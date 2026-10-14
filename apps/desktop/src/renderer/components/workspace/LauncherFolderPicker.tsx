@@ -1,9 +1,14 @@
 import type { FolderKind, LauncherFolder } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import { ChevronDown, Folder, FolderGit2, RefreshCw } from "lucide-react";
+import { ChevronDown, Folder, FolderGit2, RefreshCw, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { useMountEffect } from "../../hooks/use-mount-effect";
-import { folderFilterKeys, folderRowLabel, matchFolders } from "../../lib/launcher";
+import {
+  folderFilterKeys,
+  folderRowLabel,
+  matchFolders,
+  quickRepoFolders,
+} from "../../lib/launcher";
 
 import { Kbd } from "../common/Kbd";
 
@@ -54,8 +59,10 @@ export function LauncherFolderPicker({
   compact: boolean;
 }) {
   const Icon = selected.git ? FolderGit2 : Folder;
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const quick = quickRepoFolders(folders, selected.rel);
   return (
-    <div className="flex w-full max-w-sm shrink-0 flex-col items-center gap-1">
+    <div ref={wrapRef} className="flex w-full max-w-sm shrink-0 flex-col items-center gap-1">
       <button
         type="button"
         onClick={open ? onClose : onOpen}
@@ -77,8 +84,39 @@ export function LauncherFolderPicker({
         <ChevronDown className="h-3 w-3 shrink-0 text-text-muted" />
         {!compact && <Kbd className="h-4 min-w-4 px-1 text-[9px]">/</Kbd>}
       </button>
+      {!open && quick.shown.length > 0 && (
+        <div className="flex max-w-full flex-wrap justify-center gap-1 pane-short:hidden">
+          {quick.shown.map((f) => (
+            <button
+              key={f.rel || "(root)"}
+              type="button"
+              onClick={() => onSelect(f.rel)}
+              title={f.path}
+              className={cn(
+                "flex max-w-[10rem] items-center gap-1 rounded-full border px-2 py-0.5 text-[10px]",
+                f.rel === selected.rel
+                  ? "border-accent/50 bg-accent/15 text-text-primary"
+                  : "border-border text-text-muted hover:border-accent/40 hover:text-text-secondary",
+              )}
+            >
+              <FolderGit2 className="h-2.5 w-2.5 shrink-0" />
+              <span className="truncate">{f.rel || "root"}</span>
+            </button>
+          ))}
+          {quick.more > 0 && (
+            <button
+              type="button"
+              onClick={onOpen}
+              className="rounded-full border border-border px-2 py-0.5 text-[10px] text-text-muted hover:text-text-secondary"
+            >
+              +{quick.more}
+            </button>
+          )}
+        </div>
+      )}
       {open && (
         <FolderList
+          wrapRef={wrapRef}
           folders={folders}
           selectedRel={selected.rel}
           onSelect={onSelect}
@@ -92,6 +130,7 @@ export function LauncherFolderPicker({
 }
 
 function FolderList({
+  wrapRef,
   folders,
   selectedRel,
   onSelect,
@@ -99,6 +138,7 @@ function FolderList({
   onRefresh,
   refreshing,
 }: {
+  wrapRef: React.RefObject<HTMLDivElement | null>;
   folders: LauncherFolder[];
   selectedRel: string;
   onSelect: (rel: string) => void;
@@ -108,8 +148,25 @@ function FolderList({
 }) {
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
-  // Opened by a key or a click to type a filter right away
-  useMountEffect(() => inputRef.current?.focus());
+  // Opened by a key or a click to type a filter right away; a click outside or Esc anywhere closes
+  useMountEffect(() => {
+    inputRef.current?.focus();
+    const onPointer = (e: PointerEvent) => {
+      if (!wrapRef.current?.contains(e.target as Node)) onClose();
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape") return;
+      e.preventDefault();
+      e.stopPropagation();
+      onClose();
+    };
+    document.addEventListener("pointerdown", onPointer, true);
+    window.addEventListener("keydown", onKey, true);
+    return () => {
+      document.removeEventListener("pointerdown", onPointer, true);
+      window.removeEventListener("keydown", onKey, true);
+    };
+  });
   const [cursor, setCursor] = useState(0);
   const shown = matchFolders(folders, query);
   const active = Math.min(cursor, Math.max(0, shown.length - 1));
@@ -123,10 +180,6 @@ function FolderList({
       e.preventDefault();
       const pick = shown[active];
       if (pick) onSelect(pick.rel);
-    } else if (e.key === "Escape") {
-      e.preventDefault();
-      e.stopPropagation();
-      onClose();
     }
   };
 
@@ -155,6 +208,15 @@ function FolderList({
           aria-label="Refresh folders"
         >
           <RefreshCw className={cn("h-3 w-3", refreshing && "animate-spin")} />
+        </button>
+        <button
+          type="button"
+          onClick={onClose}
+          className="p-1 text-text-muted hover:text-text-secondary"
+          title="Close (Esc)"
+          aria-label="Close folders"
+        >
+          <X className="h-3 w-3" />
         </button>
       </div>
       <div className="flex max-h-48 flex-col overflow-y-auto" role="listbox">

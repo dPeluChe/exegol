@@ -49,6 +49,23 @@ export function matchFolders<T extends Folder>(folders: T[], query: string): T[]
   return folders.filter((f) => folderRowLabel(f).toLowerCase().includes(q));
 }
 
+const QUICK_REPOS = 5;
+
+/** A workspace's repos as one-click chips over the picker: only with 2+ repos in subfolders; the
+ *  root first, the current one always shown */
+export function quickRepoFolders<T extends Folder & { git: boolean }>(
+  folders: T[],
+  selectedRel: string,
+): { shown: T[]; more: number } {
+  const repos = folders.filter((f) => f.git && f.rel !== "");
+  if (repos.length < 2) return { shown: [], more: 0 };
+  const picked = repos.slice(0, QUICK_REPOS);
+  const current = repos.find((f) => f.rel === selectedRel);
+  if (current && !picked.includes(current)) picked[picked.length - 1] = current;
+  const root = folders.find((f) => f.rel === "");
+  return { shown: root ? [root, ...picked] : picked, more: repos.length - picked.length };
+}
+
 /** The pane's actions in a folder: Git only in a repo (the root always: it may hold one), Editor
  *  only when one is installed, Simulator once that pane exists (T203) */
 export function launcherActions(opts: {

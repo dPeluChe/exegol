@@ -9,6 +9,12 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Launcher in a workspace with several repos: the repos show as one-click chips under the folder name (the root first, five more, "+N" opens the full list)
+
+### Fixed
+- The launcher's folder list closes on a click outside it, on Esc wherever the focus is, and with its own close button
+
 ### Changed
 - The launcher in an empty pane and the one in an ended session's pane now fit their pane: in a short pane (a bottom split) the folder, agents and folder actions sit in one or two rows from the top and the pane scrolls instead of cutting them off, and in a narrow pane the buttons keep their icon and key and drop the label. Large panes look as before
 

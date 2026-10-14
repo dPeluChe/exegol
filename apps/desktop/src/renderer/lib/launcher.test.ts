@@ -12,6 +12,7 @@ import {
   matchFolders,
   orderedCommands,
   pinKey,
+  quickRepoFolders,
 } from "./launcher";
 import { sessionsInFolder } from "./launcher-sessions";
 
@@ -266,5 +267,31 @@ describe("sessionsInFolder", () => {
       projectPath: "/p",
     });
     expect(none).toEqual({ sessions: [], scope: "folder" });
+  });
+});
+
+describe("quickRepoFolders", () => {
+  const f = (rel: string, git = true) => ({ rel, git });
+  it("is empty with fewer than two repos in subfolders", () => {
+    expect(quickRepoFolders([f(""), f("app"), f("docs", false)], "").shown).toEqual([]);
+  });
+
+  it("lists the root then the repos, the rest counted", () => {
+    const folders = [f(""), ...["a", "b", "c", "d", "e", "g", "h"].map((r) => f(r))];
+    const q = quickRepoFolders(folders, "");
+    expect(q.shown.map((x) => x.rel)).toEqual(["", "a", "b", "c", "d", "e"]);
+    expect(q.more).toBe(2);
+  });
+
+  it("always shows the current repo", () => {
+    const folders = [f(""), ...["a", "b", "c", "d", "e", "g", "h"].map((r) => f(r))];
+    expect(quickRepoFolders(folders, "h").shown.map((x) => x.rel)).toEqual([
+      "",
+      "a",
+      "b",
+      "c",
+      "d",
+      "h",
+    ]);
   });
 });
