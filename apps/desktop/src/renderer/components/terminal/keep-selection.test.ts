@@ -1,5 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { selectionLength, shouldRestore } from "./keep-selection";
+import {
+  isMenuClick,
+  selectionLength,
+  shouldRestore,
+  shouldShieldSelection,
+} from "./keep-selection";
 
 const range = { start: { x: 4, y: 10 }, end: { x: 2, y: 12 } };
 
@@ -22,5 +27,27 @@ describe("shouldRestore", () => {
   it("does nothing without mouse tracking or a saved selection", () => {
     expect(shouldRestore(range, false, 0, 2_000)).toBe(false);
     expect(shouldRestore(null, true, 0, 2_000)).toBe(false);
+  });
+});
+
+describe("isMenuClick", () => {
+  it("is the right button anywhere, Ctrl+click only on macOS", () => {
+    expect(isMenuClick({ button: 2, ctrlKey: false }, false)).toBe(true);
+    expect(isMenuClick({ button: 0, ctrlKey: true }, true)).toBe(true);
+    expect(isMenuClick({ button: 0, ctrlKey: true }, false)).toBe(false);
+    expect(isMenuClick({ button: 0, ctrlKey: false }, true)).toBe(false);
+    expect(isMenuClick({ button: 1, ctrlKey: false }, true)).toBe(false);
+  });
+});
+
+describe("shouldShieldSelection", () => {
+  it("keeps a selection from a right-click or macOS Ctrl+click", () => {
+    expect(shouldShieldSelection({ button: 2, ctrlKey: false }, true, true)).toBe(true);
+    expect(shouldShieldSelection({ button: 0, ctrlKey: true }, true, true)).toBe(true);
+  });
+
+  it("leaves a right-click without a selection and a plain click alone", () => {
+    expect(shouldShieldSelection({ button: 2, ctrlKey: false }, false, true)).toBe(false);
+    expect(shouldShieldSelection({ button: 0, ctrlKey: false }, true, true)).toBe(false);
   });
 });
