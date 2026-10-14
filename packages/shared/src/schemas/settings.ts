@@ -1,11 +1,13 @@
 import { z } from "zod";
 import {
   DEFAULT_DICTATION_SETTINGS,
+  DICTATION_AUTO_INSERT_SECONDS,
   DICTATION_LANGUAGE_IDS,
   DICTATION_OVERLAY_POSITIONS,
   DICTATION_RECORDING_RETENTION_DAYS,
   DICTATION_TERM_MAX,
   DICTATION_VOCABULARY_MAX,
+  type DictationAutoInsertSeconds,
   type DictationRecordingRetentionDays,
   parseChord,
 } from "../types/dictation";
@@ -32,7 +34,14 @@ export const dictationSettingsSchema = z.object({
   pauseMediaDirect: z.boolean(),
   idleUnloadMinutes: z.number().int().min(1).max(240),
   maxSeconds: z.number().int().min(10).max(600),
-  autoStopSilenceSec: z.number().int().min(0).max(60),
+  autoStopSilenceSec: z.number().int().min(0).max(60).default(0),
+  autoInsert: z.boolean().default(false),
+  autoInsertSilenceSec: z
+    .number()
+    .refine((s): s is DictationAutoInsertSeconds =>
+      (DICTATION_AUTO_INSERT_SECONDS as readonly number[]).includes(s),
+    )
+    .default(DEFAULT_DICTATION_SETTINGS.autoInsertSilenceSec),
   retentionDays: z.number().int().min(1).max(3650),
   retentionMax: z.number().int().min(10).max(10_000),
   overlayPosition: z.enum(DICTATION_OVERLAY_POSITIONS).default("pane"),

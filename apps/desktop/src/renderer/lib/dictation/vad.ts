@@ -26,7 +26,3 @@ export function updateVad(
   }
   return { ...state, silenceMs: state.silenceMs + chunkMs };
 }
-
-/** Auto-stop (0 = off) once speech was heard and the pause ran long enough */
-export const shouldAutoStop = (state: VadState, autoStopSec: number): boolean =>
-  autoStopSec > 0 && state.heard && state.silenceMs >= autoStopSec * 1000;

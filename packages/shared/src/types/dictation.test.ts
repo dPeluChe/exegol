@@ -99,6 +99,33 @@ describe("dictation chord", () => {
     expect(dictationSettingsSchema.safeParse(picked).success).toBe(true);
   });
 
+  it("auto insert: off at 7 s by default, a row saved before it existed included", () => {
+    const { autoInsert: _, autoInsertSilenceSec: __, ...older } = DEFAULT_DICTATION_SETTINGS;
+    expect(dictationSettingsOf(older)).toMatchObject({
+      autoInsert: false,
+      autoInsertSilenceSec: 7,
+    });
+    expect(dictationSettingsSchema.parse(older)).toMatchObject({
+      autoInsert: false,
+      autoInsertSilenceSec: 7,
+    });
+    const odd = { ...DEFAULT_DICTATION_SETTINGS, autoInsertSilenceSec: 6 };
+    expect(dictationSettingsSchema.safeParse(odd).success).toBe(false);
+  });
+
+  it("auto insert: the old auto-stop pause carries over at the nearest delay", () => {
+    const { autoInsert: _, autoInsertSilenceSec: __, ...older } = DEFAULT_DICTATION_SETTINGS;
+    expect(dictationSettingsOf({ ...older, autoStopSilenceSec: 3 })).toMatchObject({
+      autoInsert: true,
+      autoInsertSilenceSec: 5,
+    });
+    expect(dictationSettingsOf({ ...older, autoStopSilenceSec: 10 }).autoInsertSilenceSec).toBe(10);
+    expect(dictationSettingsOf({ ...older, autoStopSilenceSec: 0 }).autoInsert).toBe(false);
+    // Once saved, the new setting wins
+    const saved = { ...DEFAULT_DICTATION_SETTINGS, autoStopSilenceSec: 3, autoInsert: false };
+    expect(dictationSettingsOf(saved).autoInsert).toBe(false);
+  });
+
   it("language: English by default, a row saved before it existed included", () => {
     const { language: _, ...older } = DEFAULT_DICTATION_SETTINGS;
     expect(dictationSettingsOf(older).language).toBe("en");

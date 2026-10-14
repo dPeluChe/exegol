@@ -16,6 +16,27 @@ class CaptureProcessor extends AudioWorkletProcessor {
   private pending: Float32Array[] = [];
   private size = 0;
 
+  constructor() {
+    super();
+    // Stop: the last words are still in here, under a full chunk
+    this.port.onmessage = () => {
+      const flushed = this.take();
+      this.port.postMessage({ flushed }, [flushed.buffer]);
+    };
+  }
+
+  private take(): Float32Array {
+    const chunk = new Float32Array(this.size);
+    let offset = 0;
+    for (const part of this.pending) {
+      chunk.set(part, offset);
+      offset += part.length;
+    }
+    this.pending = [];
+    this.size = 0;
+    return chunk;
+  }
+
   process(inputs: Float32Array[][]): boolean {
     const channel = inputs[0]?.[0];
     if (!channel) return true;
@@ -25,14 +46,7 @@ class CaptureProcessor extends AudioWorkletProcessor {
       this.size += out.length;
     }
     if (this.size >= CHUNK) {
-      const chunk = new Float32Array(this.size);
-      let offset = 0;
-      for (const part of this.pending) {
-        chunk.set(part, offset);
-        offset += part.length;
-      }
-      this.pending = [];
-      this.size = 0;
+      const chunk = this.take();
       this.port.postMessage(chunk, [chunk.buffer]);
     }
     return true;

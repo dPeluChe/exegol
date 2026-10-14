@@ -5,7 +5,9 @@ import { type ReactNode, type UIEvent, useLayoutEffect, useRef, useState } from 
 import { useMountEffect } from "../../hooks/use-mount-effect";
 import { useProjects, useSettings } from "../../hooks/use-trpc";
 import { useDictationStatus } from "../../hooks/use-trpc-dictation";
+import { AUTO_INSERT_COUNTDOWN_MS } from "../../lib/dictation/auto-insert";
 import {
+  cancelAutoInsert,
   dismissDictation,
   stopDictation,
   togglePauseDictation,
@@ -196,6 +198,7 @@ function Recorder({ onCenter }: { onCenter?: () => void }) {
         {phase === "listening" ? <LevelBars muted={paused} /> : <div className="h-10" />}
       </div>
       <Transcript phase={phase} />
+      <AutoInsertCountdown />
       <InputNotice />
       <div className="flex items-center justify-between gap-2 border-t border-border/60 bg-bg-primary/40 px-3.5 py-1.5">
         <CancelButton />
@@ -246,11 +249,49 @@ function DockedPill({ phase }: { phase: DictationPhase }) {
       {/* End-aligned so the newest words stay in view and the oldest slide out on the left */}
       <span className="flex min-w-0 flex-1 justify-end overflow-hidden whitespace-nowrap text-[11px] text-text-secondary [mask-image:linear-gradient(to_right,transparent,#000_1.5rem)]">
         <span>
-          {partial || (phase === "transcribing" ? "Finishing" : paused ? "Paused" : "Listening")}
+          {phase === "transcribing"
+            ? "Transcribing…"
+            : partial || (paused ? "Paused" : "Listening")}
         </span>
       </span>
+      <AutoInsertCountdown compact />
       <Commands phase={phase} />
     </div>
+  );
+}
+
+/** Auto insert's last seconds: a draining bar; a click keeps this dictation going */
+function AutoInsertCountdown({ compact = false }: { compact?: boolean }) {
+  const ms = useDictationStore((s) => s.autoInsertMs);
+  if (ms === null) return null;
+  const left = Math.max(0, Math.min(1, ms / AUTO_INSERT_COUNTDOWN_MS));
+  const bar = (
+    <span className="block h-1 overflow-hidden rounded-full bg-accent/15">
+      <span
+        className="block h-full rounded-full bg-accent transition-[width] duration-100 ease-linear motion-reduce:transition-none"
+        style={{ width: `${left * 100}%` }}
+      />
+    </span>
+  );
+  return (
+    <button
+      type="button"
+      onMouseDown={keepFocus}
+      onClick={cancelAutoInsert}
+      title="Click to keep dictating: no auto insert this time"
+      className={cn(
+        "shrink-0 text-left text-[11px] font-medium text-accent",
+        compact
+          ? "flex w-24 flex-col gap-0.5 rounded-md px-1.5 py-0.5 hover:bg-accent/10"
+          : "mx-3.5 mb-2 flex w-[calc(100%-1.75rem)] flex-col gap-1 rounded-md px-2 py-1.5 hover:bg-accent/10",
+      )}
+    >
+      <span className="flex items-center justify-between gap-2">
+        <span aria-live="polite">Inserting in {Math.ceil(ms / 1000)}…</span>
+        {!compact && <span className="font-normal text-text-muted">Click to keep dictating</span>}
+      </span>
+      {bar}
+    </button>
   );
 }
 
@@ -283,7 +324,7 @@ function StatePill({ phase }: { phase: DictationPhase }) {
   return (
     <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-accent/10 py-1 pr-2.5 pl-2 text-[11px] font-medium text-accent">
       <Loader2 className="h-3 w-3 motion-safe:animate-spin" />
-      {phase === "transcribing" ? "Finishing" : "Starting"}
+      {phase === "transcribing" ? "Transcribing…" : "Starting"}
     </span>
   );
 }

@@ -1,4 +1,5 @@
 import type { DictationInput } from "@exegol/shared";
+import { captureReceiver, type WorkletMessage } from "./capture-drain";
 import workletUrl from "./capture-worklet.ts?worker&url";
 
 export interface Capture {
@@ -8,6 +9,8 @@ export interface Capture {
   input: DictationInput;
   /** The opened mic's label (empty without mic permission) */
   label: string;
+  /** Resolves once every sample captured so far reached onChunk (or after DRAIN_TIMEOUT_MS) */
+  drain: () => Promise<void>;
   stop: () => void;
 }
 
@@ -64,15 +67,18 @@ export async function startCapture(
       channelCount: 1,
       channelCountMode: "explicit",
     });
-    node.port.onmessage = (e: MessageEvent<Float32Array>) => onChunk(e.data);
+    const receiver = captureReceiver(onChunk);
+    node.port.onmessage = (e: MessageEvent<WorkletMessage>) => receiver.receive(e.data);
     source.connect(analyser);
     source.connect(node);
     return {
       analyser,
       input,
       label: stream.getAudioTracks()[0]?.label ?? "",
+      drain: () => receiver.drain(() => node.port.postMessage("flush")),
       stop: () => {
         node.port.onmessage = null;
+        receiver.settle();
         source.disconnect();
         for (const track of stream.getTracks()) track.stop();
         void context.close();

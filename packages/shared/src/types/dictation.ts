@@ -132,6 +132,10 @@ export function isDictationPauseKey(
   return mac ? e.metaKey && !e.ctrlKey && !e.shiftKey : e.ctrlKey && e.shiftKey && !e.metaKey;
 }
 
+/** Seconds of silence after speech before a dictation inserts on its own (Settings > Dictation) */
+export const DICTATION_AUTO_INSERT_SECONDS = [5, 7, 10] as const;
+export type DictationAutoInsertSeconds = (typeof DICTATION_AUTO_INSERT_SECONDS)[number];
+
 /** Days a kept recording (audio + its text, Settings > Dictation) stays on disk */
 export const DICTATION_RECORDING_RETENTION_DAYS = [5, 10, 15, 30] as const;
 export type DictationRecordingRetentionDays = (typeof DICTATION_RECORDING_RETENTION_DAYS)[number];
@@ -150,8 +154,11 @@ export interface DictationSettings {
   /** The loaded model is freed after this long without a dictation */
   idleUnloadMinutes: number;
   maxSeconds: number;
-  /** Stop on its own after this much silence once speech was heard; 0 = off */
+  /** Replaced by autoInsert: a saved value is carried over once (dictationSettingsOf) */
   autoStopSilenceSec: number;
+  /** Insert on its own after `autoInsertSilenceSec` of silence once speech was heard; never Enter */
+  autoInsert: boolean;
+  autoInsertSilenceSec: DictationAutoInsertSeconds;
   retentionDays: number;
   retentionMax: number;
   overlayPosition: DictationOverlayPosition;
@@ -213,6 +220,8 @@ export const DEFAULT_DICTATION_SETTINGS: DictationSettings = {
   idleUnloadMinutes: 10,
   maxSeconds: 300,
   autoStopSilenceSec: 0,
+  autoInsert: false,
+  autoInsertSilenceSec: 7,
   retentionDays: 30,
   retentionMax: 500,
   overlayPosition: "pane",
@@ -232,6 +241,12 @@ export function dictationSettingsOf(
   saved: Partial<DictationSettings> | undefined,
 ): DictationSettings {
   const settings = { ...DEFAULT_DICTATION_SETTINGS, ...saved };
+  // The old "Stop on its own after a pause of" (2-10 s): on, at the nearest delay offered
+  if (saved?.autoInsert === undefined && (saved?.autoStopSilenceSec ?? 0) > 0) {
+    settings.autoInsert = true;
+    settings.autoInsertSilenceSec =
+      DICTATION_AUTO_INSERT_SECONDS.find((s) => s >= (saved?.autoStopSilenceSec ?? 0)) ?? 10;
+  }
   // A boost off the scale (the old Light 1.5 and Strong 5): back to the default
   const boosts: readonly number[] = DICTATION_VOCABULARY_BOOSTS;
   if (!boosts.includes(settings.vocabularyBoost))

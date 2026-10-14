@@ -171,7 +171,7 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
 - **Settings window**: its own window, so you can change themes, fonts or keys while agents run.
 - **Themes**: light, dark, black (OLED) and system. Three Nerd Fonts are bundled.
 - **Voice dictation**: Cmd+Shift+Space (Ctrl+Shift+Space on Linux and Windows) to start and
-  again to insert (or Enter while the overlay is open), or hold it while you talk; Esc cancels. Transcribed on this machine; the text
+  again to insert (or Enter while the overlay is open), or hold it while you talk; Esc cancels. Insert waits until the whole text is transcribed ("Transcribing…"). Opt-in Auto insert after silence (5, 7 or 10 s, a 3 s countdown on the card; never presses Enter). Transcribed on this machine; the text
   goes only into the focused pane (pasted into a terminal without Enter, a browser page's focused
   field, the code editor's cursor), else it is copied. Overlay with waveform, timer, where the
   text goes and the words so far (live with the streaming model, phrase by phrase at each pause
