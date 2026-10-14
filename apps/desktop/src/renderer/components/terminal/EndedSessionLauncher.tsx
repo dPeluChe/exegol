@@ -72,6 +72,10 @@ const ACTION_META: Record<EndedAction, { icon: LucideIcon; label: string }> = {
 
 const PRIMARY = new Set<EndedAction>(["resume", "restart", "reopen"]);
 
+/** Narrow tall pane: button rows span the pane and their buttons grow to fill each row */
+const ROW = "flex flex-wrap items-center justify-center gap-1.5 pane-narrow:w-full";
+const FILL = "min-w-0 justify-center pane-narrow:gap-1 pane-narrow:px-2";
+
 interface LauncherProps {
   agent: EndedAgent;
   paneId?: string;
@@ -202,7 +206,7 @@ function LauncherBody({
       )}
       {note && <p className="text-[11px] text-text-muted">{note}</p>}
 
-      <div className="flex flex-wrap items-center justify-center gap-1.5">
+      <div className={ROW}>
         {actions
           .filter((a) => PRIMARY.has(a) && !hidePrimary)
           .map((a) => (
@@ -211,7 +215,11 @@ function LauncherBody({
               action={a}
               disabled={locked}
               onClick={() => run(a)}
-              className="rounded-lg bg-accent px-3 py-1 text-[11px] font-semibold text-white hover:bg-accent/90 disabled:opacity-50"
+              className={cn(
+                "rounded-lg bg-accent px-3 py-1 text-[11px] font-semibold text-white hover:bg-accent/90 disabled:opacity-50",
+                FILL,
+                "pane-narrow:flex-[1_1_7rem]",
+              )}
             />
           ))}
         {actions.includes("new") && (
@@ -220,10 +228,10 @@ function LauncherBody({
             disabled={locked}
             onClick={() => run("new")}
             aria-label={`New ${cliName} session here`}
-            className={button}
+            className={cn(button, FILL, "pane-narrow:flex-[1_1_7rem]")}
           >
-            <Plus className="h-3 w-3" />
-            <span className="@max-xs:hidden">New {cliName} session here</span>
+            <Plus className="h-3 w-3 shrink-0" />
+            <span className="truncate pane-short:@max-xs:hidden">New {cliName} session here</span>
             <Kbd k={ENDED_ACTION_KEYS.new} />
           </button>
         )}
@@ -235,10 +243,10 @@ function LauncherBody({
                 new CustomEvent("exegol:view-diff", { detail: { agentId: agent.id } }),
               )
             }
-            className={button}
+            className={cn(button, FILL, "pane-narrow:flex-[1_1_7rem]")}
           >
-            <FileDiff className="h-3 w-3" />
-            View diff
+            <FileDiff className="h-3 w-3 shrink-0" />
+            <span className="truncate">View diff</span>
           </button>
         )}
       </div>
@@ -267,7 +275,7 @@ function LauncherBody({
       )}
 
       {paneId && (
-        <div className="flex flex-wrap items-center justify-center gap-1.5">
+        <div className={ROW}>
           {actions
             .filter((a) => !PRIMARY.has(a) && a !== "new")
             .map((a) => (
@@ -276,7 +284,7 @@ function LauncherBody({
                 action={a}
                 disabled={locked}
                 onClick={() => run(a)}
-                className={button}
+                className={cn(button, FILL, "pane-narrow:flex-[1_1_5.5rem]")}
               />
             ))}
         </div>
@@ -321,8 +329,8 @@ function ActionButton({
       aria-label={label}
       className={cn("flex items-center gap-1.5", className)}
     >
-      <Icon className="h-3 w-3" />
-      <span className="@max-xs:hidden">{label}</span>
+      <Icon className="h-3 w-3 shrink-0" />
+      <span className="truncate pane-short:@max-xs:hidden">{label}</span>
       <Kbd k={ENDED_ACTION_KEYS[action]} />
     </button>
   );
@@ -330,7 +338,9 @@ function ActionButton({
 
 function Kbd({ k }: { k: string }) {
   return (
-    <kbd className="rounded border border-current/30 px-1 font-sans text-[9px] opacity-70">{k}</kbd>
+    <kbd className="shrink-0 rounded border border-current/30 px-1 font-sans text-[9px] opacity-70">
+      {k}
+    </kbd>
   );
 }
 

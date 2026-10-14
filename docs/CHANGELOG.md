@@ -16,7 +16,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - The launcher's folder list closes on a click outside it, on Esc wherever the focus is, and with its own close button
 
 ### Changed
-- The launcher in an empty pane and the one in an ended session's pane now fit their pane: in a short pane (a bottom split) the folder, agents and folder actions sit in one or two rows from the top and the pane scrolls instead of cutting them off, and in a narrow pane the buttons keep their icon and key and drop the label. Large panes look as before
+- The launcher in an empty pane and the one in an ended session's pane now fit their pane: in a short pane (a bottom split) the folder, agents and folder actions sit in one or two rows from the top and the pane scrolls instead of cutting them off, and in a narrow pane the agent tiles and buttons stretch to fill its width (two tiles a row, each with icon and name, at about 230 px) and reflow as you drag the split. Large panes look as before
 
 ### Fixed
 - The terminal in view after an app start no longer draws for about 10 rows more than its pane until you switch pane or tab. It was sized before the bundled terminal font (MesloLGS NF and the other Nerd Fonts) had loaded, so it used the fallback font's shorter rows; it now refits once the font is in

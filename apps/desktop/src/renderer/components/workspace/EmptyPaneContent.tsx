@@ -30,7 +30,7 @@ function relativeTime(epoch: number | null): string {
   return `${Math.round(hours / 24)}d`;
 }
 
-type PaneSize = "full" | "compact" | "mini";
+type PaneSize = "full" | "compact" | "narrow" | "mini";
 
 /** Everything that changes with the pane size, so the JSX reads one row instead of ternaries */
 const SIZE_LAYOUT: Record<
@@ -39,7 +39,6 @@ const SIZE_LAYOUT: Record<
     isMini: boolean;
     isCompact: boolean;
     iconSize: number;
-    gridCols: string;
     card: string;
     sessionRows: number;
   }
@@ -48,7 +47,6 @@ const SIZE_LAYOUT: Record<
     isMini: false,
     isCompact: false,
     iconSize: 28,
-    gridCols: "grid-cols-4",
     card: "gap-1.5 p-2.5",
     sessionRows: 5,
   },
@@ -56,7 +54,14 @@ const SIZE_LAYOUT: Record<
     isMini: false,
     isCompact: true,
     iconSize: 22,
-    gridCols: "grid-cols-4",
+    card: "gap-1 p-2",
+    sessionRows: 3,
+  },
+  // Tall but under 300px: the modal like mini, tiles sized like compact
+  narrow: {
+    isMini: true,
+    isCompact: true,
+    iconSize: 22,
     card: "gap-1 p-2",
     sessionRows: 3,
   },
@@ -64,7 +69,6 @@ const SIZE_LAYOUT: Record<
     isMini: true,
     isCompact: true,
     iconSize: 18,
-    gridCols: "grid-cols-3",
     card: "gap-0.5 p-1.5",
     sessionRows: 1,
   },
@@ -72,7 +76,8 @@ const SIZE_LAYOUT: Record<
 
 type SizeLayout = (typeof SIZE_LAYOUT)[PaneSize];
 
-/** Observes the pane size for the responsive layout */
+/** Pane size class for what CSS cannot do (the mini modal, icon size, session rows); columns and
+ *  widths follow container queries so they reflow continuously while a split is dragged */
 function usePaneSize() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<PaneSize>("full");
@@ -83,7 +88,8 @@ function usePaneSize() {
       if (!entry) return;
       const w = entry.contentRect.width;
       const h = entry.contentRect.height;
-      if (w < 300 || h < 250) setSize("mini");
+      if (h < 250) setSize("mini");
+      else if (w < 300) setSize("narrow");
       else if (w < 500 || h < 400) setSize("compact");
       else setSize("full");
     });
@@ -294,8 +300,7 @@ function AgentGrid({
   return (
     <div
       className={cn(
-        "mt-2 grid w-full max-w-sm gap-1.5 pane-short:mt-0 pane-short:flex pane-short:w-auto pane-short:max-w-full pane-short:flex-wrap pane-short:justify-center",
-        layout.gridCols,
+        "mt-2 grid w-full max-w-sm grid-cols-[repeat(auto-fill,minmax(5rem,1fr))] gap-1.5 @max-[12rem]:grid-cols-[repeat(auto-fill,minmax(3rem,1fr))] pane-short:mt-0 pane-short:flex pane-short:w-auto pane-short:max-w-full pane-short:flex-wrap pane-short:justify-center",
       )}
     >
       {options.map((cli, i) => (
@@ -305,7 +310,7 @@ function AgentGrid({
           onClick={() => onLaunch(cli)}
           title={i < 9 ? `${cli.name} (${i + 1})` : cli.name}
           className={cn(
-            "relative flex flex-col items-center rounded-lg border border-border bg-bg-secondary transition-colors hover:border-accent/50 hover:bg-white/[0.03]",
+            "relative flex min-w-0 flex-col items-center rounded-lg border border-border bg-bg-secondary transition-colors hover:border-accent/50 hover:bg-white/[0.03]",
             layout.card,
             "pane-short:flex-row pane-short:py-1 pane-short:pr-2 pane-short:pl-5",
           )}
@@ -324,9 +329,8 @@ function AgentGrid({
           <DuplicateInstallsBadge count={installs.get(cli.id)?.length ?? 0} />
           <span
             className={cn(
-              "font-medium text-text-secondary",
+              "max-w-full truncate font-medium text-text-secondary @max-[12rem]:hidden pane-short:@max-xs:hidden",
               layout.isCompact ? "text-[8px]" : "text-[9px]",
-              layout.isMini && "hidden pane-short:@min-xs:inline",
             )}
           >
             {cli.name}

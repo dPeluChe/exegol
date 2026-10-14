@@ -47,6 +47,9 @@ const ACTION_META: Record<LauncherAction, { icon: LucideIcon; label: string }> =
 };
 
 export const CHIP = "flex items-center gap-1 rounded-lg border transition-all";
+/** Narrow tall pane: each row spans the pane and its buttons grow to fill it */
+const ROW = "flex max-w-full flex-wrap justify-center gap-1 pane-narrow:w-full";
+const FILL = "pane-narrow:min-w-0 pane-narrow:flex-[1_1_5.5rem] pane-narrow:justify-center";
 
 /**
  * T197/T204: what the pane can become in the launcher's folder (keys T, F, G, B, O, E), then the
@@ -84,12 +87,13 @@ export function FolderActions({
   const button = cn(
     CHIP,
     size,
+    FILL,
     "border-border bg-bg-secondary text-text-secondary hover:border-accent/50",
   );
 
   return (
     <div className="flex max-w-full flex-col items-center gap-1.5">
-      <div className="flex max-w-full flex-wrap justify-center gap-1">
+      <div className={ROW}>
         {actions.map((action) => {
           const { icon: Icon } = ACTION_META[action];
           const label =
@@ -108,12 +112,12 @@ export function FolderActions({
               title={`${label} in ${folder.path} (${LAUNCHER_ACTION_KEYS[action]})`}
               aria-label={label}
             >
-              <Icon className="h-3 w-3" />
-              <span className="@max-xs:hidden">{label}</span>
+              <Icon className="h-3 w-3 shrink-0" />
+              <span className="truncate pane-short:@max-xs:hidden">{label}</span>
               <Kbd
                 className={cn(
-                  "h-4 min-w-4 px-1 text-[9px]",
-                  compact && "hidden @max-xs:inline-flex",
+                  "h-4 min-w-4 shrink-0 px-1 text-[9px]",
+                  compact && "hidden pane-short:@max-xs:inline-flex",
                 )}
               >
                 {LAUNCHER_ACTION_KEYS[action]}
@@ -123,7 +127,7 @@ export function FolderActions({
         })}
       </div>
       {folder.scripts.length > 0 && (
-        <div className="flex max-w-full flex-wrap justify-center gap-1">
+        <div className={ROW}>
           {shown.map((s, i) => {
             const key = pinKey(folder.rel, s.command);
             const on = pinSet.has(key);
@@ -134,7 +138,7 @@ export function FolderActions({
                 key={key}
                 className={cn(
                   CHIP,
-                  "group border-border bg-bg-secondary",
+                  "group border-border bg-bg-secondary pane-narrow:min-w-0 pane-narrow:flex-[1_1_6rem]",
                   launching === s.name && "opacity-50",
                 )}
               >
@@ -144,13 +148,15 @@ export function FolderActions({
                   onClick={() => onCommand(s.name, s.command)}
                   title={i < 9 ? `${s.command} (${commandBadge(i + 1)})` : s.command}
                   className={cn(
-                    "flex items-center gap-1 text-text-secondary hover:text-text-primary",
+                    "flex min-w-0 flex-1 items-center gap-1 text-text-secondary hover:text-text-primary",
                     size,
                     "pr-0",
                   )}
                 >
-                  <Icon className={cn("h-3 w-3", s.source === "convex" && "text-amber-400")} />
-                  {s.name}
+                  <Icon
+                    className={cn("h-3 w-3 shrink-0", s.source === "convex" && "text-amber-400")}
+                  />
+                  <span className="truncate">{s.name}</span>
                   {runner && !compact && (
                     <span className="text-[9px] text-text-muted">({runner})</span>
                   )}
@@ -179,6 +185,7 @@ export function FolderActions({
               className={cn(
                 CHIP,
                 size,
+                FILL,
                 "border-dashed border-border text-text-muted hover:text-text-secondary",
               )}
             >
