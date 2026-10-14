@@ -1,6 +1,13 @@
 import type { AgentStatus } from "@exegol/shared";
 import { describe, expect, it } from "vitest";
-import { buildSendSections, hasSendTargets, sendAction, sendHint } from "./send-targets";
+import {
+  buildSendSections,
+  hasSendTargets,
+  sendAction,
+  sendHint,
+  sendLabel,
+  sendToActive,
+} from "./send-targets";
 
 const session = (
   id: string,
@@ -146,6 +153,38 @@ describe("sendAction", () => {
   it("never submits into an agent asking a question", () => {
     expect(sendAction(agent, prefs(true, true), true)).toBe("held");
     expect(sendAction(agent, prefs(false, true), true)).toBe("held");
+  });
+});
+
+describe("sendLabel", () => {
+  const target = (extra: { name: string; cliType?: string; folder?: string }) => ({
+    id: "x",
+    projectId: "p",
+    cliType: "claude-code",
+    ...extra,
+  });
+
+  it("an agent: its alias and the CLI's session name, never the CLI id (the icon says it)", () => {
+    expect(sendLabel(target({ name: "argo" }), "exegoldev")).toBe("argo · exegoldev");
+    expect(sendLabel(target({ name: "argo" }))).toBe("argo");
+    expect(sendLabel(target({ name: "argo" }), "argo")).toBe("argo");
+    expect(sendLabel(target({ name: "claude-code" }), "exegoldev")).toBe("exegoldev");
+    expect(sendLabel(target({ name: "claude-code" }))).toBe("claude-code");
+  });
+
+  it("a terminal: Terminal and its folder", () => {
+    expect(sendLabel(target({ name: "Terminal", cliType: "shell", folder: "web" }))).toBe(
+      "Terminal · web",
+    );
+    expect(sendLabel(target({ name: "Terminal", cliType: "shell" }), "ignored")).toBe("Terminal");
+  });
+});
+
+describe("sendToActive", () => {
+  it("shows with a selection and stays while the list is open, even if the TUI cleared it", () => {
+    expect(sendToActive(true, false)).toBe(true);
+    expect(sendToActive(false, true)).toBe(true);
+    expect(sendToActive(false, false)).toBe(false);
   });
 });
 

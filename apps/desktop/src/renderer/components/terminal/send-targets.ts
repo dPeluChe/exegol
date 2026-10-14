@@ -47,7 +47,7 @@ function toTarget(a: SessionLike, folders: ReadonlyMap<string, string>): SendTar
     const cwd = folders.get(a.id);
     return {
       id: a.id,
-      name: a.alias ?? "Terminal",
+      name: "Terminal",
       cliType: "shell",
       projectId: a.projectId,
       ...(cwd ? { folder: basename(cwd) } : {}),
@@ -55,6 +55,16 @@ function toTarget(a: SessionLike, folders: ReadonlyMap<string, string>): SendTar
   }
   if (!isPasteTarget(a)) return null;
   return { id: a.id, name: a.alias ?? a.cliType, cliType: a.cliType, projectId: a.projectId };
+}
+
+/** "argo · exegoldev": the alias and the CLI's own session name when known (the icon names the
+ *  CLI); "Terminal · web" for a shell */
+export function sendLabel(target: SendTarget, cliSessionName?: string): string {
+  if (target.cliType === "shell") return target.folder ? `Terminal · ${target.folder}` : "Terminal";
+  const parts = [target.name, cliSessionName].filter(
+    (p): p is string => !!p && p !== target.cliType,
+  );
+  return [...new Set(parts)].join(" · ") || target.cliType;
 }
 
 /** Live agents and terminals other than `selfId`. Other projects follow the sidebar's drag order
@@ -88,6 +98,9 @@ export function buildSendSections(
   const own = ownProjectId ? groupOf(ownProjectId) : null;
   return { own: own && own.targets.length > 0 ? own : null, others };
 }
+
+/** The Send to button and its list: shown with text selected, and kept while the list is open */
+export const sendToActive = (hasSelection: boolean, listOpen: boolean) => hasSelection || listOpen;
 
 export const hasSendTargets = (s: SendSections) => s.own !== null || s.others.length > 0;
 

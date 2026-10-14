@@ -9,40 +9,45 @@ import {
   type SendSections,
   type SendTarget,
   sendHint,
+  sendLabel,
 } from "./send-targets";
-import { type SelectionSource, sendSelectionTo, useSendSections } from "./use-send-to";
+import {
+  type SelectionSource,
+  sendSelectionTo,
+  useCliSessionNames,
+  useSendSections,
+} from "./use-send-to";
 
 // Per window, in memory only: both the button and the right-click menu open as it was left
 let othersExpanded = false;
 
 const SECTION = "px-2 py-0.5 text-[9px] font-semibold text-text-secondary";
 
-function TargetButton({ target, onPick }: { target: SendTarget; onPick: (t: SendTarget) => void }) {
-  const detail =
-    target.cliType === "shell"
-      ? target.folder
-      : target.name !== target.cliType
-        ? target.cliType
-        : undefined;
+interface PickProps {
+  onPick: (t: SendTarget) => void;
+  /** CLI session names by agent id */
+  names: Record<string, string>;
+}
+
+function TargetButton({ target, onPick, names }: PickProps & { target: SendTarget }) {
   return (
     <button
       type="button"
       onClick={() => onPick(target)}
-      className="flex w-full items-center gap-2 rounded px-2 py-1 text-[11px] text-text-secondary outline-none hover:bg-white/10 focus-visible:bg-white/10"
+      className="flex w-full items-center gap-2 rounded px-2 py-1 text-[11px] text-text-primary outline-none hover:bg-white/10 focus-visible:bg-white/10"
     >
       <AgentIcon provider={target.cliType} size={12} />
-      <span className="font-medium text-text-primary">{target.name}</span>
-      {detail && <span className="truncate text-text-muted">{detail}</span>}
+      <span className="truncate font-medium">{sendLabel(target, names[target.id])}</span>
     </button>
   );
 }
 
-function Group({ group, onPick }: { group: SendGroup; onPick: (t: SendTarget) => void }) {
+function Group({ group, ...pick }: PickProps & { group: SendGroup }) {
   return (
     <div className="mt-1 border-t border-border/60 pt-1 first:mt-0 first:border-t-0 first:pt-0">
       <p className={SECTION}>{group.projectName}</p>
       {group.targets.map((t) => (
-        <TargetButton key={t.id} target={t} onPick={onPick} />
+        <TargetButton key={t.id} target={t} {...pick} />
       ))}
     </div>
   );
@@ -119,8 +124,11 @@ export function SendToList({
     sendToRunTerminal: settings?.sendToRunTerminal ?? false,
     sendToSubmitAgent: settings?.sendToSubmitAgent ?? false,
   };
+  // A TUI repaint or mouse report can clear the selection while the list is open
+  const [opened] = useState(getSelection);
+  const names = useCliSessionNames(sections);
   const onPick = (t: SendTarget) => {
-    const text = getSelection();
+    const text = getSelection() || opened;
     onSent();
     void sendSelectionTo(text, t, prefs);
   };
@@ -147,7 +155,7 @@ export function SendToList({
         <>
           <p className={SECTION}>This project · {own.projectName}</p>
           {own.targets.map((t) => (
-            <TargetButton key={t.id} target={t} onPick={onPick} />
+            <TargetButton key={t.id} target={t} onPick={onPick} names={names} />
           ))}
         </>
       )}
@@ -168,7 +176,8 @@ export function SendToList({
           Other projects ({others.length})
         </button>
       )}
-      {showOthers && others.map((g) => <Group key={g.projectId} group={g} onPick={onPick} />)}
+      {showOthers &&
+        others.map((g) => <Group key={g.projectId} group={g} onPick={onPick} names={names} />)}
       <div className="mt-1 flex items-center justify-between gap-3 border-t border-border/60 px-2 pt-1 text-[9px] text-text-muted">
         <span>{sendHint(prefs)}</span>
         <button

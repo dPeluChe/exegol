@@ -14,7 +14,11 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Send to reaches plain terminals too, both ways: send a command an agent printed to the project's terminal (by default it lands at the prompt for you to review and run) or a shell's output to an agent. Terminals show their folder
 - Settings > Terminal > Send to: "run it (press Enter)" for terminals and "submit it (press Enter)" for agents, both off by default (paste only). An agent asking a question or a permission is never submitted to: the text is pasted and a toast says so. The Send to list's footer says what a pick does, with a link to the setting
 
+### Fixed
+- Selecting text in Claude (or any TUI that uses the mouse): hold Option while dragging (Shift on Linux and Windows) to select in the terminal itself, so Copy and Send to have it; a plain drag is the TUI's own selection
+
 ### Changed
+- Send to names each session by its alias and its CLI session name ("argo · exegoldev", the CLI's icon beside it) and terminals by folder ("Terminal · web"). The list keeps the text it was opened with, so a TUI repainting under it no longer sends nothing
 - Send to lists the sessions of the pane's own project first; other projects sit behind "Other projects (N)", closed until you open it (remembered while the window is open) and open by itself when your project has nothing else. Arrow keys, Enter and Esc work in the list
 
 ## [0.5.21] — 2026-10-13 — Folder-first launcher, sessions that survive a lost sidecar, idle auto-suspend

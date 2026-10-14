@@ -1,8 +1,10 @@
+import { useQueries } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { useProjects } from "../../hooks/use-trpc";
 import { pasteToAgent } from "../../lib/agent-input";
 import { agentAsksQuestion } from "../../lib/agent-question";
 import { focusActivePane } from "../../lib/pane-focus";
+import { trpcInvoke } from "../../lib/trpc-client";
 import { jumpToAgent, useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import { useToastStore } from "../../stores/toasts";
@@ -44,6 +46,31 @@ export function useSendSections(
         : EMPTY,
     [enabled, allAgents, agentId, projects, projectId, projectOrder, projectWorkspaces, paneCwd],
   );
+}
+
+/** Each agent's session name inside its CLI, by agent id (the launcher chips' source), one query
+ *  per project; names fill in once the CLI's store is read */
+export function useCliSessionNames(sections: SendSections): Record<string, string> {
+  const groups = [...(sections.own ? [sections.own] : []), ...sections.others];
+  const results = useQueries({
+    queries: groups.map((g) => {
+      const agentIds = g.targets
+        .filter((t) => t.cliType !== "shell")
+        .slice(0, 20)
+        .map((t) => t.id);
+      return {
+        queryKey: ["sendToSessionNames", g.projectId, agentIds],
+        queryFn: () =>
+          trpcInvoke<Record<string, string>>("agents.sessionNames", {
+            projectId: g.projectId,
+            agentIds,
+          }),
+        enabled: agentIds.length > 0,
+        staleTime: 30_000,
+      };
+    }),
+  });
+  return Object.assign({}, ...results.map((r) => r.data ?? {}));
 }
 
 /** Each session's folder as its pane's shell last reported it (OSC 7) */

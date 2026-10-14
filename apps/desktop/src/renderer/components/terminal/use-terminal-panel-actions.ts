@@ -1,5 +1,6 @@
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
 import { useProject } from "../../hooks/use-trpc";
+import { sendToActive } from "./send-targets";
 import type { TerminalInstanceHandle } from "./terminal-types";
 import { registerSelectionSource, useSendSections } from "./use-send-to";
 import { useTerminalUrlDetector } from "./use-terminal-url-detector";
@@ -75,7 +76,7 @@ export function useSendTo(
 ) {
   const [showSendTo, setShowSendTo] = useState(false);
   const [hasSelection, setHasSelection] = useState(false);
-  const sendSections = useSendSections(agentId, projectId, hasSelection);
+  const sendSections = useSendSections(agentId, projectId, sendToActive(hasSelection, showSendTo));
 
   useEffect(() => {
     if (!paneId) return;
@@ -86,10 +87,9 @@ export function useSendTo(
     });
   }, [paneId, agentId, projectId, terminalRef]);
 
-  const onSelectionChange = useCallback((selected: boolean) => {
-    setHasSelection(selected);
-    if (!selected) setShowSendTo(false);
-  }, []);
+  // An open list stays: a TUI's mouse mode or repaint clears xterm's selection under it, and the
+  // list sends the text it opened with
+  const onSelectionChange = useCallback((selected: boolean) => setHasSelection(selected), []);
 
   return {
     sendSections,

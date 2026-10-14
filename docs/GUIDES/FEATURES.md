@@ -90,7 +90,9 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
   review and run, a multi-line text is one bracketed paste. Settings > Terminal > Send to can press
   Enter after the paste, separately for terminals and agents; an agent asking a question or a
   permission only gets the paste (a toast says so). The list's footer shows the current behavior.
-  Arrows, Enter and Esc work in the list.
+  Arrows, Enter and Esc work in the list. Sessions read "argo · exegoldev" (alias and the CLI's
+  session name), terminals "Terminal · folder". In Claude or another TUI that uses the mouse,
+  select with Option+drag (Shift+drag on Linux and Windows): a plain drag is the TUI's own.
 - **Follow-ups and Steer**: Queue in the terminal toolbar (and on a Watching card) holds prompts
   for an agent's next turn; each is typed when the turn ends, one per turn. Steer (Claude Code,
   Codex) interrupts the turn (Esc), waits up to 20s for the prompt and types right away. The queue lives in memory: it

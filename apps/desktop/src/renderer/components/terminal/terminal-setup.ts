@@ -74,6 +74,9 @@ export function setupTerminalSession(
     allowProposedApi: true,
     convertEol: true,
     disableStdin: deps.readOnly,
+    // A TUI tracking the mouse (Claude) turns xterm's selection off: Option+drag selects anyway,
+    // as Shift+drag does off macOS, so Copy and Send to still have text
+    macOptionClickForcesSelection: true,
   });
 
   const fitAddon = new FitAddon();

@@ -190,10 +190,14 @@ export function PaneContextMenu({ children, ...actions }: PaneContextMenuProps) 
   const { contextMenu: menu, menuRef, handleContextMenu, closeContextMenu } = useContextMenu();
   const menuStyle = useFittedMenu(menuRef, menu);
   const [sendOpen, setSendOpen] = useState(false);
-  // Only with text selected in this pane's terminal; the text itself is read at send time
-  const source =
-    menu && actions.paneType === "terminal" ? selectionSourceFor(actions.paneId) : undefined;
-  const canSend = !!source?.getSelection();
+  // The selection when the menu opened: a TUI repaint or mouse report can clear it before a pick
+  const [openedWith, setOpenedWith] = useState("");
+  const live = menu && actions.paneType === "terminal" ? selectionSourceFor(actions.paneId) : null;
+  const source = live && {
+    ...live,
+    getSelection: () => live.getSelection() || openedWith,
+  };
+  const canSend = !!openedWith;
   // Built on open only: the move list reads the tabs and sessions of that moment
   const sections = menu
     ? buildMenuSections(actions, canSend ? () => setSendOpen(true) : undefined)
@@ -204,6 +208,12 @@ export function PaneContextMenu({ children, ...actions }: PaneContextMenuProps) 
     <div
       onContextMenu={(e) => {
         setSendOpen(false);
+        // Read after xterm's own handler: a right-click on a word selects it
+        setOpenedWith(
+          actions.paneType === "terminal"
+            ? (selectionSourceFor(actions.paneId)?.getSelection() ?? "")
+            : "",
+        );
         handleContextMenu(e);
       }}
       className="contents"
