@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createGpuCrashTracker, describeGpuCrash, parseGpuStats } from "./gpu-crash";
+import { createGpuCrashTracker, describeGpu, describeGpuCrash, parseGpuStats } from "./gpu-crash";
 
 const MIN = 60_000;
 
@@ -52,5 +52,40 @@ describe("describeGpuCrash", () => {
     expect(describeGpuCrash(1, [], { name: "resume", at: 0 }, 10 * MIN)).toBe(
       "1 window(s), 0 terminal view(s), 0 WebGL context(s), no sleep or display change in the last 2 min",
     );
+  });
+});
+
+describe("describeGpu", () => {
+  it("names the active device's vendor and driver, and the features that matter", () => {
+    const info = {
+      gpuDevice: [
+        { active: false, vendorId: 0x8086, deviceId: 0x3e9b },
+        {
+          active: true,
+          vendorId: 0x10de,
+          deviceId: 0x1234,
+          driverVendor: "NVIDIA",
+          driverVersion: "31.0",
+        },
+      ],
+      machineModelName: "MacBookPro",
+    };
+    const features = {
+      webgl: "enabled",
+      webgl2: "enabled",
+      gpu_compositing: "enabled",
+      video_decode: "disabled_software",
+      rasterization: "enabled",
+    };
+    const line = describeGpu(info, features);
+    expect(line).toBe(
+      "GPU NVIDIA, driver NVIDIA 31.0; gpu_compositing=enabled video_decode=disabled_software webgl=enabled webgl2=enabled",
+    );
+    expect(line).not.toContain("1234");
+    expect(line).not.toContain("MacBook");
+  });
+
+  it("copes with no info at all", () => {
+    expect(describeGpu(null, null)).toBe("GPU unknown");
   });
 });

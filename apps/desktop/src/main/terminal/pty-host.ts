@@ -39,6 +39,14 @@ import { trackSidecarCall } from "./sidecar-health-watch";
 import { isFrameGap, isStaleFrame, lostFrames, resyncFromRing } from "./sidecar-resync";
 
 export type { ReattachedSession } from "./pty-host-reattach";
+
+/** What a mounting view replays: the screen, the seq of the last output in it, and its grid */
+export interface LiveSnapshot {
+  data: string | null;
+  seq: number | null;
+  cols: number;
+  rows: number;
+}
 export type { SessionCallbacks } from "./pty-session-types";
 
 export class PtyHost {
@@ -139,7 +147,7 @@ export class PtyHost {
       s.emulator.write(processedData);
       s.resyncTail?.push(processedData);
       scheduleScrollbackFlush(s);
-      s.callbacks.onData(processedData);
+      s.callbacks.onData(processedData, s.lastSeq);
       this.outputWatchers.get(s.id)?.();
     }
   }
@@ -414,11 +422,28 @@ export class PtyHost {
     return this.sessions.get(id)?.emulator.snapshot() ?? null;
   }
 
-  /** For a live view that resets and repaints: the screen plus the modes its program set */
-  getLiveSnapshot(id: string): string | null {
-    const emulator = this.sessions.get(id)?.emulator;
-    const snapshot = emulator?.snapshot();
-    return emulator && snapshot ? snapshot + emulator.modeSequence() : null;
+  /**
+   * A live snapshot that holds exactly the output up to `seq`: taken once the model parsed every
+   * queued write (a snapshot of a half-parsed model lost bytes the view never got), and in the same
+   * turn as `seq` is read, so a view drops the live chunks it already holds by seq
+   */
+  async parsedLiveSnapshot(id: string): Promise<LiveSnapshot | null> {
+    for (;;) {
+      const s = this.sessions.get(id);
+      if (!s) return null;
+      const { emulator } = s;
+      // Re-checked after each wait: a Retry resync swaps the model, a reattach queues more
+      if (emulator.parsing) {
+        await emulator.drained();
+        continue;
+      }
+      const snapshot = emulator.snapshot();
+      return {
+        data: snapshot ? snapshot + emulator.modeSequence() : null,
+        seq: s.lastSeq ?? null,
+        ...emulator.size,
+      };
+    }
   }
 
   /** The numbered dialog the session's screen shows now, if any */

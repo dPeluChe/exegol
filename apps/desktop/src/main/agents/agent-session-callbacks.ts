@@ -281,11 +281,11 @@ export function createSpawnCallbacks(
 ) {
   maps.contexts.set(agent.id, agent);
   return {
-    onData: (data: string) => {
+    onData: (data: string, seq?: number) => {
       // T178: the renderer only needs bytes it can draw. Everything below this
       // line runs regardless — the model, the parser and the delivery clock
       // must never depend on whether a pane happens to be on screen.
-      if (hasVisibleViewer(agent.id)) broadcast("terminal:data", agent.id, data);
+      if (hasVisibleViewer(agent.id)) broadcast("terminal:data", agent.id, data, seq);
       else noteOutputDropped(agent.id);
       noteAgentOutput(agent.id);
       noteSessionActivity(agent.id, "output");

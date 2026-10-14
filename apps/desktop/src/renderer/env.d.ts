@@ -51,10 +51,13 @@ interface Window {
       invoke: (path: string, input: unknown) => Promise<unknown>;
     };
     terminal: {
-      onData: (id: string, callback: (data: string) => void) => () => void;
+      onData: (id: string, callback: (data: string, seq?: number) => void) => () => void;
       write: (id: string, data: string) => void;
       resize: (id: string, cols: number, rows: number) => void;
-      getSnapshot: (id: string) => Promise<string | null>;
+      getSnapshot: (
+        id: string,
+      ) => Promise<import("./components/terminal/live-seq").LiveSnapshot | null>;
+      mountLog?: (id: string, stats: import("./components/terminal/live-seq").MountStats) => void;
       hasContent: (id: string) => Promise<boolean>;
       /** T178: report whether this view can draw the agent. A repaint, when one
        *  is needed, arrives on terminal:data so it stays ordered. */

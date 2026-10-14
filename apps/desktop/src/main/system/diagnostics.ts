@@ -156,8 +156,10 @@ function agentCounts(db: Database.Database): string[] {
 export async function collectDiagnostics(
   db: Database.Database,
   app: { getVersion: () => string; isPackaged: boolean },
+  gpu: () => Promise<string> = async () => "",
 ): Promise<BugDiagnostics> {
   const version = app.getVersion();
+  const gpuLine = await gpu().catch(() => "");
   const doctor = await runDoctorChecks(db).catch(() => null);
   flushLogSync();
   const current = compactLog(tailFile(join(LOG_DIR, "exegol.log"), 300));
@@ -183,6 +185,7 @@ export async function collectDiagnostics(
     `- Electron ${process.versions.electron}, Chrome ${process.versions.chrome}, Node ${process.versions.node}`,
     `- ${osType()} ${release()} (${process.platform}-${process.arch})`,
     `- Sidecar protocol ${SIDECAR_VERSION}`,
+    ...(gpuLine ? [`- ${gpuLine}`] : []),
     "",
     "### Doctor",
     "",

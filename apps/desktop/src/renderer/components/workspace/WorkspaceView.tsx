@@ -134,8 +134,8 @@ function SectionArea({
   const LazySection = activeSection === "agents" ? null : LAZY_SECTIONS[activeSection];
   return (
     <div className="relative flex-1 overflow-hidden">
-      {/* Agents: always mounted. When hidden, keep in DOM but invisible.
-          Dispatch resize event when becoming visible to trigger xterm.js fit() */}
+      {/* Agents: always mounted. When hidden, keep in DOM but invisible (browser panes keep their
+          size for agent screenshots); terminals inside take display: none themselves (use-xterm) */}
       {projectId && (
         <div className={isAgents ? "absolute inset-0" : "invisible absolute inset-0"}>
           <AgentsSection />

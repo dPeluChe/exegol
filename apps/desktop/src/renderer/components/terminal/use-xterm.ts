@@ -13,10 +13,13 @@ import {
   useWorkspaceStore,
 } from "../../stores/workspace";
 import { refitWhenFontLoads } from "./font-ready";
+import { gridLabel, isOnScreen, type MountStats, mountRepaint } from "./live-seq";
 import { trackMousePress } from "./mouse-release";
 import {
+  cancelPtyResize,
   fitAndSyncSize,
   fitMirror,
+  type SnapshotApplied,
   setupTerminalSession,
   type TerminalSession,
 } from "./terminal-setup";
@@ -30,9 +33,6 @@ import {
 import { createWebglController, type WebglController } from "./terminal-webgl";
 import { HIDE_DEBOUNCE_MS, useTerminalVisibility } from "./use-terminal-visibility";
 import { trackTerminalView } from "./webgl-budget";
-
-/** Sessions already kicked by this renderer (see kickAltScreen) */
-const kickedSessions = new Set<string>();
 
 function resolveTerminalTheme(theme: string) {
   const isLight =
@@ -72,8 +72,8 @@ export function useXterm({
   const refitRef = useRef<() => void>(() => {});
   // The live session in state, so the visibility effects re-run on every rebuild
   const [session, setSession] = useState<TerminalSession | null>(null);
-  // Inactive tabs and the Agents area under the Dashboard are `invisible`, which an
-  // IntersectionObserver still counts as on screen: only this keeps them off WebGL
+  // Inactive tabs and the Agents area under the Dashboard are `invisible`, which xterm and an
+  // IntersectionObserver still count as on screen: the container then takes display: none
   const [shown, setShown] = useState(true);
 
   const setTerminalReady = useTerminalStore((s) => s.setTerminalReady);
@@ -90,16 +90,17 @@ export function useXterm({
   const cardOwns = mirror && cardFont !== undefined;
 
   // One sizing path: a plain mirror follows the PTY's grid and rescales its
-  // font; a pane (or a card that sizes its session) fits and tells the PTY
+  // font; a pane (or a card that sizes its session) fits and tells the PTY.
+  // False while the box is unmeasured (hidden): nothing was fitted
   const sizeTerminal = useCallback(
-    (terminal: Terminal, fit: FitAddon) => {
+    (terminal: Terminal, fit: FitAddon): boolean => {
       if (mirror && !cardOwns) {
         fitMirror(terminal, fontSize);
-        return;
+        return true;
       }
       // A mirror never writes the pane's size into the store
       const onSize = mirror ? () => {} : (c: number, r: number) => setTerminalSize(agentId, c, r);
-      fitAndSyncSize(terminal, fit, agentId, readOnly, onSize);
+      return fitAndSyncSize(terminal, fit, agentId, readOnly, onSize);
     },
     [agentId, setTerminalSize, readOnly, mirror, fontSize, cardOwns],
   );
@@ -125,15 +126,34 @@ export function useXterm({
     const container = containerRef.current;
     if (!container) return;
 
-    // T155.4 SIGWINCH kick: alt-screen TUIs (opencode/devin/vim) reattach to a black pane after
-    // a reload; only the app can repaint an alt screen. Once per session per renderer, and main
-    // does the jiggle without telling mirrors
-    const kickAltScreen = () => {
+    // T155.4 SIGWINCH kick, per mount: an alt-screen TUI (opencode/devin/vim) shown again at the
+    // same grid gets the jiggle (main does it without telling mirrors); at a new grid the PTY
+    // resize already makes it redraw. Decided once the snapshot is parsed AND the box measured
+    let applied: SnapshotApplied | null = null;
+    let fitted = false;
+    let settled = false;
+    const settleMount = () => {
       const t = terminalRef.current;
-      if (!t || readOnly || mirror || kickedSessions.has(agentId)) return;
-      if (t.buffer.active.type !== "alternate") return;
-      kickedSessions.add(agentId);
-      window.api.terminal.redraw(agentId);
+      if (settled || !applied || !fitted || !t) return;
+      settled = true;
+      const repaint = mountRepaint({
+        owner: !readOnly && !mirror,
+        alternate: t.buffer.active.type === "alternate",
+        snap: applied.grid,
+        fit: { cols: t.cols, rows: t.rows },
+      });
+      if (repaint === "kick") window.api.terminal.redraw(agentId);
+      sendMountLog(agentId, {
+        kind: "mount",
+        snapshotBytes: applied.bytes,
+        snapshotMs: applied.fetchMs,
+        paintMs: applied.paintMs,
+        snapGrid: applied.grid ? gridLabel(applied.grid.cols, applied.grid.rows) : null,
+        fitGrid: gridLabel(t.cols, t.rows),
+        replayed: applied.replayed,
+        dropped: applied.dropped,
+        kick: repaint === "kick",
+      });
     };
 
     // A pane mounted at startup waits for its reattach; nothing gave it the keyboard meanwhile
@@ -160,11 +180,12 @@ export function useXterm({
       liveFeed,
       mirror,
       mirrorOwnsSize: () => latest.current.cardOwns,
-      onSnapshotApplied: () => {
-        if (latest.current.cardOwns) requestAnimationFrame(() => refitRef.current());
-        // The alt-screen kick needs the snapshot in the buffer; at startup it waits for the
-        // reattach, so a fixed timer ran before it and never kicked
-        kickAltScreen();
+      onSnapshotApplied: (info) => {
+        applied = info;
+        // Written at the snapshot's grid: back to the box's (a sizing card re-applies its own)
+        if (!mirror || latest.current.cardOwns) refitRef.current();
+        // At startup the snapshot waits for the reattach, so a fixed timer ran before it
+        settleMount();
         takeKeyboard();
       },
       initialContent,
@@ -189,7 +210,11 @@ export function useXterm({
     if (live.cardOwns && live.cardFont) {
       next.terminal.options.fontSize = live.cardFont;
     }
-    const refit = () => latest.current.sizeTerminal(next.terminal, next.fitAddon);
+    const refit = () => {
+      if (!latest.current.sizeTerminal(next.terminal, next.fitAddon)) return;
+      fitted = true;
+      settleMount();
+    };
     refitRef.current = refit;
 
     // Double-RAF: first frame settles layout, second fits terminal accurately
@@ -200,21 +225,20 @@ export function useXterm({
     const settleTimer = setTimeout(refit, 150);
     const cancelFontRefit = refitWhenFontLoads(next.terminal, refit);
 
-    const kickTimer = setTimeout(kickAltScreen, 350);
-
     if (!mirror) setTerminalReady(agentId);
     onReady?.();
 
     const resizeObserver = observeContainerSize(container, mirror, refit);
     const untrackView = trackTerminalView();
-    setShown(isShown(container));
+    setShown(isShown(container.parentElement ?? container));
     const mousePress = trackMousePress(container);
 
     return () => {
       clearTimeout(settleTimer);
       cancelFontRefit();
-      clearTimeout(kickTimer);
       resizeObserver.disconnect();
+      cancelPtyResize(agentId, next.terminal);
+      if (settled) sendMountLog(agentId, UNMOUNT_STATS);
       untrackView();
       // WebGL context must be freed before the terminal itself is torn down.
       webglRef.current?.dispose();
@@ -280,7 +304,9 @@ export function useXterm({
     // Mirrors draw on canvas: several open at once would eat into Chromium's
     // ~16 WebGL contexts, and each one rebuilds its atlas on every font fit
     const useCanvas = mirror || (cliType && CANVAS_ONLY_CLI_TYPES.has(cliType));
-    const onScreen = isVisible && shown;
+    const onScreen = isOnScreen(isVisible, shown);
+    // A size measured just before hiding is not the one it comes back to
+    if (!onScreen) cancelPtyResize(agentId, terminal);
     if (onScreen && !webglRef.current && !useCanvas) {
       // Same as the menu's Refresh Terminal: the resize makes a TUI redraw its screen
       const controller = createWebglController(terminal, () =>
@@ -373,7 +399,8 @@ export function useXterm({
     // session (the dashboard hides; the workspace dispatches a refit)
     const handleRefit = () => {
       const terminal = terminalRef.current;
-      if (containerRef.current) setShown(isShown(containerRef.current));
+      const container = containerRef.current;
+      if (container) setShown(isShown(container.parentElement ?? container));
       if (!terminal) return;
       try {
         handleResize();
@@ -390,10 +417,32 @@ export function useXterm({
     };
   }, [handleResize]);
 
-  return { containerRef, terminalRef, fitAddonRef, serializeAddonRef };
+  return { containerRef, terminalRef, fitAddonRef, serializeAddonRef, shown };
 }
 
-/** `visibility: hidden` on an ancestor (a hidden tab, the Agents area under the Dashboard) */
+const UNMOUNT_STATS: MountStats = {
+  kind: "unmount",
+  snapshotBytes: 0,
+  snapshotMs: 0,
+  paintMs: null,
+  snapGrid: null,
+  fitGrid: null,
+  replayed: 0,
+  dropped: 0,
+  kick: false,
+};
+
+/** Main logs it as `[TermMount]`, at most once a second per session (never content) */
+function sendMountLog(agentId: string, stats: MountStats): void {
+  try {
+    window.api.terminal.mountLog?.(agentId, stats);
+  } catch {
+    /* a window closing */
+  }
+}
+
+/** Checked on the container's parent: the container itself is display: none while hidden.
+ *  `visibility: hidden` comes from a hidden tab or the Agents area under the Dashboard */
 function isShown(el: HTMLElement): boolean {
   return el.checkVisibility?.({ visibilityProperty: true }) ?? true;
 }

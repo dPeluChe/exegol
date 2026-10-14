@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import type { LiveSnapshot } from "./live-seq";
 import { createDormantPipe } from "./terminal-dormant-wiring";
 
 const fakeTerminal = () => {
@@ -19,17 +20,32 @@ describe("createDormantPipe", () => {
 
   it("after an overflow, resets to main's snapshot instead of drawing a partial tail", async () => {
     const t = fakeTerminal();
-    let resolve: (s: string) => void = () => {};
+    let resolve: (s: LiveSnapshot) => void = () => {};
     const pipe = createDormantPipe(t, true, () => new Promise((r) => (resolve = r)));
     pipe.setVisible(false);
     for (let i = 0; i < 300; i++) pipe.push(`frame${i}`); // more chunks than the ring keeps
     pipe.setVisible(true);
     pipe.push("live"); // arrives while the snapshot is on its way
     expect(t.log).toEqual([]);
-    resolve("SCREEN");
+    resolve({ data: "SCREEN", seq: null, cols: 80, rows: 24 });
     await Promise.resolve();
     await Promise.resolve();
     expect(t.log).toEqual(["<reset>", "SCREEN", "live"]);
+  });
+
+  it("drops output that arrived during the fetch and is already in the snapshot", async () => {
+    const t = fakeTerminal();
+    let resolve: (s: LiveSnapshot) => void = () => {};
+    const pipe = createDormantPipe(t, true, () => new Promise((r) => (resolve = r)));
+    pipe.setVisible(false);
+    for (let i = 0; i < 300; i++) pipe.push(`frame${i}`, i);
+    pipe.setVisible(true);
+    pipe.push("held", 300);
+    pipe.push("new", 301);
+    resolve({ data: "SCREEN", seq: 300, cols: 80, rows: 24 });
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(t.log).toEqual(["<reset>", "SCREEN", "new"]);
   });
 
   it("without a snapshot source it falls back to the ring's tail", () => {

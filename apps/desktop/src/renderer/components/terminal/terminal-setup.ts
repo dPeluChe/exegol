@@ -7,12 +7,14 @@ import { appChord, chordKey, IS_MAC } from "../../lib/keymap";
 import { isPaneSwitcherMounted } from "../../lib/pane-switcher-control";
 import { persistShellCwd } from "../../lib/shell-cwd";
 import { useAgentStore } from "../../stores/agents";
+import { chunksAfterSnapshot, type LiveChunk, type LiveSnapshot } from "./live-seq";
 import { stripTerminalReports } from "./mirror-input";
 import {
   createShellIntegrationState,
   type OscHandlersDisposable,
   registerOscHandlers,
 } from "./osc-handlers";
+import { createResizeStabilizer } from "./resize-stabilizer";
 import { getScrollPosition } from "./terminal-buffer";
 import { createDormantPipe, type DormantPipe } from "./terminal-dormant-wiring";
 import { registerTerminalLinkProviders } from "./terminal-link-providers";
@@ -34,8 +36,9 @@ interface TerminalSessionDeps {
   mirror?: boolean;
   /** Mirror whose card sizes the session (T194 "fit session to card"): read live */
   mirrorOwnsSize?: () => boolean;
-  /** After the snapshot lands at the PTY's grid: a sizing card re-applies its own */
-  onSnapshotApplied?: () => void;
+  /** After the snapshot is parsed (and painted on the next frame): a sizing card re-applies its
+   *  own grid, a pane refits and decides its repaint */
+  onSnapshotApplied?: (info: SnapshotApplied) => void;
   initialContent?: string;
   fontSize: number;
   fontFamily: string;
@@ -44,6 +47,17 @@ interface TerminalSessionDeps {
   onSelectionChange?: TerminalInstanceProps["onSelectionChange"];
   setPaneCwd: (paneId: string, cwd: string) => void;
   setPaneLastExit: (paneId: string, code: number | null) => void;
+}
+
+export interface SnapshotApplied {
+  bytes: number;
+  /** Request to reply */
+  fetchMs: number;
+  /** Mount to the first frame after the snapshot was parsed */
+  paintMs: number;
+  grid: { cols: number; rows: number } | null;
+  replayed: number;
+  dropped: number;
 }
 
 export interface TerminalSession {
@@ -247,15 +261,16 @@ export function setupTerminalSession(
   // Live feed runs for interactive terminals AND liveFeed viewers (T156):
   // snapshot replay first, buffering any output that races it.
   if (!deps.readOnly || deps.liveFeed) {
+    const mountedAt = performance.now();
     let snapshotResolved = false;
     let liveDisposed = false;
-    const liveBuffer: string[] = [];
-    unsubData = window.api.terminal.onData(deps.agentId, (data) => {
+    const liveBuffer: LiveChunk[] = [];
+    unsubData = window.api.terminal.onData(deps.agentId, (data, seq) => {
       if (liveDisposed) return;
       if (!snapshotResolved) {
-        liveBuffer.push(data);
+        liveBuffer.push({ data, seq });
       } else {
-        dormantPipe.push(data);
+        dormantPipe.push(data, seq);
       }
     });
 
@@ -284,15 +299,41 @@ export function setupTerminalSession(
       });
     }
 
+    let askedAt = mountedAt;
     sized
-      .then(() => window.api.terminal.getSnapshot(deps.agentId))
+      .then(() => {
+        askedAt = performance.now();
+        return window.api.terminal.getSnapshot(deps.agentId);
+      })
+      .catch((): LiveSnapshot | null => null)
       .then((snapshot) => {
         if (liveDisposed) return;
-        if (snapshot) terminal.write(snapshot);
-        deps.onSnapshotApplied?.();
-        snapshotResolved = true;
-        for (const chunk of liveBuffer) dormantPipe.push(chunk);
+        const fetchMs = performance.now() - askedAt;
+        const data = snapshot?.data ?? "";
+        // Written at the grid it was drawn at: at xterm's 80x24 a TUI frame wrapped, and the
+        // alt screen is never reflowed back by the fit that follows
+        const grid = snapshot ? { cols: snapshot.cols, rows: snapshot.rows } : null;
+        if (grid && !deps.mirror && (terminal.cols !== grid.cols || terminal.rows !== grid.rows)) {
+          terminal.resize(grid.cols, grid.rows);
+        }
+        // Chunks that raced the snapshot and are already in it would be written twice
+        const { replay, dropped } = chunksAfterSnapshot(liveBuffer, snapshot?.seq ?? null);
         liveBuffer.length = 0;
+        snapshotResolved = true;
+        terminal.write(data, () => {
+          requestAnimationFrame(() => {
+            if (liveDisposed) return;
+            deps.onSnapshotApplied?.({
+              bytes: data.length,
+              fetchMs,
+              paintMs: performance.now() - mountedAt,
+              grid,
+              replayed: replay.length,
+              dropped,
+            });
+          });
+        });
+        for (const chunk of replay) dormantPipe.push(chunk.data, chunk.seq);
       });
 
     disposables.push({
@@ -344,33 +385,31 @@ export function fitAndSyncSize(
   agentId: string,
   readOnly: boolean,
   onSize: (cols: number, rows: number) => void,
-): void {
+): boolean {
   try {
     const host = measureHost(terminal);
-    // Unlaid-out box: the addon would fall back to 80x24 and the PTY would
-    // redraw (and rewrap) at 80 columns for a frame
-    if (!host?.width || !host?.height) return;
+    // Unlaid-out or hidden (display: none) box: the addon would fall back to 80x24 and the PTY
+    // would redraw (and rewrap) at 80 columns for a frame
+    if (!host?.width || !host?.height) return false;
     fitAddon.fit();
     const { cols, rows } = terminal;
     onSize(cols, rows);
-    if (!readOnly) sendPtyResize(agentId, cols, rows);
+    if (!readOnly) ptyResizes.request(agentId, terminal, cols, rows);
+    return true;
   } catch {
     /* container may not be ready */
+    return false;
   }
 }
 
-/** Layout settles over a few frames on mount (toolbar, tabs); each size the
- *  PTY sees makes the CLI redraw, so only the last of a burst is sent. */
-const pendingResize = new Map<string, ReturnType<typeof setTimeout>>();
-function sendPtyResize(agentId: string, cols: number, rows: number): void {
-  clearTimeout(pendingResize.get(agentId));
-  pendingResize.set(
-    agentId,
-    setTimeout(() => {
-      pendingResize.delete(agentId);
-      window.api.terminal.resize(agentId, cols, rows);
-    }, 80),
-  );
+const ptyResizes = createResizeStabilizer((agentId, cols, rows) =>
+  window.api.terminal.resize(agentId, cols, rows),
+);
+
+/** A view that unmounts or hides drops the size it was settling: a transient layout size
+ *  reached the PTY after the user had already left (project switch logs) */
+export function cancelPtyResize(agentId: string, terminal: Terminal): void {
+  ptyResizes.cancel(agentId, terminal);
 }
 
 /** Latest fit per terminal: a newer call makes older rAF retry chains exit, so
