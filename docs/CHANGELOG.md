@@ -15,7 +15,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Settings > Terminal > Send to: "run it (press Enter)" for terminals and "submit it (press Enter)" for agents, both off by default (paste only). An agent asking a question or a permission is never submitted to: the text is pasted and a toast says so. The Send to list's footer says what a pick does, with a link to the setting
 
 ### Fixed
-- Selecting text in Claude (or any TUI that uses the mouse): hold Option while dragging (Shift on Linux and Windows) to select in the terminal itself, so Copy and Send to have it; a plain drag is the TUI's own selection
+- Selecting text in Claude (or any TUI that uses the mouse): hold Option while dragging (Shift on Linux and Windows) to select in the terminal itself, so Copy and Send to have it; a plain drag is the TUI's own selection. The selection now stays while you move the mouse to Send to (Claude's mouse tracking used to clear it); a click, a key or the wheel still clears it
 - The terminal in view after an app start no longer draws for about 10 rows more than its pane until you switch pane or tab. It was sized before the bundled terminal font (MesloLGS NF and the other Nerd Fonts) had loaded, so it used the fallback font's shorter rows; it now refits once the font is in
 
 ### Changed
