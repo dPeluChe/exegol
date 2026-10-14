@@ -85,7 +85,13 @@ describe("trayAgentsIn", () => {
   it("lists one state across projects with the project name", () => {
     const projects = build([
       row({ id: "a", status: "running" }),
-      row({ id: "b", project_id: "p2", project_name: "Orbital", alias: "sirius", status: "running" }),
+      row({
+        id: "b",
+        project_id: "p2",
+        project_name: "Orbital",
+        alias: "sirius",
+        status: "running",
+      }),
       row({ id: "c" }),
     ]);
     expect(trayAgentsIn(projects, "working").map((a) => a.label)).toEqual([
