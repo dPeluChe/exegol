@@ -85,12 +85,7 @@ export function answersPrompt(a: {
   return a.dialogOnScreen || (a.status === "waiting_input" && a.awaitingAnswer);
 }
 
-/** Dictated text is data: no escape sequences or control characters reach a terminal (one
- *  could end a bracketed paste and run the rest) */
-export function sanitizeDictation(text: string): string {
-  // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping them is the point
-  return text.replace(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/g, "").trim();
-}
+export { sanitizeDictation } from "@exegol/shared";
 
 /** Non-terminal targets: the overlay chip's icon and name (a terminal shows its agent) */
 export const TARGET_KINDS: Record<

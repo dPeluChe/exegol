@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Settings > Dictation > Recordings: "Keep recordings for model testing" (off by default) saves each dictation that ends with text inserted or copied, its audio and the text, in `~/.exegol/dictation-audio` on this Mac, to compare speech models later on your own speech. Recordings are deleted after 5, 10, 15 or 30 days (10 by default); turning the setting off keeps what was saved. The card shows how many there are and their size per project, with Open folder and Clear recordings; Settings > Storage lists them too. Developers can score every installed model on them with `bun apps/desktop/scripts/dictation-bench.ts` (word and character error rate, speed)
+
 ### Fixed
 - The terminal in view after an app start no longer draws for about 10 rows more than its pane until you switch pane or tab. It was sized before the bundled terminal font (MesloLGS NF and the other Nerd Fonts) had loaded, so it used the fallback font's shorter rows; it now refits once the font is in
 
