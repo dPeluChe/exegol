@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- The launcher in an empty pane and the one in an ended session's pane now fit their pane: in a short pane (a bottom split) the folder, agents and folder actions sit in one or two rows from the top and the pane scrolls instead of cutting them off, and in a narrow pane the buttons keep their icon and key and drop the label. Large panes look as before
+
 ### Fixed
 - The terminal in view after an app start no longer draws for about 10 rows more than its pane until you switch pane or tab. It was sized before the bundled terminal font (MesloLGS NF and the other Nerd Fonts) had loaded, so it used the fallback font's shorter rows; it now refits once the font is in
 

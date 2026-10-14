@@ -175,9 +175,9 @@ function LauncherBody({
     <div
       ref={rootRef}
       tabIndex={-1}
-      className="flex w-full flex-col items-center gap-3 px-4 py-4 outline-none"
+      className="@container flex w-full flex-col items-center gap-3 px-4 py-4 outline-none pane-short:flex-row pane-short:flex-wrap pane-short:justify-center pane-short:gap-x-3 pane-short:gap-y-1.5 pane-short:py-2"
     >
-      <div className="flex max-w-full flex-wrap items-center justify-center gap-x-1.5 gap-y-1 text-[12px]">
+      <div className="flex max-w-full flex-wrap items-center justify-center gap-x-1.5 gap-y-1 text-[12px] pane-short:basis-full">
         <AgentIcon provider={agent.cliType} size={16} />
         <span className="font-semibold text-text-primary">{title}</span>
         {rest.map((part) => (
@@ -215,9 +215,15 @@ function LauncherBody({
             />
           ))}
         {actions.includes("new") && (
-          <button type="button" disabled={locked} onClick={() => run("new")} className={button}>
+          <button
+            type="button"
+            disabled={locked}
+            onClick={() => run("new")}
+            aria-label={`New ${cliName} session here`}
+            className={button}
+          >
             <Plus className="h-3 w-3" />
-            New {cliName} session here
+            <span className="@max-xs:hidden">New {cliName} session here</span>
             <Kbd k={ENDED_ACTION_KEYS.new} />
           </button>
         )}
@@ -239,7 +245,7 @@ function LauncherBody({
 
       {paneId && others.length > 0 && (
         <div className="flex flex-wrap items-center justify-center gap-1">
-          <span className="mr-1 text-[9px] font-medium uppercase tracking-wide text-text-muted">
+          <span className="mr-1 text-[9px] font-medium uppercase tracking-wide text-text-muted @max-xs:hidden">
             Switch agent
           </span>
           {others.map((p, i) => (
@@ -312,10 +318,11 @@ function ActionButton({
       type="button"
       disabled={disabled}
       onClick={onClick}
+      aria-label={label}
       className={cn("flex items-center gap-1.5", className)}
     >
       <Icon className="h-3 w-3" />
-      {label}
+      <span className="@max-xs:hidden">{label}</span>
       <Kbd k={ENDED_ACTION_KEYS[action]} />
     </button>
   );

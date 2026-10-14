@@ -106,12 +106,18 @@ export function FolderActions({
               onClick={() => onAction(action)}
               className={button}
               title={`${label} in ${folder.path} (${LAUNCHER_ACTION_KEYS[action]})`}
+              aria-label={label}
             >
               <Icon className="h-3 w-3" />
-              {label}
-              {!compact && (
-                <Kbd className="h-4 min-w-4 px-1 text-[9px]">{LAUNCHER_ACTION_KEYS[action]}</Kbd>
-              )}
+              <span className="@max-xs:hidden">{label}</span>
+              <Kbd
+                className={cn(
+                  "h-4 min-w-4 px-1 text-[9px]",
+                  compact && "hidden @max-xs:inline-flex",
+                )}
+              >
+                {LAUNCHER_ACTION_KEYS[action]}
+              </Kbd>
             </button>
           );
         })}
