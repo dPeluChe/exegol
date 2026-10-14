@@ -10,7 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-- Canary 180M flash (NVIDIA, CC-BY-4.0) in Settings > Models: a 154 MB dictation model for Spanish, English, German and French with punctuation. It is set to Spanish, so speech in another language comes out translated to Spanish
+- Canary 180M flash (NVIDIA, CC-BY-4.0) in Settings > Models: a 154 MB dictation model for Spanish, English, German and French with punctuation. It runs in the new Settings > Dictation > Language (English by default, or Spanish), so speech in another language comes out translated into it
 
 ### Fixed
 - The terminal in view after an app start no longer draws for about 10 rows more than its pane until you switch pane or tab. It was sized before the bundled terminal font (MesloLGS NF and the other Nerd Fonts) had loaded, so it used the fallback font's shorter rows; it now refits once the font is in

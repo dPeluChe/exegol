@@ -29,6 +29,18 @@ export type DictationTargetKind = (typeof DICTATION_TARGET_KINDS)[number];
 export const DICTATION_OVERLAY_POSITIONS = ["pane", "titlebar"] as const;
 export type DictationOverlayPosition = (typeof DICTATION_OVERLAY_POSITIONS)[number];
 
+/** The spoken language, for models that need one (Canary); multilingual models detect it.
+ *  A new language is one entry here */
+export const DICTATION_LANGUAGES = [
+  { id: "en", label: "English" },
+  { id: "es", label: "Spanish" },
+] as const;
+export type DictationLanguage = (typeof DICTATION_LANGUAGES)[number]["id"];
+export const DICTATION_LANGUAGE_IDS = DICTATION_LANGUAGES.map((l) => l.id) as [
+  DictationLanguage,
+  ...DictationLanguage[],
+];
+
 /** What ended a dictation, for the log line (never the text): a bug report tells a mis-click from
  *  a key that never arrived */
 export const DICTATION_STOP_REASONS = [
@@ -71,6 +83,7 @@ export interface DictationSettings {
   retentionDays: number;
   retentionMax: number;
   overlayPosition: DictationOverlayPosition;
+  language: DictationLanguage;
 }
 
 export const DEFAULT_DICTATION_SHORTCUT = "Cmd+Shift+Space";
@@ -87,6 +100,7 @@ export const DEFAULT_DICTATION_SETTINGS: DictationSettings = {
   retentionDays: 30,
   retentionMax: 500,
   overlayPosition: "pane",
+  language: "en",
 };
 
 /** The saved settings over the defaults: a row written before a field existed lacks it */

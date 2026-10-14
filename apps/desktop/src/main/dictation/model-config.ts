@@ -1,5 +1,9 @@
 import { isAbsolute, join, relative } from "node:path";
-import { DICTATION_SAMPLE_RATE, type SpeechModelEntry } from "@exegol/shared";
+import {
+  DICTATION_SAMPLE_RATE,
+  type DictationLanguage,
+  type SpeechModelEntry,
+} from "@exegol/shared";
 
 /** What the engine process builds: an offline recognizer (decode after stop) or an online one
  *  (partial text while listening). `config` is sherpa-onnx-node's recognizer config */
@@ -12,7 +16,11 @@ export interface RecognizerSpec {
   };
 }
 
-type Builder = (file: (name: string) => string, numThreads: number) => RecognizerSpec;
+type Builder = (
+  file: (name: string) => string,
+  numThreads: number,
+  language: DictationLanguage,
+) => RecognizerSpec;
 
 const offline = (
   modelConfig: Record<string, unknown>,
@@ -44,8 +52,12 @@ const moonshine: Builder = (file, numThreads) =>
     numThreads,
   );
 
-// No dictation language setting yet; the same language in and out means no translation
-export const CANARY_LANGUAGE = "es";
+// Models that run in one set language; the others detect it, so their recognizer ignores it
+const NEEDS_LANGUAGE = new Set(["canary-180m-flash-int8"]);
+
+/** What the loaded recognizer is cached by: a language change reloads only the models it shapes */
+export const recognizerKey = (id: string, language: DictationLanguage): string =>
+  NEEDS_LANGUAGE.has(id) ? `${id}:${language}` : id;
 
 // Per catalog id: the sherpa-onnx model family and the file names inside its folder
 const BUILDERS: Record<string, Builder> = {
@@ -96,14 +108,15 @@ const BUILDERS: Record<string, Builder> = {
       },
       numThreads,
     ),
-  "canary-180m-flash-int8": (file, numThreads) =>
+  // Same language in and out: speech in another one comes out translated into it
+  "canary-180m-flash-int8": (file, numThreads, language) =>
     offline(
       {
         canary: {
           encoder: file("encoder.int8.onnx"),
           decoder: file("decoder.int8.onnx"),
-          srcLang: CANARY_LANGUAGE,
-          tgtLang: CANARY_LANGUAGE,
+          srcLang: language,
+          tgtLang: language,
           usePnc: 1,
         },
         tokens: file("tokens.txt"),
@@ -122,9 +135,10 @@ export function recognizerSpec(
   entry: SpeechModelEntry,
   dir: string,
   numThreads: number,
+  language: DictationLanguage,
 ): RecognizerSpec | null {
   const build = BUILDERS[entry.id];
-  return build ? build((name) => join(dir, name), numThreads) : null;
+  return build ? build((name) => join(dir, name), numThreads, language) : null;
 }
 
 /** Every file path in a spec (any string value that is absolute) */

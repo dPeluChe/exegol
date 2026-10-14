@@ -259,7 +259,8 @@ export const MODEL_CATALOG: readonly SpeechModelEntry[] = [
     archive: "tar.bz2",
     rootDir: CANARY_ROOT,
     files: ["encoder.int8.onnx", "decoder.int8.onnx", "tokens.txt"],
-    notes: "Set to Spanish: speech in another language comes out translated to Spanish.",
+    notes:
+      "Runs in the language set in Settings > Dictation: speech in another language comes out translated into it.",
   },
 ];
 
