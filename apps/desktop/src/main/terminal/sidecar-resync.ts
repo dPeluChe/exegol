@@ -71,5 +71,5 @@ export async function resyncFromRing(
   s.emulator = fresh;
   if (ring.seq !== undefined) s.lastSeq = Math.max(s.lastSeq ?? 0, ring.seq);
   s.seqGap = false;
-  broadcast("terminal:data", s.id, `\x1bc${snapshot}${tail.join("")}`);
+  broadcast("terminal:data", s.id, `\x1bc${snapshot}${tail.join("")}`, s.lastSeq);
 }

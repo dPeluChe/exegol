@@ -64,3 +64,43 @@ export function describeGpuCrash(
       : "no sleep or display change in the last 2 min";
   return `${windows} window(s), ${views} terminal view(s), ${webgl} WebGL context(s), ${event}`;
 }
+
+const GPU_VENDORS: Record<number, string> = {
+  4203: "Apple",
+  4098: "AMD",
+  4318: "NVIDIA",
+  32902: "Intel",
+  20803: "Qualcomm",
+};
+
+/** Always named: the rest of the feature table only when it is not plainly enabled */
+const KEY_FEATURES = ["gpu_compositing", "webgl", "webgl2"];
+
+/**
+ * The GPU line for logs and the public bug report: the active device's vendor and driver plus the
+ * feature status. Device ids, machine model and every other field are left out on purpose
+ */
+export function describeGpu(info: unknown, features: Record<string, string> | null): string {
+  const devices = (info as { gpuDevice?: unknown } | null)?.gpuDevice;
+  const list = Array.isArray(devices) ? (devices as Array<Record<string, unknown>>) : [];
+  const device = list.find((d) => d.active === true) ?? list[0];
+  const parts: string[] = [];
+  if (device) {
+    const id = typeof device.vendorId === "number" ? device.vendorId : null;
+    const vendor = id === null ? "unknown" : (GPU_VENDORS[id] ?? `0x${id.toString(16)}`);
+    const driver = [device.driverVendor, device.driverVersion]
+      .filter((v): v is string => typeof v === "string" && v.length > 0 && v.length < 64)
+      .join(" ");
+    parts.push(`GPU ${vendor}${driver ? `, driver ${driver}` : ""}`);
+  } else {
+    parts.push("GPU unknown");
+  }
+  if (features) {
+    const shown = Object.entries(features)
+      .filter(([k, v]) => KEY_FEATURES.includes(k) || !v.startsWith("enabled"))
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([k, v]) => `${k}=${v}`);
+    if (shown.length) parts.push(shown.join(" "));
+  }
+  return parts.join("; ");
+}

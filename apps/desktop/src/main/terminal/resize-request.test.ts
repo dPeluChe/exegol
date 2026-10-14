@@ -48,3 +48,21 @@ describe("requestPtyResize", () => {
     expect(info).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("requestPtyResize log", () => {
+  it("says how many lines the rate limit held back", () => {
+    info.mockClear();
+    host = {
+      requestedSize: vi.fn(() => ({ size: { cols: 100, rows: 30 }, held: false })),
+    };
+    vi.useFakeTimers();
+    vi.setSystemTime(1_000_000);
+    requestPtyResize("flap", 108, 54);
+    requestPtyResize("flap", 102, 54);
+    requestPtyResize("flap", 108, 54);
+    vi.setSystemTime(1_011_000);
+    requestPtyResize("flap", 66, 10);
+    vi.useRealTimers();
+    expect(info).toHaveBeenLastCalledWith("[Resize] flap 100x30 -> 66x10 (+2 suppressed)");
+  });
+});

@@ -10,6 +10,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- Switching projects quickly (2, 3, 4 and back to 2) no longer leaves repeated characters in the terminal you land on. Output that arrived while a terminal was loading its screen was drawn twice, and output still being processed could go missing; each terminal now takes exactly the output its screen does not already hold
+- Terminals in a hidden tab or behind the Dashboard stop drawing until you look at them again, and a terminal no longer sends its program a passing size while the layout settles or after you have left it (the program redrew at each one). An agent in a full-screen view (opencode, Codex, vim) that comes back with a blank screen is asked to redraw
 - The terminal in view after an app start no longer draws for about 10 rows more than its pane until you switch pane or tab. It was sized before the bundled terminal font (MesloLGS NF and the other Nerd Fonts) had loaded, so it used the fallback font's shorter rows; it now refits once the font is in
 
 ## [0.5.21] — 2026-10-13 — Folder-first launcher, sessions that survive a lost sidecar, idle auto-suspend

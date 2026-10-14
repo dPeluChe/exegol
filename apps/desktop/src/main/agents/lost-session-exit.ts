@@ -3,6 +3,7 @@
 import type Database from "libsql";
 import { logger } from "../lib/logger";
 import { revokeAgentMcpToken } from "../mcp/exegol-server";
+import { forgetTerminalLogs } from "../terminal/mount-log";
 import { forgetTerminalViewers } from "../terminal/pty-visibility";
 import type { SessionMaps } from "./agent-session-callbacks";
 import { lastActiveOf } from "./auto-resume";
@@ -30,6 +31,7 @@ export function handleLostSession(
   revokeAgentMcpToken(agent.id);
   forgetBroadcastStatus(agent.id);
   forgetTerminalViewers(agent.id);
+  forgetTerminalLogs(agent.id);
   forgetTurns(agent.id);
   if (!persist) return;
 
