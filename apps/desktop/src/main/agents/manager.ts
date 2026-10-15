@@ -2,6 +2,7 @@ import { type Agent, type AgentCreate, appliedModelRoles, YOLO_FLAGS } from "@ex
 import type Database from "libsql";
 import {
   activateAgent,
+  agentPtySize,
   getAgent,
   insertActivity,
   setAgentCliVersion,
@@ -222,9 +223,14 @@ export class AgentManager {
       if (missed) reportMissedResume(agent);
     };
 
+    // A resume lands in its source's pane: start at that grid, not redraw from 120x30
+    const size = (config.resumeFromAgentId && agentPtySize(db, config.resumeFromAgentId)) || {
+      cols: DEFAULT_PTY_COLS,
+      rows: DEFAULT_PTY_ROWS,
+    };
     const { pid } = await ptyHost.createSession(
       agent.id,
-      { shell, args, cwd, cols: DEFAULT_PTY_COLS, rows: DEFAULT_PTY_ROWS, env },
+      { shell, args, cwd, cols: size.cols, rows: size.rows, env },
       callbacks,
       { scrollbackPath, shellReadyGating: enableMarker, smallRingBuffer: isPlainShell },
     );

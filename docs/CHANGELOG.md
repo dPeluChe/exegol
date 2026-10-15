@@ -38,6 +38,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Pages in browser panes no longer get location, notifications, MIDI, idle detection, window management or external app links silently: they ask (see Added), and screen capture, USB, serial and HID are refused. While an agent drives the pane nothing asks: the request is denied, and camera and microphone stay off even with a saved Allow
 
 ### Fixed
+- A session resumed or restarted in its pane (Restart to update, Resume) starts at that pane's size instead of 120x30 and a redraw a moment later
 - Typing into Antigravity (agy) after switching back to its pane no longer scatters letters at the start of the line or leaves gaps when the line wraps: a pane rebuilt from its saved screen now puts the cursor exactly where the CLI left it
 - Opening Exegol a second time no longer pushes the running session's log aside: the bug report's "this session" log showed only the short-lived second copy, and five extra launches deleted the real one
 - Opening Exegol again while it is already running (from the app menu or a launcher, mostly on Linux) now brings its window back, also when the window had been closed into the tray or minimized. Before, the second copy started halfway, then quit, and the running one stayed hidden until its process was killed
