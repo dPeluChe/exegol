@@ -5,7 +5,6 @@ import {
   type DictationStatus,
   type DictationStopReason,
   dictationSettingsOf,
-  type ScreenDialog,
   type Settings,
 } from "@exegol/shared";
 import type { QueryClient } from "@tanstack/react-query";
@@ -16,14 +15,13 @@ import { recordedMs, useDictationStore } from "../../stores/dictation";
 import { useToastStore } from "../../stores/toasts";
 import { getActivePaneId, useWorkspaceStore } from "../../stores/workspace";
 import { pasteToAgent, submitToAgent } from "../agent-input";
-import { isClaudeQuestion } from "../claude-question";
+import { agentAsksQuestion } from "../agent-question";
 import { focusedField } from "../focused-field";
 import { paneRoot } from "../pane-focus";
 import { trpcInvoke, trpcMutate } from "../trpc-client";
 import { type Capture, startCapture } from "./capture";
 import { insertIntoEditorIn } from "./editors";
 import {
-  answersPrompt,
   confirmTarget,
   type DictationTarget,
   type FocusSnapshot,
@@ -330,20 +328,9 @@ async function copyInstead(text: string, title: string, body: string): Promise<v
 /** Why the text must not be typed into the agent: it ended, or a dictation would answer its
  *  question. Null when it can take it */
 async function terminalRefusal(agentId: string): Promise<string | null> {
-  const { agents, attentionItems } = useAgentStore.getState();
-  const agent = agents[agentId];
+  const agent = useAgentStore.getState().agents[agentId];
   if (!agent || !takesDictation(agent)) return "The agent is not running";
-  if (agent.cliType === "shell") return null;
-  const dialog = await trpcInvoke<ScreenDialog | null>("agents.screenDialog", {
-    id: agentId,
-  }).catch(() => null);
-  const asks = answersPrompt({
-    status: agent.status,
-    dialogOnScreen: !!dialog,
-    // Claude's hooks say when it asks; other CLIs' prompts show up as a screen dialog
-    awaitingAnswer: isClaudeQuestion(attentionItems[agentId], agent),
-  });
-  return asks ? "The agent is waiting on a question" : null;
+  return (await agentAsksQuestion(agentId)) ? "The agent is waiting on a question" : null;
 }
 
 export async function insertDictation(

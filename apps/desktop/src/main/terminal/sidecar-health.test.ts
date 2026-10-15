@@ -8,7 +8,6 @@ import {
   PING_BACKOFF_MS,
   pingDelay,
   pingResult,
-  RateLimiter,
   STALL_AFTER_MS,
   STILL_STALLED_LOG_MS,
   StallWatch,
@@ -156,18 +155,6 @@ describe("StallWatch", () => {
 
   it("ignores a ping result while not watching", () => {
     expect(new StallWatch().onPing("failed", 1)).toEqual({ event: null, next: null });
-  });
-});
-
-describe("RateLimiter", () => {
-  it("allows one per key per interval, and again after reset", () => {
-    const r = new RateLimiter(1_000);
-    expect(r.allow("session.write", 0)).toBe(true);
-    expect(r.allow("session.write", 999)).toBe(false);
-    expect(r.allow("session.resize", 999)).toBe(true);
-    expect(r.allow("session.write", 1_000)).toBe(true);
-    r.reset();
-    expect(r.allow("session.write", 1_001)).toBe(true);
   });
 });
 

@@ -157,23 +157,6 @@ export class StallWatch {
   }
 }
 
-export class RateLimiter {
-  private last = new Map<string, number>();
-
-  constructor(private readonly intervalMs: number) {}
-
-  allow(key: string, now: number): boolean {
-    const prev = this.last.get(key);
-    if (prev !== undefined && now - prev < this.intervalMs) return false;
-    this.last.set(key, now);
-    return true;
-  }
-
-  reset(): void {
-    this.last.clear();
-  }
-}
-
 export const seconds = (ms: number): string => `${(ms / 1000).toFixed(1)}s`;
 
 export function describeProcess(m: ProcessMetrics): string {

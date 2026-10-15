@@ -92,7 +92,7 @@ export class AgentManager {
   /** T123: NotifyHandler file events (Claude Code hooks) → signal pipeline. */
   handleAgentFileEvent(
     db: Database.Database,
-    event: { type: string; agentId: string; sessionId?: string },
+    event: { type: string; agentId: string; sessionId?: string; cwd?: string },
   ): void {
     dispatchAgentFileEvent(db, this.getSessionMaps(), event);
   }

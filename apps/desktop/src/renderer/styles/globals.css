@@ -7,6 +7,11 @@
 @import "@xterm/xterm/css/xterm.css";
 @import "./fonts.css";
 
+/* Height of the nearest size container (`@container-[size]`), e.g. a short bottom pane */
+@custom-variant pane-short (@container (max-height: 16rem));
+/* A narrow pane that is not short (a split's right half): rows of buttons stretch to its width */
+@custom-variant pane-narrow (@container (width <= 28rem) and (height > 16rem));
+
 @theme {
   --color-bg-primary: var(--bg-primary);
   --color-bg-secondary: var(--bg-secondary);

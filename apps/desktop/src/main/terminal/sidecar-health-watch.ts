@@ -5,6 +5,7 @@ import { monitorEventLoopDelay } from "node:perf_hooks";
 import { SIDECAR_HEALTHY, type SidecarHealth } from "@exegol/shared";
 import { powerMonitor } from "electron";
 import { broadcast } from "../lib/event-bus";
+import { createLogLimiter, suppressedNote } from "../lib/log-limiter";
 import { logger } from "../lib/logger";
 import { withTimeout } from "../lib/timeout";
 import { readProcessMetrics } from "../system/process-metrics";
@@ -19,7 +20,6 @@ import {
   PING_TIMEOUT_MS,
   type PingResult,
   pingResult,
-  RateLimiter,
   STALL_AFTER_MS,
   type StallEvent,
   StallWatch,
@@ -29,7 +29,7 @@ import {
 let clientSource: (() => SidecarClient | null) | null = null;
 const watch = new StallWatch();
 const calls = new CallTracker();
-const failureLog = new RateLimiter(FAILURE_LOG_MS);
+const failureLog = createLogLimiter(FAILURE_LOG_MS);
 let lastLoopLog = 0;
 let asleep = false;
 let sleptSinceSample = false;
@@ -66,11 +66,12 @@ export function trackSidecarCall(
     const now = Date.now();
     calls.settle(false, now);
     if (clientSource?.() !== client) return;
-    if (failureLog.allow(method, now)) {
+    const suppressed = failureLog.take(method, now);
+    if (suppressed !== null) {
       const reason = err instanceof Error && /timeout/i.test(err.message) ? "timed out" : "failed";
       const detail = err instanceof Error && reason === "failed" ? ` (${err.message})` : "";
       logger.warn(
-        `[Sidecar] ${method} to ${sessionId} ${reason} after ${seconds(now - started)}${detail}`,
+        `[Sidecar] ${method} to ${sessionId} ${reason} after ${seconds(now - started)}${detail}${suppressedNote(suppressed)}`,
       );
     }
     suspect(started);

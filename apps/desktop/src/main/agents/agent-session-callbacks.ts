@@ -14,6 +14,7 @@ import { logger } from "../lib/logger";
 import { removeAgentMcpConfig, removePerAgentMcpConfig } from "../mcp/exegol-mcp-config";
 import { revokeAgentMcpToken } from "../mcp/exegol-server";
 import { getNotificationBus } from "../notifications/bus";
+import { forgetTerminalLogs } from "../terminal/mount-log";
 import { getPtyHost } from "../terminal/pty-host";
 import {
   forgetTerminalViewers,
@@ -30,6 +31,7 @@ import {
 import type { OutputProcessor } from "./agent-output-processor";
 import { handleParallelAgentExit } from "./agent-parallel-orchestration";
 import { detectCliSelfUpdate } from "./cli-self-update";
+import { noteHookCwd } from "./hook-cwd";
 import { handleLostSession } from "./lost-session-exit";
 import { detachOutputPipeline } from "./output-pipeline";
 import { noteSessionActivity } from "./session-activity";
@@ -234,10 +236,11 @@ function storeHookSessionId(db: Database.Database, agentId: string, sessionId: s
 export function dispatchAgentFileEvent(
   db: Database.Database,
   maps: SessionMaps,
-  event: { type: string; agentId: string; sessionId?: string },
+  event: { type: string; agentId: string; sessionId?: string; cwd?: string },
 ): void {
-  // Before the OSC short-circuit: OSC carries no session id, hooks do
+  // Before the OSC short-circuit: OSC carries no session id or folder, hooks do
   if (event.sessionId) storeHookSessionId(db, event.agentId, event.sessionId);
+  noteHookCwd(event.agentId, event.cwd);
   if (oscDeliveredAgents.has(event.agentId)) return;
   const sigType = FILE_EVENT_SIGNALS[event.type];
   if (!sigType) return;
@@ -281,11 +284,11 @@ export function createSpawnCallbacks(
 ) {
   maps.contexts.set(agent.id, agent);
   return {
-    onData: (data: string) => {
+    onData: (data: string, seq?: number) => {
       // T178: the renderer only needs bytes it can draw. Everything below this
       // line runs regardless — the model, the parser and the delivery clock
       // must never depend on whether a pane happens to be on screen.
-      if (hasVisibleViewer(agent.id)) broadcast("terminal:data", agent.id, data);
+      if (hasVisibleViewer(agent.id)) broadcast("terminal:data", agent.id, data, seq);
       else noteOutputDropped(agent.id);
       noteAgentOutput(agent.id);
       noteSessionActivity(agent.id, "output");
@@ -477,6 +480,7 @@ export function createSpawnCallbacks(
       }
       forgetBroadcastStatus(agent.id);
       forgetTerminalViewers(agent.id);
+      forgetTerminalLogs(agent.id);
       forgetTurns(agent.id);
 
       // T65: if this agent was part of a parallel run, check if the run is done.

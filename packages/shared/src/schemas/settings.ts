@@ -52,6 +52,8 @@ export const settingsSchema = z.object({
   globalHotkey: z.string().default("CommandOrControl+Shift+E"),
   terminalFontSize: z.number().int().min(8).max(32).default(14),
   terminalFontFamily: z.string().default("Menlo, Monaco, monospace"),
+  sendToRunTerminal: z.boolean().default(false),
+  sendToSubmitAgent: z.boolean().default(false),
   notificationsEnabled: z.boolean().default(true),
   toastsEnabled: z.boolean().default(true),
   saveWorktreeWork: z.boolean().default(true),
