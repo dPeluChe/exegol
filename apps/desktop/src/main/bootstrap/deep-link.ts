@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import { app, type BrowserWindow } from "electron";
 import { findDeepLinkArg, parseDeepLink } from "../lib/deeplink";
 import { logger } from "../lib/logger";
-import { createWindow, getMainWindow } from "./window";
+import { createWindow, getMainWindow, showMainWindow } from "./window";
 
 // ─── T155.6: exegol:// deep link (CLI opener) ─────────────────────────────
 
@@ -57,18 +57,15 @@ export function installDeepLinkHandling(): void {
   // Dev instances share userData with packaged ones, so only a packaged app
   // hard-quits when it loses the lock.
   if (app.requestSingleInstanceLock()) {
+    // The window may have been closed into the tray (often invisible on Linux): reopen it
     app.on("second-instance", (_event, argv) => {
-      const mainWindow = getMainWindow();
-      if (mainWindow) {
-        if (mainWindow.isMinimized()) mainWindow.restore();
-        mainWindow.show();
-        mainWindow.focus();
-      }
+      if (app.isReady()) showMainWindow();
       const url = findDeepLinkArg(argv);
       if (url) handleDeepLinkUrl(url);
     });
   } else if (app.isPackaged) {
-    app.quit();
+    // quit() is async: ready still fired and the copy grabbed the hotkey and MCP socket
+    app.exit(0);
   }
 
   // Must be registered before app ready — macOS can deliver the URL at launch.
