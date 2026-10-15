@@ -37,6 +37,25 @@ describe("overlayKeyAction", () => {
     expect(overlayKeyAction(key("Enter"), "error")).toBeNull();
   });
 
+  it("Cmd+P pauses and resumes while listening, wherever the focus is", () => {
+    const cmdP = key("p", { code: "KeyP", metaKey: true });
+    expect(overlayKeyAction(cmdP, "listening")).toBe("pause");
+    expect(overlayKeyAction(cmdP, "listening", { onTarget: false })).toBe("pause");
+    expect(overlayKeyAction(cmdP, "starting")).toBe("swallow");
+    expect(overlayKeyAction(cmdP, "transcribing")).toBe("swallow");
+    expect(overlayKeyAction(cmdP, "idle")).toBeNull();
+    expect(overlayKeyAction(cmdP, "error")).toBeNull();
+  });
+
+  it("off macOS the pause key is Ctrl+Shift+P; plain Ctrl+P stays the terminal's", () => {
+    const off = { mac: false };
+    const ctrlShiftP = key("P", { code: "KeyP", ctrlKey: true, shiftKey: true });
+    expect(overlayKeyAction(ctrlShiftP, "listening", off)).toBe("pause");
+    expect(
+      overlayKeyAction(key("p", { code: "KeyP", ctrlKey: true }), "listening", off),
+    ).toBeNull();
+  });
+
   it("Esc cancels in every open phase", () => {
     expect(overlayKeyAction(key("Escape"), "listening")).toBe("cancel");
     expect(overlayKeyAction(key("Escape"), "no-model")).toBe("cancel");

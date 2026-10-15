@@ -17,6 +17,7 @@ import {
   dismissDictation,
   focusOnTarget,
   stopDictation,
+  togglePauseDictation,
 } from "../lib/dictation/controller";
 import {
   describeOpenDialog,
@@ -43,15 +44,27 @@ const forwardedKey = (key: "Enter" | "Escape") => ({
   shiftKey: false,
 });
 
+/** The pause key as this platform types it, for a forwarded one */
+const forwardedPause = {
+  key: "p",
+  code: "KeyP",
+  metaKey: IS_MAC,
+  ctrlKey: !IS_MAC,
+  altKey: false,
+  shiftKey: !IS_MAC,
+};
+
 /** One decision for keys typed here and keys main forwarded; true when the key was taken */
 function runKey(e: Parameters<typeof overlayKeyAction>[0], escSource: DictationCancelSource) {
   const phase = useDictationStore.getState().phase;
   const action = overlayKeyAction(e, phase, {
     onTarget: e.key !== "Enter" || focusOnTarget(),
     dialogOpen: e.key === "Escape" && phase !== "idle" && otherDialogOpen(),
+    mac: IS_MAC,
   });
   if (action === "cancel") dismissDictation(escSource);
   else if (action === "insert") void stopDictation("enter");
+  else if (action === "pause") togglePauseDictation();
   else if (e.key === "Escape" && phase !== "idle") {
     // Esc not cancelling was reported live: say why in the log (no dictated text)
     window.api.reportError?.(
@@ -107,6 +120,7 @@ export function useDictation() {
       if (kind === "limit") dictationLimitReached(event.sessionId, event.maxSeconds);
       else if (kind === "down") chordDown();
       else if (kind === "up") chordUp();
+      else if (kind === "pause") runKey(forwardedPause, "esc-forwarded");
       else runKey(forwardedKey(kind === "enter" ? "Enter" : "Escape"), "esc-forwarded");
     });
     const offPartial = window.api.dictation.onPartial(({ sessionId, text }) => {

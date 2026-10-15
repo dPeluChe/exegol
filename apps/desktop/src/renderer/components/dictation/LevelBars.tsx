@@ -1,12 +1,13 @@
+import { cn } from "@exegol/ui";
 import { useRef } from "react";
 import { useMountEffect } from "../../hooks/use-mount-effect";
 import { currentAnalyser } from "../../lib/dictation/controller";
 
 const BARS = 28;
 
-/** Mounted only while listening: the draw loop stops with it. Each bar is the level of a slice
+/** Mounted only while listening (muted and flat while paused): the draw loop stops with it. Each bar is the level of a slice
  *  of the last audio frame, held and eased down so speech reads as motion */
-export function LevelBars() {
+export function LevelBars({ muted = false }: { muted?: boolean }) {
   const ref = useRef<HTMLCanvasElement>(null);
   const glow = useRef<HTMLDivElement>(null);
   useMountEffect(() => {
@@ -15,7 +16,8 @@ export function LevelBars() {
     const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const data = new Uint8Array(1024);
     const levels = new Float32Array(BARS);
-    const color = ref.current ? getComputedStyle(ref.current).color : "";
+    let color = "";
+    let colorOf = "";
     // Reduced motion: a few still frames a second, no easing or glow
     const next = () => {
       frame = reduce ? window.setTimeout(draw, 200) : requestAnimationFrame(draw);
@@ -25,6 +27,11 @@ export function LevelBars() {
       const canvas = ref.current;
       const ctx = canvas?.getContext("2d");
       if (!canvas || !ctx) return;
+      // Paused swaps the class: the bar color follows it
+      if (canvas.className !== colorOf) {
+        colorOf = canvas.className;
+        color = getComputedStyle(canvas).color;
+      }
       const dpr = window.devicePixelRatio || 1;
       const w = canvas.clientWidth * dpr;
       const h = canvas.clientHeight * dpr;
@@ -86,7 +93,10 @@ export function LevelBars() {
       <canvas
         ref={ref}
         aria-hidden
-        className="pointer-events-none relative h-10 w-full text-accent"
+        className={cn(
+          "pointer-events-none relative h-10 w-full",
+          muted ? "text-text-muted" : "text-accent",
+        )}
       />
     </div>
   );

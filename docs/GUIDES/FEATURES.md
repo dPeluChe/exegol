@@ -197,6 +197,9 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
   is the fallback that needs Automation access. "Keep recordings for model testing" (off by
   default) saves each dictation's audio and text in `~/.exegol/dictation-audio` for 5 to 30 days
   to compare models offline (`docs/GUIDES/DICTATION_BENCH.md`); also listed in Settings > Storage.
+  Cmd+P (Ctrl+Shift+P) or the card's Pause button pauses a dictation and resumes it with the same
+  text and target; Settings > Dictation > Input picks the microphone (system default when it is
+  missing, said in the card).
 - **Speech models** (Settings > Models): local speech-to-text models for voice dictation,
   downloaded on request into `~/.exegol/models`, resumable and checked against a pinned
   SHA-256. Each lists what it is best for, languages, size and license; a non-commercial model is

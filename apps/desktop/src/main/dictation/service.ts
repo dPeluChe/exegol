@@ -2,6 +2,7 @@ import {
   DEFAULT_SPEECH_MODEL_KEY,
   DICTATION_SAMPLE_RATE,
   type DictationCancelSource,
+  type DictationInput,
   type DictationSettings,
   type DictationStatus,
   type DictationStopReason,
@@ -18,7 +19,7 @@ import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { DEFAULT_MODEL_ID, findModel, MODEL_CATALOG } from "../models/catalog";
 import { modelStatus } from "../models/manager";
-import { armDictationSession, disarmDictationSession } from "./background";
+import { armDictationSession, disarmDictationSession, pauseDictationSession } from "./background";
 import {
   beginSession,
   cancelSession,
@@ -52,7 +53,12 @@ interface Active {
   media: MediaHold | null;
   /** Its audio, kept only with Settings > Dictation > Keep recordings on */
   audio: RecordingBuffer | null;
+  /** No audio reaches the engine or the recording, and the limit stands still */
+  paused: boolean;
 }
+
+/** While paused the players stay paused this long before the safety timer gives them back */
+const PAUSED_MEDIA_HOLD_MS = 30 * 60_000;
 
 let active: Active | null = null;
 /** A stopped dictation still transcribing: Esc meanwhile means nothing was inserted */
@@ -117,7 +123,7 @@ export async function dictationStatus(db: Database.Database): Promise<DictationS
   };
 }
 
-export async function startDictation(db: Database.Database) {
+export async function startDictation(db: Database.Database, input: DictationInput = "default") {
   const settings = dictationSettings(db);
   disarmMic();
   if (!settings.enabled) throw new Error("dictation is off in Settings > Dictation");
@@ -145,6 +151,7 @@ export async function startDictation(db: Database.Database) {
       cold: warmedCold ?? !modelLoaded(entry.id, settings.language),
       media,
       audio: settings.keepRecordings ? new RecordingBuffer(settings.maxSeconds) : null,
+      paused: false,
     };
     warmedCold = null;
     // The model loads while the user speaks: audio waits in the engine until it is ready
@@ -156,15 +163,28 @@ export async function startDictation(db: Database.Database) {
     active = null;
     throw err;
   }
+  logger.info(`[Dictation] input: ${input}`);
   if (!getJsonSetting(db, MIC_USED_KEY, false)) setJsonSetting(db, MIC_USED_KEY, true);
   return { sessionId: id, modelId: entry.id, kind: entry.kind, maxSeconds: settings.maxSeconds };
 }
 
 export function dictationAudio(sessionId: unknown, samples: unknown): void {
-  if (!active || sessionId !== active.id || !(samples instanceof Float32Array)) return;
+  if (!active || sessionId !== active.id || active.paused) return;
+  if (!(samples instanceof Float32Array)) return;
   if (samples.length === 0 || samples.length > DICTATION_SAMPLE_RATE) return;
   feedAudio(active.id, samples);
   active.audio?.push(samples);
+}
+
+/** Same session on resume: target, model and text so far are kept. Players stay paused */
+export function pauseDictation(sessionId: string, paused: boolean): { ok: boolean } {
+  if (!active || active.id !== sessionId) return { ok: false };
+  if (active.paused === paused) return { ok: true };
+  active.paused = paused;
+  const remainingMs = pauseDictationSession(paused);
+  active.media?.extend(remainingMs + 30_000 + (paused ? PAUSED_MEDIA_HOLD_MS : 0));
+  logger.info(`[Dictation] ${paused ? "paused" : "resumed"}`);
+  return { ok: true };
 }
 
 export async function stopDictation(

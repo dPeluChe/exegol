@@ -11,6 +11,13 @@ import {
 const key = (k: string, extra: Partial<Electron.Input> = {}) =>
   ({ type: "keyDown", key: k, code: k, ...extra }) as Electron.Input;
 
+const pauseKey = (extra: Partial<Electron.Input> = {}) =>
+  key("p", {
+    code: "KeyP",
+    ...(process.platform === "darwin" ? { meta: true } : { control: true, shift: true }),
+    ...extra,
+  });
+
 function page() {
   const host = { send: vi.fn(), isDestroyed: () => false };
   let handler: (event: { preventDefault(): void }, input: Electron.Input) => void = () => {};
@@ -60,6 +67,17 @@ describe("forwardDictationKeys", () => {
     expect(toMain).toHaveBeenCalledWith({ kind: "escape" });
   });
 
+  it("the pause key in a page toggles the main window's dictation, once per press", () => {
+    const { host, contents, press } = page();
+    const toMain = vi.fn();
+    forwardDictationKeys(contents, () => false, toMain);
+    expect(press(pauseKey())).toBe(true);
+    expect(press(pauseKey({ isAutoRepeat: true }))).toBe(false);
+    expect(toMain).toHaveBeenCalledTimes(1);
+    expect(toMain).toHaveBeenCalledWith({ kind: "pause" });
+    expect(host.send).not.toHaveBeenCalled();
+  });
+
   it("leaves Enter alone during an IME composition", () => {
     const { host, contents, press } = page();
     forwardDictationKeys(contents, () => true);
@@ -94,6 +112,20 @@ describe("forwardDictationEscape", () => {
     expect(press(key("Escape", { type: "keyUp" }))).toBe(false);
     expect(toMain).toHaveBeenCalledTimes(1);
     expect(toMain).toHaveBeenCalledWith({ kind: "escape" });
+  });
+
+  it("the pause key in another window pauses; the main window's own is never relayed", () => {
+    setDictationListening(() => true);
+    const toMain = vi.fn();
+    const other = win();
+    forwardDictationEscape(other.contents, () => false, toMain);
+    expect(other.press(pauseKey())).toBe(true);
+    expect(toMain).toHaveBeenCalledWith({ kind: "pause" });
+    toMain.mockClear();
+    const main = win();
+    forwardDictationEscape(main.contents, () => true, toMain);
+    expect(main.press(pauseKey())).toBe(false);
+    expect(toMain).not.toHaveBeenCalled();
   });
 
   it("keeps the main window's Esc for its page and relays it; no dictation, no relay", () => {

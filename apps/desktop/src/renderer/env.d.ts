@@ -132,7 +132,7 @@ interface Window {
       onKey: (
         callback: (
           event:
-            | { kind: "down" | "up" | "escape" | "enter" }
+            | { kind: "down" | "up" | "escape" | "enter" | "pause" }
             | { kind: "limit"; sessionId: string; maxSeconds: number },
         ) => void,
       ) => () => void;

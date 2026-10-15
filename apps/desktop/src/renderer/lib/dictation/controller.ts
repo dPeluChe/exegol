@@ -11,7 +11,7 @@ import type { QueryClient } from "@tanstack/react-query";
 import { DICTATION_STATUS_KEY, fetchDictationStatus } from "../../hooks/use-trpc-dictation";
 import { findAgentPane, useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
-import { useDictationStore } from "../../stores/dictation";
+import { recordedMs, useDictationStore } from "../../stores/dictation";
 import { useToastStore } from "../../stores/toasts";
 import { getActivePaneId, useWorkspaceStore } from "../../stores/workspace";
 import { pasteToAgent, submitToAgent } from "../agent-input";
@@ -46,6 +46,8 @@ interface Run {
   early: Float32Array[];
   vad: VadState;
   cancelled: boolean;
+  /** Paused: chunks are dropped here, before IPC, and the VAD does not count them */
+  paused: boolean;
   /** Stopped while the mic was opening: stops once it listens, for this reason */
   stopWhenReady: DictationStopReason | null;
 }
@@ -60,7 +62,9 @@ export function bindDictationQueries(client: QueryClient | null): void {
   queryClient = client;
 }
 
-export const currentAnalyser = (): AnalyserNode | null => run?.capture?.analyser ?? null;
+/** Null while paused: the waveform goes flat */
+export const currentAnalyser = (): AnalyserNode | null =>
+  run?.paused ? null : (run?.capture?.analyser ?? null);
 
 const store = () => useDictationStore.getState();
 const toast = useToastStore.getState;
@@ -120,6 +124,9 @@ function reset(): void {
     error: null,
     anchorPaneId: null,
     downloadRequested: false,
+    pausedAt: null,
+    inputName: null,
+    inputNotice: null,
   });
 }
 
@@ -130,7 +137,7 @@ function fail(message: string): void {
 
 function onChunk(samples: Float32Array): void {
   const r = run;
-  if (!r || r.cancelled) return;
+  if (!r || r.cancelled || r.paused) return;
   r.vad = updateVad(r.vad, rms(samples), (samples.length / DICTATION_SAMPLE_RATE) * 1000);
   if (r.sessionId) window.api.dictation.sendAudio(r.sessionId, samples);
   else r.early.push(samples);
@@ -169,6 +176,9 @@ export async function startDictation(): Promise<void> {
     targetProjectId: target.projectId,
     partial: "",
     error: null,
+    pausedAt: null,
+    inputName: null,
+    inputNotice: null,
   });
   const current: Run = {
     settings: dictationSettingsOf(undefined),
@@ -179,6 +189,7 @@ export async function startDictation(): Promise<void> {
     early: [],
     vad: VAD_START,
     cancelled: false,
+    paused: false,
     stopWhenReady: null,
   };
   run = current;
@@ -209,7 +220,7 @@ export async function startDictation(): Promise<void> {
     if (mic === "denied" || mic === "restricted") return endWith({ phase: "mic-denied" });
     if (gone()) return;
     try {
-      current.capture = await startCapture(onChunk);
+      current.capture = await startCapture(onChunk, current.settings.inputDeviceId);
     } catch (err) {
       const denied = err instanceof DOMException && err.name === "NotAllowedError";
       return endWith(
@@ -222,7 +233,15 @@ export async function startDictation(): Promise<void> {
       current.capture.stop();
       return;
     }
-    const started = await trpcMutate<{ sessionId: string }>("dictation.start");
+    const { input, label } = current.capture;
+    store().set({
+      inputName: label || null,
+      inputNotice:
+        input === "fallback"
+          ? `${current.settings.inputDeviceLabel || "The selected input"} not found, using system default`
+          : null,
+    });
+    const started = await trpcMutate<{ sessionId: string }>("dictation.start", { input });
     patchStatus({ micEverGranted: true });
     if (gone()) {
       void trpcMutate("dictation.cancel", { sessionId: started.sessionId, source: "superseded" });
@@ -249,7 +268,7 @@ export async function stopDictation(by: DictationStopReason): Promise<void> {
     return;
   }
   const sessionId = r.sessionId;
-  const durationMs = Date.now() - store().startedAt;
+  const durationMs = recordedMs(store());
   r.capture?.stop();
   r.capture = null;
   r.cancelled = true;
@@ -400,6 +419,19 @@ export function chordUp(): void {
   if (!holdCandidate) return;
   holdCandidate = false;
   if (Date.now() - pressedAt >= HOLD_MS && run) void stopDictation("chord");
+}
+
+/** Pause or resume a listening dictation: same session, target and text. The mic stays open so
+ *  resuming is instant (reopening it would need main to arm getUserMedia again) */
+export function togglePauseDictation(): void {
+  const r = run;
+  const { phase, pausedAt, startedAt } = store();
+  if (!r?.sessionId || phase !== "listening") return;
+  const now = Date.now();
+  r.paused = !r.paused;
+  if (r.paused) store().set({ pausedAt: now });
+  else store().set({ pausedAt: null, startedAt: startedAt + (now - (pausedAt ?? now)) });
+  void trpcMutate("dictation.pause", { sessionId: r.sessionId, paused: r.paused });
 }
 
 /** Status bar mic: a plain toggle */

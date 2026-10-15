@@ -6,6 +6,7 @@ import {
   DEFAULT_DICTATION_SHORTCUT,
   dictationSettingsOf,
   formatChord,
+  isDictationPauseKey,
   matchesChord,
   parseChord,
   releasesChord,
@@ -90,6 +91,14 @@ describe("dictation chord", () => {
     expect(dictationSettingsSchema.safeParse(bad).success).toBe(false);
   });
 
+  it("input: the system default unless one was picked, a row saved before it existed included", () => {
+    const { inputDeviceId: _, inputDeviceLabel: __, ...older } = DEFAULT_DICTATION_SETTINGS;
+    expect(dictationSettingsOf(older).inputDeviceId).toBeNull();
+    expect(dictationSettingsSchema.parse(older).inputDeviceId).toBeNull();
+    const picked = { ...DEFAULT_DICTATION_SETTINGS, inputDeviceId: "abc", inputDeviceLabel: "USB" };
+    expect(dictationSettingsSchema.safeParse(picked).success).toBe(true);
+  });
+
   it("language: English by default, a row saved before it existed included", () => {
     const { language: _, ...older } = DEFAULT_DICTATION_SETTINGS;
     expect(dictationSettingsOf(older).language).toBe("en");
@@ -98,5 +107,22 @@ describe("dictation chord", () => {
     expect(dictationSettingsSchema.safeParse(es).success).toBe(true);
     const bad = { ...DEFAULT_DICTATION_SETTINGS, language: "xx" };
     expect(dictationSettingsSchema.safeParse(bad).success).toBe(false);
+  });
+});
+
+describe("isDictationPauseKey", () => {
+  it("is Cmd+P on macOS and Ctrl+Shift+P elsewhere", () => {
+    expect(isDictationPauseKey(key("KeyP", { meta: true }), true)).toBe(true);
+    expect(isDictationPauseKey(key("KeyP", { ctrl: true, shift: true }), false)).toBe(true);
+  });
+
+  it("leaves the palette, the terminal's Ctrl+P and other keys alone", () => {
+    expect(isDictationPauseKey(key("KeyP", { meta: true, shift: true }), true)).toBe(false);
+    expect(isDictationPauseKey(key("KeyP", { ctrl: true }), true)).toBe(false);
+    expect(isDictationPauseKey(key("KeyP", { ctrl: true }), false)).toBe(false);
+    expect(isDictationPauseKey(key("KeyP", { ctrl: true, shift: true, alt: true }), false)).toBe(
+      false,
+    );
+    expect(isDictationPauseKey(key("KeyO", { meta: true }), true)).toBe(false);
   });
 });

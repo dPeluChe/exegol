@@ -12,10 +12,11 @@ import { cn } from "@exegol/ui";
 import { Mic } from "lucide-react";
 import { useState } from "react";
 import { useDictationStatus, useMediaConsent, useMicAction } from "../../hooks/use-trpc-dictation";
-import { IS_MAC, PLATFORM } from "../../lib/keymap";
+import { appKeys, IS_MAC, PLATFORM } from "../../lib/keymap";
 import { SEMANTIC_BADGE } from "../../lib/semantic-colors";
 import { shortcutClash } from "../../lib/shortcuts";
 import { DictationHistory } from "./DictationHistory";
+import { DictationInput } from "./DictationInput";
 import { DictationRecordings } from "./DictationRecordings";
 import { SECTION_HEADING, SelectRow, SMALL_BUTTON, SwitchRow } from "./settings-ui";
 
@@ -65,11 +66,14 @@ export function DictationSettings({ settings, onChange }: Props) {
         <h3 className={SECTION_HEADING}>Shortcut</h3>
         <ShortcutRow value={prefs.shortcut} onChange={(shortcut) => set({ shortcut })} />
         <p className="mt-1 text-[10px] text-text-muted">
-          Press it to start and again to insert, or hold it while you talk. Esc cancels.
+          Press it to start and again to insert, or hold it while you talk. Esc cancels,{" "}
+          {appKeys("Cmd+P")} pauses and resumes.
         </p>
       </div>
 
       <MicSection />
+
+      <DictationInput prefs={prefs} set={set} />
 
       <div>
         <h3 className={SECTION_HEADING}>Language</h3>
