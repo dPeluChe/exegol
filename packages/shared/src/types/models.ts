@@ -60,6 +60,7 @@ export const STORAGE_CATEGORIES = [
   "models",
   "scrollback",
   "screenshots",
+  "recordings",
   "logs",
   "database",
   "worktrees",

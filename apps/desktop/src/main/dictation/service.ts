@@ -8,9 +8,11 @@ import {
   type DictationTargetKind,
   dictationSettingsOf,
   parseChord,
+  sanitizeDictation,
 } from "@exegol/shared";
 import type Database from "libsql";
 import { nanoid } from "nanoid";
+import { getProject } from "../db/queries/projects";
 import { getAppSettings, getJsonSetting, setJsonSetting } from "../db/queries/settings";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
@@ -35,6 +37,7 @@ import { setDictationChord } from "./keys";
 import { holdMedia, type MediaHold, mediaBackend } from "./media-pause";
 import { disarmMic, micStatus } from "./mic";
 import { hasRecognizer } from "./model-config";
+import { RecordingBuffer, saveRecording } from "./recordings";
 
 /** Set once a recording started here: Linux and Windows have no OS answer to remember */
 const MIC_USED_KEY = "dictation_mic_used";
@@ -47,9 +50,13 @@ interface Active {
   cold: boolean;
   /** The players this dictation paused; null when the setting is off */
   media: MediaHold | null;
+  /** Its audio, kept only with Settings > Dictation > Keep recordings on */
+  audio: RecordingBuffer | null;
 }
 
 let active: Active | null = null;
+/** A stopped dictation still transcribing: Esc meanwhile means nothing was inserted */
+let stopping: { id: string; cancelled: boolean } | null = null;
 /** Whether the last warm-up found the model unloaded: the start that follows is a cold one.
  *  Null until a warm-up, and again once a start consumed it */
 let warmedCold: boolean | null = null;
@@ -137,6 +144,7 @@ export async function startDictation(db: Database.Database) {
       startedAt: Date.now(),
       cold: warmedCold ?? !modelLoaded(entry.id),
       media,
+      audio: settings.keepRecordings ? new RecordingBuffer(settings.maxSeconds) : null,
     };
     warmedCold = null;
     // The model loads while the user speaks: audio waits in the engine until it is ready
@@ -156,6 +164,7 @@ export function dictationAudio(sessionId: unknown, samples: unknown): void {
   if (!active || sessionId !== active.id || !(samples instanceof Float32Array)) return;
   if (samples.length === 0 || samples.length > DICTATION_SAMPLE_RATE) return;
   feedAudio(active.id, samples);
+  active.audio?.push(samples);
 }
 
 export async function stopDictation(
@@ -171,11 +180,17 @@ export async function stopDictation(
   if (!active || active.id !== input.sessionId) {
     throw new Error("this dictation is no longer running");
   }
-  const { modelId, cold, media } = active;
+  const { modelId, cold, media, audio } = active;
   active = null;
   disarmDictationSession();
   media?.release();
-  const { text, decodeMs, phrases, phraseMs, fullPass } = await finishSession(input.sessionId);
+  const ending = { id: input.sessionId, cancelled: false };
+  stopping = ending;
+  const { text, decodeMs, phrases, phraseMs, fullPass } = await finishSession(
+    input.sessionId,
+  ).finally(() => {
+    if (stopping === ending) stopping = null;
+  });
   const phraseLog =
     phrases > 0 ? `${phrases} phrases decoded while recording in ${phraseMs}ms, ` : "";
   // Lengths and timings only: dictated text never goes to the log (bug reports are public)
@@ -184,7 +199,7 @@ export async function stopDictation(
   );
   if (text) {
     const settings = dictationSettings(db);
-    addDictation(db, {
+    const saved = addDictation(db, {
       text,
       modelId,
       durationMs: Math.max(0, Math.round(input.durationMs)),
@@ -193,6 +208,27 @@ export async function stopDictation(
     });
     pruneDictations(db, { days: settings.retentionDays, max: settings.retentionMax });
     broadcast("dictation:done", {});
+    const inserted = sanitizeDictation(text);
+    if (audio && inserted) {
+      const projectName = saved.projectId ? (getProject(db, saved.projectId)?.name ?? null) : null;
+      const at = new Date();
+      setImmediate(() => {
+        if (ending.cancelled) return;
+        void saveRecording({
+          sessionId: input.sessionId,
+          audio,
+          at,
+          projectId: saved.projectId,
+          projectName,
+          target: input.targetKind,
+          modelId,
+          transcribeMs: decodeMs,
+          historyId: saved.id,
+          text: inserted,
+          rawText: text,
+        });
+      });
+    }
   }
   return { text };
 }
@@ -216,6 +252,7 @@ export async function warmDictation(db: Database.Database): Promise<{ ok: boolea
 }
 
 export function cancelDictation(sessionId: string, source: DictationCancelSource): void {
+  if (stopping?.id === sessionId) stopping.cancelled = true;
   if (active?.id !== sessionId) return;
   const secs = Math.round((Date.now() - active.startedAt) / 100) / 10;
   logger.info(`[Dictation] cancelled after ${secs}s (${source})`);

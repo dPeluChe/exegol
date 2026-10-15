@@ -2,6 +2,8 @@ import { z } from "zod";
 import {
   DEFAULT_DICTATION_SETTINGS,
   DICTATION_OVERLAY_POSITIONS,
+  DICTATION_RECORDING_RETENTION_DAYS,
+  type DictationRecordingRetentionDays,
   parseChord,
 } from "../types/dictation";
 import { IDE_IDS } from "../types/ide";
@@ -31,6 +33,13 @@ export const dictationSettingsSchema = z.object({
   retentionDays: z.number().int().min(1).max(3650),
   retentionMax: z.number().int().min(10).max(10_000),
   overlayPosition: z.enum(DICTATION_OVERLAY_POSITIONS).default("pane"),
+  keepRecordings: z.boolean().default(false),
+  recordingsRetentionDays: z
+    .number()
+    .refine((d): d is DictationRecordingRetentionDays =>
+      (DICTATION_RECORDING_RETENTION_DAYS as readonly number[]).includes(d),
+    )
+    .default(DEFAULT_DICTATION_SETTINGS.recordingsRetentionDays),
 });
 
 export const settingsSchema = z.object({

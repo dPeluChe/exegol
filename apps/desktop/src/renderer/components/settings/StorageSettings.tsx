@@ -24,6 +24,7 @@ const CATEGORY_COLOR: Record<StorageCategory, string> = {
   models: "bg-accent",
   scrollback: "bg-info",
   screenshots: "bg-success",
+  recordings: "bg-success/50",
   logs: "bg-warning",
   database: "bg-error",
   worktrees: "bg-accent/50",
@@ -35,6 +36,7 @@ const HINTS: Partial<Record<StorageCategory, string>> = {
   worktrees: "Clean them up from the Dashboard's Worktrees card: a worktree can hold work.",
   scrollback: "Saved terminal output of agents, kept for their history.",
   database: "Projects, agents, history and settings.",
+  recordings: "Kept for model testing (Settings > Dictation); deleted after their retention.",
 };
 
 // The settings window lives for the session: reopening Storage lands on the last tab
@@ -163,9 +165,11 @@ function OverviewPanel({
             onClear={
               row.category === "screenshots" && row.bytes > 0
                 ? () => onPending({ kind: "clearScreenshots", bytes: row.bytes })
-                : row.category === "logs"
-                  ? () => onPending({ kind: "clearOldLogs" })
-                  : undefined
+                : row.category === "recordings" && row.bytes > 0
+                  ? () => onPending({ kind: "clearRecordings", bytes: row.bytes })
+                  : row.category === "logs"
+                    ? () => onPending({ kind: "clearOldLogs" })
+                    : undefined
             }
           />
         ))}
@@ -176,6 +180,7 @@ function OverviewPanel({
 
 function confirmTitle(pending: Pending | null): string {
   if (pending?.kind === "clearScreenshots") return "Clear screenshots?";
+  if (pending?.kind === "clearRecordings") return "Clear dictation recordings?";
   if (pending?.kind === "clearOldLogs") return "Clear old logs?";
   return "Clear browser cache?";
 }
@@ -184,6 +189,9 @@ function confirmText(pending: Pending | null): string {
   if (!pending) return "";
   if (pending.kind === "clearScreenshots") {
     return `Deletes the agent browser screenshots (${formatBytes(pending.bytes)}).`;
+  }
+  if (pending.kind === "clearRecordings") {
+    return `Deletes every kept dictation recording, audio and text (${formatBytes(pending.bytes)}). The dictation history stays.`;
   }
   if (pending.kind === "clearOldLogs") {
     return "Deletes the logs of earlier sessions. This session's log stays. Bug reports include fewer past warnings afterwards.";

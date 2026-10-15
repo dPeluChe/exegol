@@ -1,10 +1,12 @@
 import { lstat, readdir, unlink } from "node:fs/promises";
 import { join } from "node:path";
+import { dictationSettingsOf } from "@exegol/shared";
 import type Database from "libsql";
 import { MODEL_SETTINGS_DIR } from "../agents/launch-model";
 import { WORKTREE_ROOTS } from "../agents/worktrees";
 import { HOOKS_DIR } from "../agents/wrappers";
-import { getJsonSetting, setJsonSetting } from "../db/queries/settings";
+import { getAppSettings, getJsonSetting, setJsonSetting } from "../db/queries/settings";
+import { sweepRecordings } from "../dictation/recordings";
 import { logger } from "../lib/logger";
 import { MCP_CONFIG_DIR } from "../mcp/exegol-mcp-config";
 import { sweepOrphanWorktrees, type WorktreeSweepResult } from "./worktree-housekeeping";
@@ -112,9 +114,13 @@ function agentIds(db: Database.Database): ReadonlySet<string> {
   return new Set(rows.map((r) => r.id));
 }
 
-/** At most once a day: a couple of minutes after startup, then daily while the app stays open */
+/** At most once a day: a couple of minutes after startup, then daily while the app stays open.
+ *  Dictation recordings are swept on every run, the start one included */
 export function scheduleHousekeeping(db: Database.Database): void {
   const run = async () => {
+    await sweepRecordings(
+      dictationSettingsOf(getAppSettings(db).dictation).recordingsRetentionDays,
+    );
     const last = getJsonSetting<HousekeepingResult | null>(db, HOUSEKEEPING_KEY, null);
     if (last && Date.now() - last.at < DAY_MS) return;
     const result = await sweepOrphanAgentFiles(agentFileTargets(), () => agentIds(db));
