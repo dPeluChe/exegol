@@ -1,14 +1,16 @@
 import { lstat, readdir, unlink } from "node:fs/promises";
 import { join } from "node:path";
-import { dictationSettingsOf } from "@exegol/shared";
+import { dictationSettingsOf, LIVE_STATUSES } from "@exegol/shared";
 import type Database from "libsql";
 import { MODEL_SETTINGS_DIR } from "../agents/launch-model";
 import { WORKTREE_ROOTS } from "../agents/worktrees";
 import { HOOKS_DIR } from "../agents/wrappers";
+import { AGENT_FOLDER_SQL } from "../db/queries/agents";
 import { getAppSettings, getJsonSetting, setJsonSetting } from "../db/queries/settings";
 import { sweepRecordings } from "../dictation/recordings";
 import { logger } from "../lib/logger";
 import { MCP_CONFIG_DIR } from "../mcp/exegol-mcp-config";
+import { MCP_TOKENS_DIR, tokenKeyFor } from "../mcp/exegol-mcp-token-file";
 import { sweepOrphanWorktrees, type WorktreeSweepResult } from "./worktree-housekeeping";
 
 const AGENT_ID = /^[A-Za-z0-9_-]{21}$/;
@@ -109,6 +111,55 @@ export async function sweepOrphanAgentFiles(
   return result;
 }
 
+const TOKEN_KEY = /^[0-9a-f]{32}$/;
+
+/** Per-directory MCP token files no live agent's folder maps to: the last exit removes its
+ *  own, this catches a crash or a kill. Only files older than `minAgeMs`, like the sweep above */
+export async function sweepOrphanTokenFiles(
+  dir: string,
+  liveKeys: () => ReadonlySet<string>,
+  now = Date.now(),
+  minAgeMs = DAY_MS,
+): Promise<number> {
+  const names = await readdir(dir).catch(() => [] as string[]);
+  const old: string[] = [];
+  for (const name of names) {
+    if (!TOKEN_KEY.test(name)) continue;
+    const info = await lstat(join(dir, name)).catch(() => null);
+    if (info?.isFile() && info.mtimeMs <= now - minAgeMs) old.push(name);
+  }
+  if (old.length === 0) return 0;
+  const keys = liveKeys();
+  let removed = 0;
+  for (const name of old) {
+    if (keys.has(name)) continue;
+    await unlink(join(dir, name)).then(
+      () => removed++,
+      () => {},
+    );
+  }
+  if (removed > 0) logger.info(`[Housekeeping] removed ${removed} orphaned MCP token file(s)`);
+  return removed;
+}
+
+function liveTokenKeys(db: Database.Database): ReadonlySet<string> {
+  const statuses = [...LIVE_STATUSES];
+  const rows = db
+    .prepare(
+      `SELECT ${AGENT_FOLDER_SQL} AS cwd, COALESCE(w.path, p.path) AS root
+       FROM agents a
+       LEFT JOIN worktrees w ON w.id = a.worktree_id
+       JOIN projects p ON p.id = a.project_id
+       WHERE a.status IN (${statuses.map(() => "?").join(",")})`,
+    )
+    .all(...statuses) as { cwd: string | null; root: string | null }[];
+  const keys = new Set<string>();
+  for (const r of rows) {
+    for (const dir of [r.cwd, r.root]) if (dir) keys.add(tokenKeyFor(dir));
+  }
+  return keys;
+}
+
 function agentIds(db: Database.Database): ReadonlySet<string> {
   const rows = db.prepare("SELECT id FROM agents").all() as { id: string }[];
   return new Set(rows.map((r) => r.id));
@@ -124,6 +175,7 @@ export function scheduleHousekeeping(db: Database.Database): void {
     const last = getJsonSetting<HousekeepingResult | null>(db, HOUSEKEEPING_KEY, null);
     if (last && Date.now() - last.at < DAY_MS) return;
     const result = await sweepOrphanAgentFiles(agentFileTargets(), () => agentIds(db));
+    await sweepOrphanTokenFiles(MCP_TOKENS_DIR, () => liveTokenKeys(db));
     const worktrees = await sweepOrphanWorktrees(db, Object.values(WORKTREE_ROOTS));
     if (worktrees.removed + worktrees.droppedRows + worktrees.kept > 0) {
       logger.info(

@@ -9,9 +9,9 @@
  * All diagnostics go to stderr; stdout is reserved for the framed protocol.
  */
 
-import { readFileSync } from "node:fs";
 import { connect } from "node:net";
 import { join } from "node:path";
+import { resolveShimToken } from "./exegol-mcp-token-file";
 import {
   createFrameReader,
   type ExegolAccessMode,
@@ -25,29 +25,10 @@ import {
 // access mode from the DB. The env mode below only shapes tools/list display;
 // it fails CLOSED to "read" (enforcement is server-side regardless).
 //
-// Order matters, and it is the whole identity fix: EXEGOL_MCP_TOKEN is set on
-// the CLI's PTY at spawn and inherited down to us, so it is per SESSION.
-// EXEGOL_MCP_TOKEN_FILE comes from a config file that every session in the
-// directory shares — using it when a per-session token exists is what made two
-// agents present the same identity. Disk is the last resort, for CLIs that
-// sanitize the env they hand to MCP servers (codex).
+// Order (resolveShimToken) is the whole identity fix: the per-session env token
+// first, the directory's shared token file only when that is missing.
 function resolveToken(): string {
-  const perSession = process.env.EXEGOL_MCP_TOKEN;
-  if (perSession) return perSession;
-  const fromConfigEnv = process.env.EXEGOL_MCP_TOKEN_FILE;
-  if (fromConfigEnv) return fromConfigEnv;
-  try {
-    const raw = readFileSync(join(process.cwd(), ".mcp.json"), "utf-8");
-    const parsed = JSON.parse(raw) as {
-      mcpServers?: {
-        exegol?: { env?: { EXEGOL_MCP_TOKEN_FILE?: string; EXEGOL_MCP_TOKEN?: string } };
-      };
-    };
-    const env = parsed.mcpServers?.exegol?.env;
-    return env?.EXEGOL_MCP_TOKEN_FILE ?? env?.EXEGOL_MCP_TOKEN ?? "";
-  } catch {
-    return "";
-  }
+  return resolveShimToken(process.env, process.cwd());
 }
 
 let token = resolveToken();

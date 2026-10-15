@@ -10,7 +10,12 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { type AgentFileTarget, agentFileTargets, sweepOrphanAgentFiles } from "./housekeeping";
+import {
+  type AgentFileTarget,
+  agentFileTargets,
+  sweepOrphanAgentFiles,
+  sweepOrphanTokenFiles,
+} from "./housekeeping";
 
 const LIVE = "live".padEnd(21, "0");
 const ARCHIVED = "archived".padEnd(21, "1");
@@ -108,5 +113,24 @@ describe("sweepOrphanAgentFiles", () => {
       return known();
     });
     expect(reads).toBe(0);
+  });
+});
+
+describe("sweepOrphanTokenFiles", () => {
+  it("removes old token files no live folder maps to, keeps live, fresh and foreign ones", async () => {
+    root = mkdtempSync(join(tmpdir(), "exegol-tokens-"));
+    const key = (c: string) => c.repeat(32);
+    const live = file(join(root, key("a")));
+    const orphan = file(join(root, key("b")));
+    const fresh = file(join(root, key("c")), false);
+    const foreign = file(join(root, "notes.txt"));
+    expect(await sweepOrphanTokenFiles(root, () => new Set([key("a")]), NOW)).toBe(1);
+    expect(existsSync(orphan)).toBe(false);
+    for (const kept of [live, fresh, foreign]) expect(existsSync(kept)).toBe(true);
+  });
+
+  it("is a no-op when the folder does not exist", async () => {
+    const missing = join(tmpdir(), "exegol-no-such-tokens-dir");
+    expect(await sweepOrphanTokenFiles(missing, () => new Set())).toBe(0);
   });
 });
