@@ -6,7 +6,8 @@ import type { HeldFrame } from "./sidecar-resync";
 export type ShellReadyState = "pending" | "ready" | "timed_out" | "unsupported";
 
 export interface SessionCallbacks {
-  onData: (data: string) => void;
+  /** `seq`: the session's output seq after this chunk (views drop what their snapshot holds) */
+  onData: (data: string, seq?: number) => void;
   onExit: (exitCode: number, signal?: number) => void;
   onError: (message: string) => void;
   /** Gone with the sidecar, not the CLI's own exit: no finalize, no scoring, no cleanup */
@@ -33,7 +34,8 @@ export interface Session {
   shellReadyTimeout: ReturnType<typeof setTimeout> | null;
   /** Set while Retry rebuilds the model from the ring: output that came after the ring's copy */
   resyncTail?: string[];
-  /** Seq of the last sidecar output frame applied (sidecar-resync.ts) */
+  /** Seq of the last sidecar output frame applied (sidecar-resync.ts); legacy sessions count
+   *  their own chunks */
   lastSeq?: number;
   /** A frame arrived past lastSeq + 1: some were lost (a Retry swap rebuilds it) */
   seqGap?: boolean;

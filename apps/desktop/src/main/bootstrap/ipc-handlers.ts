@@ -5,21 +5,29 @@ import { app, clipboard, dialog, ipcMain, webContents } from "electron";
 import { getAgentManager } from "../agents/manager";
 import { isHostedWebview } from "../browser/electron-host";
 import { broadcast } from "../lib/event-bus";
+import { suppressedNote } from "../lib/log-limiter";
 import { logger } from "../lib/logger";
 import { checkForUpdatesManual, installUpdate } from "../system/auto-updater";
+import {
+  AGENT_ID,
+  formatMountLine,
+  mountLogLimit,
+  parseMountStats,
+  visibleLogLimit,
+} from "../terminal/mount-log";
 import { getPtyHost } from "../terminal/pty-host";
 import {
   consumeMissedOutput,
   forgetViewer,
+  hasVisibleViewer,
   setTerminalViewerVisible,
 } from "../terminal/pty-visibility";
-
-/** webContents we already wired a destroy listener for. */
-const trackedSenders = new Set<number>();
-
 import { whenSessionReady } from "../terminal/reattach-gate";
 import { requestPtyResize } from "../terminal/resize-request";
 import { getMainWindow } from "./window";
+
+/** webContents we already wired a destroy listener for. */
+const trackedSenders = new Set<number>();
 
 export function registerIpcHandlers(): void {
   // Terminal write: renderer -> main -> pty
@@ -63,7 +71,16 @@ export function registerIpcHandlers(): void {
   // idle TUI (claude at its prompt) then stayed blank until touched. Wait for ITS reattach only
   ipcMain.handle("terminal:get-snapshot", async (_event, agentId: string) => {
     await whenSessionReady(agentId);
-    return getPtyHost().getLiveSnapshot(agentId);
+    return getPtyHost().parsedLiveSnapshot(agentId);
+  });
+
+  // Sizes, counts and times of a view's mount (renderer/terminal-setup): never content
+  ipcMain.on("terminal:mount-log", (_event, agentId: unknown, input: unknown) => {
+    const mount = parseMountStats(agentId, input);
+    if (!mount) return;
+    const suppressed = mountLogLimit.take(mount.agentId, Date.now());
+    if (suppressed === null) return;
+    logger.info(`${formatMountLine(mount)}${suppressedNote(suppressed)}`);
   });
 
   // A mount only needs to know whether output exists: serializing it just to test length cost 25-40ms
@@ -77,7 +94,8 @@ export function registerIpcHandlers(): void {
    *  the model instead of resuming mid-stream on a screen that moved on. */
   ipcMain.handle(
     "terminal:set-visible",
-    (event, agentId: string, visible: boolean, viewId: string, fresh?: boolean) => {
+    async (event, agentId: unknown, visible: boolean, viewId: string, fresh?: boolean) => {
+      if (typeof agentId !== "string" || !AGENT_ID.test(agentId)) return;
       const viewerId = event.sender.id;
       if (!trackedSenders.has(viewerId)) {
         trackedSenders.add(viewerId);
@@ -88,17 +106,30 @@ export function registerIpcHandlers(): void {
           forgetViewer(viewerId);
         });
       }
+      const wasVisible = hasVisibleViewer(agentId);
       setTerminalViewerVisible(agentId, viewerId, visible, viewId);
+      const nowVisible = hasVisibleViewer(agentId);
+      if (wasVisible !== nowVisible) {
+        const suppressed = visibleLogLimit.take(agentId, Date.now());
+        if (suppressed !== null) {
+          logger.info(
+            `[Visible] ${agentId} ${nowVisible ? "on" : "off"}${suppressedNote(suppressed)}`,
+          );
+        }
+      }
       // A view's first report comes from a mount that fetched its own snapshot:
       // repainting it again would serialize and paint the screen twice
       if (!visible || !consumeMissedOutput(agentId) || fresh) return;
-      const snapshot = getPtyHost().getLiveSnapshot(agentId);
-      if (!snapshot) return;
+      await whenSessionReady(agentId);
+      // The gate is open already: output during the wait reaches the view AND is in this
+      // snapshot (taken once parsed), so the reset below repaints it instead of losing it
+      const snapshot = await getPtyHost().parsedLiveSnapshot(agentId);
+      if (!snapshot?.data) return;
       // Pushed through terminal:data rather than returned, so the repaint is
       // ORDERED with live output. Returning it raced: bytes arriving between the
       // gate opening and the reply landing were applied, then wiped by the
       // renderer's reset. RIS (ESC c) makes the reset part of the same stream.
-      broadcast("terminal:data", agentId, `\x1bc${snapshot}`);
+      broadcast("terminal:data", agentId, `\x1bc${snapshot.data}`, snapshot.seq);
     },
   );
 
