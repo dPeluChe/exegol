@@ -1,7 +1,8 @@
 import type { Settings } from "@exegol/shared";
 import { Input } from "@exegol/ui";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, Send, TerminalSquare } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
+import { SECTION_HEADING, SwitchRow } from "./settings-ui";
 import { FamilyBadge } from "./terminal-settings/FamilyBadge";
 import { FontGroup } from "./terminal-settings/FontGroup";
 import {
@@ -19,7 +20,10 @@ function FieldLabel({ children }: { children: React.ReactNode }) {
 }
 
 interface TerminalSettingsProps {
-  settings: Pick<Settings, "terminalFontSize" | "terminalFontFamily">;
+  settings: Pick<
+    Settings,
+    "terminalFontSize" | "terminalFontFamily" | "sendToRunTerminal" | "sendToSubmitAgent"
+  >;
   onChange: (updates: Partial<Settings>) => void;
 }
 
@@ -175,6 +179,24 @@ export function TerminalSettings({ settings, onChange }: TerminalSettingsProps) 
           plainPreview={PLAIN_PREVIEW}
           onSelect={handleSelectFont}
           onDeselect={handleDeselectFont}
+        />
+      </div>
+
+      <div className="space-y-2">
+        <h3 className={SECTION_HEADING}>Send to</h3>
+        <SwitchRow
+          label="After Send to a terminal: run it (press Enter)"
+          description="Off: the text waits at the prompt for you to review and run it"
+          icon={TerminalSquare}
+          value={settings.sendToRunTerminal}
+          onToggle={() => onChange({ sendToRunTerminal: !settings.sendToRunTerminal })}
+        />
+        <SwitchRow
+          label="After Send to an agent: submit it (press Enter)"
+          description="Off: the text waits in the agent's input for you to add context. Never submitted while the agent asks a question or a permission"
+          icon={Send}
+          value={settings.sendToSubmitAgent}
+          onToggle={() => onChange({ sendToSubmitAgent: !settings.sendToSubmitAgent })}
         />
       </div>
     </div>

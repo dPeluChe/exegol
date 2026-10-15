@@ -85,9 +85,15 @@ contextBridge.exposeInMainWorld("api", {
     },
   },
   terminal: {
-    onData: (id: string, callback: (data: string) => void) => {
-      const handler = (_event: Electron.IpcRendererEvent, termId: string, data: string): void => {
-        if (termId === id) callback(data);
+    /** `seq`: the session's output seq after this chunk (absent when main has none) */
+    onData: (id: string, callback: (data: string, seq?: number) => void) => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        termId: string,
+        data: string,
+        seq?: number,
+      ): void => {
+        if (termId === id) callback(data, seq);
       };
       safe.on("terminal:data", handler as never);
       return () => {
@@ -97,8 +103,11 @@ contextBridge.exposeInMainWorld("api", {
     write: (id: string, data: string) => safe.send("terminal:write", id, data),
     resize: (id: string, cols: number, rows: number) =>
       safe.send("terminal:resize", id, cols, rows),
-    /** Get ring buffer snapshot for late-mounting terminals */
-    getSnapshot: (id: string): Promise<string | null> => safe.invoke("terminal:get-snapshot", id),
+    /** The session's screen for a mounting view, with the seq of the last output it holds */
+    getSnapshot: (id: string): Promise<import("@exegol/shared").LiveSnapshot | null> =>
+      safe.invoke("terminal:get-snapshot", id),
+    mountLog: (id: string, stats: import("@exegol/shared").MountStats) =>
+      safe.send("terminal:mount-log", id, stats),
     /** Whether the session ever produced output, without serializing it */
     hasContent: (id: string): Promise<boolean> => safe.invoke("terminal:has-content", id),
     /** T178: report whether this view can draw the agent. A repaint, when one is
