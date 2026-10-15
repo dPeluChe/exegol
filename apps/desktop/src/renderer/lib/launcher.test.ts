@@ -8,10 +8,12 @@ import {
   launcherFocusAllowed,
   launcherFolder,
   launcherKeyAction,
+  launcherRelFor,
   launchFormKey,
   matchFolders,
   orderedCommands,
   pinKey,
+  quickRepoFolders,
 } from "./launcher";
 import { sessionsInFolder } from "./launcher-sessions";
 
@@ -27,6 +29,24 @@ describe("launcherFolder", () => {
   });
   it("nothing detected yet, nothing picked", () => {
     expect(launcherFolder([], "api")).toBeUndefined();
+  });
+  it("a folder deeper than the list picks the nearest listed one above it", () => {
+    expect(launcherFolder(folders, "apps/web/src/lib")?.rel).toBe("apps/web");
+    expect(launcherFolder(folders, "api2/src")?.rel).toBe("");
+  });
+});
+
+describe("launcherRelFor", () => {
+  it("the session's folder relative to the project root", () => {
+    expect(launcherRelFor("/w/corp/nexus-control", "/w/corp")).toBe("nexus-control");
+    expect(launcherRelFor("/w/corp/apps/web/", "/w/corp/")).toBe("apps/web");
+  });
+  it("nothing at the root, outside the project or without a folder", () => {
+    expect(launcherRelFor("/w/corp", "/w/corp")).toBeUndefined();
+    expect(launcherRelFor("/w/corporate/x", "/w/corp")).toBeUndefined();
+    expect(launcherRelFor("/w/corp/../other", "/w/corp")).toBeUndefined();
+    expect(launcherRelFor(null, "/w/corp")).toBeUndefined();
+    expect(launcherRelFor("/w/corp/x", undefined)).toBeUndefined();
   });
 });
 
@@ -266,5 +286,31 @@ describe("sessionsInFolder", () => {
       projectPath: "/p",
     });
     expect(none).toEqual({ sessions: [], scope: "folder" });
+  });
+});
+
+describe("quickRepoFolders", () => {
+  const f = (rel: string, git = true) => ({ rel, git });
+  it("is empty with fewer than two repos in subfolders", () => {
+    expect(quickRepoFolders([f(""), f("app"), f("docs", false)], "").shown).toEqual([]);
+  });
+
+  it("lists the root then the repos, the rest counted", () => {
+    const folders = [f(""), ...["a", "b", "c", "d", "e", "g", "h"].map((r) => f(r))];
+    const q = quickRepoFolders(folders, "");
+    expect(q.shown.map((x) => x.rel)).toEqual(["", "a", "b", "c", "d", "e"]);
+    expect(q.more).toBe(2);
+  });
+
+  it("always shows the current repo", () => {
+    const folders = [f(""), ...["a", "b", "c", "d", "e", "g", "h"].map((r) => f(r))];
+    expect(quickRepoFolders(folders, "h").shown.map((x) => x.rel)).toEqual([
+      "",
+      "a",
+      "b",
+      "c",
+      "d",
+      "h",
+    ]);
   });
 });

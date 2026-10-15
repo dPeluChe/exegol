@@ -15,9 +15,9 @@ import { type DragEvent, lazy, Suspense, useCallback, useEffect, useRef, useStat
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { resumeSessionInto } from "../../hooks/use-resume-agent";
 import { useAgent } from "../../hooks/use-trpc";
-import { sizeKey } from "../../lib/browser-viewports";
 import { closeWithConfirm } from "../../lib/close-target";
 import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
+import { canFloat, floatPane } from "../../lib/float-pane";
 import { movePane } from "../../lib/move-pane";
 import { openProjectInIde } from "../../lib/open-in-ide";
 import { projectBrowserUrl } from "../../lib/project-browser-url";
@@ -49,38 +49,6 @@ const TerminalPanel = lazy(() =>
 );
 
 // ─── Pane Toolbar ───────────────────────────────────────────────────────────
-
-/** Opens a terminal (with an agent) or browser (with a URL) pane in an always-on-top window */
-function floatPane(
-  paneId: string,
-  pane: Pane,
-  projectId: string | null | undefined,
-  markPaneFloating: (paneId: string, type: "terminal" | "browser") => void,
-) {
-  if (pane.type === "terminal" && pane.agentId) {
-    markPaneFloating(paneId, "terminal");
-    window.api.floating.open({
-      paneId,
-      type: "terminal",
-      title: `Terminal — ${pane.agentId.slice(0, 8)}`,
-      agentId: pane.agentId,
-    });
-  } else if (pane.type === "browser" && pane.url) {
-    markPaneFloating(paneId, "browser");
-    window.api.floating.open({
-      paneId,
-      type: "browser",
-      title: "Browser",
-      url: pane.url,
-      // The floating browser lists the project's agents from it
-      projectId: projectId ?? undefined,
-      viewport: pane.viewport ? sizeKey(pane.viewport) : undefined,
-    });
-  }
-}
-
-const canFloat = (pane: Pane) =>
-  Boolean((pane.type === "terminal" && pane.agentId) || (pane.type === "browser" && pane.url));
 
 function PaneToolbar({
   tabId,

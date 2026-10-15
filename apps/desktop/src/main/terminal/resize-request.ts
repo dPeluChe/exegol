@@ -1,11 +1,10 @@
 import { getAgentManager } from "../agents/manager";
 import { getDb } from "../db/client";
 import { broadcast } from "../lib/event-bus";
+import { suppressedNote } from "../lib/log-limiter";
 import { logger } from "../lib/logger";
+import { resizeLogLimit } from "./mount-log";
 import { getPtyHost } from "./pty-host";
-
-const LOG_EVERY_MS = 10_000;
-const lastLogged = new Map<string, number>();
 
 /**
  * A view asks for a PTY grid (a pane's fit, or a Dashboard card that sizes the session).
@@ -39,11 +38,10 @@ function logResize(
   rows: number,
   held: boolean,
 ): void {
-  const now = Date.now();
-  if (!held && now - (lastLogged.get(agentId) ?? 0) < LOG_EVERY_MS) return;
-  lastLogged.set(agentId, now);
+  const suppressed = resizeLogLimit.take(agentId, Date.now(), held);
+  if (suppressed === null) return;
   const from = before ? `${before.cols}x${before.rows}` : "none";
   logger.info(
-    `[Resize] ${agentId} ${from} -> ${cols}x${rows}${held ? " (held for reattach)" : ""}`,
+    `[Resize] ${agentId} ${from} -> ${cols}x${rows}${held ? " (held for reattach)" : ""}${suppressedNote(suppressed)}`,
   );
 }

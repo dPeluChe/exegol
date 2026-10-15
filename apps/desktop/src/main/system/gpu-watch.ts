@@ -1,8 +1,10 @@
-import { BrowserWindow, ipcMain, powerMonitor, screen } from "electron";
+import { app, BrowserWindow, ipcMain, powerMonitor, screen } from "electron";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
+import { withTimeout } from "../lib/timeout";
 import {
   createGpuCrashTracker,
+  describeGpu,
   describeGpuCrash,
   parseGpuStats,
   type SystemEvent,
@@ -13,6 +15,23 @@ import {
 const statsByWindow = new Map<number, TerminalGpuStats>();
 const tracker = createGpuCrashTracker();
 let lastEvent: SystemEvent | null = null;
+/** Read once at start: asking the GPU process right after it died could hang or fail */
+let gpuInfo: unknown = null;
+
+/** Vendor, driver and feature status (no device or machine identifiers): logs and bug reports */
+export async function gpuSummary(): Promise<string> {
+  // A hung GPU process must never hold up the bug report
+  gpuInfo ??= await withTimeout(app.getGPUInfo("basic"), 1_000, "getGPUInfo").catch(() => null);
+  return describeGpu(gpuInfo, gpuFeatures());
+}
+
+function gpuFeatures(): Record<string, string> | null {
+  try {
+    return { ...app.getGPUFeatureStatus() } as Record<string, string>;
+  } catch {
+    return null;
+  }
+}
 
 function note(name: string): void {
   lastEvent = { name, at: Date.now() };
@@ -30,6 +49,16 @@ const onDisplayMetrics = (_e: unknown, _display: unknown, changed: string[]) => 
 };
 
 export function startGpuWatch(): void {
+  // Feature status reads all "disabled" until the GPU process reports (Electron docs)
+  app.once("gpu-info-update", () => {
+    app
+      .getGPUInfo("basic")
+      .then((info) => {
+        gpuInfo = info;
+        logger.info(`[GPU] ${describeGpu(info, gpuFeatures())}`);
+      })
+      .catch(() => {});
+  });
   ipcMain.on("terminal:gpu-stats", (event, input: unknown) => {
     const stats = parseGpuStats(input);
     if (!stats) return;
@@ -72,7 +101,9 @@ export function handleGpuProcessGone(details: { reason: string; exitCode: number
     lastEvent,
     now,
   );
-  logger.warn(`[GPU] process gone (${details.reason}, exit ${details.exitCode}): ${context}`);
+  logger.warn(
+    `[GPU] process gone (${details.reason}, exit ${details.exitCode}): ${context}; ${describeGpu(gpuInfo, gpuFeatures())}`,
+  );
   const verdict = tracker.record(now);
   if (verdict.switched) {
     logger.warn(

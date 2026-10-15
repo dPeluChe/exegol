@@ -142,12 +142,41 @@ describe("diagnostics: what ended a dictation reaches main's log (never the text
     expect(callOf("dictation.stop")).toMatchObject({ sessionId: "s1", by: "chord" });
   });
 
-  it("a stop with nothing heard is logged as a cancel", async () => {
+  it("a stop with sound but no speech is logged as a cancel", async () => {
     trpcMutate.mockClear();
     await startRecording();
+    feed(new Float32Array(1600).fill(0.004));
     chordDown();
     await settle();
     expect(callOf("dictation.cancel")).toEqual({ sessionId: "s1", source: "nothing-heard" });
+  });
+});
+
+describe("heard nothing: says which input and links to Settings", () => {
+  const lastToast = () => useToastStore.getState().toasts[0];
+
+  it("a flat input (no signal at all) cancels as flat", async () => {
+    trpcMutate.mockClear();
+    await startRecording();
+    useDictationStore.getState().set({ inputName: "USB Mic" });
+    feed(new Float32Array(1600));
+    chordDown();
+    await settle();
+    expect(trpcMutate.mock.calls.find(([p]) => p === "dictation.cancel")?.[1]).toEqual({
+      sessionId: "s1",
+      source: "flat",
+    });
+    expect(lastToast()?.title).toBe("Heard nothing from USB Mic");
+    expect(lastToast()?.action?.label).toBe("Open Settings");
+  });
+
+  it("speech the model found no words in says the same", async () => {
+    await startRecording();
+    feed(speech());
+    trpcMutate.mockImplementationOnce(async () => ({ text: "" }));
+    chordDown();
+    await settle();
+    expect(lastToast()?.title).toBe("Heard nothing from the microphone");
   });
 });
 

@@ -43,6 +43,17 @@ if (dryRun) {
   process.exit(0);
 }
 
+// A fresh worktree has no Rust binding and the app would ship without worktrees and git/diff
+const rustBinding = resolve(desktop, "../../packages/core-rust/core-rust.darwin-arm64.node");
+if (!existsSync(rustBinding)) {
+  console.log("[package:local] Rust binding missing, building it");
+  const r = spawnSync("bun", ["run", "build:rust"], {
+    cwd: resolve(desktop, "../.."),
+    stdio: "inherit",
+  });
+  if (r.status !== 0 || !existsSync(rustBinding)) fail("could not build the Rust binding");
+}
+
 rmSync(outDir, { recursive: true, force: true });
 run("electron-vite", ["build"]);
 // A notarytool profile in the shell must not make a throwaway build wait on Apple

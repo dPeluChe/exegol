@@ -162,7 +162,8 @@ export function doCreateLegacy(
             if (data.length > 0) {
               emulator.write(data);
               scheduleScrollbackFlush(session);
-              callbacks.onData(data);
+              session.lastSeq = (session.lastSeq ?? 0) + 1;
+              callbacks.onData(data, session.lastSeq);
             }
             break;
           }
