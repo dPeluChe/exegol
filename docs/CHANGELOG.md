@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Right-click on the Dashboard opens a menu. On a Watching card: Go to session, Copy (when text is selected in it), Collapse or Expand, Fit session to card, Smaller and Larger text, Float to window (when the session has a pane) and Unpin. On a pin whose session ended: Resume, Open project and Unpin. On a fleet card: Go to session, Watch or Stop watching, Mute and Suspend while it runs, Resume and Archive once it ended. A right-click in a card no longer reaches a full-screen CLI that tracks the mouse
+
 ### Fixed
 - The `[GPU]` startup line in the log and bug reports showed every feature (WebGL included) as disabled: it was read before the GPU process reported. It is now written once the GPU process is up
 - `bun run package:local` (development) builds the Rust module first when it is missing, so a test DMG made in a fresh worktree keeps worktrees and the Rust git/diff

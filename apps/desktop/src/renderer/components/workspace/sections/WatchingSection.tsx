@@ -9,9 +9,14 @@ import {
   PinOff,
   X,
 } from "lucide-react";
-import { type DragEvent, useState } from "react";
+import { type DragEvent, useRef, useState } from "react";
 import { type AgentState, useAgentStore } from "../../../stores/agents";
-import { DEFAULT_CARD_FONT, MAX_OPEN_MIRRORS, useWatchStore } from "../../../stores/watch";
+import {
+  DEFAULT_CARD_FONT,
+  MAX_OPEN_MIRRORS,
+  stepCardFont,
+  useWatchStore,
+} from "../../../stores/watch";
 import { AgentQuestion } from "../../agents/AgentQuestion";
 import { ResumeButton } from "../../agents/ResumeButton";
 import { AgentIcon } from "../../common/AgentIcon";
@@ -21,7 +26,8 @@ import { SessionAlias } from "../../common/SessionAlias";
 import { StatusDot } from "../../common/StatusDot";
 import { ErrorBoundary, paneFallback } from "../../ErrorBoundary";
 import { FollowUpControl } from "../../terminal/FollowUpControl";
-import { TerminalInstance } from "../../terminal/TerminalInstance";
+import { TerminalInstance, type TerminalInstanceHandle } from "../../terminal/TerminalInstance";
+import { WatchCardMenu } from "./DashboardMenus";
 import { WatchGoneCard, WatchGoneStrip } from "./WatchGoneStrip";
 
 const DRAG_TYPE = "application/x-exegol-watch";
@@ -156,7 +162,13 @@ export function WatchingSection({
             return openIds.has(id) && agent ? (
               <WatchCard key={id} agent={agent} onOpenAgent={onOpenAgent} {...common} />
             ) : (
-              <CollapsedStrip key={id} agentId={id} agent={agent} {...common} />
+              <CollapsedStrip
+                key={id}
+                agentId={id}
+                agent={agent}
+                onOpenAgent={onOpenAgent}
+                {...common}
+              />
             );
           });
           return rowIndex === 0
@@ -175,9 +187,11 @@ function CollapsedStrip({
   project,
   dropTarget,
   dragProps,
+  onOpenAgent,
 }: {
   agentId: string;
   agent: AgentState | undefined;
+  onOpenAgent: (agent: AgentState) => void;
   needsInput: boolean;
   project: ProjectMeta | undefined;
   dropTarget: boolean;
@@ -200,42 +214,46 @@ function CollapsedStrip({
   const name = agent.alias ?? agent.cliType;
 
   return (
-    <div
-      {...dragProps}
-      style={{ height: FULL_HEIGHT }}
-      className={cn(
-        "group flex w-9 shrink-0 cursor-grab flex-col items-center gap-2 rounded-xl border bg-bg-secondary/60 py-2 active:cursor-grabbing",
-        needsInput ? "border-amber-500/50" : "border-border",
-        dropTarget && "ring-1 ring-accent",
-      )}
-    >
-      <button
-        type="button"
-        onClick={() => toggleWatch(agentId)}
-        className="rounded p-0.5 text-text-muted opacity-0 transition-opacity hover:bg-white/10 hover:text-text-primary group-hover:opacity-100"
-        title="Stop watching"
+    <WatchCardMenu agent={agent} expanded={false} onOpenAgent={onOpenAgent}>
+      <div
+        {...dragProps}
+        style={{ height: FULL_HEIGHT }}
+        className={cn(
+          "group flex w-9 shrink-0 cursor-grab flex-col items-center gap-2 rounded-xl border bg-bg-secondary/60 py-2 active:cursor-grabbing",
+          needsInput ? "border-amber-500/50" : "border-border",
+          dropTarget && "ring-1 ring-accent",
+        )}
       >
-        <X className="h-3 w-3" />
-      </button>
-      <button
-        type="button"
-        disabled={!agent}
-        onClick={() => toggleOpen(agentId)}
-        className="flex min-h-0 flex-1 flex-col items-center gap-2 text-text-secondary hover:text-text-primary disabled:opacity-50"
-        title={agent ? `Open ${name} here` : undefined}
-      >
-        {agent && <StatusDot status={agent.status} activityLevel={agent.activityLevel} size="sm" />}
-        {agent && <AgentIcon provider={agent.cliType} size={16} />}
-        {needsInput && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />}
-        <span
-          className="min-h-0 truncate text-[11px] font-medium"
-          style={{ writingMode: "vertical-rl" }}
+        <button
+          type="button"
+          onClick={() => toggleWatch(agentId)}
+          className="rounded p-0.5 text-text-muted opacity-0 transition-opacity hover:bg-white/10 hover:text-text-primary group-hover:opacity-100"
+          title="Stop watching"
         >
-          {name}
-          {project && <span className="font-normal text-text-muted"> · {project.name}</span>}
-        </span>
-      </button>
-    </div>
+          <X className="h-3 w-3" />
+        </button>
+        <button
+          type="button"
+          disabled={!agent}
+          onClick={() => toggleOpen(agentId)}
+          className="flex min-h-0 flex-1 flex-col items-center gap-2 text-text-secondary hover:text-text-primary disabled:opacity-50"
+          title={agent ? `Open ${name} here` : undefined}
+        >
+          {agent && (
+            <StatusDot status={agent.status} activityLevel={agent.activityLevel} size="sm" />
+          )}
+          {agent && <AgentIcon provider={agent.cliType} size={16} />}
+          {needsInput && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-400" />}
+          <span
+            className="min-h-0 truncate text-[11px] font-medium"
+            style={{ writingMode: "vertical-rl" }}
+          >
+            {name}
+            {project && <span className="font-normal text-text-muted"> · {project.name}</span>}
+          </span>
+        </button>
+      </div>
+    </WatchCardMenu>
   );
 }
 
@@ -263,99 +281,111 @@ function WatchCard({
     return !!item && !item.read && item.level === "action_needed";
   });
   const cardFont = useWatchStore((s) => s.cardFont[agent.id]);
+  const terminalRef = useRef<TerminalInstanceHandle>(null);
+  // Opened by a question, not by you: collapsing means "seen"
+  const collapse = () =>
+    openedByUser ? toggleOpen(agent.id) : useAgentStore.getState().markAttentionRead(agent.id);
 
   return (
-    <div
-      style={{ height: FULL_HEIGHT }}
-      className={cn(
-        "flex min-w-0 flex-1 flex-col rounded-xl border bg-bg-secondary/40",
-        needsInput ? "border-amber-500/40" : "border-border",
-        dropTarget && "ring-1 ring-accent",
-      )}
+    <WatchCardMenu
+      agent={agent}
+      expanded
+      terminalRef={terminalRef}
+      onOpenAgent={onOpenAgent}
+      onCollapse={collapse}
     >
       <div
-        {...dragProps}
-        className="flex cursor-grab items-center gap-2 px-2 py-2 active:cursor-grabbing"
+        style={{ height: FULL_HEIGHT }}
+        className={cn(
+          "flex min-w-0 flex-1 flex-col rounded-xl border bg-bg-secondary/40",
+          needsInput ? "border-amber-500/40" : "border-border",
+          dropTarget && "ring-1 ring-accent",
+        )}
       >
-        <GripVertical className="h-3.5 w-3.5 shrink-0 text-text-muted/50" />
-        <button
-          type="button"
-          onClick={() =>
-            // Opened by a question, not by you: collapsing means "seen"
-            openedByUser
-              ? toggleOpen(agent.id)
-              : useAgentStore.getState().markAttentionRead(agent.id)
-          }
-          className="shrink-0 rounded p-0.5 text-text-muted hover:bg-white/10 hover:text-text-primary"
-          title="Collapse to a strip"
-        >
-          <ChevronDown className="h-3.5 w-3.5" />
-        </button>
-        <div className="flex min-w-0 flex-1 items-center gap-2">
-          <StatusDot status={agent.status} activityLevel={agent.activityLevel} size="sm" />
-          <AgentIcon provider={agent.cliType} size={16} />
-          <span className="min-w-0 shrink truncate">
-            <SessionAlias agent={agent} textClassName="text-xs" />
-          </span>
-          {project && <ProjectChip project={project} className="text-[10px]" />}
-          {needsInput && (
-            <span className="shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-400">
-              Needs input
-            </span>
-          )}
-        </div>
-        <FollowUpControl agentId={agent.id} className="py-0.5 text-[10px]" />
-        {live && <CardSizeControls agentId={agent.id} />}
-        <button
-          type="button"
-          onClick={() => onOpenAgent(agent)}
-          className="flex shrink-0 items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] text-text-muted hover:bg-white/10 hover:text-text-primary"
-          title="Go to its project and pane"
-        >
-          <ArrowUpRight className="h-3 w-3" />
-          Open
-        </button>
-        <button
-          type="button"
-          onClick={() => toggleWatch(agent.id)}
-          className="shrink-0 rounded p-1 text-text-muted hover:bg-white/10 hover:text-text-primary"
-          title="Stop watching"
-        >
-          <PinOff className="h-3 w-3" />
-        </button>
-      </div>
-
-      <div className="mx-2 mb-2 empty:hidden">
-        <AgentQuestion agentId={agent.id} enabled={live && asksQuestion} />
-      </div>
-      {live ? (
-        // Focusing the mirror keeps it open after the question is answered and
-        // clears the attention badge, as reading it in its pane would.
         <div
-          className="mx-2 mb-2 min-h-0 flex-1 overflow-hidden rounded-md border border-border bg-black/40 p-1"
-          data-mirror-agent-id={agent.id}
-          onFocusCapture={() => {
-            if (!openedByUser) toggleOpen(agent.id);
-            if (needsInput) useAgentStore.getState().markAttentionRead(agent.id);
-          }}
+          {...dragProps}
+          className="flex cursor-grab items-center gap-2 px-2 py-2 active:cursor-grabbing"
         >
-          <ErrorBoundary fallback={paneFallback}>
-            <TerminalInstance
-              key={`mirror-${agent.id}`}
-              agentId={agent.id}
-              cliType={agent.cliType}
-              mirror
-              cardFont={cardFont}
-            />
-          </ErrorBoundary>
+          <GripVertical className="h-3.5 w-3.5 shrink-0 text-text-muted/50" />
+          <button
+            type="button"
+            onClick={collapse}
+            className="shrink-0 rounded p-0.5 text-text-muted hover:bg-white/10 hover:text-text-primary"
+            title="Collapse to a strip"
+          >
+            <ChevronDown className="h-3.5 w-3.5" />
+          </button>
+          <div className="flex min-w-0 flex-1 items-center gap-2">
+            <StatusDot status={agent.status} activityLevel={agent.activityLevel} size="sm" />
+            <AgentIcon provider={agent.cliType} size={16} />
+            <span className="min-w-0 shrink truncate">
+              <SessionAlias agent={agent} textClassName="text-xs" />
+            </span>
+            {project && <ProjectChip project={project} className="text-[10px]" />}
+            {needsInput && (
+              <span className="shrink-0 rounded-full bg-amber-500/15 px-1.5 py-0.5 text-[10px] text-amber-400">
+                Needs input
+              </span>
+            )}
+          </div>
+          <FollowUpControl agentId={agent.id} className="py-0.5 text-[10px]" />
+          {live && <CardSizeControls agentId={agent.id} />}
+          <button
+            type="button"
+            onClick={() => onOpenAgent(agent)}
+            className="flex shrink-0 items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] text-text-muted hover:bg-white/10 hover:text-text-primary"
+            title="Go to its project and pane"
+          >
+            <ArrowUpRight className="h-3 w-3" />
+            Open
+          </button>
+          <button
+            type="button"
+            onClick={() => toggleWatch(agent.id)}
+            className="shrink-0 rounded p-1 text-text-muted hover:bg-white/10 hover:text-text-primary"
+            title="Stop watching"
+          >
+            <PinOff className="h-3 w-3" />
+          </button>
         </div>
-      ) : (
-        <div className="mx-3 mb-2 flex items-center gap-2 text-[11px] text-text-muted">
-          <span>Session ended ({agent.status}).</span>
-          <ResumeButton agent={agent} />
+
+        <div className="mx-2 mb-2 empty:hidden">
+          <AgentQuestion agentId={agent.id} enabled={live && asksQuestion} />
         </div>
-      )}
-    </div>
+        {live ? (
+          // Focusing the mirror keeps it open after the question is answered and
+          // clears the attention badge, as reading it in its pane would.
+          <div
+            className="mx-2 mb-2 min-h-0 flex-1 overflow-hidden rounded-md border border-border bg-black/40 p-1"
+            data-mirror-agent-id={agent.id}
+            // Our menu takes the right button: a TUI tracking the mouse must not get the press
+            onMouseDownCapture={(e) => {
+              if (e.button === 2) e.stopPropagation();
+            }}
+            onFocusCapture={() => {
+              if (!openedByUser) toggleOpen(agent.id);
+              if (needsInput) useAgentStore.getState().markAttentionRead(agent.id);
+            }}
+          >
+            <ErrorBoundary fallback={paneFallback}>
+              <TerminalInstance
+                ref={terminalRef}
+                key={`mirror-${agent.id}`}
+                agentId={agent.id}
+                cliType={agent.cliType}
+                mirror
+                cardFont={cardFont}
+              />
+            </ErrorBoundary>
+          </div>
+        ) : (
+          <div className="mx-3 mb-2 flex items-center gap-2 text-[11px] text-text-muted">
+            <span>Session ended ({agent.status}).</span>
+            <ResumeButton agent={agent} />
+          </div>
+        )}
+      </div>
+    </WatchCardMenu>
   );
 }
 
@@ -368,7 +398,7 @@ function CardSizeControls({ agentId }: { agentId: string }) {
   const cardFont = useWatchStore((s) => s.cardFont[agentId]);
   const setCardFont = useWatchStore((s) => s.setCardFont);
   const sizing = cardFont !== undefined;
-  const step = (delta: number) => setCardFont(agentId, (cardFont ?? DEFAULT_CARD_FONT) + delta);
+  const step = (delta: number) => stepCardFont(agentId, delta);
   const btn =
     "rounded px-1 py-0.5 text-[10px] text-text-muted hover:bg-white/10 hover:text-text-primary";
 
