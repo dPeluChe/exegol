@@ -131,7 +131,10 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
 - **Browser pane**: a webview with URL bar and navigation, next to your agents. It remembers
   the page it was on, and can show it at a device size (desktop, laptop, tablet, mobile).
   A page's `alert()`, `confirm()` and `prompt()` show as a bar inside the pane, never as a
-  window-wide dialog.
+  window-wide dialog. A page asking for location, camera, microphone, notifications, MIDI or to
+  open another app gets a bar too: Allow once, Always allow on this site, or Block. Saved answers
+  are per project and site, in Edit project > Site permissions (× forgets one). On macOS the
+  first location Allow asks macOS for Location Services access.
 - **Design mode**: click an element to send its selector, styles and HTML to an agent.
 - **Agents in the browser**: agents drive the project's browser pane through the Exegol MCP
   tools (`browser_open`, `browser_snapshot`, `browser_click`...), live in the same pane you see.

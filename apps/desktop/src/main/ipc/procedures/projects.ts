@@ -12,6 +12,7 @@ import { MAX_BROWSER_HOSTS, parseBrowserHosts, projectCreateSchema } from "@exeg
 import { coreRust } from "../../agents/spawn-env";
 import { getWorktreeName, removeManagedWorktree } from "../../agents/worktrees";
 import { copyCookiesForHosts, markCookiesMigrated } from "../../browser/electron-host";
+import { forgetSitePermission, listSitePermissions } from "../../browser/page-permissions";
 import {
   createProject,
   deleteProject,
@@ -177,6 +178,19 @@ export const projectRouter = router({
       );
       return getProject(ctx.db, input.id);
     }),
+
+  /** Site permissions saved from a browser pane's bar (Always allow / Block) */
+  browserPermissions: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .query(({ ctx, input }) => listSitePermissions(ctx.db, input.id)),
+
+  forgetBrowserPermission: publicProcedure
+    .input(
+      z.object({ id: z.string(), origin: z.string().max(300), permission: z.string().max(40) }),
+    )
+    .mutation(({ ctx, input }) =>
+      forgetSitePermission(ctx.db, input.id, input.origin, input.permission),
+    ),
 
   reorder: publicProcedure
     .input(z.object({ orderedIds: z.array(z.string()) }))

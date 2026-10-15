@@ -1,6 +1,7 @@
 import type { MicStatus } from "@exegol/shared";
 import { app, type Session, session, shell, systemPreferences, type WebContents } from "electron";
 import { pageClipboardDecision } from "../browser/page-events";
+import { checkPagePermission, requestPagePermission } from "../browser/page-permissions";
 import { getMainWindow } from "../windows/main-window-ref";
 import { allowMediaRequest } from "./media-policy";
 
@@ -98,15 +99,22 @@ function guardSession(ses: Session): void {
   guarded.add(ses);
   ses.setPermissionRequestHandler((wc, permission, callback, details) => {
     const media = "mediaTypes" in details ? (details.mediaTypes ?? []) : [];
-    callback(decide(wc, permission, media, details.requestingUrl ?? wc.getURL()));
+    const url = details.requestingUrl ?? wc.getURL();
+    // Browser pane pages: the pane's permission bar (page-permissions), never silent
+    if (requestPagePermission(wc, permission, media, url, callback)) return;
+    callback(decide(wc, permission, media, url));
   });
   ses.setPermissionCheckHandler((wc, permission, origin, details) => {
     const media = details.mediaType ? [details.mediaType] : [];
-    return decide(wc, permission, media, details.requestingUrl ?? origin, true);
+    const url = details.requestingUrl ?? origin;
+    return (
+      checkPagePermission(wc, permission, media, url) ?? decide(wc, permission, media, url, true)
+    );
   });
 }
 
-/** Mic and camera: every session (the default one and each project's browser partition) */
+/** Every session (the default one and each project's browser partition): app windows by the
+ *  media policy, browser pane pages by their permission bar */
 export function installMediaPermissions(): void {
   guardSession(session.defaultSession);
   app.on("session-created", guardSession);

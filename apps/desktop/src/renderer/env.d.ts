@@ -195,6 +195,17 @@ interface Window {
       onPageDialogClosed: (callback: (closed: { id: string }) => void) => () => void;
       answerPageDialog: (answer: { id: string; ok: boolean; text?: string }) => Promise<boolean>;
       blockPageDialogs: (id: string) => Promise<boolean>;
+      onPermissionRequest: (
+        callback: (request: { id: string; paneId: string; host: string; what: string }) => void,
+      ) => () => void;
+      onPermissionClosed: (callback: (closed: { id: string }) => void) => () => void;
+      onPermissionNotice: (
+        callback: (notice: { paneId: string; kind: "location-off" }) => void,
+      ) => () => void;
+      answerPermission: (
+        id: string,
+        answer: "once" | "always" | "block" | "deny",
+      ) => Promise<boolean>;
     };
     onPreviewLink: (
       callback: (link: { from: string; url: string; host: string; dropped: boolean }) => void,

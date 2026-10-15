@@ -1,11 +1,13 @@
 {
   "trpc": {
     "projects": [
+      "browserPermissions",
       "create",
       "delete",
       "deleteWorktree",
       "detectIcons",
       "detectIconsAt",
+      "forgetBrowserPermission",
       "get",
       "iconImage",
       "list",
@@ -447,6 +449,10 @@
     "browser:page-dialog-closed",
     "browser:page-dialog-answer",
     "browser:page-dialog-block",
+    "browser:permission-request",
+    "browser:permission-closed",
+    "browser:permission-answer",
+    "browser:permission-notice",
     "mcp:status",
     "files-preview:link",
     "agent:turn-changes",

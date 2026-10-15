@@ -42,6 +42,7 @@ import {
   takeOverPageDialogs,
   trackPageEvents,
 } from "./page-events";
+import { installPagePermissions, trackPagePermissions } from "./page-permissions";
 import { blocksAgentRequest, logUrl } from "./request-guard";
 import {
   type BrowserHost,
@@ -199,6 +200,7 @@ function trackWebview(wc: WebContents): void {
   ringOf(id);
   guardWebview(wc);
   trackPageEvents(wc);
+  trackPagePermissions(wc);
   wc.on("console-message", (...args: unknown[]) => {
     const d = args[0] as {
       level?: string;
@@ -573,6 +575,7 @@ export function installAgentBrowser(db: Database.Database): void {
   });
 
   installPageEvents((wcId) => paneOfWebContents(wcId)?.paneId);
+  installPagePermissions(db, paneOfWebContents);
   ipcMain.handle("browser:register-pane", (event, input) =>
     registerPane(db, event.sender, input ?? {}),
   );

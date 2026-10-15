@@ -15,7 +15,7 @@ describe("allowMediaRequest", () => {
     expect(allowMediaRequest(base)).toBe(true);
   });
 
-  it("denies a browser pane, a disarmed window, another origin and the camera", () => {
+  it("denies another window, a disarmed window, another origin and the camera", () => {
     expect(allowMediaRequest({ ...base, isMainWindow: false })).toBe(false);
     expect(allowMediaRequest({ ...base, armed: false })).toBe(false);
     expect(allowMediaRequest({ ...base, url: "https://example.com/" })).toBe(false);

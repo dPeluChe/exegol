@@ -128,6 +128,8 @@ export function ProjectAppearanceDialog({
             </span>
           </label>
 
+          <SitePermissions projectId={project.id} enabled={open} />
+
           <ProjectIconPicker
             found={found}
             isLoading={isLoading}
@@ -205,6 +207,73 @@ function ShortcutPicker({ projectId }: { projectId: string }) {
         ))}
       </select>
     </label>
+  );
+}
+
+interface SitePermissionRow {
+  origin: string;
+  permission: string;
+  decision: "allow" | "block";
+  label: string;
+}
+
+/** "Always allow" / "Block" answers given in this project's browser panes; removing one makes
+ *  the site ask again */
+function SitePermissions({ projectId, enabled }: { projectId: string; enabled: boolean }) {
+  const queryClient = useQueryClient();
+  const key = ["projects", "browserPermissions", projectId];
+  const { data: rows = [] } = useQuery({
+    queryKey: key,
+    queryFn: () =>
+      trpcInvoke<SitePermissionRow[]>("projects.browserPermissions", { id: projectId }),
+    enabled,
+  });
+  const forget = useMutation({
+    mutationFn: (r: SitePermissionRow) =>
+      trpcMutate("projects.forgetBrowserPermission", {
+        id: projectId,
+        origin: r.origin,
+        permission: r.permission,
+      }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: key }),
+    onError: toastError("Could not forget the site permission"),
+  });
+  if (rows.length === 0) return null;
+  return (
+    <div className="mb-3">
+      <span className="mb-1 block text-[10px] uppercase tracking-wider text-text-muted">
+        Site permissions
+      </span>
+      <ul className="space-y-0.5">
+        {rows.map((r) => (
+          <li
+            key={`${r.origin} ${r.permission}`}
+            className="flex items-center gap-2 text-[11px] text-text-secondary"
+          >
+            <span className="min-w-0 flex-1 truncate font-mono" title={r.origin}>
+              {r.origin}
+            </span>
+            <span className="shrink-0">{r.label}</span>
+            <span
+              className={
+                r.decision === "allow" ? "shrink-0 text-green-400" : "shrink-0 text-red-400"
+              }
+            >
+              {r.decision === "allow" ? "Allowed" : "Blocked"}
+            </span>
+            <button
+              type="button"
+              aria-label={`Forget ${r.label} for ${r.origin}`}
+              title="Forget: the site asks again"
+              onClick={() => forget.mutate(r)}
+              className="shrink-0 rounded p-0.5 text-text-muted hover:bg-white/10 hover:text-text-primary"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

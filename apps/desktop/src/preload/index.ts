@@ -380,6 +380,15 @@ contextBridge.exposeInMainWorld("api", {
       safe.invoke("browser:page-dialog-answer", answer),
     /** Until the page navigates, its dialogs are cancelled without showing */
     blockPageDialogs: (id: string) => safe.invoke("browser:page-dialog-block", { id }),
+    /** A pane's page asks for location, camera, notifications...: the pane's bar answers */
+    onPermissionRequest: (callback: (request: unknown) => void) =>
+      listen("browser:permission-request", callback),
+    onPermissionClosed: (callback: (closed: unknown) => void) =>
+      listen("browser:permission-closed", callback),
+    onPermissionNotice: (callback: (notice: unknown) => void) =>
+      listen("browser:permission-notice", callback),
+    answerPermission: (id: string, answer: "once" | "always" | "block" | "deny") =>
+      safe.invoke("browser:permission-answer", { id, answer }),
   },
   /** An http(s) link clicked in a Files HTML preview (main refused the navigation) */
   onPreviewLink: (callback: (link: unknown) => void) => listen("files-preview:link", callback),

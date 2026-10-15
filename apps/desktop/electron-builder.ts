@@ -106,7 +106,13 @@ const config: Configuration = {
       NSAppleEventsUsageDescription:
         "Exegol needs automation access to open IDEs, manage terminals and, if you turn it on, pause your music while you dictate.",
       NSMicrophoneUsageDescription:
-        "Exegol uses the microphone only while you dictate. Speech is transcribed on this Mac and never leaves it.",
+        "Exegol uses the microphone while you dictate (transcribed on this Mac, it never leaves it), and for a page in a browser pane only when it asks and you allow it.",
+      NSCameraUsageDescription:
+        "Exegol uses the camera only when a page in a browser pane asks for it and you allow it.",
+      NSLocationUsageDescription:
+        "Exegol uses your location only when a page in a browser pane asks for it and you allow it.",
+      NSLocationWhenInUseUsageDescription:
+        "Exegol uses your location only when a page in a browser pane asks for it and you allow it.",
     },
   },
 
