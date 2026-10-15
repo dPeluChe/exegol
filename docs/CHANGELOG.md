@@ -9,6 +9,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.22] — 2026-10-15 — Site permissions in browser panes, dictation pause and vocabulary, Dashboard menus
+
 ### Added
 - A page in a browser pane that asks for your location, camera, microphone, notifications, MIDI devices or to open another app now asks you in a bar in the pane: Allow once (until the page leaves that site), Always allow on this site, or Block (Esc or × denies this time). Saved answers are per project and site, listed in Edit project > Site permissions, where × forgets one so the site asks again
 - Location works in browser panes on macOS: the first Allow asks macOS for Location Services access for Exegol (a page that was waiting may need a reload after you answer). If macOS has it turned off, a notice says where to turn it on
