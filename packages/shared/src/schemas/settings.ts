@@ -1,6 +1,7 @@
 import { z } from "zod";
 import {
   DEFAULT_DICTATION_SETTINGS,
+  DICTATION_LANGUAGE_IDS,
   DICTATION_OVERLAY_POSITIONS,
   DICTATION_RECORDING_RETENTION_DAYS,
   type DictationRecordingRetentionDays,
@@ -33,6 +34,7 @@ export const dictationSettingsSchema = z.object({
   retentionDays: z.number().int().min(1).max(3650),
   retentionMax: z.number().int().min(10).max(10_000),
   overlayPosition: z.enum(DICTATION_OVERLAY_POSITIONS).default("pane"),
+  language: z.enum(DICTATION_LANGUAGE_IDS).default("en"),
   keepRecordings: z.boolean().default(false),
   recordingsRetentionDays: z
     .number()
@@ -53,6 +55,8 @@ export const settingsSchema = z.object({
   globalHotkey: z.string().default("CommandOrControl+Shift+E"),
   terminalFontSize: z.number().int().min(8).max(32).default(14),
   terminalFontFamily: z.string().default("Menlo, Monaco, monospace"),
+  sendToRunTerminal: z.boolean().default(false),
+  sendToSubmitAgent: z.boolean().default(false),
   notificationsEnabled: z.boolean().default(true),
   toastsEnabled: z.boolean().default(true),
   saveWorktreeWork: z.boolean().default(true),

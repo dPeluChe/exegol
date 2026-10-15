@@ -98,6 +98,16 @@ describe("dictation chord", () => {
     const picked = { ...DEFAULT_DICTATION_SETTINGS, inputDeviceId: "abc", inputDeviceLabel: "USB" };
     expect(dictationSettingsSchema.safeParse(picked).success).toBe(true);
   });
+
+  it("language: English by default, a row saved before it existed included", () => {
+    const { language: _, ...older } = DEFAULT_DICTATION_SETTINGS;
+    expect(dictationSettingsOf(older).language).toBe("en");
+    expect(dictationSettingsSchema.parse(older).language).toBe("en");
+    const es = { ...DEFAULT_DICTATION_SETTINGS, language: "es" };
+    expect(dictationSettingsSchema.safeParse(es).success).toBe(true);
+    const bad = { ...DEFAULT_DICTATION_SETTINGS, language: "xx" };
+    expect(dictationSettingsSchema.safeParse(bad).success).toBe(false);
+  });
 });
 
 describe("isDictationPauseKey", () => {

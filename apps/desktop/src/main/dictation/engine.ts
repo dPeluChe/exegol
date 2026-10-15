@@ -1,6 +1,10 @@
 import { availableParallelism } from "node:os";
 import { join } from "node:path";
-import { type DictationEngineState, DICTATION_SAMPLE_RATE as SAMPLE_RATE } from "@exegol/shared";
+import {
+  type DictationEngineState,
+  type DictationLanguage,
+  DICTATION_SAMPLE_RATE as SAMPLE_RATE,
+} from "@exegol/shared";
 import { type UtilityProcess, utilityProcess } from "electron";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
@@ -8,7 +12,7 @@ import { findModel } from "../models/catalog";
 import { MODELS_DIR, modelDir } from "../models/manager";
 import { getMainWindow } from "../windows/main-window-ref";
 import type { EngineReply, EngineRequest } from "./engine-protocol";
-import { recognizerSpec } from "./model-config";
+import { recognizerKey, recognizerSpec } from "./model-config";
 
 const LOAD_TIMEOUT_MS = 120_000;
 const DECODE_TIMEOUT_MS = 180_000;
@@ -24,7 +28,12 @@ interface Waiter<T> {
 
 let child: UtilityProcess | null = null;
 let state: DictationEngineState = "unloaded";
-let modelId: string | null = null;
+interface Wanted {
+  id: string;
+  language: DictationLanguage;
+}
+/** The recognizer asked for, and its cache key (`recognizerKey`): the engine reloads on a new key */
+let wanted: (Wanted & { key: string }) | null = null;
 let loadWaiter: Waiter<void> | null = null;
 let loadPromise: Promise<void> | null = null;
 type Final = Omit<Extract<EngineReply, { type: "final" }>, "type" | "sessionId">;
@@ -84,7 +93,7 @@ function onReply(msg: EngineReply): void {
       return;
     case "load-failed":
       logger.warn(`[Dictation] model ${msg.modelId} failed to load: ${msg.error}`);
-      modelId = null;
+      wanted = null;
       setState("failed");
       loadWaiter?.reject(new Error(`the model did not load: ${msg.error}`));
       loadWaiter = null;
@@ -123,16 +132,16 @@ function spawn(): UtilityProcess {
   proc.on("message", (msg: EngineReply) => onReply(msg));
   proc.on("exit", (code) => {
     if (child !== proc) return;
-    const wanted = modelId;
+    const lost = wanted;
     reset();
-    if (code !== 0) onCrash(code, wanted);
+    if (code !== 0) onCrash(code, lost);
   });
   return proc;
 }
 
 /** Back with the same model after a delay; after the last one it stays down until asked again */
-function onCrash(code: number, wanted: string | null): void {
-  if (!wanted) {
+function onCrash(code: number, lost: Wanted | null): void {
+  if (!lost) {
     logger.warn(`[Dictation] engine exited with code ${code}`);
     return;
   }
@@ -145,7 +154,7 @@ function onCrash(code: number, wanted: string | null): void {
   logger.warn(`[Dictation] engine exited with code ${code}; restarting in ${delay / 1000}s`);
   respawnTimer = setTimeout(() => {
     respawnTimer = null;
-    if (!child) ensureModel(wanted).catch(() => {});
+    if (!child) ensureModel(lost.id, lost.language).catch(() => {});
   }, delay);
   respawnTimer.unref?.();
 }
@@ -183,7 +192,7 @@ export function probeEngine(): Promise<{ ok: boolean; error: string | null }> {
 
 function reset(): void {
   child = null;
-  modelId = null;
+  wanted = null;
   loadPromise = null;
   const err = new Error("the speech engine stopped");
   loadWaiter?.reject(err);
@@ -194,15 +203,16 @@ function reset(): void {
 }
 
 /** Loads the model in the engine process (spawned on demand); resolves once it can decode */
-export function ensureModel(id: string): Promise<void> {
+export function ensureModel(id: string, language: DictationLanguage): Promise<void> {
   touch();
-  if (modelId === id && loadPromise) return loadPromise;
+  const key = recognizerKey(id, language);
+  if (wanted?.key === key && loadPromise) return loadPromise;
   const entry = findModel(id);
   const threads = Math.max(1, Math.min(4, Math.floor(availableParallelism() / 2)));
-  const spec = entry && recognizerSpec(entry, modelDir(id), threads);
+  const spec = entry && recognizerSpec(entry, modelDir(id), threads, language);
   if (!spec) return Promise.reject(new Error("this model cannot dictate yet"));
   child ??= spawn();
-  modelId = id;
+  wanted = { id, language, key };
   setState("loading");
   loadStartedAt = Date.now();
   coldStart.loadMs = null;
@@ -211,7 +221,7 @@ export function ensureModel(id: string): Promise<void> {
     loadWaiter = w;
   });
   loadPromise.catch(() => {});
-  send({ type: "load", modelId: id, spec });
+  send({ type: "load", modelId: key, spec });
   return loadPromise;
 }
 
@@ -243,7 +253,8 @@ export async function finishSession(sessionId: string): Promise<Final & { decode
   }
 }
 
-export const modelLoaded = (id: string): boolean => modelId === id && state === "ready";
+export const modelLoaded = (id: string, language: DictationLanguage): boolean =>
+  wanted?.key === recognizerKey(id, language) && state === "ready";
 
 export function cancelSession(sessionId: string): void {
   send({ type: "cancel", sessionId });
