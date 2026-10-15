@@ -21,6 +21,8 @@ export interface RecordingMeta {
   historyId: string | null;
   text: string;
   rawText?: string;
+  /** Terms the dictation had (count and hash, never the words); `applied`: the model used them */
+  vocabulary?: { terms: number; hash: string; applied: boolean };
 }
 
 /** 16-bit PCM mono WAV: what sherpa-onnx and any audio tool read */

@@ -1,9 +1,13 @@
 import { z } from "zod";
 import {
   DEFAULT_DICTATION_SETTINGS,
+  DICTATION_AUTO_INSERT_SECONDS,
   DICTATION_LANGUAGE_IDS,
   DICTATION_OVERLAY_POSITIONS,
   DICTATION_RECORDING_RETENTION_DAYS,
+  DICTATION_TERM_MAX,
+  DICTATION_VOCABULARY_MAX,
+  type DictationAutoInsertSeconds,
   type DictationRecordingRetentionDays,
   parseChord,
 } from "../types/dictation";
@@ -30,7 +34,15 @@ export const dictationSettingsSchema = z.object({
   pauseMediaDirect: z.boolean(),
   idleUnloadMinutes: z.number().int().min(1).max(240),
   maxSeconds: z.number().int().min(10).max(600),
-  autoStopSilenceSec: z.number().int().min(0).max(60),
+  // Legacy, read only by dictationSettingsOf: an old row still parses
+  autoStopSilenceSec: z.number().int().min(0).max(60).optional(),
+  autoInsert: z.boolean().default(false),
+  autoInsertSilenceSec: z
+    .number()
+    .refine((s): s is DictationAutoInsertSeconds =>
+      (DICTATION_AUTO_INSERT_SECONDS as readonly number[]).includes(s),
+    )
+    .default(DEFAULT_DICTATION_SETTINGS.autoInsertSilenceSec),
   retentionDays: z.number().int().min(1).max(3650),
   retentionMax: z.number().int().min(10).max(10_000),
   overlayPosition: z.enum(DICTATION_OVERLAY_POSITIONS).default("pane"),
@@ -45,6 +57,19 @@ export const dictationSettingsSchema = z.object({
   inputDeviceId: z.string().max(256).nullable().default(null),
   inputDeviceLabel: z.string().max(256).nullable().default(null),
   inputDeviceGroupId: z.string().max(256).nullable().default(null),
+  vocabulary: z
+    .array(z.string().max(DICTATION_TERM_MAX))
+    .max(DICTATION_VOCABULARY_MAX)
+    .default([...DEFAULT_DICTATION_SETTINGS.vocabulary]),
+  projectVocabulary: z
+    .record(
+      z.string().max(64),
+      z.array(z.string().max(DICTATION_TERM_MAX)).max(DICTATION_VOCABULARY_MAX),
+    )
+    .refine((r) => Object.keys(r).length <= 500, "too many projects")
+    .default({}),
+  vocabularyBoost: z.number().min(0.5).max(10).default(DEFAULT_DICTATION_SETTINGS.vocabularyBoost),
+  spokenPunctuation: z.boolean().default(true),
 });
 
 export const settingsSchema = z.object({

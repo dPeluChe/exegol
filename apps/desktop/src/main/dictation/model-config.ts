@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { isAbsolute, join, relative } from "node:path";
 import {
   DICTATION_SAMPLE_RATE,
@@ -9,6 +10,9 @@ import {
  *  (partial text while listening). `config` is sherpa-onnx-node's recognizer config */
 export interface RecognizerSpec {
   kind: "offline" | "online";
+  /** Parakeet's terms, "/"-separated, given per stream: a phrase with little speech decodes
+   *  without them (the recognizer's own hotwords file could not be turned off per phrase) */
+  hotwords?: string;
   config: {
     featConfig: { sampleRate: number; featureDim: number };
     modelConfig: Record<string, unknown>;
@@ -16,21 +20,39 @@ export interface RecognizerSpec {
   };
 }
 
+/** The vocabulary a recognizer is built with. Its file lives under the vocabulary folder (main
+ *  writes it), never in the models folder */
+export interface VocabularySpec {
+  terms: string[];
+  score: number;
+  /** `vocabularyHash(terms, score)`, computed once per vocabulary */
+  hash: string;
+  /** sentencepiece vocab derived from the model's tokens.txt: lets hotwords be plain words */
+  bpeVocab: string;
+}
+
 type Builder = (
   file: (name: string) => string,
   numThreads: number,
   language: DictationLanguage,
+  vocab: VocabularySpec | null,
 ) => RecognizerSpec;
 
 const offline = (
   modelConfig: Record<string, unknown>,
   numThreads: number,
-  featureDim = 80,
+  {
+    extra = {},
+    featureDim = 80,
+    hotwords,
+  }: { extra?: Record<string, unknown>; featureDim?: number; hotwords?: string } = {},
 ): RecognizerSpec => ({
   kind: "offline",
+  ...(hotwords ? { hotwords } : {}),
   config: {
     featConfig: { sampleRate: DICTATION_SAMPLE_RATE, featureDim },
     modelConfig: { ...modelConfig, numThreads, provider: "cpu", debug: 0 },
+    ...extra,
   },
 });
 
@@ -55,16 +77,27 @@ const moonshine: Builder = (file, numThreads) =>
 // Models that run in one set language; the others detect it, so their recognizer ignores it
 const NEEDS_LANGUAGE = new Set(["canary-180m-flash-int8"]);
 
-/** What the loaded recognizer is cached by: a language change reloads only the models it shapes */
-export const recognizerKey = (id: string, language: DictationLanguage): string =>
-  NEEDS_LANGUAGE.has(id) ? `${id}:${language}` : id;
-
 // Per catalog id: the sherpa-onnx model family and the file names inside its folder
 const BUILDERS: Record<string, Builder> = {
-  "parakeet-tdt-0.6b-v3-int8": (file, numThreads) =>
+  "parakeet-tdt-0.6b-v3-int8": (file, numThreads, _language, vocab) =>
     offline(
-      { transducer: transducer(file), tokens: file("tokens.txt"), modelType: "nemo_transducer" },
+      {
+        transducer: transducer(file),
+        tokens: file("tokens.txt"),
+        modelType: "nemo_transducer",
+        ...(vocab ? { modelingUnit: "bpe", bpeVocab: vocab.bpeVocab } : {}),
+      },
       numThreads,
+      vocab
+        ? {
+            extra: {
+              decodingMethod: "modified_beam_search",
+              maxActivePaths: 4,
+              hotwordsScore: vocab.score,
+            },
+            hotwords: vocab.terms.join("/"),
+          }
+        : {},
     ),
   "whisper-large-v3-turbo-int8": (file, numThreads) =>
     offline(
@@ -94,7 +127,7 @@ const BUILDERS: Record<string, Builder> = {
       enableEndpoint: 0,
     },
   }),
-  "qwen3-asr-0.6b-int8": (file, numThreads) =>
+  "qwen3-asr-0.6b-int8": (file, numThreads, _language, vocab) =>
     offline(
       {
         qwen3Asr: {
@@ -102,7 +135,7 @@ const BUILDERS: Record<string, Builder> = {
           encoder: file("encoder.int8.onnx"),
           decoder: file("decoder.int8.onnx"),
           tokenizer: file("tokenizer"),
-          hotwords: "",
+          hotwords: vocab?.terms.join(",") ?? "",
         },
         tokens: "",
       },
@@ -122,7 +155,7 @@ const BUILDERS: Record<string, Builder> = {
         tokens: file("tokens.txt"),
       },
       numThreads,
-      128,
+      { featureDim: 128 },
     ),
   "moonshine-v2-tiny-en": moonshine,
   "moonshine-v2-base-es": moonshine,
@@ -130,15 +163,62 @@ const BUILDERS: Record<string, Builder> = {
 
 export const hasRecognizer = (id: string): boolean => id in BUILDERS;
 
+/** Hotwords per stream (Parakeet) or a prompt (Qwen3-ASR); the other models have no biasing in
+ *  sherpa-onnx 1.13 */
+const VOCABULARY_USE: Record<string, "hotwords" | "prompt"> = {
+  "parakeet-tdt-0.6b-v3-int8": "hotwords",
+  "qwen3-asr-0.6b-int8": "prompt",
+};
+
+export const vocabularyUse = (id: string): "hotwords" | "prompt" | null =>
+  VOCABULARY_USE[id] ?? null;
+
+/** The vocabulary a model is built with: none when it is empty or the model takes none */
+const usedVocabulary = <T extends { terms: readonly string[] }>(id: string, vocab: T | null) =>
+  vocab && vocab.terms.length > 0 && vocabularyUse(id) ? vocab : null;
+
+export const vocabularyHash = (terms: readonly string[], score: number): string =>
+  createHash("sha256").update(JSON.stringify({ terms, score })).digest("hex").slice(0, 12);
+
+/** What the loaded recognizer is cached by: the language only for models it shapes. Hotwords go
+ *  per stream, so only their decoding (beam search, score) is in the key: new terms never reload */
+export function recognizerKey(
+  id: string,
+  language: DictationLanguage,
+  vocab: Pick<VocabularySpec, "terms" | "score" | "hash"> | null = null,
+): string {
+  const lang = NEEDS_LANGUAGE.has(id) ? `:${language}` : "";
+  const used = usedVocabulary(id, vocab);
+  if (!used) return `${id}${lang}`;
+  return `${id}${lang}#${vocabularyUse(id) === "hotwords" ? `beam${used.score}` : used.hash}`;
+}
+
 /** The recognizer for a catalog model installed in `dir`; null for a model the engine lacks */
 export function recognizerSpec(
   entry: SpeechModelEntry,
   dir: string,
   numThreads: number,
   language: DictationLanguage,
+  vocab: VocabularySpec | null = null,
 ): RecognizerSpec | null {
   const build = BUILDERS[entry.id];
-  return build ? build((name) => join(dir, name), numThreads, language) : null;
+  const used = usedVocabulary(entry.id, vocab);
+  return build ? build((name) => join(dir, name), numThreads, language, used) : null;
+}
+
+/** tokens.txt ("piece id" per line) as the "piece<TAB>score" vocab sherpa-onnx's sentencepiece
+ *  reads. Score -id: lower ids are the earlier, more frequent merges in a BPE model */
+export function bpeVocabFromTokens(tokens: string): string {
+  const lines: string[] = [];
+  for (const line of tokens.split("\n")) {
+    const at = line.lastIndexOf(" ");
+    if (at <= 0) continue;
+    const piece = line.slice(0, at);
+    const id = Number(line.slice(at + 1));
+    if (!Number.isInteger(id) || /^<.*>$/.test(piece)) continue;
+    lines.push(`${piece}\t${-id}`);
+  }
+  return `${lines.join("\n")}\n`;
 }
 
 /** Every file path in a spec (any string value that is absolute) */

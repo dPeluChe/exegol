@@ -19,6 +19,7 @@ import { agentAsksQuestion } from "../agent-question";
 import { focusedField } from "../focused-field";
 import { paneRoot } from "../pane-focus";
 import { trpcInvoke, trpcMutate } from "../trpc-client";
+import { autoInsertState, countdownMs, resumedVad } from "./auto-insert";
 import { type Capture, startCapture } from "./capture";
 import { insertIntoEditorIn } from "./editors";
 import { isFlat, peakOf, resolveInput } from "./inputs";
@@ -31,7 +32,7 @@ import {
   sanitizeDictation,
   takesDictation,
 } from "./target";
-import { rms, shouldAutoStop, updateVad, VAD_START, type VadState } from "./vad";
+import { rms, updateVad, VAD_START, type VadState } from "./vad";
 
 /** A press held at least this long is hold-to-talk (release stops); shorter toggles */
 const HOLD_MS = 350;
@@ -53,6 +54,8 @@ interface Run {
   paused: boolean;
   /** Stopped while the mic was opening: stops once it listens, for this reason */
   stopWhenReady: DictationStopReason | null;
+  /** A click on the countdown: this dictation no longer inserts on its own */
+  autoInsertOff: boolean;
 }
 
 let run: Run | null = null;
@@ -130,6 +133,7 @@ function reset(): void {
     pausedAt: null,
     inputName: null,
     inputNotice: null,
+    autoInsertCountdown: null,
   });
 }
 
@@ -145,7 +149,29 @@ function onChunk(samples: Float32Array): void {
   r.peak = peakOf(samples, r.peak);
   if (r.sessionId) window.api.dictation.sendAudio(r.sessionId, samples);
   else r.early.push(samples);
-  if (shouldAutoStop(r.vad, r.settings.autoStopSilenceSec)) void stopDictation("silence");
+  const auto = autoInsertState(r.vad, {
+    enabled: r.settings.autoInsert,
+    delaySec: r.settings.autoInsertSilenceSec,
+    paused: r.paused,
+    dismissed: r.autoInsertOff,
+  });
+  if (auto.kind === "fire") {
+    void stopDictation("silence");
+    return;
+  }
+  const ms = countdownMs(auto);
+  const shown = store().autoInsertCountdown;
+  if (ms === null) {
+    if (shown) store().set({ autoInsertCountdown: null });
+  } else if (!shown) {
+    store().set({ autoInsertCountdown: { endsAt: Date.now() + ms, ms } });
+  }
+}
+
+/** A click on the countdown: this dictation goes on until the user inserts or cancels */
+export function cancelAutoInsert(): void {
+  if (run) run.autoInsertOff = true;
+  store().set({ autoInsertCountdown: null });
 }
 
 /** The saved mic, found again when the OS gave it a new id: the setting follows the new id */
@@ -232,6 +258,7 @@ export async function startDictation(): Promise<void> {
     pausedAt: null,
     inputName: null,
     inputNotice: null,
+    autoInsertCountdown: null,
   });
   const current: Run = {
     settings: dictationSettingsOf(undefined),
@@ -245,6 +272,7 @@ export async function startDictation(): Promise<void> {
     cancelled: false,
     paused: false,
     stopWhenReady: null,
+    autoInsertOff: false,
   };
   run = current;
   // Esc (or a new dictation) during an await below: this start must not touch what follows
@@ -261,7 +289,7 @@ export async function startDictation(): Promise<void> {
     if (!status.engineAvailable) return reset();
     if (!current.settings.enabled) throw new Error("Dictation is off in Settings > Dictation");
     if (!status.model.ready) return endWith({ phase: "no-model" });
-    trpcMutate("dictation.warm").catch(() => {});
+    trpcMutate("dictation.warm", { projectId: target.projectId }).catch(() => {});
     if (target.kind === "browser") {
       await window.api.dictation.markBrowser({
         paneId: target.paneId,
@@ -297,7 +325,10 @@ export async function startDictation(): Promise<void> {
           ? `${current.settings.inputDeviceLabel || "The selected input"} not found, using system default`
           : null,
     });
-    const started = await trpcMutate<{ sessionId: string }>("dictation.start", { input });
+    const started = await trpcMutate<{ sessionId: string }>("dictation.start", {
+      input,
+      projectId: target.projectId,
+    });
     patchStatus({ micEverGranted: true });
     if (gone()) {
       void trpcMutate("dictation.cancel", { sessionId: started.sessionId, source: "superseded" });
@@ -325,6 +356,11 @@ export async function stopDictation(by: DictationStopReason): Promise<void> {
   }
   const sessionId = r.sessionId;
   const durationMs = recordedMs(store());
+  // Transcribing from here: a second Enter or chord meanwhile is swallowed, one insert only
+  store().set({ phase: "transcribing", autoInsertCountdown: null });
+  // The last words are still in the worklet or in flight: they reach main before the stop does
+  await r.capture?.drain();
+  if (run !== r) return;
   r.capture?.stop();
   r.capture = null;
   r.cancelled = true;
@@ -341,9 +377,9 @@ export async function stopDictation(by: DictationStopReason): Promise<void> {
     toast().addToast({ type: "info", title: "Nothing was heard", body: "Dictation stopped" });
     return;
   }
-  store().set({ phase: "transcribing" });
   const target = finalTarget(r);
   try {
+    // Main returns it cleaned (sanitized, repeats collapsed, spoken punctuation)
     const { text } = await trpcMutate<{ text: string }>("dictation.stop", {
       sessionId,
       durationMs,
@@ -354,12 +390,12 @@ export async function stopDictation(by: DictationStopReason): Promise<void> {
     // Esc while transcribing: cancelled for real, nothing is inserted
     if (run !== r) return;
     reset();
-    const clean = sanitizeDictation(text);
-    if (!clean) {
+    if (!text) {
       heardNothing(inputName);
       return;
     }
-    await insertDictation(clean, target, r.settings.pressEnter, r.field);
+    // An auto insert never sends: the user did not choose the moment
+    await insertDictation(text, target, by !== "silence" && r.settings.pressEnter, r.field);
   } catch (err) {
     if (run === r) fail(errorText(err));
   }
@@ -492,8 +528,11 @@ export function togglePauseDictation(): void {
   if (!r?.sessionId || phase !== "listening") return;
   const now = Date.now();
   r.paused = !r.paused;
-  if (r.paused) store().set({ pausedAt: now });
-  else store().set({ pausedAt: null, startedAt: startedAt + (now - (pausedAt ?? now)) });
+  if (r.paused) store().set({ pausedAt: now, autoInsertCountdown: null });
+  else {
+    r.vad = resumedVad(r.vad);
+    store().set({ pausedAt: null, startedAt: startedAt + (now - (pausedAt ?? now)) });
+  }
   void trpcMutate("dictation.pause", { sessionId: r.sessionId, paused: r.paused });
 }
 

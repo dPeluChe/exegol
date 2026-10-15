@@ -185,7 +185,7 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
 - **Settings window**: its own window, so you can change themes, fonts or keys while agents run.
 - **Themes**: light, dark, black (OLED) and system. Three Nerd Fonts are bundled.
 - **Voice dictation**: Cmd+Shift+Space (Ctrl+Shift+Space on Linux and Windows) to start and
-  again to insert (or Enter while the overlay is open), or hold it while you talk; Esc cancels. Transcribed on this machine; the text
+  again to insert (or Enter while the overlay is open), or hold it while you talk; Esc cancels. Insert waits until the whole text is transcribed ("Transcribing…"). Opt-in Auto insert after silence (5, 7 or 10 s, a 3 s countdown on the card; never presses Enter). Transcribed on this machine; the text
   goes only into the focused pane (pasted into a terminal without Enter, a browser page's focused
   field, the code editor's cursor), else it is copied. Overlay with waveform, timer, where the
   text goes and the words so far (live with the streaming model, phrase by phrase at each pause
@@ -202,10 +202,18 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
   missing, said in the card, and again once it is back); its Test button shows a live level for
   15 s. A mic unplugged mid-dictation hands over to the system default without stopping, and a
   dictation that heard nothing says which input to check.
+  Settings > Dictation > Vocabulary: terms to recognize as written
+  (global plus per project; used by Parakeet TDT v3 as hotwords and Qwen3-ASR in its prompt, other
+  models ignore them) and spoken punctuation in Spanish and English ("coma", "punto", "nueva
+  línea", "comma", "period", "new line"...). "punto" and "period" count only at the end of a
+  sentence; after an article or determiner ("la coma", "a new line") the word stays a word;
+  "punto" before a lowercase word stays ("google punto com").
 - **Speech models** (Settings > Models): local speech-to-text models for voice dictation,
   downloaded on request into `~/.exegol/models`, resumable and checked against a pinned
   SHA-256. Each lists what it is best for, languages, size and license; a non-commercial model is
-  badged and asks before download or set as default.
+  badged and asks before download or set as default. Grouped into Installed (downloads in
+  progress too) and a collapsible Available to download; above them a ranking for the dictation
+  language by your corrected bench results, else public WER (FLEURS), with speed and source links.
 - **Storage** (Settings > Storage): tabs Overview (disk use by kind as a bar and a list, free
   space, open folder, clear screenshots, clear old logs), Speech models (download, set as default,
   delete), Browser (per-project size, clear cache), Worktrees (size, project, branch, dirty or

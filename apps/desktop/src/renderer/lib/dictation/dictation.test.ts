@@ -12,7 +12,7 @@ import {
   sanitizeDictation,
   takesDictation,
 } from "./target";
-import { rms, shouldAutoStop, updateVad, VAD_START } from "./vad";
+import { rms, updateVad, VAD_START } from "./vad";
 
 const sine = (rate: number, seconds: number, hz = 440, amp = 0.5) =>
   Float32Array.from({ length: Math.round(rate * seconds) }, (_, i) =>
@@ -61,18 +61,6 @@ describe("energy VAD", () => {
     expect(s.heard).toBe(false);
     s = updateVad(s, 0.05, 100);
     expect(s.heard).toBe(true);
-  });
-
-  it("auto-stops only after speech and the set pause; 0 never", () => {
-    let s = VAD_START;
-    for (let i = 0; i < 50; i++) s = updateVad(s, 0.001, 100);
-    expect(shouldAutoStop(s, 2)).toBe(false);
-    s = updateVad(updateVad(s, 0.1, 100), 0.1, 100);
-    for (let i = 0; i < 19; i++) s = updateVad(s, 0.001, 100);
-    expect(shouldAutoStop(s, 2)).toBe(false);
-    s = updateVad(s, 0.001, 100);
-    expect(shouldAutoStop(s, 2)).toBe(true);
-    expect(shouldAutoStop(s, 0)).toBe(false);
   });
 });
 

@@ -1,4 +1,5 @@
 import type { DictationInput } from "@exegol/shared";
+import { captureReceiver, type WorkletMessage } from "./capture-drain";
 import workletUrl from "./capture-worklet.ts?worker&url";
 
 export interface Capture {
@@ -11,6 +12,8 @@ export interface Capture {
   /** The mic went away: the system default feeds the same analyser and worklet (its resampler
    *  state and the session carry on). Resolves to the new mic's label */
   switchToDefault: () => Promise<string>;
+  /** Resolves once every sample captured so far reached onChunk (or after DRAIN_TIMEOUT_MS) */
+  drain: () => Promise<void>;
   stop: () => void;
 }
 
@@ -74,7 +77,8 @@ export async function startCapture(
       channelCount: 1,
       channelCountMode: "explicit",
     });
-    node.port.onmessage = (e: MessageEvent<Float32Array>) => onChunk(e.data);
+    const receiver = captureReceiver(onChunk);
+    node.port.onmessage = (e: MessageEvent<WorkletMessage>) => receiver.receive(e.data);
     source.connect(analyser);
     source.connect(node);
     let stopped = false;
@@ -119,10 +123,12 @@ export async function startCapture(
         watch(next);
         return next.getAudioTracks()[0]?.label ?? "";
       },
+      drain: () => receiver.drain(() => node.port.postMessage("flush")),
       stop: () => {
         stopped = true;
         navigator.mediaDevices.removeEventListener("devicechange", deviceChange);
         node.port.onmessage = null;
+        receiver.settle();
         source.disconnect();
         release(stream);
         void context.close();

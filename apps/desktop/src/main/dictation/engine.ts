@@ -12,7 +12,8 @@ import { findModel } from "../models/catalog";
 import { MODELS_DIR, modelDir } from "../models/manager";
 import { getMainWindow } from "../windows/main-window-ref";
 import type { EngineReply, EngineRequest } from "./engine-protocol";
-import { recognizerKey, recognizerSpec } from "./model-config";
+import { recognizerKey, recognizerSpec, type VocabularySpec } from "./model-config";
+import { forgetVocabularyFiles, VOCAB_DIR } from "./vocabulary";
 
 const LOAD_TIMEOUT_MS = 120_000;
 const DECODE_TIMEOUT_MS = 180_000;
@@ -28,12 +29,14 @@ interface Waiter<T> {
 
 let child: UtilityProcess | null = null;
 let state: DictationEngineState = "unloaded";
-interface Wanted {
+export interface Wanted {
   id: string;
   language: DictationLanguage;
+  vocab: VocabularySpec | null;
 }
-/** The recognizer asked for, and its cache key (`recognizerKey`): the engine reloads on a new key */
-let wanted: (Wanted & { key: string }) | null = null;
+/** The recognizer asked for, its cache key (`recognizerKey`: the engine reloads on a new key) and
+ *  the per-stream terms it was last given */
+let wanted: (Wanted & { key: string; hotwords: string | null }) | null = null;
 let loadWaiter: Waiter<void> | null = null;
 let loadPromise: Promise<void> | null = null;
 type Final = Omit<Extract<EngineReply, { type: "final" }>, "type" | "sessionId">;
@@ -93,6 +96,8 @@ function onReply(msg: EngineReply): void {
       return;
     case "load-failed":
       logger.warn(`[Dictation] model ${msg.modelId} failed to load: ${msg.error}`);
+      // A vocabulary file deleted under us: the next start writes it again
+      if (msg.error.includes("ENOENT")) forgetVocabularyFiles();
       wanted = null;
       setState("failed");
       loadWaiter?.reject(new Error(`the model did not load: ${msg.error}`));
@@ -120,10 +125,14 @@ function onReply(msg: EngineReply): void {
 }
 
 const fork = (): UtilityProcess =>
-  utilityProcess.fork(join(__dirname, "dictation-engine.js"), [`--models-root=${MODELS_DIR}`], {
-    serviceName: "Exegol Dictation",
-    stdio: "ignore",
-  });
+  utilityProcess.fork(
+    join(__dirname, "dictation-engine.js"),
+    [`--models-root=${MODELS_DIR}`, `--vocab-root=${VOCAB_DIR}`],
+    {
+      serviceName: "Exegol Dictation",
+      stdio: "ignore",
+    },
+  );
 
 function spawn(): UtilityProcess {
   spawnedAt = Date.now();
@@ -154,7 +163,7 @@ function onCrash(code: number, lost: Wanted | null): void {
   logger.warn(`[Dictation] engine exited with code ${code}; restarting in ${delay / 1000}s`);
   respawnTimer = setTimeout(() => {
     respawnTimer = null;
-    if (!child) ensureModel(lost.id, lost.language).catch(() => {});
+    if (!child) ensureModel(lost).catch(() => {});
   }, delay);
   respawnTimer.unref?.();
 }
@@ -203,16 +212,22 @@ function reset(): void {
 }
 
 /** Loads the model in the engine process (spawned on demand); resolves once it can decode */
-export function ensureModel(id: string, language: DictationLanguage): Promise<void> {
+export function ensureModel(want: Wanted): Promise<void> {
   touch();
-  const key = recognizerKey(id, language);
-  if (wanted?.key === key && loadPromise) return loadPromise;
+  const { id, language, vocab } = want;
+  const key = recognizerKey(id, language, vocab);
   const entry = findModel(id);
   const threads = Math.max(1, Math.min(4, Math.floor(availableParallelism() / 2)));
-  const spec = entry && recognizerSpec(entry, modelDir(id), threads, language);
+  const spec = entry && recognizerSpec(entry, modelDir(id), threads, language, vocab);
   if (!spec) return Promise.reject(new Error("this model cannot dictate yet"));
+  const hotwords = spec.hotwords ?? null;
+  if (wanted?.key === key && loadPromise) {
+    if (wanted.hotwords !== hotwords) send({ type: "hotwords", hotwords });
+    wanted = { ...want, key, hotwords };
+    return loadPromise;
+  }
   child ??= spawn();
-  wanted = { id, language, key };
+  wanted = { ...want, key, hotwords };
   setState("loading");
   loadStartedAt = Date.now();
   coldStart.loadMs = null;
@@ -221,7 +236,7 @@ export function ensureModel(id: string, language: DictationLanguage): Promise<vo
     loadWaiter = w;
   });
   loadPromise.catch(() => {});
-  send({ type: "load", modelId: key, spec });
+  send({ type: "load", modelId: id, key, spec });
   return loadPromise;
 }
 
@@ -246,15 +261,14 @@ export async function finishSession(sessionId: string): Promise<Final & { decode
   });
   send({ type: "finish", sessionId });
   try {
-    const { text, phrases, phraseMs, fullPass } = await done;
-    return { text, phrases, phraseMs, fullPass, decodeMs: Date.now() - stoppedAt };
+    return { ...(await done), decodeMs: Date.now() - stoppedAt };
   } finally {
     touch();
   }
 }
 
-export const modelLoaded = (id: string, language: DictationLanguage): boolean =>
-  wanted?.key === recognizerKey(id, language) && state === "ready";
+export const modelLoaded = ({ id, language, vocab }: Wanted): boolean =>
+  wanted?.key === recognizerKey(id, language, vocab) && state === "ready";
 
 export function cancelSession(sessionId: string): void {
   send({ type: "cancel", sessionId });

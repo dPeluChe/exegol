@@ -337,6 +337,7 @@
       "resumableLocal"
     ],
     "models": [
+      "benchResults",
       "cancel",
       "delete",
       "download",

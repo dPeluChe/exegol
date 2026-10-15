@@ -11,7 +11,8 @@ declare module "sherpa-onnx-node" {
     acceptWaveform(wave: Waveform): void;
   }
   export interface OfflineRecognizer {
-    createStream(): OfflineStream;
+    /** `hotwords` ("/"-separated) are added to the recognizer's own, if any */
+    createStream(hotwords?: string): OfflineStream;
     decodeAsync(stream: OfflineStream): Promise<RecognizerResult>;
   }
   export const OfflineRecognizer: {

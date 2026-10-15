@@ -1,4 +1,5 @@
 // Pure parts of dictation-bench.ts: text normalization, edit distance, WER/CER, per-model rows
+import type { LocalBenchModel } from "@exegol/shared";
 
 /** Case and punctuation do not count: lowercase, anything but letters and digits is a space */
 export function normalizeText(text: string): string {
@@ -48,6 +49,10 @@ export interface ClipResult {
   cer: number;
   reference: string;
   hypothesis: string;
+  /** The recording had a human `reference`, not only the saved text */
+  corrected: boolean;
+  /** The model that dictated it (its `modelId`) */
+  dictatedWith: string | null;
 }
 
 export interface ModelRow {
@@ -95,4 +100,22 @@ export function formatTable(rows: readonly ModelRow[]): string {
       .map((c, i) => (i === 0 ? c.padEnd(widths[i] ?? 0) : c.padStart(widths[i] ?? 0)))
       .join("  ");
   return [line(header), line(widths.map((w) => "-".repeat(w))), ...body.map(line)].join("\n");
+}
+
+/** A model's line in results.json: its row plus how trustworthy the references were */
+export function localBenchModel(modelId: string, results: readonly ClipResult[]): LocalBenchModel {
+  const row = summarizeModel(modelId, results);
+  const correctedClips = results.filter((c) => c.corrected).length;
+  const round = (n: number, digits: number) => Number(n.toFixed(digits));
+  return {
+    modelId,
+    werPercent: round(row.meanWer * 100, 2),
+    cerPercent: round(row.meanCer * 100, 2),
+    rtf: round(row.rtf, 4),
+    decodeSeconds: round(row.decodeSec, 2),
+    clips: row.clips,
+    correctedClips,
+    selfScoredClips: results.filter((c) => !c.corrected && c.dictatedWith === modelId).length,
+    reference: row.clips > 0 && correctedClips === row.clips ? "corrected" : "saved-text",
+  };
 }

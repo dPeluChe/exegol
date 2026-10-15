@@ -1,6 +1,7 @@
 import {
   chordFromEvent,
   DEFAULT_DICTATION_SHORTCUT,
+  DICTATION_AUTO_INSERT_SECONDS,
   DICTATION_LANGUAGES,
   type DictationSettings as DictationPrefs,
   dictationSettingsOf,
@@ -18,6 +19,7 @@ import { shortcutClash } from "../../lib/shortcuts";
 import { DictationHistory } from "./DictationHistory";
 import { DictationInput } from "./DictationInput";
 import { DictationRecordings } from "./DictationRecordings";
+import { DictationVocabulary } from "./DictationVocabulary";
 import { SECTION_HEADING, SelectRow, SMALL_BUTTON, SwitchRow } from "./settings-ui";
 
 interface Props {
@@ -118,12 +120,20 @@ export function DictationSettings({ settings, onChange }: Props) {
             options={[60, 120, 300, 600].map((s) => [s, `${s / 60} min`])}
             onChange={(maxSeconds) => set({ maxSeconds })}
           />
-          <SelectRow
-            label="Stop on its own after a pause of"
-            value={prefs.autoStopSilenceSec}
-            options={[0, 2, 3, 5, 10].map((s) => [s, s === 0 ? "Never" : `${s} s`])}
-            onChange={(autoStopSilenceSec) => set({ autoStopSilenceSec })}
+          <SwitchRow
+            label="Auto insert after silence"
+            description="After you speak, a pause inserts the text (never Enter); talk to reset the countdown, click it to keep dictating"
+            value={prefs.autoInsert}
+            onToggle={() => set({ autoInsert: !prefs.autoInsert })}
           />
+          {prefs.autoInsert && (
+            <SelectRow
+              label="Insert after a silence of"
+              value={prefs.autoInsertSilenceSec}
+              options={DICTATION_AUTO_INSERT_SECONDS.map((s) => [s, `${s} s`])}
+              onChange={(autoInsertSilenceSec) => set({ autoInsertSilenceSec })}
+            />
+          )}
           <SelectRow
             label="Free the model's memory after"
             value={prefs.idleUnloadMinutes}
@@ -149,6 +159,8 @@ export function DictationSettings({ settings, onChange }: Props) {
           project, tab or view) and comes back with it.
         </p>
       </div>
+
+      <DictationVocabulary prefs={prefs} set={set} />
 
       <DictationRecordings prefs={prefs} set={set} />
 

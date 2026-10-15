@@ -1,7 +1,15 @@
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { MODEL_CATALOG } from "../models/catalog";
-import { isInside, recognizerKey, recognizerSpec, specPaths } from "./model-config";
+import {
+  bpeVocabFromTokens,
+  isInside,
+  recognizerKey,
+  recognizerSpec,
+  specPaths,
+  vocabularyHash,
+  vocabularyUse,
+} from "./model-config";
 
 const ROOT = "/home/u/.exegol/models";
 
@@ -67,5 +75,85 @@ describe("recognizer specs", () => {
     expect(isInside(ROOT, `${ROOT}/../.ssh/id_rsa`)).toBe(false);
     expect(isInside(ROOT, "/etc/passwd")).toBe(false);
     expect(isInside(ROOT, ROOT)).toBe(false);
+  });
+});
+
+describe("vocabulary", () => {
+  const vocab = {
+    terms: ["worktree", "pull request"],
+    score: 3,
+    hash: vocabularyHash(["worktree", "pull request"], 3),
+    bpeVocab: "/home/u/.exegol/dictation-vocab/p.bpe.vocab",
+  };
+  const spec = (id: string, v: typeof vocab | null = vocab) => {
+    const entry = MODEL_CATALOG.find((m) => m.id === id);
+    if (!entry) throw new Error(id);
+    return recognizerSpec(entry, join(ROOT, id), 2, "en", v)?.config;
+  };
+
+  it("Parakeet gets hotwords per stream with modified_beam_search and the bpe vocab", () => {
+    expect(spec("parakeet-tdt-0.6b-v3-int8")).toMatchObject({
+      decodingMethod: "modified_beam_search",
+      hotwordsScore: 3,
+      modelConfig: { modelingUnit: "bpe", bpeVocab: vocab.bpeVocab },
+    });
+    expect(spec("parakeet-tdt-0.6b-v3-int8")?.hotwordsFile).toBeUndefined();
+    const entry = MODEL_CATALOG.find((m) => m.id === "parakeet-tdt-0.6b-v3-int8");
+    if (!entry) throw new Error("parakeet");
+    expect(recognizerSpec(entry, ROOT, 2, "en", vocab)?.hotwords).toBe("worktree/pull request");
+    expect(recognizerSpec(entry, ROOT, 2, "en")?.hotwords).toBeUndefined();
+  });
+
+  it("without terms Parakeet stays on greedy search", () => {
+    for (const v of [null, { ...vocab, terms: [] }]) {
+      const config = spec("parakeet-tdt-0.6b-v3-int8", v);
+      expect(config?.decodingMethod).toBeUndefined();
+      expect(config?.modelConfig.bpeVocab).toBeUndefined();
+    }
+  });
+
+  it("Qwen3-ASR takes them in its prompt", () => {
+    expect(spec("qwen3-asr-0.6b-int8")?.modelConfig).toMatchObject({
+      qwen3Asr: { hotwords: "worktree,pull request" },
+    });
+  });
+
+  it("models without biasing ignore it", () => {
+    for (const entry of MODEL_CATALOG.filter((m) => !vocabularyUse(m.id))) {
+      const config = recognizerSpec(entry, join(ROOT, entry.id), 2, "en", vocab)?.config;
+      expect(JSON.stringify(config), entry.id).not.toContain("worktree");
+      expect(recognizerSpec(entry, ROOT, 2, "en", vocab)?.hotwords, entry.id).toBeUndefined();
+    }
+  });
+
+  it("caches by vocabulary only for models that use one, with the language for Canary", () => {
+    const parakeet = "parakeet-tdt-0.6b-v3-int8";
+    expect(recognizerKey(parakeet, "es", vocab)).toBe(`${parakeet}#beam3`);
+    // Hotwords go per stream: other terms (another project) keep the loaded recognizer
+    const other = { ...vocab, terms: ["Biome"], hash: vocabularyHash(["Biome"], 3) };
+    expect(recognizerKey(parakeet, "en", other)).toBe(recognizerKey(parakeet, "en", vocab));
+    expect(recognizerKey(parakeet, "en", { ...vocab, score: 2 })).not.toBe(
+      recognizerKey(parakeet, "en", vocab),
+    );
+    // Qwen takes them in its prompt: new terms are a new recognizer
+    expect(recognizerKey("qwen3-asr-0.6b-int8", "en", vocab)).toBe(
+      `qwen3-asr-0.6b-int8#${vocab.hash}`,
+    );
+    expect(recognizerKey("qwen3-asr-0.6b-int8", "en", other)).not.toBe(
+      recognizerKey("qwen3-asr-0.6b-int8", "en", vocab),
+    );
+    expect(recognizerKey("parakeet-tdt-0.6b-v3-int8", "en", { ...vocab, terms: [] })).toBe(
+      "parakeet-tdt-0.6b-v3-int8",
+    );
+    expect(recognizerKey("canary-180m-flash-int8", "es", vocab)).toBe("canary-180m-flash-int8:es");
+    expect(recognizerKey("whisper-large-v3-turbo-int8", "en", vocab)).toBe(
+      "whisper-large-v3-turbo-int8",
+    );
+  });
+
+  it("tokens.txt becomes a sentencepiece vocab without the special tokens", () => {
+    expect(bpeVocabFromTokens("<unk> 0\n<pad> 1\n▁the 2\ns 3\n<blk> 4\n")).toBe(
+      "▁the\t-2\ns\t-3\n",
+    );
   });
 });

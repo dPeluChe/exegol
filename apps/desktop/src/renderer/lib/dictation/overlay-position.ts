@@ -62,13 +62,24 @@ export function overlayMode(
   return hasPane && recording ? "dock" : "window";
 }
 
-/** Where the user dragged the card: its center minus the anchor's center (pane or window) */
+/** Where the user dragged the card: its center from the anchor's center, as a fraction of the
+ *  anchor's half width and height (-1..1). A fraction, not px, so it scales with the pane: a spot
+ *  dragged in a wide pane stays at the same relative spot in a narrow one */
 export interface Offset {
-  dx: number;
-  dy: number;
+  fx: number;
+  fy: number;
 }
 
-export const NO_OFFSET: Offset = { dx: 0, dy: 0 };
+export const NO_OFFSET: Offset = { fx: 0, fy: 0 };
+
+/** The rect the card sits over: the target pane's on screen, else the window (no pane, a pane
+ *  not in the DOM, or one with no size because it is hidden) */
+export function anchorRect(mode: OverlayMode, pane: Rect | null, viewport: Size): Rect {
+  if (mode === "pane" && pane && pane.width > 0 && pane.height > 0) {
+    return { left: pane.left, top: pane.top, width: pane.width, height: pane.height };
+  }
+  return { left: 0, top: 0, width: viewport.width, height: viewport.height };
+}
 
 interface Size {
   width: number;
@@ -90,18 +101,25 @@ export function offsetBox(anchor: Rect, viewport: Size, card: Size, offset: Offs
     x: Math.min(viewport.width, anchor.left + anchor.width),
     y: Math.min(viewport.height, anchor.top + anchor.height),
   };
-  const cx = anchor.left + anchor.width / 2 + offset.dx;
-  const cy = anchor.top + anchor.height / 2 + offset.dy;
+  const cx = anchor.left + (anchor.width / 2) * (1 + offset.fx);
+  const cy = anchor.top + (anchor.height / 2) * (1 + offset.fy);
   const left = clampAxis(cx - w / 2, w, lo.x, hi.x, viewport.width);
   const top = clampAxis(cy - card.height / 2, card.height, lo.y, hi.y, viewport.height);
   return { left, top: top + card.height / 2, width: w, docked: false };
 }
 
-/** The offset a placed card holds: stored clamped, so a drag past the edge does not linger */
-export const offsetOf = (box: OverlayBox, anchor: Rect): Offset => ({
-  dx: box.left + box.width / 2 - (anchor.left + anchor.width / 2),
-  dy: box.top - (anchor.top + anchor.height / 2),
+const fraction = (delta: number, half: number) =>
+  half > 0 ? Math.max(-1, Math.min(1, delta / half)) : 0;
+
+/** The offset of a card centered at (x, y) over `anchor`, clamped to the anchor */
+export const offsetAt = (x: number, y: number, anchor: Rect): Offset => ({
+  fx: fraction(x - (anchor.left + anchor.width / 2), anchor.width / 2),
+  fy: fraction(y - (anchor.top + anchor.height / 2), anchor.height / 2),
 });
+
+/** The offset a placed card holds: stored clamped, so a drag past the edge does not linger */
+export const offsetOf = (box: OverlayBox, anchor: Rect): Offset =>
+  offsetAt(box.left + box.width / 2, box.top, anchor);
 
 /** The title bar's free span: past the traffic-light inset and the controls left of the middle,
  *  before the ones right of it. A control across the middle is ignored */

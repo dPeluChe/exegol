@@ -5,8 +5,8 @@ import type { Offset } from "../lib/dictation/overlay-position";
 /** What the dragged card is placed relative to: the target pane, or the window */
 export type AnchorKind = "pane" | "window";
 
-/** Where the user dragged the dictation card, per anchor kind, kept across restarts. A missing
- *  offset is the default spot (centered) */
+/** Where the user dragged the dictation card, per anchor kind, kept across restarts; none =
+ *  centered. v1 stores fractions of the anchor (v0 px offsets reset to center) */
 interface DictationOverlayStore {
   offsets: Partial<Record<AnchorKind, Offset>>;
   setOffset: (kind: AnchorKind, offset: Offset | null) => void;
@@ -24,6 +24,6 @@ export const useDictationOverlayStore = create<DictationOverlayStore>()(
           return { offsets };
         }),
     }),
-    { name: "exegol-dictation-overlay" },
+    { name: "exegol-dictation-overlay", version: 1, migrate: () => ({ offsets: {} }) },
   ),
 );

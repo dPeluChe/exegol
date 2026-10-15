@@ -21,6 +21,7 @@ import {
   recordingStem,
   summarizeRecordings,
 } from "./recording-files";
+import type { VocabularyInfo } from "./vocabulary";
 
 export const RECORDINGS_DIR = join(EXEGOL_DIR, "dictation-audio");
 const fsLimit = createLimiter(16);
@@ -67,6 +68,7 @@ export interface SaveRecordingInput {
   historyId: string | null;
   text: string;
   rawText: string;
+  vocabulary: VocabularyInfo | null;
 }
 
 /** Writes the .wav and its .json; never throws, never logs what was said */
@@ -94,6 +96,7 @@ export async function saveRecording(input: SaveRecordingInput): Promise<void> {
       historyId: input.historyId,
       text: input.text,
       ...(input.rawText !== input.text ? { rawText: input.rawText } : {}),
+      ...(input.vocabulary ? { vocabulary: input.vocabulary } : {}),
     };
     await writeFile(
       join(dir, `${base}.wav`),

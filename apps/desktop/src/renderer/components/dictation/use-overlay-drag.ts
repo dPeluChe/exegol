@@ -1,9 +1,11 @@
 import { type MouseEvent, type PointerEvent, useRef, useState } from "react";
 import {
+  anchorRect,
   NO_OFFSET,
   type Offset,
   type OverlayBox,
   type OverlayMode,
+  offsetAt,
   offsetBox,
   offsetOf,
   type Rect,
@@ -20,13 +22,25 @@ const onHandle = (t: EventTarget | null): boolean =>
   !!t.closest("[data-drag-handle]") &&
   !t.closest("button, a, input, textarea, select");
 
-/** The pane the card sits over, else the window (also when the pane is not in the DOM) */
-function anchorRect(mode: OverlayMode, paneId: string | null): Rect {
-  const el = mode === "pane" && paneId ? paneRoot(paneId) : null;
-  return el
-    ? el.getBoundingClientRect()
-    : { left: 0, top: 0, width: window.innerWidth, height: window.innerHeight };
+interface Frame {
+  anchor: Rect;
+  viewport: { width: number; height: number };
+  size: { width: number; height: number };
 }
+
+function measure(
+  mode: OverlayMode,
+  paneId: string | null,
+  card: { width: number; el: HTMLElement | null },
+): Frame {
+  const viewport = { width: window.innerWidth, height: window.innerHeight };
+  const pane = mode === "pane" && paneId ? paneRoot(paneId) : null;
+  const anchor = anchorRect(mode, pane?.getBoundingClientRect() ?? null, viewport);
+  return { anchor, viewport, size: { width: card.width, height: card.el?.offsetHeight ?? 0 } };
+}
+
+const boxIn = (f: Frame, offset: Offset): OverlayBox =>
+  offsetBox(f.anchor, f.viewport, f.size, offset);
 
 export function cardBox(
   mode: OverlayMode,
@@ -34,17 +48,18 @@ export function cardBox(
   card: { width: number; el: HTMLElement | null },
   offset: Offset,
 ): { box: OverlayBox; anchor: Rect } {
-  const anchor = anchorRect(mode, paneId);
-  const viewport = { width: window.innerWidth, height: window.innerHeight };
-  const size = { width: card.width, height: card.el?.offsetHeight ?? 0 };
-  return { box: offsetBox(anchor, viewport, size, offset), anchor };
+  const frame = measure(mode, paneId, card);
+  return { box: boxIn(frame, offset), anchor: frame.anchor };
 }
 
 interface Gesture {
   pointerId: number;
   x: number;
   y: number;
-  start: Offset;
+  /** The card's center when grabbed, in px */
+  start: { x: number; y: number };
+  /** Measured once at the grab: a move only recomputes the box */
+  frame: Frame;
   moved: boolean;
 }
 
@@ -69,7 +84,7 @@ export function useOverlayDrag({
   const gestureRef = useRef<Gesture | null>(null);
   const live = useRef<Offset | null>(null);
   const [dragging, setDragging] = useState(false);
-  const { dx, dy } = stored ?? NO_OFFSET;
+  const { fx, fy } = stored ?? NO_OFFSET;
   const reset = stored && kind ? () => setOffset(kind, null) : undefined;
 
   const end = (e: PointerEvent<HTMLElement>) => {
@@ -93,12 +108,14 @@ export function useOverlayDrag({
       if (!kind || e.button !== 0 || !onHandle(e.target)) return;
       e.currentTarget.setPointerCapture(e.pointerId);
       // From where the card shows: a stored offset may be clamped by a smaller window now
-      const { box, anchor } = cardBox(mode, paneId, { width, el: card }, { dx, dy });
+      const frame = measure(mode, paneId, { width, el: card });
+      const box = boxIn(frame, { fx, fy });
       gestureRef.current = {
         pointerId: e.pointerId,
         x: e.clientX,
         y: e.clientY,
-        start: offsetOf(box, anchor),
+        start: { x: box.left + box.width / 2, y: box.top },
+        frame,
         moved: false,
       };
     },
@@ -112,9 +129,9 @@ export function useOverlayDrag({
         gesture.moved = true;
         setDragging(true);
       }
-      const offset = { dx: gesture.start.dx + mx, dy: gesture.start.dy + my };
-      const { box, anchor } = cardBox(mode, paneId, { width, el: card }, offset);
-      live.current = offsetOf(box, anchor);
+      const { frame } = gesture;
+      const box = boxIn(frame, offsetAt(gesture.start.x + mx, gesture.start.y + my, frame.anchor));
+      live.current = offsetOf(box, frame.anchor);
       apply(box);
     },
     onPointerUp: end,
@@ -124,5 +141,5 @@ export function useOverlayDrag({
       if (onHandle(e.target)) reset?.();
     },
   };
-  return { dx, dy, reset, dragging, handlers, live };
+  return { fx, fy, reset, dragging, handlers, live };
 }

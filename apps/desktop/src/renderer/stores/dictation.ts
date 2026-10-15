@@ -33,6 +33,9 @@ interface DictationStore {
   inputName: string | null;
   /** The picked mic was missing: the overlay says the system default is used */
   inputNotice: string | null;
+  /** Auto insert's countdown, set once as it starts (a restart is a new object): `ms` was left
+   *  then, `endsAt` is when it inserts. Null outside the countdown */
+  autoInsertCountdown: { endsAt: number; ms: number } | null;
   /** The overlay's Download was pressed: dictation starts once the model is ready */
   downloadRequested: boolean;
   set: (patch: Partial<Omit<DictationStore, "set">>) => void;
@@ -53,6 +56,7 @@ export const useDictationStore = create<DictationStore>((set) => ({
   inputName: null,
   inputNotice: null,
   downloadRequested: false,
+  autoInsertCountdown: null,
   set: (patch) => set(patch),
 }));
 

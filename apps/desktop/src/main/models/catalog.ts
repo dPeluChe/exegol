@@ -1,4 +1,4 @@
-import type { SpeechModelEntry } from "@exegol/shared";
+import type { DictationLanguage, PublicBenchmark, SpeechModelEntry } from "@exegol/shared";
 
 // Hashes and sizes checked against the downloaded assets on 2026-10-07, Canary on 2026-10-14 (see TASK_COMPLETED/2610.md)
 const SHERPA_RELEASE = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models";
@@ -11,6 +11,32 @@ const QWEN_ROOT = "sherpa-onnx-qwen3-asr-0.6B-int8-2026-03-25";
 const MOONSHINE_EN_ROOT = "sherpa-onnx-moonshine-tiny-en-quantized-2026-02-27";
 const MOONSHINE_ES_ROOT = "sherpa-onnx-moonshine-base-es-quantized-2026-02-27";
 const CANARY_ROOT = "sherpa-onnx-nemo-canary-180m-flash-en-es-de-fr-int8";
+
+// Read off the pages on 2026-10-14. Handy runs its own Q8_0 builds (transcribe.cpp), not these
+// sherpa-onnx int8 exports: a guide to the ranking, not this app's exact numbers
+const HANDY = "https://models.handy.computer/languages";
+const HANDY_NOTE = "Q8_0 build; speed on an AMD Ryzen 4750U CPU";
+const handy = (
+  language: DictationLanguage,
+  werPercent: number,
+  speedX: number,
+  note = HANDY_NOTE,
+): PublicBenchmark => ({
+  language,
+  werPercent,
+  speedX,
+  dataset: "FLEURS",
+  source: "Handy models",
+  url: `${HANDY}/${language}/`,
+  note,
+});
+const paper = (language: DictationLanguage, werPercent: number): PublicBenchmark => ({
+  language,
+  werPercent,
+  dataset: "FLEURS",
+  source: "NVIDIA paper (Table 11)",
+  url: "https://arxiv.org/abs/2509.14128",
+});
 
 const TRANSDUCER_FILES = [
   "encoder.int8.onnx",
@@ -68,6 +94,12 @@ export const MODEL_CATALOG: readonly SpeechModelEntry[] = [
     rootDir: PARAKEET_ROOT,
     files: TRANSDUCER_FILES,
     notes: "Numbers come out as words (twenty five, not 25).",
+    benchmarks: [
+      handy("es", 3.65, 13.7),
+      handy("en", 4.83, 13.7),
+      paper("es", 3.45),
+      paper("en", 4.85),
+    ],
   },
   {
     id: "whisper-large-v3-turbo-int8",
@@ -89,6 +121,7 @@ export const MODEL_CATALOG: readonly SpeechModelEntry[] = [
     rootDir: WHISPER_ROOT,
     files: ["turbo-encoder.int8.onnx", "turbo-decoder.int8.onnx", "turbo-tokens.txt"],
     notes: "Slower and the largest on disk once unpacked; text appears when you pause.",
+    benchmarks: [handy("es", 3.12, 1.4), handy("en", 4.38, 1.4)],
   },
   {
     id: "nemotron-3.5-asr-streaming-0.6b-560ms-int8",
@@ -145,6 +178,11 @@ export const MODEL_CATALOG: readonly SpeechModelEntry[] = [
     rootDir: NEMOTRON_ROOT,
     files: TRANSDUCER_FILES,
     notes: "560 ms chunks: the latency and accuracy middle ground of the five exports.",
+    // Handy does not say which of the five chunk-size exports it ran
+    benchmarks: [
+      handy("es", 6.3, 10.6, `${HANDY_NOTE}; chunk size not stated`),
+      handy("en", 7.9, 10.6, `${HANDY_NOTE}; chunk size not stated`),
+    ],
   },
   {
     id: "qwen3-asr-0.6b-int8",
@@ -202,6 +240,7 @@ export const MODEL_CATALOG: readonly SpeechModelEntry[] = [
       "tokenizer/tokenizer_config.json",
     ],
     notes: "An LLM-style decoder: slower per second of audio than Parakeet.",
+    benchmarks: [handy("es", 4.88, 5.3), handy("en", 4.23, 5.3)],
   },
   {
     id: "moonshine-v2-tiny-en",
@@ -261,6 +300,7 @@ export const MODEL_CATALOG: readonly SpeechModelEntry[] = [
     files: ["encoder.int8.onnx", "decoder.int8.onnx", "tokens.txt"],
     notes:
       "Runs in the language set in Settings > Dictation: speech in another language comes out translated into it.",
+    benchmarks: [handy("es", 6.54, 21.7), handy("en", 5.98, 21.7)],
   },
 ];
 
