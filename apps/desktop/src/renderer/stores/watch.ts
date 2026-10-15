@@ -140,3 +140,9 @@ export const useWatchStore = create<WatchStore>()(
     },
   ),
 );
+
+/** A−/A+ on a card: the first step starts sizing the session from the default font */
+export function stepCardFont(agentId: string, delta: number): void {
+  const s = useWatchStore.getState();
+  s.setCardFont(agentId, (s.cardFont[agentId] ?? DEFAULT_CARD_FONT) + delta);
+}

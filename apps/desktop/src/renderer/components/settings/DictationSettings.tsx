@@ -16,6 +16,7 @@ import { IS_MAC, PLATFORM } from "../../lib/keymap";
 import { SEMANTIC_BADGE } from "../../lib/semantic-colors";
 import { shortcutClash } from "../../lib/shortcuts";
 import { DictationHistory } from "./DictationHistory";
+import { DictationRecordings } from "./DictationRecordings";
 import { SECTION_HEADING, SelectRow, SMALL_BUTTON, SwitchRow } from "./settings-ui";
 
 interface Props {
@@ -49,7 +50,7 @@ export function DictationSettings({ settings, onChange }: Props) {
         <p className="mt-2 text-xs leading-relaxed text-text-muted">
           Speak and the text goes into the focused pane: a terminal (pasted, not sent), a browser
           page's focused field or the code editor. Speech is transcribed on this machine with the
-          model chosen in Models: audio never leaves it and is never saved.
+          model chosen in Models: audio never leaves it and is saved only if you keep recordings.
         </p>
       </div>
 
@@ -144,6 +145,8 @@ export function DictationSettings({ settings, onChange }: Props) {
           project, tab or view) and comes back with it.
         </p>
       </div>
+
+      <DictationRecordings prefs={prefs} set={set} />
 
       <div>
         <h3 className={SECTION_HEADING}>History</h3>

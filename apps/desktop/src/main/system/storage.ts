@@ -93,6 +93,11 @@ function categorySpecs(p: StoragePaths): CategorySpec[] {
       label: "Agent browser screenshots",
       paths: [join(p.exegolDir, "screenshots")],
     },
+    {
+      category: "recordings",
+      label: "Dictation recordings",
+      paths: [join(p.exegolDir, "dictation-audio")],
+    },
     { category: "logs", label: "Logs", paths: [p.logDir] },
     { category: "database", label: "Database", paths: DB_FILES.map((f) => join(p.userData, f)) },
     {

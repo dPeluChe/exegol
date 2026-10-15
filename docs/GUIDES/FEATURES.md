@@ -39,8 +39,9 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
 - **Picture-in-Picture**: a terminal or browser pane detaches into a small always-on-top window.
 - **Terminal links**: URLs and file paths in any terminal (agents, shells, Dashboard cards) are
   clickable. A URL opens in the tab's link preview pane; a file (`src/app.ts:42:7`, `./a.tsx`,
-  `~/notes.md`, absolute) opens read-only over the terminal at its line, images as pictures, PDFs
-  in their app. Only files inside the session's project or its worktrees are links. Cmd+click (Ctrl+click on
+  `~/notes.md`, absolute) opens read-only at its line in a movable, resizable window over the
+  workspace, images as pictures, PDFs in their app. Esc or Cmd+W closes that window, never the
+  session. Only files inside the session's project or its worktrees are links. Cmd+click (Ctrl+click on
   Linux and Windows) opens a URL in the system browser and a file in the IDE at its line;
   Cmd+Shift+click shows the file in Finder. Hovering shows the target and the clicks.
 - **Open in IDE**: Settings > General picks the default IDE among the ones installed (VS Code,
@@ -83,7 +84,16 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
   pinned in Watching, on Watch PR, waiting on you, in a pipeline, with uncommitted worktree
   changes or a server listening, nor a terminal running anything. A toast links each session
   with its project; suspended sessions carry a "Suspended" mark in the sidebar.
-- **Send to**: select text in one terminal and paste it into another live agent.
+- **Send to**: select text in one terminal and paste it into another live agent or terminal
+  (the floating Send to button, or right-click > Send selection to). Sessions of the pane's own
+  project come first; other projects sit behind "Other projects (N)", open when the own project
+  has nothing else. By default nothing is submitted: a terminal gets the command at its prompt to
+  review and run, a multi-line text is one bracketed paste. Settings > Terminal > Send to can press
+  Enter after the paste, separately for terminals and agents; an agent asking a question or a
+  permission only gets the paste (a toast says so). The list's footer shows the current behavior.
+  Arrows, Enter and Esc work in the list. Sessions read "argo · exegoldev" (alias and the CLI's
+  session name), terminals "Terminal · folder". In Claude or another TUI that uses the mouse,
+  select with Option+drag (Shift+drag on Linux and Windows): a plain drag is the TUI's own.
 - **Follow-ups and Steer**: Queue in the terminal toolbar (and on a Watching card) holds prompts
   for an agent's next turn; each is typed when the turn ends, one per turn. Steer (Claude Code,
   Codex) interrupts the turn (Esc), waits up to 20s for the prompt and types right away. The queue lives in memory: it
@@ -111,6 +121,10 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
   and its message thread with other agents.
 - **Watching**: pin sessions to see them as live terminals side by side (one to three columns,
   collapsible, reorderable); type into a card after clicking it.
+- **Right-click menus**: a Watching card offers Go to session, Copy (with text selected),
+  Collapse/Expand, Fit session to card, A-/A+, Float to window and Unpin; an ended pin offers
+  Resume, Open project and Unpin; a fleet card offers Go to session, Watch, Mute, Suspend, or
+  Resume and Archive once it ended.
 
 ## Browser and QA
 
@@ -180,7 +194,9 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
   button in the status bar. "Pause music while dictating" (on by default) pauses what is playing
   through the system's Now Playing on macOS (browser tabs included) or MPRIS players through
   playerctl on Linux, and resumes it after; on macOS, "Also control Music and Spotify directly"
-  is the fallback that needs Automation access.
+  is the fallback that needs Automation access. "Keep recordings for model testing" (off by
+  default) saves each dictation's audio and text in `~/.exegol/dictation-audio` for 5 to 30 days
+  to compare models offline (`docs/GUIDES/DICTATION_BENCH.md`); also listed in Settings > Storage.
 - **Speech models** (Settings > Models): local speech-to-text models for voice dictation,
   downloaded on request into `~/.exegol/models`, resumable and checked against a pinned
   SHA-256. Each lists what it is best for, languages, size and license; a non-commercial model is

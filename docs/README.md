@@ -11,7 +11,7 @@
 | `CHANGELOG.md` | Release-oriented history (what a user cares about per version) |
 | `ARCHITECTURE/` | Technical architecture and capability docs |
 | `PROJECT_DEFINITION/` | Vision, problem statement, stack decisions, feature roadmap (living set, created 2026-03) |
-| `GUIDES/` | Features, keyboard shortcuts, release & distribution, pipeline evidence in CI |
+| `GUIDES/` | Features, keyboard shortcuts, release & distribution, pipeline evidence in CI, dictation model bench |
 | `RESEARCH/` | Analyses that feed the board: competitive reviews, stack reviews, audits, benchmarks |
 | `AGENT_PROMPTS/` | Briefs handed to agents working in worktrees |
 | `ARCHIVED/` | Obsolete docs kept for historical context (see `ARCHIVED/README.md`) |
@@ -31,6 +31,7 @@
 | [GUIDES/FEATURES.md](./GUIDES/FEATURES.md) | Everything the app does, by area (the README keeps the highlights) |
 | [GUIDES/KEYBOARD_SHORTCUTS.md](./GUIDES/KEYBOARD_SHORTCUTS.md) | App and terminal shortcuts |
 | [GUIDES/RELEASE.md](./GUIDES/RELEASE.md) | Release & distribution guide |
+| [GUIDES/DICTATION_BENCH.md](./GUIDES/DICTATION_BENCH.md) | Compare speech models on kept dictation recordings (dev script) |
 | [PROJECT_DEFINITION/README.md](./PROJECT_DEFINITION/README.md) | Vision + problem statement + document map |
 
 ## Writing rules

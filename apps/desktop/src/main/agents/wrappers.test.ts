@@ -20,6 +20,7 @@ import {
   formatLike,
   isExegolHook,
   notifyCommand,
+  notifyScript,
   syncHooksFile,
   withExegolHooks,
 } from "./wrappers";
@@ -109,6 +110,37 @@ describe("notifyCommand", () => {
     expect(run({ EXEGOL_AGENT_ID: "a1" })).toBe("ran stop\n");
     expect(run({ EXEGOL_AGENT_ID: "a1", EXEGOL_HOOKS_FILE: "/x.json" })).toBe("");
     rmSync(dir, { recursive: true, force: true });
+  });
+});
+
+describe("notifyScript", () => {
+  const event = (payload: string) => {
+    const home = mkdtempSync(join(tmpdir(), "exegol-notify-home-"));
+    const file = join(home, "notify.sh");
+    writeFileSync(file, notifyScript(), { mode: 0o755 });
+    execFileSync(file, ["tool_use", "agent"], {
+      env: { PATH: process.env.PATH ?? "", HOME: home, EXEGOL_AGENT_ID: "a1" },
+      input: payload,
+    });
+    const dir = join(home, ".exegol", "events");
+    const [name] = readdirSync(dir);
+    const parsed = JSON.parse(readFileSync(join(dir, name as string), "utf-8"));
+    rmSync(home, { recursive: true, force: true });
+    return parsed as { sessionId: string; cwd: string };
+  };
+
+  it("carries the session id and the top-level cwd, escapes kept valid", () => {
+    const payload = JSON.stringify({
+      session_id: "s-1",
+      transcript_path: "/t.jsonl",
+      cwd: '/w/Corp "BiT"/nexus-control',
+      tool_input: { cwd: "/elsewhere" },
+    });
+    expect(event(payload)).toMatchObject({ sessionId: "s-1", cwd: '/w/Corp "BiT"/nexus-control' });
+  });
+
+  it("an empty cwd when the payload has none", () => {
+    expect(event(JSON.stringify({ session_id: "s-2" })).cwd).toBe("");
   });
 });
 

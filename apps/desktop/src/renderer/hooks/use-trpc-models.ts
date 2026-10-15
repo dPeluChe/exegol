@@ -70,6 +70,7 @@ type StorageAction =
   | { action: "openFolder"; category: StorageCategory }
   | { action: "openOther"; root: StorageRoot; name: string }
   | { action: "clearScreenshots" }
+  | { action: "clearRecordings" }
   | { action: "clearOldLogs" }
   | { action: "clearBrowserCache"; projectId: string };
 

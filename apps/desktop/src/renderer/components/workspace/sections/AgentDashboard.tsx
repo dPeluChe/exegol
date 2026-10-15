@@ -38,6 +38,7 @@ import { SessionAlias } from "../../common/SessionAlias";
 import { WatchToggle } from "../../common/WatchToggle";
 import { TerminalInstance } from "../../terminal/TerminalInstance";
 import { AgentMessagesPanel, useAgentMessages } from "./AgentMessages";
+import { FleetCardMenu } from "./DashboardMenus";
 import { WatchingSection } from "./WatchingSection";
 import { WorktreesCard } from "./WorktreesCard";
 
@@ -510,75 +511,77 @@ function AgentCard({
   const { data: messages = [] } = useAgentMessages(agent.id);
 
   return (
-    <div
-      className={cn(
-        "group relative flex flex-col rounded-xl border p-3 transition-all",
-        // Ended sessions stay quiet: a wall of red cards drowned the live ones (the icon keeps the state)
-        canPeek ? config.bg : "border-border bg-bg-secondary/40",
-        "cursor-pointer hover:shadow-lg hover:shadow-black/10",
-      )}
-    >
-      {/* Covers the card so a click anywhere opens it; the card's own controls sit above it as siblings */}
-      <button
-        type="button"
-        onClick={onClick}
-        aria-label={`Open ${agent.alias ?? agent.cliType}`}
-        className="absolute inset-0 rounded-xl"
-      />
-      {/* Clicks fall through to the button; controls and titled badges (tooltips) still take the pointer.
+    <FleetCardMenu agent={agent} onOpen={onClick} onArchive={onArchive}>
+      <div
+        className={cn(
+          "group relative flex flex-col rounded-xl border p-3 transition-all",
+          // Ended sessions stay quiet: a wall of red cards drowned the live ones (the icon keeps the state)
+          canPeek ? config.bg : "border-border bg-bg-secondary/40",
+          "cursor-pointer hover:shadow-lg hover:shadow-black/10",
+        )}
+      >
+        {/* Covers the card so a click anywhere opens it; the card's own controls sit above it as siblings */}
+        <button
+          type="button"
+          onClick={onClick}
+          aria-label={`Open ${agent.alias ?? agent.cliType}`}
+          className="absolute inset-0 rounded-xl"
+        />
+        {/* Clicks fall through to the button; controls and titled badges (tooltips) still take the pointer.
           The alias pencil shows on card hover because its own hover target is now pass-through. */}
-      <div className="pointer-events-none relative flex items-start gap-3 group-hover:[&_.group\/alias_button]:inline-block [&_[title]]:pointer-events-auto [&_button]:pointer-events-auto [&_input]:pointer-events-auto">
-        {/* Left: icon + spinner */}
-        <div className="flex flex-col items-center gap-1.5 pt-0.5">
-          <AgentIcon provider={agent.cliType} size={28} />
-          {!hasUnread && isWorking(agent) && (
-            <AgentSpinner agentId={agent.id} className="text-accent" />
-          )}
-        </div>
+        <div className="pointer-events-none relative flex items-start gap-3 group-hover:[&_.group\/alias_button]:inline-block [&_[title]]:pointer-events-auto [&_button]:pointer-events-auto [&_input]:pointer-events-auto">
+          {/* Left: icon + spinner */}
+          <div className="flex flex-col items-center gap-1.5 pt-0.5">
+            <AgentIcon provider={agent.cliType} size={28} />
+            {!hasUnread && isWorking(agent) && (
+              <AgentSpinner agentId={agent.id} className="text-accent" />
+            )}
+          </div>
 
-        {/* Center: info */}
-        <div className="min-w-0 flex-1">
-          <AgentCardTitle agent={agent} projectMeta={projectMeta} hasUnread={hasUnread} />
-          <p className="mt-0.5 truncate text-xs text-text-muted">{agent.taskDescription}</p>
-          {agent.currentStep && (
-            <p className="mt-0.5 truncate text-[10px] text-text-muted/70 italic">
-              {agent.currentStep}
-            </p>
-          )}
-          <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-text-muted">
-            {agent.startedAt && <Elapsed startedAt={agent.startedAt} />}
-            <AgentTokenUsage usage={agent.tokenUsage} />
-            <AccessModeBadge mode={agent.accessMode} variant="inline" />
-            <McpStatusIndicator agentId={agent.id} accessMode={agent.accessMode} />
-            {agent.branchName && (
-              <span className="truncate rounded bg-white/5 px-1 py-0.5 font-mono text-[9px]">
-                {agent.branchName}
-              </span>
+          {/* Center: info */}
+          <div className="min-w-0 flex-1">
+            <AgentCardTitle agent={agent} projectMeta={projectMeta} hasUnread={hasUnread} />
+            <p className="mt-0.5 truncate text-xs text-text-muted">{agent.taskDescription}</p>
+            {agent.currentStep && (
+              <p className="mt-0.5 truncate text-[10px] text-text-muted/70 italic">
+                {agent.currentStep}
+              </p>
             )}
-            {messages.length > 0 && (
-              <MessagesToggle
-                count={messages.length}
-                open={messagesOpen}
-                onToggle={() => setMessagesOpen((v) => !v)}
-              />
-            )}
-            {canPeek && (
-              <PeekControls
-                agentId={agent.id}
-                peekOpen={peekOpen}
-                onTogglePeek={() => setPeekOpen((v) => !v)}
-              />
-            )}
-            {onArchive && <EndedSessionActions agent={agent} onArchive={onArchive} />}
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-text-muted">
+              {agent.startedAt && <Elapsed startedAt={agent.startedAt} />}
+              <AgentTokenUsage usage={agent.tokenUsage} />
+              <AccessModeBadge mode={agent.accessMode} variant="inline" />
+              <McpStatusIndicator agentId={agent.id} accessMode={agent.accessMode} />
+              {agent.branchName && (
+                <span className="truncate rounded bg-white/5 px-1 py-0.5 font-mono text-[9px]">
+                  {agent.branchName}
+                </span>
+              )}
+              {messages.length > 0 && (
+                <MessagesToggle
+                  count={messages.length}
+                  open={messagesOpen}
+                  onToggle={() => setMessagesOpen((v) => !v)}
+                />
+              )}
+              {canPeek && (
+                <PeekControls
+                  agentId={agent.id}
+                  peekOpen={peekOpen}
+                  onTogglePeek={() => setPeekOpen((v) => !v)}
+                />
+              )}
+              {onArchive && <EndedSessionActions agent={agent} onArchive={onArchive} />}
+            </div>
           </div>
         </div>
-      </div>
 
-      {peekOpen && <PeekPanel agent={agent} />}
-      {messagesOpen && messages.length > 0 && (
-        <AgentMessagesPanel agentId={agent.id} messages={messages} />
-      )}
-    </div>
+        {peekOpen && <PeekPanel agent={agent} />}
+        {messagesOpen && messages.length > 0 && (
+          <AgentMessagesPanel agentId={agent.id} messages={messages} />
+        )}
+      </div>
+    </FleetCardMenu>
   );
 }
 

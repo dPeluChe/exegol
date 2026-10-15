@@ -30,7 +30,7 @@ function relativeTime(epoch: number | null): string {
   return `${Math.round(hours / 24)}d`;
 }
 
-type PaneSize = "full" | "compact" | "mini";
+type PaneSize = "full" | "compact" | "narrow" | "mini";
 
 /** Everything that changes with the pane size, so the JSX reads one row instead of ternaries */
 const SIZE_LAYOUT: Record<
@@ -39,7 +39,6 @@ const SIZE_LAYOUT: Record<
     isMini: boolean;
     isCompact: boolean;
     iconSize: number;
-    gridCols: string;
     card: string;
     sessionRows: number;
   }
@@ -48,7 +47,6 @@ const SIZE_LAYOUT: Record<
     isMini: false,
     isCompact: false,
     iconSize: 28,
-    gridCols: "grid-cols-4",
     card: "gap-1.5 p-2.5",
     sessionRows: 5,
   },
@@ -56,7 +54,14 @@ const SIZE_LAYOUT: Record<
     isMini: false,
     isCompact: true,
     iconSize: 22,
-    gridCols: "grid-cols-4",
+    card: "gap-1 p-2",
+    sessionRows: 3,
+  },
+  // Tall but under 300px: the modal like mini, tiles sized like compact
+  narrow: {
+    isMini: true,
+    isCompact: true,
+    iconSize: 22,
     card: "gap-1 p-2",
     sessionRows: 3,
   },
@@ -64,7 +69,6 @@ const SIZE_LAYOUT: Record<
     isMini: true,
     isCompact: true,
     iconSize: 18,
-    gridCols: "grid-cols-3",
     card: "gap-0.5 p-1.5",
     sessionRows: 1,
   },
@@ -72,7 +76,8 @@ const SIZE_LAYOUT: Record<
 
 type SizeLayout = (typeof SIZE_LAYOUT)[PaneSize];
 
-/** Observes the pane size for the responsive layout */
+/** Pane size class for what CSS cannot do (the mini modal, icon size, session rows); columns and
+ *  widths follow container queries so they reflow continuously while a split is dragged */
 function usePaneSize() {
   const containerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState<PaneSize>("full");
@@ -83,7 +88,8 @@ function usePaneSize() {
       if (!entry) return;
       const w = entry.contentRect.width;
       const h = entry.contentRect.height;
-      if (w < 300 || h < 250) setSize("mini");
+      if (h < 250) setSize("mini");
+      else if (w < 300) setSize("narrow");
       else if (w < 500 || h < 400) setSize("compact");
       else setSize("full");
     });
@@ -173,79 +179,90 @@ export function EmptyPane({ paneId, folder: remembered }: { paneId: string; fold
     <div
       ref={containerRef}
       tabIndex={-1}
-      className={cn(
-        "flex h-full flex-col items-center overflow-y-auto p-3 outline-none",
-        inPaneForm ? "justify-start" : "justify-center",
-      )}
+      className="@container-[size] h-full overflow-y-auto outline-none"
     >
-      {inPaneForm && picked ? (
-        <PaneLaunchForm
-          key={picked.provider.id}
-          projectId={projectId ?? ""}
-          paneId={paneId}
-          provider={picked.provider}
-          session={picked.session}
-          accessMode="write"
-          folder={folderPath}
-          folderName={folderName}
-          onBack={backToGrid}
-        />
-      ) : (
-        <>
-          {folder && (
-            <LauncherFolderPicker
-              projectName={project?.name ?? "Project"}
-              folders={folders}
-              selected={folder}
-              open={folderOpen}
-              onOpen={() => setFolderOpen(true)}
-              onClose={closeFolders}
-              onSelect={chooseFolder}
-              onRefresh={() => refresh.mutate()}
-              refreshing={refresh.isPending}
-              compact={layout.isCompact}
-            />
-          )}
-          <AgentGrid options={providers} layout={layout} onLaunch={(p) => pick(p)} />
-          {!layout.isMini && <MissingAgents installed={providers.length} />}
-          {recent.sessions.length > 0 && (
-            <RecentSessions
-              sessions={recent.sessions}
-              elsewhere={recent.scope === "project"}
-              layout={layout}
-              onResume={(s) => {
-                const provider = providers.find((p) => p.id === s.cliType);
-                if (provider) pick(provider, s);
-              }}
-            />
-          )}
-          {folder && (
-            <div className={cn("w-full max-w-sm", layout.isMini ? "mt-1.5" : "mt-3")}>
-              <FolderActions
-                projectId={projectId ?? ""}
-                folder={folder}
-                actions={actions}
-                labels={{ finder: fileManager, editor: detect?.editor?.label ?? "Editor" }}
-                launching={launching}
+      <div
+        className={cn(
+          "flex min-h-full flex-col items-center p-3",
+          inPaneForm
+            ? "justify-start"
+            : "justify-center pane-short:flex-row pane-short:flex-wrap pane-short:content-center pane-short:gap-x-3 pane-short:gap-y-1.5",
+        )}
+      >
+        {inPaneForm && picked ? (
+          <PaneLaunchForm
+            key={picked.provider.id}
+            projectId={projectId ?? ""}
+            paneId={paneId}
+            provider={picked.provider}
+            session={picked.session}
+            accessMode="write"
+            folder={folderPath}
+            folderName={folderName}
+            onBack={backToGrid}
+          />
+        ) : (
+          <>
+            {folder && (
+              <LauncherFolderPicker
+                projectName={project?.name ?? "Project"}
+                folders={folders}
+                selected={folder}
+                open={folderOpen}
+                onOpen={() => setFolderOpen(true)}
+                onClose={closeFolders}
+                onSelect={chooseFolder}
+                onRefresh={() => refresh.mutate()}
+                refreshing={refresh.isPending}
                 compact={layout.isCompact}
-                onAction={(a) => run(a, fileManager)}
-                onCommand={(label, command) => void runCommand(label, command)}
               />
-            </div>
-          )}
-        </>
-      )}
-      {picked && layout.isMini && (
-        <SpawnAgentModal
-          projectId={projectId ?? ""}
-          initialProvider={picked.provider}
-          initialCliType={picked.provider.id}
-          initialSession={picked.session}
-          folder={folderPath}
-          targetPaneId={paneId}
-          onClose={backToGrid}
-        />
-      )}
+            )}
+            <AgentGrid options={providers} layout={layout} onLaunch={(p) => pick(p)} />
+            {!layout.isMini && <MissingAgents installed={providers.length} />}
+            {recent.sessions.length > 0 && (
+              <RecentSessions
+                sessions={recent.sessions}
+                elsewhere={recent.scope === "project"}
+                layout={layout}
+                onResume={(s) => {
+                  const provider = providers.find((p) => p.id === s.cliType);
+                  if (provider) pick(provider, s);
+                }}
+              />
+            )}
+            {folder && (
+              <div
+                className={cn(
+                  "w-full max-w-sm pane-short:mt-0 pane-short:w-auto pane-short:max-w-full",
+                  layout.isMini ? "mt-1.5" : "mt-3",
+                )}
+              >
+                <FolderActions
+                  projectId={projectId ?? ""}
+                  folder={folder}
+                  actions={actions}
+                  labels={{ finder: fileManager, editor: detect?.editor?.label ?? "Editor" }}
+                  launching={launching}
+                  compact={layout.isCompact}
+                  onAction={(a) => run(a, fileManager)}
+                  onCommand={(label, command) => void runCommand(label, command)}
+                />
+              </div>
+            )}
+          </>
+        )}
+        {picked && layout.isMini && (
+          <SpawnAgentModal
+            projectId={projectId ?? ""}
+            initialProvider={picked.provider}
+            initialCliType={picked.provider.id}
+            initialSession={picked.session}
+            folder={folderPath}
+            targetPaneId={paneId}
+            onClose={backToGrid}
+          />
+        )}
+      </div>
     </div>
   );
 }
@@ -254,7 +271,7 @@ function MissingAgents({ installed }: { installed: number }) {
   const missing = useEnabledProviders().length - installed;
   if (missing <= 0) return null;
   return (
-    <p className="mt-1 text-[10px] text-text-muted">
+    <p className="mt-1 text-[10px] text-text-muted pane-short:order-last pane-short:mt-0 pane-short:basis-full pane-short:text-center">
       {installed === 0
         ? "No agent CLI is installed on this machine yet: "
         : `${missing} more not installed: `}
@@ -281,7 +298,11 @@ function AgentGrid({
 }) {
   const installs = useCliInstalls();
   return (
-    <div className={cn("mt-2 grid w-full max-w-sm gap-1.5", layout.gridCols)}>
+    <div
+      className={cn(
+        "mt-2 grid w-full max-w-sm grid-cols-[repeat(auto-fill,minmax(5rem,1fr))] gap-1.5 @max-[12rem]:grid-cols-[repeat(auto-fill,minmax(3rem,1fr))] pane-short:mt-0 pane-short:flex pane-short:w-auto pane-short:max-w-full pane-short:flex-wrap pane-short:justify-center",
+      )}
+    >
       {options.map((cli, i) => (
         <button
           key={cli.id}
@@ -289,8 +310,9 @@ function AgentGrid({
           onClick={() => onLaunch(cli)}
           title={i < 9 ? `${cli.name} (${i + 1})` : cli.name}
           className={cn(
-            "relative flex flex-col items-center rounded-lg border border-border bg-bg-secondary transition-colors hover:border-accent/50 hover:bg-white/[0.03]",
+            "relative flex min-w-0 flex-col items-center rounded-lg border border-border bg-bg-secondary transition-colors hover:border-accent/50 hover:bg-white/[0.03]",
             layout.card,
+            "pane-short:flex-row pane-short:py-1 pane-short:pr-2 pane-short:pl-5",
           )}
         >
           <AgentIcon
@@ -305,16 +327,14 @@ function AgentGrid({
             </span>
           )}
           <DuplicateInstallsBadge count={installs.get(cli.id)?.length ?? 0} />
-          {!layout.isMini && (
-            <span
-              className={cn(
-                "font-medium text-text-secondary",
-                layout.isCompact ? "text-[8px]" : "text-[9px]",
-              )}
-            >
-              {cli.name}
-            </span>
-          )}
+          <span
+            className={cn(
+              "max-w-full truncate font-medium text-text-secondary @max-[12rem]:hidden pane-short:@max-xs:hidden",
+              layout.isCompact ? "text-[8px]" : "text-[9px]",
+            )}
+          >
+            {cli.name}
+          </span>
         </button>
       ))}
     </div>
@@ -349,7 +369,7 @@ function RecentSessions({
   const [open, setOpen] = useState(false);
   const Chevron = open ? ChevronDown : ChevronRight;
   return (
-    <div className="mt-2 w-full max-w-sm shrink-0">
+    <div className="mt-2 w-full max-w-sm shrink-0 pane-short:order-last pane-short:mt-0 pane-short:basis-full">
       <button
         type="button"
         onClick={() => setOpen(!open)}

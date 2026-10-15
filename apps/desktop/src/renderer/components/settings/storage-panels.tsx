@@ -10,6 +10,7 @@ import { SMALL_BUTTON } from "./settings-ui";
 
 export type Pending =
   | { kind: "clearScreenshots"; bytes: number }
+  | { kind: "clearRecordings"; bytes: number }
   | { kind: "clearOldLogs" }
   | { kind: "clearBrowserCache"; projectId: string; projectName: string; bytes: number };
 

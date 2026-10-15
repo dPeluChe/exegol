@@ -3,9 +3,10 @@ import {
   DICTATION_STOP_REASONS,
   DICTATION_TARGET_KINDS,
 } from "@exegol/shared";
-import { clipboard, ipcMain } from "electron";
+import { clipboard, ipcMain, shell } from "electron";
 import { z } from "zod";
 import { insertTextInBrowserPane, markDictationPage } from "../../browser/electron-host";
+import { getProject } from "../../db/queries/projects";
 import {
   clearDictations,
   deleteDictation,
@@ -16,6 +17,11 @@ import { setDictationListening } from "../../dictation/keys";
 import { askMediaConsent } from "../../dictation/media-pause";
 import { askMic, openMicSettings } from "../../dictation/mic";
 import {
+  clearRecordings,
+  ensureRecordingsDir,
+  recordingsSummary,
+} from "../../dictation/recordings";
+import {
   cancelDictation,
   dictationActive,
   dictationAudio,
@@ -24,6 +30,7 @@ import {
   stopDictation,
   warmDictation,
 } from "../../dictation/service";
+import { invalidateStorageReport } from "../../system/storage";
 import { publicProcedure, router } from "../trpc";
 
 const sessionId = z.string().regex(/^[A-Za-z0-9_-]{8,32}$/);
@@ -80,6 +87,21 @@ export const dictationRouter = router({
 
   clearHistory: publicProcedure.mutation(({ ctx }) => {
     clearDictations(ctx.db);
+    return { ok: true };
+  }),
+
+  /** Kept recordings (Settings > Dictation > Recordings): counts and sizes, never contents */
+  recordings: publicProcedure.query(({ ctx }) =>
+    recordingsSummary((id) => getProject(ctx.db, id)?.name ?? null),
+  ),
+
+  openRecordings: publicProcedure.mutation(async () => ({
+    opened: (await shell.openPath(await ensureRecordingsDir())) === "",
+  })),
+
+  clearRecordings: publicProcedure.mutation(async () => {
+    await clearRecordings();
+    invalidateStorageReport();
     return { ok: true };
   }),
 

@@ -3,12 +3,14 @@ import { cn } from "@exegol/ui";
 import { ArrowUpRight, ChevronDown, GripVertical, PinOff, Play } from "lucide-react";
 import { useState } from "react";
 import { fetchResumableCliTypes, resumeSessionInto } from "../../../hooks/use-resume-agent";
+import { type GoneMenuItem, goneCardMenu } from "../../../lib/dashboard-menu";
 import { formatTimeAgoLong } from "../../../lib/format";
 import { trpcMutate } from "../../../lib/trpc-client";
 import { findAgentPane, focusPane, jumpToAgent, showProject } from "../../../stores/agents";
 import { toastError } from "../../../stores/toasts";
 import { type GoneSession, useWatchStore } from "../../../stores/watch";
 import { AgentIcon } from "../../common/AgentIcon";
+import { ContextMenu, type MenuItem } from "../../common/ContextMenu";
 
 /** Its tab and pane when it still has one, else its project */
 function goToSession(g: GoneSession): void {
@@ -33,13 +35,47 @@ async function resumeGone(g: GoneSession): Promise<void> {
 function useResumeGone(g: GoneSession | undefined) {
   const [busy, setBusy] = useState(false);
   const run = () => {
-    if (!g) return;
+    if (!g || busy) return;
     setBusy(true);
     resumeGone(g)
       .catch(toastError(`Could not resume ${labelOf(g)}`))
       .finally(() => setBusy(false));
   };
   return { busy, run };
+}
+
+/** Right-click on a gone pin: its Resume, Open project and Unpin buttons */
+function GoneMenu({
+  gone,
+  agentId,
+  onResume,
+  children,
+}: {
+  gone: GoneSession | undefined;
+  agentId: string;
+  onResume: () => void;
+  children: React.ReactNode;
+}) {
+  const unwatch = useWatchStore((s) => s.unwatch);
+  const item = (id: GoneMenuItem): MenuItem => {
+    switch (id) {
+      case "resume":
+        return { label: "Resume", icon: Play, action: onResume };
+      case "open-project":
+        return {
+          label: "Open Project",
+          icon: ArrowUpRight,
+          action: () => gone && goToSession(gone),
+        };
+      case "unpin":
+        return { label: "Unpin", icon: PinOff, action: () => unwatch(agentId) };
+    }
+  };
+  return (
+    <ContextMenu sections={() => goneCardMenu(!!gone).map((ids) => ({ items: ids.map(item) }))}>
+      {children}
+    </ContextMenu>
+  );
 }
 
 const labelOf = (g: GoneSession | undefined) => (g ? (g.alias ?? g.cliType) : "Session not found");
@@ -66,56 +102,58 @@ export function WatchGoneStrip({ gone, agentId, height, dragProps, dropTarget }:
   const name = labelOf(gone);
 
   return (
-    <div
-      {...dragProps}
-      style={{ height }}
-      className={cn(
-        "group flex w-9 shrink-0 cursor-grab flex-col items-center gap-2 rounded-xl border border-dashed border-border bg-bg-secondary/40 py-2 active:cursor-grabbing",
-        dropTarget && "ring-1 ring-accent",
-      )}
-    >
-      <button
-        type="button"
-        onClick={() => unwatch(agentId)}
-        className="rounded p-0.5 text-text-muted opacity-0 transition-opacity hover:bg-white/10 hover:text-text-primary group-hover:opacity-100"
-        title="Unpin"
+    <GoneMenu gone={gone} agentId={agentId} onResume={run}>
+      <div
+        {...dragProps}
+        style={{ height }}
+        className={cn(
+          "group flex w-9 shrink-0 cursor-grab flex-col items-center gap-2 rounded-xl border border-dashed border-border bg-bg-secondary/40 py-2 active:cursor-grabbing",
+          dropTarget && "ring-1 ring-accent",
+        )}
       >
-        <PinOff className="h-3 w-3" />
-      </button>
-      {gone && (
         <button
           type="button"
-          disabled={busy}
-          onClick={run}
-          className="rounded p-0.5 text-accent hover:bg-accent/15 disabled:opacity-50"
-          title={`Resume ${name}`}
+          onClick={() => unwatch(agentId)}
+          className="rounded p-0.5 text-text-muted opacity-0 transition-opacity hover:bg-white/10 hover:text-text-primary group-hover:opacity-100"
+          title="Unpin"
         >
-          <Play className="h-3.5 w-3.5" />
+          <PinOff className="h-3 w-3" />
         </button>
-      )}
-      {gone && (
+        {gone && (
+          <button
+            type="button"
+            disabled={busy}
+            onClick={run}
+            className="rounded p-0.5 text-accent hover:bg-accent/15 disabled:opacity-50"
+            title={`Resume ${name}`}
+          >
+            <Play className="h-3.5 w-3.5" />
+          </button>
+        )}
+        {gone && (
+          <button
+            type="button"
+            onClick={() => toggleOpen(agentId)}
+            className="rounded p-0.5 text-text-muted hover:bg-white/10 hover:text-text-primary"
+            title="Expand"
+          >
+            <AgentIcon provider={gone.cliType} size={16} />
+          </button>
+        )}
         <button
           type="button"
-          onClick={() => toggleOpen(agentId)}
-          className="rounded p-0.5 text-text-muted hover:bg-white/10 hover:text-text-primary"
-          title="Expand"
+          disabled={!gone}
+          onClick={() => gone && goToSession(gone)}
+          className="min-h-0 truncate text-[11px] font-medium text-text-muted hover:text-text-primary"
+          style={{ writingMode: "vertical-rl" }}
+          title={gone ? `Go to ${name} in ${gone.projectName ?? "its project"}` : undefined}
         >
-          <AgentIcon provider={gone.cliType} size={16} />
+          {name}
+          {gone?.projectName && <span className="font-normal"> · {gone.projectName}</span>}
+          {gone && <span className="font-normal"> · {lastSeen(gone)}</span>}
         </button>
-      )}
-      <button
-        type="button"
-        disabled={!gone}
-        onClick={() => gone && goToSession(gone)}
-        className="min-h-0 truncate text-[11px] font-medium text-text-muted hover:text-text-primary"
-        style={{ writingMode: "vertical-rl" }}
-        title={gone ? `Go to ${name} in ${gone.projectName ?? "its project"}` : undefined}
-      >
-        {name}
-        {gone?.projectName && <span className="font-normal"> · {gone.projectName}</span>}
-        {gone && <span className="font-normal"> · {lastSeen(gone)}</span>}
-      </button>
-    </div>
+      </div>
+    </GoneMenu>
   );
 }
 
@@ -135,61 +173,63 @@ export function WatchGoneCard({
     "flex items-center gap-1 rounded px-2 py-1 text-xs text-text-muted hover:bg-white/10 hover:text-text-primary";
 
   return (
-    <div
-      style={{ height }}
-      className={cn(
-        "flex min-w-0 flex-1 flex-col rounded-xl border border-dashed border-border bg-bg-secondary/40",
-        dropTarget && "ring-1 ring-accent",
-      )}
-    >
+    <GoneMenu gone={gone} agentId={agentId} onResume={run}>
       <div
-        {...dragProps}
-        className="flex cursor-grab items-center gap-2 px-2 py-2 active:cursor-grabbing"
+        style={{ height }}
+        className={cn(
+          "flex min-w-0 flex-1 flex-col rounded-xl border border-dashed border-border bg-bg-secondary/40",
+          dropTarget && "ring-1 ring-accent",
+        )}
       >
-        <GripVertical className="h-3.5 w-3.5 shrink-0 text-text-muted/50" />
-        <button
-          type="button"
-          onClick={() => toggleOpen(agentId)}
-          className="shrink-0 rounded p-0.5 text-text-muted hover:bg-white/10 hover:text-text-primary"
-          title="Collapse to a strip"
+        <div
+          {...dragProps}
+          className="flex cursor-grab items-center gap-2 px-2 py-2 active:cursor-grabbing"
         >
-          <ChevronDown className="h-3.5 w-3.5" />
-        </button>
-        <AgentIcon provider={gone.cliType} size={16} />
-        <span className="min-w-0 truncate text-xs font-medium text-text-primary">{name}</span>
-      </div>
-      <div className="flex flex-1 flex-col items-start justify-center gap-3 px-4 pb-4">
-        <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
-          <dt className="text-text-muted">CLI</dt>
-          <dd className="text-text-secondary">{gone.cliType}</dd>
-          <dt className="text-text-muted">Project</dt>
-          <dd className="text-text-secondary">
-            {gone.projectName ?? gone.projectId}
-            {gone.branchName && <span className="text-text-muted"> · {gone.branchName}</span>}
-          </dd>
-          <dt className="text-text-muted">Last</dt>
-          <dd className="text-text-secondary">{lastSeen(gone)}</dd>
-        </dl>
-        <div className="flex flex-wrap items-center gap-2">
+          <GripVertical className="h-3.5 w-3.5 shrink-0 text-text-muted/50" />
           <button
             type="button"
-            disabled={busy}
-            onClick={run}
-            className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent/90 disabled:opacity-60"
+            onClick={() => toggleOpen(agentId)}
+            className="shrink-0 rounded p-0.5 text-text-muted hover:bg-white/10 hover:text-text-primary"
+            title="Collapse to a strip"
           >
-            <Play className="h-3.5 w-3.5" />
-            {busy ? "Resuming..." : "Resume"}
+            <ChevronDown className="h-3.5 w-3.5" />
           </button>
-          <button type="button" onClick={() => goToSession(gone)} className={secondary}>
-            <ArrowUpRight className="h-3.5 w-3.5" />
-            Open project
-          </button>
-          <button type="button" onClick={() => unwatch(agentId)} className={secondary}>
-            <PinOff className="h-3.5 w-3.5" />
-            Unpin
-          </button>
+          <AgentIcon provider={gone.cliType} size={16} />
+          <span className="min-w-0 truncate text-xs font-medium text-text-primary">{name}</span>
+        </div>
+        <div className="flex flex-1 flex-col items-start justify-center gap-3 px-4 pb-4">
+          <dl className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 text-xs">
+            <dt className="text-text-muted">CLI</dt>
+            <dd className="text-text-secondary">{gone.cliType}</dd>
+            <dt className="text-text-muted">Project</dt>
+            <dd className="text-text-secondary">
+              {gone.projectName ?? gone.projectId}
+              {gone.branchName && <span className="text-text-muted"> · {gone.branchName}</span>}
+            </dd>
+            <dt className="text-text-muted">Last</dt>
+            <dd className="text-text-secondary">{lastSeen(gone)}</dd>
+          </dl>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={run}
+              className="flex items-center gap-1.5 rounded-md bg-accent px-3 py-1.5 text-xs font-medium text-white hover:bg-accent/90 disabled:opacity-60"
+            >
+              <Play className="h-3.5 w-3.5" />
+              {busy ? "Resuming..." : "Resume"}
+            </button>
+            <button type="button" onClick={() => goToSession(gone)} className={secondary}>
+              <ArrowUpRight className="h-3.5 w-3.5" />
+              Open project
+            </button>
+            <button type="button" onClick={() => unwatch(agentId)} className={secondary}>
+              <PinOff className="h-3.5 w-3.5" />
+              Unpin
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </GoneMenu>
   );
 }
