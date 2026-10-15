@@ -223,6 +223,8 @@ app.on("render-process-gone", (_event, contents, details) => {
 });
 app.on("child-process-gone", (_event, details) => {
   if (details.reason === "clean-exit") return;
+  // Only Exegol kills its utility processes (the dictation probe and idle unload)
+  if (details.type === "Utility" && details.reason === "killed") return;
   logger.error(
     `[Crash] ${details.type} process gone (${details.reason}, exit ${details.exitCode})${details.name ? `: ${details.name}` : ""}`,
   );
