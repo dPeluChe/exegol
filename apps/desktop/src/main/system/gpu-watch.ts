@@ -49,13 +49,16 @@ const onDisplayMetrics = (_e: unknown, _display: unknown, changed: string[]) => 
 };
 
 export function startGpuWatch(): void {
-  app
-    .getGPUInfo("basic")
-    .then((info) => {
-      gpuInfo = info;
-      logger.info(`[GPU] ${describeGpu(info, gpuFeatures())}`);
-    })
-    .catch(() => {});
+  // Feature status reads all "disabled" until the GPU process reports (Electron docs)
+  app.once("gpu-info-update", () => {
+    app
+      .getGPUInfo("basic")
+      .then((info) => {
+        gpuInfo = info;
+        logger.info(`[GPU] ${describeGpu(info, gpuFeatures())}`);
+      })
+      .catch(() => {});
+  });
   ipcMain.on("terminal:gpu-stats", (event, input: unknown) => {
     const stats = parseGpuStats(input);
     if (!stats) return;
