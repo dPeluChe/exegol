@@ -29,15 +29,35 @@ interface Folder {
   rel: string;
 }
 
-/** The pane's remembered folder while it still exists, else the project root (never a pinned
- *  command's folder: a project opens where it is) */
+/** The pane's remembered folder while it still exists, else the nearest listed folder above it
+ *  (a session working in `web/src` picks `web`), else the project root (never a pinned command's
+ *  folder: a project opens where it is) */
 export function launcherFolder<T extends Folder>(
   folders: T[],
   remembered: string | undefined,
 ): T | undefined {
-  return (
-    folders.find((f) => f.rel === remembered) ?? folders.find((f) => f.rel === "") ?? folders[0]
-  );
+  const exact = folders.find((f) => f.rel === remembered);
+  if (exact) return exact;
+  const above = remembered
+    ? folders
+        .filter((f) => f.rel && remembered.startsWith(`${f.rel}/`))
+        .sort((a, b) => b.rel.length - a.rel.length)[0]
+    : undefined;
+  return above ?? folders.find((f) => f.rel === "") ?? folders[0];
+}
+
+/** `folder` relative to the project root for a new launcher; undefined outside the project or at
+ *  its root */
+export function launcherRelFor(
+  folder: string | null | undefined,
+  projectPath: string | null | undefined,
+): string | undefined {
+  if (!folder || !projectPath) return undefined;
+  const root = projectPath.replace(/\/+$/, "");
+  const f = folder.replace(/\/+$/, "");
+  if (!root || !f.startsWith(`${root}/`)) return undefined;
+  const rel = f.slice(root.length + 1);
+  return rel.split("/").some((part) => part === ".." || part === ".") ? undefined : rel;
 }
 
 export const folderRowLabel = (f: Folder) => f.rel || "root";
@@ -47,6 +67,23 @@ export function matchFolders<T extends Folder>(folders: T[], query: string): T[]
   const q = query.trim().toLowerCase();
   if (!q) return folders;
   return folders.filter((f) => folderRowLabel(f).toLowerCase().includes(q));
+}
+
+const QUICK_REPOS = 5;
+
+/** A workspace's repos as one-click chips over the picker: only with 2+ repos in subfolders; the
+ *  root first, the current one always shown */
+export function quickRepoFolders<T extends Folder & { git: boolean }>(
+  folders: T[],
+  selectedRel: string,
+): { shown: T[]; more: number } {
+  const repos = folders.filter((f) => f.git && f.rel !== "");
+  if (repos.length < 2) return { shown: [], more: 0 };
+  const picked = repos.slice(0, QUICK_REPOS);
+  const current = repos.find((f) => f.rel === selectedRel);
+  if (current && !picked.includes(current)) picked[picked.length - 1] = current;
+  const root = folders.find((f) => f.rel === "");
+  return { shown: root ? [root, ...picked] : picked, more: repos.length - picked.length };
 }
 
 /** The pane's actions in a folder: Git only in a repo (the root always: it may hold one), Editor

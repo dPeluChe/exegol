@@ -77,6 +77,33 @@ export class HeadlessEmulator {
   }
 
   /**
+   * Runs `read` once every write queued so far is parsed: an empty write's callback, which xterm
+   * runs in order between chunks, so nothing queued later is in the model yet. `parsed` is false
+   * past `deadlineMs` or on dispose (the model may then be half-parsed)
+   */
+  afterParsed<T>(deadlineMs: number, read: (parsed: boolean) => T): Promise<T> {
+    return new Promise((resolve) => {
+      let done = false;
+      const finish = (parsed: boolean) => {
+        if (done) return;
+        done = true;
+        clearTimeout(timer);
+        this.parseWaiters.delete(onDispose);
+        resolve(read(parsed));
+      };
+      const onDispose = () => finish(false);
+      const timer = setTimeout(onDispose, deadlineMs);
+      this.parseWaiters.add(onDispose);
+      try {
+        this.terminal.write("", () => finish(true));
+      } catch {
+        // xterm refuses writes past 50 MB pending
+        finish(false);
+      }
+    });
+  }
+
+  /**
    * Serialized terminal state, replayable into a fresh xterm.
    *
    * When the session is on the ALTERNATE screen the alt buffer IS the content —

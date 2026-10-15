@@ -123,7 +123,7 @@ describe("PtyHost reattach", () => {
     const host = new PtyHost();
     host.connectToSidecar(client);
     await host.reattachSession("ready", { cols: 80, rows: 24 }, callbacks);
-    expect(host.getLiveSnapshot("ready")).toContain("idle prompt>");
+    expect((await host.parsedLiveSnapshot("ready"))?.data).toContain("idle prompt>");
   });
 });
 

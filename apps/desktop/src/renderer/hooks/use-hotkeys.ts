@@ -194,7 +194,7 @@ export function useHotkeys() {
     // Window" never fires.
     const unsubMenu = window.api.onMenuAction((action) => {
       if (action === "new-tab") {
-        useWorkspaceStore.getState().addTab();
+        addTabAndFocus();
       } else if (action === "close-pane") {
         void closeActivePane();
       } else if (action === "reload") {

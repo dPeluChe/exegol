@@ -75,7 +75,11 @@ export function sweepStaleAgentEvents(): void {
 // ─── Notify Script ──────────────────────────────────────────────────────
 
 function createNotifyScript(): void {
-  const script = `#!/bin/bash
+  writeFileSync(NOTIFY_SCRIPT, notifyScript(), { mode: 0o755 });
+}
+
+export function notifyScript(): string {
+  return `#!/bin/bash
 # Exegol lifecycle notification hook.
 # Usage: notify.sh <event_type> [agent]
 # Called by agent hooks (Claude Code, Codex, etc.) on lifecycle events.
@@ -91,15 +95,22 @@ TS=$(date +%s)
 # Claude Code pipes the hook payload on stdin; its session_id is what
 # "claude --resume" needs after the PTY dies (a reboot leaves no exit output)
 SID=""
+CWD=""
 if [ ! -t 0 ]; then
   # Drain all of it (stopping early would break Claude's pipe); the id sits near the start
   INPUT=$(cat)
-  SID=$(printf '%s' "\${INPUT:0:4096}" | tr -d '\\n' | sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\\([A-Za-z0-9-]*\\)".*/\\1/p')
+  HEAD="\${INPUT:0:4096}"
+  SID=$(printf '%s' "$HEAD" | tr -d '\\n' | sed -n 's/.*"session_id"[[:space:]]*:[[:space:]]*"\\([A-Za-z0-9-]*\\)".*/\\1/p')
+  # The session's folder now (a cd inside the CLI moves it): the first top-level "cwd", kept
+  # JSON-escaped so it drops into the event as is
+  AFTER="\${HEAD#*\\"cwd\\"}"
+  if [ "$AFTER" != "$HEAD" ]; then
+    CWD=$(printf '%s' "$AFTER" | tr -d '\\n' | sed -nE 's/^[[:space:]]*:[[:space:]]*"(([^"\\\\]|\\\\.)*)".*/\\1/p')
+  fi
 fi
-echo "{\\"type\\":\\"$EVENT_TYPE\\",\\"agentId\\":\\"$EXEGOL_AGENT_ID\\",\\"ts\\":$TS,\\"sessionId\\":\\"$SID\\"}" \\
+echo "{\\"type\\":\\"$EVENT_TYPE\\",\\"agentId\\":\\"$EXEGOL_AGENT_ID\\",\\"ts\\":$TS,\\"sessionId\\":\\"$SID\\",\\"cwd\\":\\"$CWD\\"}" \\
   > "$EVENT_DIR/\${EXEGOL_AGENT_ID}_\${EVENT_TYPE}_\${TS}.json"
 `;
-  writeFileSync(NOTIFY_SCRIPT, script, { mode: 0o755 });
 }
 
 // ─── Global hooks (Claude Code + Codex use the same format) ─────────────

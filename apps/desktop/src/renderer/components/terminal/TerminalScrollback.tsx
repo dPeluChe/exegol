@@ -91,7 +91,7 @@ export function TerminalScrollback({
         className={
           showOutput
             ? "max-h-[55%] shrink-0 overflow-y-auto border-b border-border"
-            : "flex min-h-0 flex-1 flex-col items-center justify-center overflow-y-auto"
+            : "@container-[size] flex min-h-0 flex-1 flex-col items-center justify-center-safe overflow-y-auto"
         }
       >
         {agent && (

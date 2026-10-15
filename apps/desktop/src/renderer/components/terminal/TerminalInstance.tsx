@@ -45,7 +45,7 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
   const paneId = useWorkspaceStore((s) =>
     mirror ? undefined : paneIdForAgentSelector(s, agentId, paneIdProp),
   );
-  const { containerRef, terminalRef, fitAddonRef, serializeAddonRef } = useXterm({
+  const { containerRef, terminalRef, fitAddonRef, serializeAddonRef, shown } = useXterm({
     agentId,
     paneId,
     cliType,
@@ -72,6 +72,9 @@ export const TerminalInstance = forwardRef(function TerminalInstance(
         // Clipped, so a grid momentarily larger than its box can never push the
         // box (and with it the next fit); a mirror's box is its card's body
         "terminal-container h-full w-full overflow-hidden bg-bg-primary",
+        // Under a hidden tab or the Dashboard: xterm pauses only for display: none, and the
+        // unmeasured box skips every fit until it shows again
+        !shown && "hidden",
         isDragOver && "ring-2 ring-inset ring-accent/60",
       )}
       onDragOver={handleDragOver}

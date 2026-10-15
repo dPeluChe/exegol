@@ -1,5 +1,5 @@
 // PTY Host — manages PTY subprocess sessions from the main process (T35+T36+T37).
-import type { ScreenDialog } from "@exegol/shared";
+import type { LiveSnapshot, ScreenDialog } from "@exegol/shared";
 import { noteSessionActivity } from "../agents/session-activity";
 import { createLimiter } from "../lib/concurrency";
 import { logger } from "../lib/logger";
@@ -40,6 +40,9 @@ import { isFrameGap, isStaleFrame, lostFrames, resyncFromRing } from "./sidecar-
 
 export type { ReattachedSession } from "./pty-host-reattach";
 export type { SessionCallbacks } from "./pty-session-types";
+
+/** A snapshot waits at most this long for queued output to parse, then goes without a seq */
+const SNAPSHOT_PARSE_DEADLINE_MS = 1_500;
 
 export class PtyHost {
   private sessions = new Map<string, Session>();
@@ -139,7 +142,7 @@ export class PtyHost {
       s.emulator.write(processedData);
       s.resyncTail?.push(processedData);
       scheduleScrollbackFlush(s);
-      s.callbacks.onData(processedData);
+      s.callbacks.onData(processedData, s.lastSeq);
       this.outputWatchers.get(s.id)?.();
     }
   }
@@ -414,11 +417,24 @@ export class PtyHost {
     return this.sessions.get(id)?.emulator.snapshot() ?? null;
   }
 
-  /** For a live view that resets and repaints: the screen plus the modes its program set */
-  getLiveSnapshot(id: string): string | null {
-    const emulator = this.sessions.get(id)?.emulator;
-    const snapshot = emulator?.snapshot();
-    return emulator && snapshot ? snapshot + emulator.modeSequence() : null;
+  /** The screen holding exactly the output up to `seq`, serialized once that output is parsed */
+  parsedLiveSnapshot(id: string): Promise<LiveSnapshot | null> {
+    const s = this.sessions.get(id);
+    if (!s) return Promise.resolve(null);
+    const { emulator } = s;
+    const seq = s.lastSeq;
+    return emulator.afterParsed(SNAPSHOT_PARSE_DEADLINE_MS, (parsed) => {
+      if (this.sessions.get(id) !== s) return null;
+      // A Retry resync may have swapped the model meanwhile: its screen is not the one `seq` names
+      const model = s.emulator;
+      const snapshot = model.snapshot();
+      return {
+        data: snapshot ? snapshot + model.modeSequence() : null,
+        seq: parsed && model === emulator ? seq : undefined,
+        alt: model.alternateScreen,
+        ...model.size,
+      };
+    });
   }
 
   /** The numbered dialog the session's screen shows now, if any */
