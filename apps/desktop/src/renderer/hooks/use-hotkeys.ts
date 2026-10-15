@@ -3,7 +3,7 @@ import { focusAddressBar } from "../lib/address-bar";
 import { closeActivePane, reopenClosed } from "../lib/close-target";
 import { appChord, chordKey, IS_MAC } from "../lib/keymap";
 import { goToShortcut } from "../lib/live-tabs";
-import { cyclePane, focusActivePane, paneRoot } from "../lib/pane-focus";
+import { cyclePane, focusActivePane, focusDashboard, paneRoot } from "../lib/pane-focus";
 import { addTabAndFocus, splitActivePane, terminalForActivePane } from "../lib/split-terminal";
 import { trpcMutate } from "../lib/trpc-client";
 import { jumpToAgent, sortAttentionItems, useAgentStore } from "../stores/agents";
@@ -152,6 +152,7 @@ export function useHotkeys() {
         e.preventDefault();
         if (digit === "1") {
           useAppStore.getState().openDashboard();
+          focusDashboard();
           return;
         }
         const flash = goToShortcut(digit);

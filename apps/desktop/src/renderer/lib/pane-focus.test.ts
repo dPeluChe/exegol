@@ -2,7 +2,9 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../stores/workspace", () => ({}));
 vi.stubGlobal("requestAnimationFrame", () => 0);
-const { adjacentPane, claimPaneFocus, dropPaneFocus, focusNewPane } = await import("./pane-focus");
+const { adjacentPane, claimPaneFocus, dropPaneFocus, focusNewPane, mirrorToFocus } = await import(
+  "./pane-focus"
+);
 
 describe("adjacentPane", () => {
   it("moves forward and back, wrapping around", () => {
@@ -27,5 +29,14 @@ describe("focusNewPane / claimPaneFocus", () => {
     dropPaneFocus("p2");
     expect(claimPaneFocus("p2")).toBe(false);
     expect(claimPaneFocus("never")).toBe(false);
+  });
+});
+
+describe("mirrorToFocus", () => {
+  it("returns to the last mirror while it is on screen, else the first", () => {
+    expect(mirrorToFocus("b", ["a", "b"])).toBe("b");
+    expect(mirrorToFocus("c", ["a", "b"])).toBe("a");
+    expect(mirrorToFocus(null, ["a"])).toBe("a");
+    expect(mirrorToFocus("a", [])).toBeNull();
   });
 });
