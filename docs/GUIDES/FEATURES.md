@@ -39,8 +39,9 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
 - **Picture-in-Picture**: a terminal or browser pane detaches into a small always-on-top window.
 - **Terminal links**: URLs and file paths in any terminal (agents, shells, Dashboard cards) are
   clickable. A URL opens in the tab's link preview pane; a file (`src/app.ts:42:7`, `./a.tsx`,
-  `~/notes.md`, absolute) opens read-only over the terminal at its line, images as pictures, PDFs
-  in their app. Only files inside the session's project or its worktrees are links. Cmd+click (Ctrl+click on
+  `~/notes.md`, absolute) opens read-only at its line in a movable, resizable window over the
+  workspace, images as pictures, PDFs in their app. Esc or Cmd+W closes that window, never the
+  session. Only files inside the session's project or its worktrees are links. Cmd+click (Ctrl+click on
   Linux and Windows) opens a URL in the system browser and a file in the IDE at its line;
   Cmd+Shift+click shows the file in Finder. Hovering shows the target and the clicks.
 - **Open in IDE**: Settings > General picks the default IDE among the ones installed (VS Code,
@@ -83,7 +84,16 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
   pinned in Watching, on Watch PR, waiting on you, in a pipeline, with uncommitted worktree
   changes or a server listening, nor a terminal running anything. A toast links each session
   with its project; suspended sessions carry a "Suspended" mark in the sidebar.
-- **Send to**: select text in one terminal and paste it into another live agent.
+- **Send to**: select text in one terminal and paste it into another live agent or terminal
+  (the floating Send to button, or right-click > Send selection to). Sessions of the pane's own
+  project come first; other projects sit behind "Other projects (N)", open when the own project
+  has nothing else. By default nothing is submitted: a terminal gets the command at its prompt to
+  review and run, a multi-line text is one bracketed paste. Settings > Terminal > Send to can press
+  Enter after the paste, separately for terminals and agents; an agent asking a question or a
+  permission only gets the paste (a toast says so). The list's footer shows the current behavior.
+  Arrows, Enter and Esc work in the list. Sessions read "argo · exegoldev" (alias and the CLI's
+  session name), terminals "Terminal · folder". In Claude or another TUI that uses the mouse,
+  select with Option+drag (Shift+drag on Linux and Windows): a plain drag is the TUI's own.
 - **Follow-ups and Steer**: Queue in the terminal toolbar (and on a Watching card) holds prompts
   for an agent's next turn; each is typed when the turn ends, one per turn. Steer (Claude Code,
   Codex) interrupts the turn (Esc), waits up to 20s for the prompt and types right away. The queue lives in memory: it

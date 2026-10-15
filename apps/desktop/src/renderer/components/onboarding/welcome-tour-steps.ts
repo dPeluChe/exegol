@@ -38,7 +38,7 @@ const MAC_STEPS: WelcomeTourStep[] = [
   {
     title: "Working in terminals",
     bullets: [
-      "Select text and use Send to: it pastes into another agent without submitting.",
+      "Select text and use Send to (or right-click): it pastes into another agent or terminal without submitting.",
       "Open Files beside the terminal from its toolbar.",
       "Cmd+click a link or a file path to open it.",
       "Right-click for Clear Terminal and Refresh Terminal.",

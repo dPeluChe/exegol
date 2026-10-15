@@ -23,6 +23,8 @@ export interface AgentEvent {
   ts: number;
   /** Provider session id from the hook payload (Claude Code), empty when absent */
   sessionId?: string;
+  /** The CLI's working folder from the hook payload, empty when absent */
+  cwd?: string;
   payload?: Record<string, unknown>;
 }
 
