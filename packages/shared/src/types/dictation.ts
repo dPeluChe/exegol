@@ -13,6 +13,13 @@ export function rms(samples: Float32Array): number {
   return Math.sqrt(sum / samples.length);
 }
 
+/** Dictated text is data: no escape sequences or control characters reach a terminal (one
+ *  could end a bracketed paste and run the rest) */
+export function sanitizeDictation(text: string): string {
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping them is the point
+  return text.replace(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/g, "").trim();
+}
+
 /** Where a dictation went: a pane kind, a text field of the app, or the clipboard */
 export const DICTATION_TARGET_KINDS = [
   "terminal",
@@ -52,6 +59,10 @@ export const DICTATION_CANCEL_SOURCES = [
 ] as const;
 export type DictationCancelSource = (typeof DICTATION_CANCEL_SOURCES)[number];
 
+/** Days a kept recording (audio + its text, Settings > Dictation) stays on disk */
+export const DICTATION_RECORDING_RETENTION_DAYS = [5, 10, 15, 30] as const;
+export type DictationRecordingRetentionDays = (typeof DICTATION_RECORDING_RETENTION_DAYS)[number];
+
 export interface DictationSettings {
   enabled: boolean;
   /** macOS notation ("Cmd+Shift+Space"); Cmd reads as Ctrl on Linux and Windows */
@@ -71,6 +82,9 @@ export interface DictationSettings {
   retentionDays: number;
   retentionMax: number;
   overlayPosition: DictationOverlayPosition;
+  /** Save each dictation's audio and text under ~/.exegol/dictation-audio, to compare models */
+  keepRecordings: boolean;
+  recordingsRetentionDays: DictationRecordingRetentionDays;
 }
 
 export const DEFAULT_DICTATION_SHORTCUT = "Cmd+Shift+Space";
@@ -87,6 +101,8 @@ export const DEFAULT_DICTATION_SETTINGS: DictationSettings = {
   retentionDays: 30,
   retentionMax: 500,
   overlayPosition: "pane",
+  keepRecordings: false,
+  recordingsRetentionDays: 10,
 };
 
 /** The saved settings over the defaults: a row written before a field existed lacks it */
@@ -129,6 +145,18 @@ export interface DictationHistoryItem {
   createdAt: number;
   projectId: string | null;
   targetKind: DictationTargetKind;
+}
+
+/** Kept recordings on disk: a recording is its .wav and .json, counted once */
+export interface DictationRecordingsSummary {
+  count: number;
+  bytes: number;
+  projects: {
+    projectId: string | null;
+    projectName: string | null;
+    count: number;
+    bytes: number;
+  }[];
 }
 
 /** Pushed on `dictation:partial` while a streaming model listens */

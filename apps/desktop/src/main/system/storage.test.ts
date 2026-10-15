@@ -24,6 +24,7 @@ function fixture() {
   const logDir = join(exegolDir, "logs");
   write(join(exegolDir, "models", "m", "enc.onnx"), 1000);
   write(join(exegolDir, "screenshots", "a.jpg"), 200);
+  write(join(exegolDir, "dictation-audio", "no-project", "r.wav"), 40);
   write(join(exegolDir, "ring-evicted", "s.bin"), 50);
   write(join(logDir, "exegol.log"), 30);
   write(join(logDir, "exegol.1.log"), 20);
@@ -64,12 +65,13 @@ describe("storage", () => {
       models: 1000,
       scrollback: 350,
       screenshots: 200,
+      recordings: 40,
       logs: 80,
       database: 560,
       browser: 85,
       other: 10,
     });
-    expect(report.totalBytes).toBe(2285 + (worktrees ?? 0));
+    expect(report.totalBytes).toBe(2325 + (worktrees ?? 0));
     // Chromium lowercases partition folders; the project id keeps its case
     expect(report.browserPartitions).toEqual([
       { projectId: "ABC", projectName: "Proj", bytes: 85, cacheBytes: 80 },

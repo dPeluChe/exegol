@@ -346,6 +346,7 @@
     "storage": [
       "clearBrowserCache",
       "clearOldLogs",
+      "clearRecordings",
       "clearScreenshots",
       "openFolder",
       "openOther",
@@ -360,11 +361,14 @@
     "dictation": [
       "cancel",
       "clearHistory",
+      "clearRecordings",
       "copyHistory",
       "deleteHistory",
       "history",
       "mediaConsent",
       "openMicSettings",
+      "openRecordings",
+      "recordings",
       "requestMic",
       "start",
       "status",

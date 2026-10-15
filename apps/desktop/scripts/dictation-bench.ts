@@ -1,0 +1,164 @@
+// Dev only (not shipped): decodes kept dictation recordings with each speech model and scores
+// them against the text saved next to each clip. Usage in docs/GUIDES/DICTATION_BENCH.md.
+//   bun apps/desktop/scripts/dictation-bench.ts [--dir DIR] [--model DIR[=catalogId]]...
+//     [--no-installed] [--threads N] [--json out.json]
+import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { basename, join, resolve } from "node:path";
+import type { SpeechModelEntry } from "@exegol/shared";
+import * as sherpa from "sherpa-onnx-node";
+import { hasRecognizer, recognizerSpec } from "../src/main/dictation/model-config";
+import { decodeWav } from "../src/main/dictation/recording-files";
+import { MODEL_CATALOG } from "../src/main/models/catalog";
+import {
+  type ClipResult,
+  charErrorRate,
+  formatTable,
+  type ModelRow,
+  summarizeModel,
+  wordErrorRate,
+} from "./dictation-bench-score";
+
+const SAMPLE_RATE = 16_000;
+const EXEGOL_DIR = join(homedir(), ".exegol");
+
+const args = process.argv.slice(2);
+const flag = (name: string) => args.includes(name);
+const values = (name: string) =>
+  args.flatMap((a, i) => (a === name && args[i + 1] ? [args[i + 1] as string] : []));
+const recordingsDir = resolve(values("--dir")[0] ?? join(EXEGOL_DIR, "dictation-audio"));
+const jsonOut = values("--json")[0];
+const threads = Number(values("--threads")[0] ?? 4);
+
+interface Clip {
+  name: string;
+  samples: Float32Array;
+  reference: string;
+}
+
+interface ModelTarget {
+  label: string;
+  entry: SpeechModelEntry;
+  dir: string;
+}
+
+const installed = (entry: SpeechModelEntry, dir: string) =>
+  entry.files.every((f) => existsSync(join(dir, f)));
+
+/** `--model DIR=id`, else the folder name when it is a catalog id, else the first family whose files are there */
+function extraModel(arg: string): ModelTarget | null {
+  const [path = "", id] = arg.split("=");
+  const dir = resolve(path);
+  const entry =
+    MODEL_CATALOG.find((m) => m.id === (id ?? basename(dir))) ??
+    MODEL_CATALOG.find((m) => hasRecognizer(m.id) && installed(m, dir));
+  return entry ? { label: `${entry.id} (${dir})`, entry, dir } : null;
+}
+
+function modelTargets(): ModelTarget[] {
+  const list: ModelTarget[] = flag("--no-installed")
+    ? []
+    : MODEL_CATALOG.filter((m) => hasRecognizer(m.id))
+        .map((entry) => ({ label: entry.id, entry, dir: join(EXEGOL_DIR, "models", entry.id) }))
+        .filter((t) => installed(t.entry, t.dir));
+  for (const arg of values("--model")) {
+    const target = extraModel(arg);
+    if (target) list.push(target);
+    else console.error(`skipped ${arg}: no known model family in that folder`);
+  }
+  return list;
+}
+
+function loadClips(dir: string): Clip[] {
+  const clips: Clip[] = [];
+  const walk = (current: string) => {
+    for (const e of readdirSync(current, { withFileTypes: true })) {
+      const path = join(current, e.name);
+      if (e.isDirectory()) walk(path);
+      if (!e.isFile() || !e.name.endsWith(".json")) continue;
+      const wav = path.replace(/\.json$/, ".wav");
+      if (!existsSync(wav)) continue;
+      const meta = JSON.parse(readFileSync(path, "utf8")) as { text?: string; reference?: string };
+      const audio = decodeWav(readFileSync(wav));
+      const reference = meta.reference ?? meta.text;
+      if (!audio || audio.sampleRate !== SAMPLE_RATE || typeof reference !== "string") {
+        console.error(`skipped ${path}: not a 16 kHz recording with text`);
+        continue;
+      }
+      clips.push({ name: path.slice(dir.length + 1), samples: audio.samples, reference });
+    }
+  };
+  if (existsSync(dir)) walk(dir);
+  return clips.sort((a, b) => a.name.localeCompare(b.name));
+}
+
+async function decoder(target: ModelTarget): Promise<(samples: Float32Array) => Promise<string>> {
+  const spec = recognizerSpec(target.entry, target.dir, threads);
+  if (!spec) throw new Error(`${target.entry.id} has no recognizer`);
+  if (spec.kind === "offline") {
+    const recognizer = await sherpa.OfflineRecognizer.createAsync(spec.config);
+    return async (samples) => {
+      const stream = recognizer.createStream();
+      stream.acceptWaveform({ samples, sampleRate: SAMPLE_RATE });
+      return (await recognizer.decodeAsync(stream)).text.trim();
+    };
+  }
+  const recognizer = new sherpa.OnlineRecognizer(spec.config);
+  return async (samples) => {
+    const stream = recognizer.createStream();
+    stream.acceptWaveform({ samples, sampleRate: SAMPLE_RATE });
+    // Same trailing silence as the engine: the streaming model emits its last words
+    stream.acceptWaveform({
+      samples: new Float32Array(SAMPLE_RATE * 0.4),
+      sampleRate: SAMPLE_RATE,
+    });
+    stream.inputFinished();
+    while (recognizer.isReady(stream)) recognizer.decode(stream);
+    return recognizer.getResult(stream).text.trim();
+  };
+}
+
+async function main(): Promise<void> {
+  const clips = loadClips(recordingsDir);
+  const targets = modelTargets();
+  if (clips.length === 0) {
+    console.error(`no recordings in ${recordingsDir}`);
+    process.exit(1);
+  }
+  if (targets.length === 0) {
+    console.error("no models: install one in Settings > Models or pass --model DIR");
+    process.exit(1);
+  }
+  const rows: ModelRow[] = [];
+  const details: Record<string, ClipResult[]> = {};
+  for (const target of targets) {
+    console.error(`${target.label}: loading`);
+    const decode = await decoder(target);
+    const results: ClipResult[] = [];
+    for (const clip of clips) {
+      const started = performance.now();
+      const hypothesis = await decode(clip.samples);
+      results.push({
+        clip: clip.name,
+        audioSec: clip.samples.length / SAMPLE_RATE,
+        decodeSec: (performance.now() - started) / 1000,
+        wer: wordErrorRate(clip.reference, hypothesis),
+        cer: charErrorRate(clip.reference, hypothesis),
+        reference: clip.reference,
+        hypothesis,
+      });
+    }
+    rows.push(summarizeModel(target.label, results));
+    details[target.label] = results;
+  }
+  console.log(formatTable(rows));
+  if (jsonOut) {
+    writeFileSync(jsonOut, `${JSON.stringify({ recordingsDir, rows, clips: details }, null, 2)}\n`);
+    console.error(`wrote ${jsonOut}`);
+  }
+}
+
+main().catch((err) => {
+  console.error(err instanceof Error ? err.message : err);
+  process.exit(1);
+});

@@ -3,6 +3,7 @@ import { app, session, shell } from "electron";
 import { z } from "zod";
 import { listProjects } from "../../db/queries/projects";
 import { listAllWorktreeRows } from "../../db/queries/worktrees";
+import { clearRecordings } from "../../dictation/recordings";
 import { LOG_DIR } from "../../lib/logger";
 import {
   cachedStorageReport,
@@ -61,6 +62,12 @@ export const storageRouter = router({
 
   clearScreenshots: publicProcedure.mutation(async () => {
     await clearScreenshots(EXEGOL_DIR);
+    invalidateStorageReport();
+    return { ok: true };
+  }),
+
+  clearRecordings: publicProcedure.mutation(async () => {
+    await clearRecordings();
     invalidateStorageReport();
     return { ok: true };
   }),

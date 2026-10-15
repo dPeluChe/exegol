@@ -10,7 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
-
+- Settings > Dictation > Recordings: "Keep recordings for model testing" (off by default) saves each dictation that ends with text inserted or copied, its audio and the text, in `~/.exegol/dictation-audio` on this Mac, to compare speech models later on your own speech. Recordings are deleted after 5, 10, 15 or 30 days (10 by default); turning the setting off keeps what was saved. The card shows how many there are and their size per project, with Open folder and Clear recordings; Settings > Storage lists them too. Developers can score every installed model on them with `bun apps/desktop/scripts/dictation-bench.ts` (word and character error rate, speed)
 
 ### Changed
 - The launcher in an empty pane and the one in an ended session's pane now fit their pane: in a short pane (a bottom split) the folder, agents and folder actions sit in one or two rows from the top and the pane scrolls instead of cutting them off, and in a narrow pane the agent tiles and buttons stretch to fill its width (two tiles a row, each with icon and name, at about 230 px) and reflow as you drag the split. Large panes look as before
