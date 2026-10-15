@@ -116,7 +116,7 @@ export class HeadlessEmulator {
     try {
       const alt = this._modes.alternateScreen;
       const body = this.serializer.serialize({ excludeAltBuffer: !alt, excludeModes: true });
-      const serialized = alt ? `\x1b[?1049h${body}` : body;
+      const serialized = `${alt ? `\x1b[?1049h${body}` : body}${this.cursorSequence()}`;
       const buf = Buffer.from(serialized, "utf-8");
       if (buf.byteLength <= MAX_SNAPSHOT_BYTES) return serialized;
       // Keep the most recent bytes — old scrollback is less useful than a
@@ -125,6 +125,14 @@ export class HeadlessEmulator {
     } catch {
       return null;
     }
+  }
+
+  /** Absolute cursor: the serializer drops cells skipped with CUF (agy draws spaces that way), so
+   *  the replay left the cursor short and every later relative draw landed one column off */
+  private cursorSequence(): string {
+    const b = this.terminal.buffer.active;
+    if (b.cursorX >= this.terminal.cols) return "";
+    return `\x1b[${b.cursorY + 1};${b.cursorX + 1}H`;
   }
 
   /**
