@@ -9,7 +9,7 @@ vi.mock("node:os", async (orig) => {
   return { ...os, tmpdir: () => dir };
 });
 
-const { flushLogSync, logger, LOG_DIR } = await import("./logger");
+const { flushLogSync, logger, LOG_DIR, startLogFile } = await import("./logger");
 const read = () => readFileSync(join(LOG_DIR, "exegol.log"), "utf-8");
 
 afterAll(() => rmSync(join(LOG_DIR, ".."), { recursive: true, force: true }));
@@ -18,8 +18,10 @@ describe("logger file writes", () => {
   it("queues lines off the call and keeps their order across timed and sync flushes", async () => {
     expect(LOG_DIR).toContain(`exegol-logger-${process.pid}`);
     logger.debug("one");
+    startLogFile();
     logger.debug("two");
-    expect(read()).not.toContain("one");
+    expect(read()).toContain("one");
+    expect(read()).not.toContain("two");
 
     await new Promise((r) => setTimeout(r, 120));
     expect(read()).toContain("two");
