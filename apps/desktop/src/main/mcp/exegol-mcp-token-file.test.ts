@@ -12,7 +12,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
-  excludeLineFor,
   readTokenFile,
   removeTokenFile,
   resolveShimToken,
@@ -129,15 +128,5 @@ describe("resolveShimToken", () => {
       JSON.stringify({ mcpServers: { exegol: { env: { EXEGOL_MCP_TOKEN_PATH: outside } } } }),
     );
     expect(resolveShimToken({}, repo, tokens)).toBe("");
-  });
-});
-
-describe("excludeLineFor", () => {
-  it("anchors the path under the prefix and skips a line already there", () => {
-    expect(excludeLineFor("", "", ".agents/mcp_config.json")).toBe("/.agents/mcp_config.json");
-    expect(excludeLineFor("# x\n", "apps/web/", ".mcp.json")).toBe("/apps/web/.mcp.json");
-    expect(excludeLineFor("# x\n/.mcp.json\n", "", ".mcp.json")).toBeNull();
-    expect(excludeLineFor("/.mcp.json\r\n", "", ".mcp.json")).toBeNull();
-    expect(excludeLineFor("", "[a]*/", ".mcp.json")).toBe("/\\[a]\\*/.mcp.json");
   });
 });

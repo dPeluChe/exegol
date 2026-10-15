@@ -23,7 +23,7 @@ export const MCP_TOKENS_DIR = join(homedir(), ".exegol", "mcp", "tokens");
 /** Config env key holding the token FILE path */
 export const TOKEN_PATH_ENV = "EXEGOL_MCP_TOKEN_PATH";
 /** Older builds put the raw token inline under this (misleading) name; still read */
-export const LEGACY_INLINE_TOKEN_ENV = "EXEGOL_MCP_TOKEN_FILE";
+const LEGACY_INLINE_TOKEN_ENV = "EXEGOL_MCP_TOKEN_FILE";
 export const SESSION_TOKEN_ENV = "EXEGOL_MCP_TOKEN";
 
 const MAX_TOKEN_BYTES = 512;
@@ -43,13 +43,30 @@ export function tokenFilePathFor(cwd: string, dir = MCP_TOKENS_DIR): string {
   return join(dir, tokenKeyFor(cwd));
 }
 
-/** Temp file + rename: an existing symlink at the target is replaced, never followed */
-export function writeTokenFile(cwd: string, token: string, dir = MCP_TOKENS_DIR): string {
+const readyDirs = new Set<string>();
+
+function ensureTokensDir(dir: string): void {
+  if (readyDirs.has(dir)) return;
   mkdirSync(dir, { recursive: true, mode: 0o700 });
   chmodSync(dir, 0o700);
+  readyDirs.add(dir);
+}
+
+/** Temp file + rename: an existing symlink at the target is replaced, never followed */
+export function writeTokenFile(cwd: string, token: string, dir = MCP_TOKENS_DIR): string {
+  ensureTokensDir(dir);
   const path = tokenFilePathFor(cwd, dir);
   const tmp = `${path}.${process.pid}.${Date.now()}.tmp`;
-  writeFileSync(tmp, token, { encoding: "utf-8", mode: 0o600, flag: "wx" });
+  const write = () => writeFileSync(tmp, token, { encoding: "utf-8", mode: 0o600, flag: "wx" });
+  try {
+    write();
+  } catch (err) {
+    // The dir was removed since this process created it
+    if ((err as NodeJS.ErrnoException).code !== "ENOENT") throw err;
+    readyDirs.delete(dir);
+    ensureTokensDir(dir);
+    write();
+  }
   try {
     renameSync(tmp, path);
   } catch (err) {
@@ -108,25 +125,16 @@ export function resolveShimToken(
   cwd: string,
   dir = MCP_TOKENS_DIR,
 ): string {
-  const perSession = env[SESSION_TOKEN_ENV];
-  if (perSession) return perSession;
-  const fromPath = env[TOKEN_PATH_ENV] ? readTokenFile(env[TOKEN_PATH_ENV], dir) : null;
-  if (fromPath) return fromPath;
-  const legacy = env[LEGACY_INLINE_TOKEN_ENV];
-  if (legacy) return legacy;
+  return env[SESSION_TOKEN_ENV] || tokenFromEnvBlock(env, dir) || cwdMcpJsonToken(cwd, dir) || "";
+}
+
+function cwdMcpJsonToken(cwd: string, dir: string): string | null {
   try {
     const parsed = JSON.parse(readFileSync(join(cwd, ".mcp.json"), "utf-8")) as {
       mcpServers?: { exegol?: { env?: Record<string, unknown> } };
     };
-    return tokenFromEnvBlock(parsed.mcpServers?.exegol?.env, dir) ?? "";
+    return tokenFromEnvBlock(parsed.mcpServers?.exegol?.env, dir);
   } catch {
-    return "";
+    return null;
   }
-}
-
-/** The line `.git/info/exclude` needs for `relPath` under `prefix` (cwd relative to the
- *  work tree root, as `git rev-parse --show-prefix` prints it), or null when present */
-export function excludeLineFor(existing: string, prefix: string, relPath: string): string | null {
-  const line = `/${`${prefix}${relPath}`.replace(/[\\*?[]/g, "\\$&")}`;
-  return existing.split(/\r?\n/).some((l) => l.trim() === line) ? null : line;
 }

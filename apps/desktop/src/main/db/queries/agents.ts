@@ -621,6 +621,20 @@ export function countLiveAgentsInWorktree(
   return row.n;
 }
 
+/** Distinct folders live agents work in (`AGENT_FOLDER_SQL`) */
+export function listLiveAgentFolders(db: Database.Database): string[] {
+  const rows = db
+    .prepare(
+      `SELECT DISTINCT ${AGENT_FOLDER_SQL} AS cwd
+       FROM agents a
+       LEFT JOIN worktrees w ON w.id = a.worktree_id
+       JOIN projects p ON p.id = a.project_id
+       WHERE a.status IN (${liveIn()})`,
+    )
+    .all(...LIVE_STATUSES) as { cwd: string | null }[];
+  return rows.flatMap((r) => (r.cwd ? [r.cwd] : []));
+}
+
 export function listLiveAgentIds(db: Database.Database, projectId: string): string[] {
   const rows = db
     .prepare(`SELECT id FROM agents WHERE project_id = ? AND status IN (${liveIn()})`)

@@ -24,9 +24,6 @@ import {
 // Identity is the token — the server maps it to agent/project and re-reads
 // access mode from the DB. The env mode below only shapes tools/list display;
 // it fails CLOSED to "read" (enforcement is server-side regardless).
-//
-// Order (resolveShimToken) is the whole identity fix: the per-session env token
-// first, the directory's shared token file only when that is missing.
 function resolveToken(): string {
   return resolveShimToken(process.env, process.cwd());
 }
@@ -34,7 +31,7 @@ function resolveToken(): string {
 let token = resolveToken();
 if (!token) {
   process.stderr.write(
-    `[exegol-mcp-shim] no EXEGOL_MCP_TOKEN in env or ${join(process.cwd(), ".mcp.json")} — calls will be unauthorized\n`,
+    `[exegol-mcp-shim] no token (EXEGOL_MCP_TOKEN, EXEGOL_MCP_TOKEN_PATH or ${join(process.cwd(), ".mcp.json")}): calls will be unauthorized\n`,
   );
 }
 const displayMode = (process.env.EXEGOL_ACCESS_MODE as ExegolAccessMode) ?? "read";
