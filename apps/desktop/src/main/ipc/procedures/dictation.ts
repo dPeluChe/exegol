@@ -16,7 +16,7 @@ import {
 } from "../../dictation/history";
 import { setDictationListening } from "../../dictation/keys";
 import { askMediaConsent } from "../../dictation/media-pause";
-import { askMic, openMicSettings } from "../../dictation/mic";
+import { armMicTest, askMic, openMicSettings } from "../../dictation/mic";
 import {
   clearRecordings,
   ensureRecordingsDir,
@@ -131,4 +131,6 @@ export function registerDictationIpc(): void {
   ipcMain.handle("dictation:insert-browser", (event, input) =>
     insertTextInBrowserPane(event.sender, input ?? {}),
   );
+  // An IPC, not tRPC: the arm is bound to the window that pressed Test
+  ipcMain.handle("dictation:test-mic", (event) => armMicTest(event.sender));
 }

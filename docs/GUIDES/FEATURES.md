@@ -199,7 +199,9 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
   to compare models offline (`docs/GUIDES/DICTATION_BENCH.md`); also listed in Settings > Storage.
   Cmd+P (Ctrl+Shift+P) or the card's Pause button pauses a dictation and resumes it with the same
   text and target; Settings > Dictation > Input picks the microphone (system default when it is
-  missing, said in the card).
+  missing, said in the card, and again once it is back); its Test button shows a live level for
+  15 s. A mic unplugged mid-dictation hands over to the system default without stopping, and a
+  dictation that heard nothing says which input to check.
 - **Speech models** (Settings > Models): local speech-to-text models for voice dictation,
   downloaded on request into `~/.exegol/models`, resumable and checked against a pinned
   SHA-256. Each lists what it is best for, languages, size and license; a non-commercial model is

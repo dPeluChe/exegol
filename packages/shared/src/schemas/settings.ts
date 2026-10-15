@@ -44,6 +44,7 @@ export const dictationSettingsSchema = z.object({
     .default(DEFAULT_DICTATION_SETTINGS.recordingsRetentionDays),
   inputDeviceId: z.string().max(256).nullable().default(null),
   inputDeviceLabel: z.string().max(256).nullable().default(null),
+  inputDeviceGroupId: z.string().max(256).nullable().default(null),
 });
 
 export const settingsSchema = z.object({

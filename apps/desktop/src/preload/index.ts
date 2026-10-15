@@ -275,6 +275,8 @@ contextBridge.exposeInMainWorld("api", {
       safe.invoke("dictation:mark-browser", input) as Promise<boolean>,
     insertInBrowser: (input: { paneId: string; projectId: string; text: string }) =>
       safe.invoke("dictation:insert-browser", input) as Promise<boolean>,
+    /** Settings > Dictation > Input's Test: lets this window open the mic once, for a few seconds */
+    testMic: () => safe.invoke("dictation:test-mic") as Promise<string>,
     onPartial: (callback: (event: unknown) => void) => listen("dictation:partial", callback),
     onEngine: (callback: (event: unknown) => void) => listen("dictation:engine", callback),
     onKey: (callback: (event: unknown) => void) => listen("dictation:key", callback),

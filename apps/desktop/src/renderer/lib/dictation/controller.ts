@@ -21,6 +21,7 @@ import { paneRoot } from "../pane-focus";
 import { trpcInvoke, trpcMutate } from "../trpc-client";
 import { type Capture, startCapture } from "./capture";
 import { insertIntoEditorIn } from "./editors";
+import { isFlat, peakOf, resolveInput } from "./inputs";
 import {
   confirmTarget,
   type DictationTarget,
@@ -45,6 +46,8 @@ interface Run {
   /** Chunks captured before the session id came back */
   early: Float32Array[];
   vad: VadState;
+  /** Loudest sample sent: a dictation that stays flat heard nothing from the mic */
+  peak: number;
   cancelled: boolean;
   /** Paused: chunks are dropped here, before IPC, and the VAD does not count them */
   paused: boolean;
@@ -139,9 +142,59 @@ function onChunk(samples: Float32Array): void {
   const r = run;
   if (!r || r.cancelled || r.paused) return;
   r.vad = updateVad(r.vad, rms(samples), (samples.length / DICTATION_SAMPLE_RATE) * 1000);
+  r.peak = peakOf(samples, r.peak);
   if (r.sessionId) window.api.dictation.sendAudio(r.sessionId, samples);
   else r.early.push(samples);
   if (shouldAutoStop(r.vad, r.settings.autoStopSilenceSec)) void stopDictation("silence");
+}
+
+/** The saved mic, found again when the OS gave it a new id: the setting follows the new id */
+async function pickInput(settings: DictationSettings): Promise<string | null> {
+  if (!settings.inputDeviceId) return null;
+  const devices = await navigator.mediaDevices.enumerateDevices().catch(() => []);
+  const { id, relinked } = resolveInput(devices, {
+    id: settings.inputDeviceId,
+    label: settings.inputDeviceLabel,
+    groupId: settings.inputDeviceGroupId,
+  });
+  if (relinked && id) {
+    const groupId = devices.find((d) => d.deviceId === id)?.groupId || null;
+    const dictation = { ...settings, inputDeviceId: id, inputDeviceGroupId: groupId };
+    trpcMutate("settings.update", { dictation })
+      .then(() => queryClient?.invalidateQueries({ queryKey: ["settings"] }))
+      .catch(() => {});
+  }
+  return id;
+}
+
+/** The open mic was unplugged mid-dictation: the system default takes over in the same session
+ *  (pause, text so far and target kept). Main must arm getUserMedia again for the reopen */
+async function inputLost(r: Run): Promise<void> {
+  const capture = r.capture;
+  if (run !== r || !capture || r.cancelled) return;
+  const name = store().inputName || r.settings.inputDeviceLabel || "The microphone";
+  try {
+    await trpcMutate("dictation.requestMic");
+    if (run !== r || r.capture !== capture) return;
+    const label = await capture.switchToDefault();
+    if (run !== r) return;
+    store().set({
+      inputName: label || null,
+      inputNotice: `${name} disconnected, using system default`,
+    });
+  } catch (err) {
+    if (run === r) fail(`Microphone disconnected: ${errorText(err)}`);
+  }
+}
+
+/** The mic gave no signal or the model found no words: say which input, not just nothing */
+function heardNothing(inputName: string | null): void {
+  toast().addToast({
+    type: "warning",
+    title: `Heard nothing from ${inputName || "the microphone"}`,
+    body: "Check the input in Settings > Dictation",
+    action: { label: "Open Settings", run: () => void window.api.settings.open("dictation") },
+  });
 }
 
 async function loadStatus(): Promise<DictationStatus> {
@@ -188,6 +241,7 @@ export async function startDictation(): Promise<void> {
     sessionId: null,
     early: [],
     vad: VAD_START,
+    peak: 0,
     cancelled: false,
     paused: false,
     stopWhenReady: null,
@@ -220,7 +274,9 @@ export async function startDictation(): Promise<void> {
     if (mic === "denied" || mic === "restricted") return endWith({ phase: "mic-denied" });
     if (gone()) return;
     try {
-      current.capture = await startCapture(onChunk, current.settings.inputDeviceId);
+      const deviceId = await pickInput(current.settings);
+      if (gone()) return;
+      current.capture = await startCapture(onChunk, deviceId, () => void inputLost(current));
     } catch (err) {
       const denied = err instanceof DOMException && err.name === "NotAllowedError";
       return endWith(
@@ -272,6 +328,13 @@ export async function stopDictation(by: DictationStopReason): Promise<void> {
   r.capture?.stop();
   r.capture = null;
   r.cancelled = true;
+  const inputName = store().inputName;
+  if (isFlat(r.peak)) {
+    void trpcMutate("dictation.cancel", { sessionId, source: "flat" });
+    reset();
+    heardNothing(inputName);
+    return;
+  }
   if (!r.vad.heard) {
     void trpcMutate("dictation.cancel", { sessionId, source: "nothing-heard" });
     reset();
@@ -293,7 +356,7 @@ export async function stopDictation(by: DictationStopReason): Promise<void> {
     reset();
     const clean = sanitizeDictation(text);
     if (!clean) {
-      toast().addToast({ type: "info", title: "No words recognized" });
+      heardNothing(inputName);
       return;
     }
     await insertDictation(clean, target, r.settings.pressEnter, r.field);

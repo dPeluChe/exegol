@@ -32,6 +32,15 @@ describe("allowMediaRequest", () => {
     expect(allowMediaRequest({ ...check, mediaTypes: ["video"] })).toBe(false);
   });
 
+  it("lets an app window open the mic only while its Test button armed it, audio only", () => {
+    const test = { ...base, isMainWindow: false, armed: false, micTest: true, isAppWindow: true };
+    expect(allowMediaRequest(test)).toBe(true);
+    expect(allowMediaRequest({ ...test, micTest: false })).toBe(false);
+    expect(allowMediaRequest({ ...test, isAppWindow: false })).toBe(false);
+    expect(allowMediaRequest({ ...test, url: "https://example.com/" })).toBe(false);
+    expect(allowMediaRequest({ ...test, mediaTypes: ["audio", "video"] })).toBe(false);
+  });
+
   it("matches the dev server origin exactly", () => {
     const dev = { ...base, appOrigin: "http://localhost:5173" };
     expect(allowMediaRequest({ ...dev, url: "http://localhost:5173/?x=1" })).toBe(true);

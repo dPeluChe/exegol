@@ -123,6 +123,7 @@ interface Window {
         projectId: string;
         text: string;
       }) => Promise<boolean>;
+      testMic: () => Promise<import("@exegol/shared").MicStatus>;
       onPartial: (
         callback: (event: import("@exegol/shared").DictationPartialEvent) => void,
       ) => () => void;
