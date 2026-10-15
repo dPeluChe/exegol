@@ -280,7 +280,7 @@ function SessionEndedState({
     );
   }
   return (
-    <div className="flex h-full flex-col items-center justify-center overflow-y-auto">
+    <div className="@container-[size] flex h-full flex-col items-center justify-center-safe overflow-y-auto">
       <EndedSessionLauncher
         agent={agent}
         paneId={paneId}

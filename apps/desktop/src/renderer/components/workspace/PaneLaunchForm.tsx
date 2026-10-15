@@ -64,7 +64,7 @@ export function PaneLaunchForm({
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: the form's keys (Esc back, Enter launch)
     <div
-      className="my-auto flex w-full max-w-md shrink-0 flex-col gap-3 rounded-xl border border-border bg-bg-primary p-4 shadow-2xl"
+      className="my-auto flex w-full max-w-md shrink-0 flex-col gap-3 rounded-xl border border-border bg-bg-primary p-4 shadow-2xl @max-xs:gap-2 @max-xs:p-3"
       onKeyDown={onKeyDown}
     >
       <div className="flex items-start gap-2">

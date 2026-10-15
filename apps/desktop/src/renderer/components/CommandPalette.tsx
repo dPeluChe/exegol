@@ -24,7 +24,12 @@ import { appKeys } from "../lib/keymap";
 import { movePane, paneMoveTargets } from "../lib/move-pane";
 import { SIDEBAR_VIEW_META } from "../lib/sidebar-views";
 import { runCommandInNewTab } from "../lib/spawn-shell";
-import { addTabAndFocus, openTerminalHere, splitActiveWithTerminal } from "../lib/split-terminal";
+import {
+  addTabAndFocus,
+  openTerminalHere,
+  splitActivePane,
+  splitActiveWithTerminal,
+} from "../lib/split-terminal";
 import { trpcInvoke } from "../lib/trpc-client";
 import { jumpToAgent, useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
@@ -160,7 +165,7 @@ function useCommands(close: () => void, open: boolean): Command[] {
         category: "workspace",
         icon: Split,
         shortcut: "⌘D",
-        action: run(() => useWorkspaceStore.getState().splitFocusedPane("horizontal")),
+        action: run(() => splitActivePane("horizontal")),
       },
       {
         id: "ws:split-v",
@@ -168,7 +173,7 @@ function useCommands(close: () => void, open: boolean): Command[] {
         category: "workspace",
         icon: Split,
         shortcut: "⌘⇧D",
-        action: run(() => useWorkspaceStore.getState().splitFocusedPane("vertical")),
+        action: run(() => splitActivePane("vertical")),
       },
 
       {
