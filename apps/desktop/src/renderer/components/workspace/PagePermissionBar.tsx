@@ -1,8 +1,8 @@
+import type { PermissionAnswer } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { ShieldQuestion, X } from "lucide-react";
-import { useState } from "react";
-import { useMountEffect } from "../../hooks/use-mount-effect";
 import { useToastStore } from "../../stores/toasts";
+import { barBtn, usePaneQueue } from "./pane-bar";
 
 interface PermissionRequest {
   id: string;
@@ -12,21 +12,10 @@ interface PermissionRequest {
   what: string;
 }
 
-type Answer = "once" | "always" | "block" | "deny";
-
-const btn =
-  "shrink-0 rounded border px-2 py-0.5 text-[10px] font-medium transition-colors hover:bg-white/10";
-
 function usePermissionRequests(paneId: string) {
-  const [requests, setRequests] = useState<PermissionRequest[]>([]);
-  // A pane keeps its id while mounted
-  useMountEffect(() => {
-    const offRequest = window.api.browser.onPermissionRequest((r) => {
-      if (r.paneId === paneId) setRequests((list) => [...list, r]);
-    });
-    const offClosed = window.api.browser.onPermissionClosed(({ id }) =>
-      setRequests((list) => list.filter((r) => r.id !== id)),
-    );
+  const { first, remove } = usePaneQueue<PermissionRequest>(paneId, (add, drop) => {
+    const offRequest = window.api.browser.onPermissionRequest(add);
+    const offClosed = window.api.browser.onPermissionClosed(({ id }) => drop(id));
     const offNotice = window.api.browser.onPermissionNotice((n) => {
       if (n.paneId !== paneId || n.kind !== "location-off") return;
       useToastStore.getState().addToast({
@@ -42,11 +31,11 @@ function usePermissionRequests(paneId: string) {
       offNotice();
     };
   });
-  const answer = (id: string, a: Answer) => {
-    setRequests((list) => list.filter((r) => r.id !== id));
+  const answer = (id: string, a: PermissionAnswer) => {
+    remove(id);
     void window.api.browser.answerPermission(id, a).catch(() => {});
   };
-  return { request: requests[0] ?? null, answer };
+  return { request: first, answer };
 }
 
 /** A pane's page asks for a site permission. The page waits for the answer, as in Chrome; Esc
@@ -54,11 +43,12 @@ function usePermissionRequests(paneId: string) {
 export function PagePermissionBar({ paneId }: { paneId: string }) {
   const { request, answer } = usePermissionRequests(paneId);
   if (!request) return null;
-  const reply = (a: Answer) => answer(request.id, a);
+  const reply = (a: PermissionAnswer) => answer(request.id, a);
+  const host = request.host || "This page";
   return (
     <div
       role="alertdialog"
-      aria-label={`${request.host || "This page"} wants to ${request.what}`}
+      aria-label={`${host} wants to ${request.what}`}
       onKeyDown={(e) => {
         if (e.key === "Escape") reply("deny");
       }}
@@ -66,18 +56,17 @@ export function PagePermissionBar({ paneId }: { paneId: string }) {
     >
       <ShieldQuestion className="h-3 w-3 shrink-0 text-accent" />
       <div className="min-w-0 flex-1 truncate">
-        <span className="font-medium text-text-primary">{request.host || "This page"}</span> wants
-        to {request.what}
+        <span className="font-medium text-text-primary">{host}</span> wants to {request.what}
       </div>
-      <button type="button" className={cn(btn, "border-border")} onClick={() => reply("block")}>
+      <button type="button" className={cn(barBtn, "border-border")} onClick={() => reply("block")}>
         Block
       </button>
-      <button type="button" className={cn(btn, "border-border")} onClick={() => reply("always")}>
+      <button type="button" className={cn(barBtn, "border-border")} onClick={() => reply("always")}>
         Always allow on this site
       </button>
       <button
         type="button"
-        className={cn(btn, "border-accent/40 text-accent")}
+        className={cn(barBtn, "border-accent/40 text-accent")}
         onClick={() => reply("once")}
       >
         Allow once

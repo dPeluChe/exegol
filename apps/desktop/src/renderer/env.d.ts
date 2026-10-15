@@ -204,7 +204,7 @@ interface Window {
       ) => () => void;
       answerPermission: (
         id: string,
-        answer: "once" | "always" | "block" | "deny",
+        answer: import("@exegol/shared").PermissionAnswer,
       ) => Promise<boolean>;
     };
     onPreviewLink: (

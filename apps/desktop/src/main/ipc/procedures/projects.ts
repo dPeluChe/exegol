@@ -12,7 +12,11 @@ import { MAX_BROWSER_HOSTS, parseBrowserHosts, projectCreateSchema } from "@exeg
 import { coreRust } from "../../agents/spawn-env";
 import { getWorktreeName, removeManagedWorktree } from "../../agents/worktrees";
 import { copyCookiesForHosts, markCookiesMigrated } from "../../browser/electron-host";
-import { forgetSitePermission, listSitePermissions } from "../../browser/page-permissions";
+import {
+  forgetProjectPermissions,
+  forgetSitePermission,
+  listSitePermissions,
+} from "../../browser/page-permissions";
 import {
   createProject,
   deleteProject,
@@ -254,6 +258,7 @@ export const projectRouter = router({
       ),
     );
     deleteProject(ctx.db, input.id);
+    forgetProjectPermissions(input.id);
     return { success: true };
   }),
 

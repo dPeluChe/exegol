@@ -2,27 +2,11 @@
  *  ones ask the user, what a saved or one-time answer allows, and the requests waiting on a
  *  bar in the pane. Clipboard is clipboard-policy's. No Electron here */
 
-export type SitePermission =
-  | "geolocation"
-  | "notifications"
-  | "camera"
-  | "microphone"
-  | "midi"
-  | "idle-detection"
-  | "window-management"
-  | "external-app";
+import { PERMISSION_ANSWERS, type PermissionAnswer, type SiteDecision } from "@exegol/shared";
+import { originOf } from "./clipboard-policy";
+import { createPendingStore, MAX_PENDING_PER_PAGE, type PendingItem } from "./pending-store";
 
-export type SiteDecision = "allow" | "block";
-/** once: until the page leaves the origin; always / block: saved for the project and origin */
-export type PermissionAnswer = "once" | "always" | "block" | "deny";
-
-/** allow / deny without asking; ask: the bar decides `needs` (all of them) */
-export type PermissionRoute =
-  | { kind: "allow" }
-  | { kind: "deny" }
-  | { kind: "ask"; needs: SitePermission[] };
-
-export const SITE_PERMISSIONS: readonly SitePermission[] = [
+export const SITE_PERMISSIONS = [
   "geolocation",
   "notifications",
   "camera",
@@ -31,10 +15,16 @@ export const SITE_PERMISSIONS: readonly SitePermission[] = [
   "idle-detection",
   "window-management",
   "external-app",
-];
+] as const;
+export type SitePermission = (typeof SITE_PERMISSIONS)[number];
+
+/** allow / deny without asking; ask: the bar decides `needs` (all of them) */
+export type PermissionRoute =
+  | { kind: "allow" }
+  | { kind: "deny" }
+  | { kind: "ask"; needs: SitePermission[] };
 
 export const PERMISSION_TIMEOUT_MS = 120_000;
-export const MAX_PENDING_PERMISSIONS_PER_PAGE = 3;
 
 const ASKING: Record<string, SitePermission> = {
   geolocation: "geolocation",
@@ -95,45 +85,39 @@ const LABEL: Record<SitePermission, string> = {
 
 export const permissionLabel = (p: string): string => LABEL[p as SitePermission] ?? p;
 
+const PROMPT: Record<SitePermission, string> = {
+  geolocation: "use your location",
+  notifications: "show notifications",
+  camera: "use your camera",
+  microphone: "use your microphone",
+  midi: "use your MIDI devices",
+  "idle-detection": "know when you are using this device",
+  "window-management": "manage windows on your displays",
+  "external-app": "open a link in another app",
+};
+
 /** The bar's sentence after "<host> wants to" */
 export function permissionPrompt(needs: readonly SitePermission[]): string {
   if (needs.includes("camera") && needs.includes("microphone")) {
     return "use your camera and microphone";
   }
-  const p = needs[0];
-  if (p === "geolocation") return "use your location";
-  if (p === "notifications") return "show notifications";
-  if (p === "camera") return "use your camera";
-  if (p === "microphone") return "use your microphone";
-  if (p === "midi") return "use your MIDI devices";
-  if (p === "idle-detection") return "know when you are using this device";
-  if (p === "window-management") return "manage windows on your displays";
-  return "open a link in another app";
+  return PROMPT[needs[0] ?? "external-app"];
 }
-
-export const isSitePermission = (p: unknown): p is SitePermission =>
-  typeof p === "string" && (SITE_PERMISSIONS as readonly string[]).includes(p);
 
 /** scheme://host:port of http(s) pages; null for anything else (no saved answer for it) */
 export function permissionOrigin(url: unknown): string | null {
-  if (typeof url !== "string") return null;
-  try {
-    const u = new URL(url);
-    return u.protocol === "http:" || u.protocol === "https:" ? u.origin : null;
-  } catch {
-    return null;
-  }
+  const o = originOf(url);
+  return o && (o.startsWith("http://") || o.startsWith("https://")) ? o : null;
 }
 
+/** A page in a pane, on an http(s) origin (anything else is "denied (no pane)") */
 export interface SitePermissionContext {
-  hasPane: boolean;
-  /** A saved http(s) origin; false = file:, data:, about: and the like */
-  hasOrigin: boolean;
   agentActing: boolean;
   saved: Partial<Record<SitePermission, SiteDecision>>;
   /** Allowed once on this page and origin */
   grantedOnce: ReadonlySet<SitePermission>;
-  pendingOnPage: number;
+  /** Read only when it would ask */
+  pendingOnPage: () => number;
 }
 
 export type SitePermissionOutcome =
@@ -155,32 +139,25 @@ export function decideSitePermission(
   needs: readonly SitePermission[],
   c: SitePermissionContext,
 ): SitePermissionOutcome {
-  if (!c.hasPane || !c.hasOrigin) return "denied (no pane)";
   if (needs.some((p) => c.saved[p] === "block")) return "blocked (saved)";
   const mediaWhileActing = c.agentActing && needs.some((p) => NEVER_WHILE_ACTING.has(p));
   if (allowedBy(needs, c) && !mediaWhileActing) {
     return needs.every((p) => c.saved[p] === "allow") ? "allowed (saved)" : "allowed (once)";
   }
   if (c.agentActing) return "denied (agent acting)";
-  if (c.pendingOnPage >= MAX_PENDING_PERMISSIONS_PER_PAGE) return "denied (too many)";
+  if (c.pendingOnPage() >= MAX_PENDING_PER_PAGE) return "denied (too many)";
   return "ask";
 }
 
-/** permissions.query, Notification.permission, device labels: only what is already allowed */
-export const checkSitePermission = (
-  needs: readonly SitePermission[],
-  c: SitePermissionContext,
-): boolean => {
-  const d = decideSitePermission(needs, c);
-  return d === "allowed (saved)" || d === "allowed (once)";
-};
+export const isAllowed = (o: SitePermissionOutcome): boolean =>
+  o === "allowed (saved)" || o === "allowed (once)";
 
 export const answerAllows = (a: PermissionAnswer): boolean => a === "once" || a === "always";
 
 export const isPermissionAnswer = (a: unknown): a is PermissionAnswer =>
-  a === "once" || a === "always" || a === "block" || a === "deny";
+  (PERMISSION_ANSWERS as readonly unknown[]).includes(a);
 
-const ANSWER_LOG: Record<PermissionAnswer, string> = {
+export const ANSWER_LOG: Record<PermissionAnswer, string> = {
   once: "allowed once",
   always: "allowed always",
   block: "blocked",
@@ -191,11 +168,7 @@ export function permissionLog(needs: readonly SitePermission[], host: string, ou
   return `[Browser] permission ${needs.join("+")} on ${host || "(no host)"}: ${outcome}`;
 }
 
-export const answerLog = (a: PermissionAnswer): string => ANSWER_LOG[a];
-
-export interface PendingPermission {
-  id: string;
-  wcId: number;
+export interface PendingPermission extends PendingItem {
   paneId: string;
   projectId: string;
   origin: string;
@@ -203,57 +176,47 @@ export interface PendingPermission {
   needs: SitePermission[];
   /** Each request for the same thing on the page waits on one bar */
   callbacks: ((granted: boolean) => void)[];
-  notifyClosed?: () => void;
-  timer?: ReturnType<typeof setTimeout>;
+  timer: ReturnType<typeof setTimeout>;
 }
 
-const pending = new Map<string, PendingPermission>();
+const pending = createPendingStore<PendingPermission>();
 const once = new Map<number, { origin: string; granted: Set<SitePermission> }>();
 
 const sameNeeds = (a: readonly SitePermission[], b: readonly SitePermission[]) =>
   a.length === b.length && a.every((p) => b.includes(p));
 
-export function findPendingPermission(wcId: number, origin: string, needs: SitePermission[]) {
-  for (const p of pending.values()) {
-    if (p.wcId === wcId && p.origin === origin && sameNeeds(p.needs, needs)) return p;
-  }
-  return undefined;
-}
+export const findPendingPermission = (
+  wcId: number,
+  origin: string,
+  needs: readonly SitePermission[],
+): PendingPermission | undefined =>
+  pending.find((p) => p.wcId === wcId && p.origin === origin && sameNeeds(p.needs, needs));
 
 export function addPendingPermission(p: PendingPermission): void {
-  pending.set(p.id, p);
+  pending.add(p);
 }
 
-export function getPendingPermission(id: string): PendingPermission | undefined {
-  return pending.get(id);
-}
+export const getPendingPermission = (id: string): PendingPermission | undefined => pending.get(id);
 
-export function pendingPermissionsOf(wcId: number): number {
-  let n = 0;
-  for (const p of pending.values()) if (p.wcId === wcId) n += 1;
-  return n;
-}
+export const pendingPermissionsOf = (wcId: number): number => pending.countOf(wcId);
 
 /** Answers and forgets it; undefined when it is already gone */
-export function settlePermission(id: string, granted: boolean): PendingPermission | undefined {
-  const p = pending.get(id);
+export function settlePermission(
+  id: string,
+  granted: boolean,
+  closeBar = false,
+): PendingPermission | undefined {
+  const p = pending.take(id);
   if (!p) return undefined;
-  pending.delete(id);
-  if (p.timer) clearTimeout(p.timer);
+  clearTimeout(p.timer);
   for (const cb of p.callbacks) cb(granted);
+  if (closeBar) p.notifyClosed();
   return p;
 }
 
 /** The page went away (new document or webview gone): every request of it is denied */
-export function denyPermissionsOf(wcId: number): PendingPermission[] {
-  const out: PendingPermission[] = [];
-  for (const p of [...pending.values()]) {
-    if (p.wcId !== wcId) continue;
-    settlePermission(p.id, false);
-    p.notifyClosed?.();
-    out.push(p);
-  }
-  return out;
+export function denyPermissionsOf(wcId: number): void {
+  for (const p of pending.of(wcId)) settlePermission(p.id, false, true);
 }
 
 export function grantOnce(wcId: number, origin: string, needs: readonly SitePermission[]): void {

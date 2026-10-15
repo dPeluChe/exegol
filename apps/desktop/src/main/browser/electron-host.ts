@@ -42,7 +42,7 @@ import {
   takeOverPageDialogs,
   trackPageEvents,
 } from "./page-events";
-import { installPagePermissions, trackPagePermissions } from "./page-permissions";
+import { installPagePermissions } from "./page-permissions";
 import { blocksAgentRequest, logUrl } from "./request-guard";
 import {
   type BrowserHost,
@@ -200,7 +200,6 @@ function trackWebview(wc: WebContents): void {
   ringOf(id);
   guardWebview(wc);
   trackPageEvents(wc);
-  trackPagePermissions(wc);
   wc.on("console-message", (...args: unknown[]) => {
     const d = args[0] as {
       level?: string;

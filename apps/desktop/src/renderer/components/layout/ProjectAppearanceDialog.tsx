@@ -1,4 +1,10 @@
-import { type IdeType, ideLabel, type Project, parseBrowserHosts } from "@exegol/shared";
+import {
+  type IdeType,
+  ideLabel,
+  type Project,
+  parseBrowserHosts,
+  type SitePermissionRow,
+} from "@exegol/shared";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
@@ -208,13 +214,6 @@ function ShortcutPicker({ projectId }: { projectId: string }) {
       </select>
     </label>
   );
-}
-
-interface SitePermissionRow {
-  origin: string;
-  permission: string;
-  decision: "allow" | "block";
-  label: string;
 }
 
 /** "Always allow" / "Block" answers given in this project's browser panes; removing one makes

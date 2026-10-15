@@ -1,44 +1,41 @@
 import { randomUUID } from "node:crypto";
-import { ipcMain, type WebContents, webContents } from "electron";
+import type { PermissionAnswer, SiteDecision, SitePermissionRow } from "@exegol/shared";
+import { ipcMain, type WebContents } from "electron";
 import type Database from "libsql";
 import { coreRust } from "../agents/spawn-env";
 import {
   deleteBrowserPermission,
   listBrowserPermissions,
-  type SavedSitePermission,
   saveBrowserPermission,
 } from "../db/queries/browser-permissions";
-import { createLogLimiter } from "../lib/log-limiter";
+import { createLogLimiter, suppressedNote } from "../lib/log-limiter";
 import { logger } from "../lib/logger";
 import { isAgentActing } from "./control";
 import { dialogHost } from "./page-dialogs";
+import { pageClipboardDecision } from "./page-events";
 import {
+  ANSWER_LOG,
   addPendingPermission,
   answerAllows,
-  answerLog,
-  checkSitePermission,
   decideSitePermission,
-  denyPermissionsOf,
   findPendingPermission,
-  forgetOnce,
-  forgetOnceUnless,
   getPendingPermission,
   grantedOnceOn,
   grantOnce,
+  isAllowed,
   isPermissionAnswer,
   PERMISSION_TIMEOUT_MS,
-  type PermissionAnswer,
   pendingPermissionsOf,
   permissionLabel,
   permissionLog,
   permissionOrigin,
   permissionPrompt,
   routePermission,
-  type SiteDecision,
   type SitePermission,
   type SitePermissionContext,
   settlePermission,
 } from "./site-permissions";
+import { hostedBy, sendTo } from "./webview-guard";
 
 type PaneLookup = (wcId: number) => { paneId: string; projectId: string } | undefined;
 
@@ -47,17 +44,17 @@ let dbRef: Database.Database | null = null;
 const saved = new Map<string, Map<string, SiteDecision>>();
 /** Saved answers apply on every request (watchPosition): one line per page and minute */
 const quiet = createLogLimiter(60_000);
-let locationNoticeSent = false;
+/** macOS asks once; afterwards only System Settings changes it */
+let systemLocation = "not-determined";
 
-const isPage = (wc: WebContents | null): wc is WebContents =>
-  !!wc && !wc.isDestroyed() && wc.getType() === "webview";
+const savedKey = (origin: string, permission: string) => `${origin} ${permission}`;
 
 function savedOf(projectId: string): Map<string, SiteDecision> {
   let m = saved.get(projectId);
   if (!m && dbRef) {
     m = new Map(
       listBrowserPermissions(dbRef, projectId).map((r) => [
-        `${r.origin} ${r.permission}`,
+        savedKey(r.origin, r.permission),
         r.decision,
       ]),
     );
@@ -66,50 +63,39 @@ function savedOf(projectId: string): Map<string, SiteDecision> {
   return m ?? new Map();
 }
 
-function contextOf(
-  wc: WebContents,
-  origin: string | null,
-  needs: readonly SitePermission[],
-): SitePermissionContext & { pane?: { paneId: string; projectId: string } } {
+/** null: no pane or no http(s) origin, denied */
+function contextOf(wc: WebContents, origin: string | null, needs: readonly SitePermission[]) {
   const pane = paneOf(wc.id);
-  const own = pane && origin ? savedOf(pane.projectId) : new Map<string, SiteDecision>();
+  if (!pane || !origin) return null;
+  const own = savedOf(pane.projectId);
   const savedFor: SitePermissionContext["saved"] = {};
   for (const p of needs) {
-    const d = own.get(`${origin} ${p}`);
+    const d = own.get(savedKey(origin, p));
     if (d) savedFor[p] = d;
   }
-  return {
-    pane,
-    hasPane: !!pane,
-    hasOrigin: !!origin,
-    agentActing: !!pane && isAgentActing(pane.paneId),
+  const c: SitePermissionContext = {
+    agentActing: isAgentActing(pane.paneId),
     saved: savedFor,
     grantedOnce: grantedOnceOn(wc.id, origin),
-    pendingOnPage: pendingPermissionsOf(wc.id),
+    pendingOnPage: () => pendingPermissionsOf(wc.id),
   };
-}
-
-function sendTo(host: WebContents | null, channel: string, payload: unknown): void {
-  if (host && !host.isDestroyed()) host.send(channel, payload);
+  return { pane, origin, c };
 }
 
 /** Chromium never asks macOS for Location Services: without this the page's request hangs */
-function ensureSystemLocation(wc: WebContents, paneId: string): void {
+function ensureSystemLocation(wc: WebContents, paneId: string, needs: readonly SitePermission[]) {
+  if (!needs.includes("geolocation") || systemLocation !== "not-determined") return;
   // Optional: a native module built before this export lacks it
-  const native = coreRust as unknown as {
-    locationAuthorization?: (request: boolean) => string;
-  } | null;
-  if (process.platform !== "darwin" || !native?.locationAuthorization) return;
-  let status: string;
+  if (process.platform !== "darwin" || !coreRust?.locationAuthorization) return;
   try {
-    status = native.locationAuthorization(true);
+    systemLocation = coreRust.locationAuthorization(true);
   } catch {
     return;
   }
-  if (status === "not-determined") logger.info("[Browser] location: asked macOS for access");
-  if ((status === "denied" || status === "restricted") && !locationNoticeSent) {
-    locationNoticeSent = true;
-    logger.info(`[Browser] location: macOS Location Services ${status} for Exegol`);
+  if (systemLocation === "not-determined")
+    logger.info("[Browser] location: asked macOS for access");
+  if (systemLocation === "denied" || systemLocation === "restricted") {
+    logger.info(`[Browser] location: macOS Location Services ${systemLocation} for Exegol`);
     sendTo(wc.hostWebContents ?? null, "browser:permission-notice", {
       paneId,
       kind: "location-off",
@@ -117,52 +103,46 @@ function ensureSystemLocation(wc: WebContents, paneId: string): void {
   }
 }
 
-function granted(wc: WebContents, paneId: string, needs: readonly SitePermission[]): void {
-  if (needs.includes("geolocation")) ensureSystemLocation(wc, paneId);
-}
-
-/** A webview's permission request. false: not a page's site permission (the app windows' and
- *  clipboard rules decide it) */
+/** A browser pane page's permission request: clipboard by its policy, the rest by the pane's
+ *  permission bar (never silent) */
 export function requestPagePermission(
-  wc: WebContents | null,
+  wc: WebContents,
   permission: string,
   mediaTypes: readonly string[],
   url: string,
   callback: (granted: boolean) => void,
-): boolean {
-  if (!isPage(wc)) return false;
+): void {
   const route = routePermission(permission, mediaTypes);
-  if (!route) return false;
+  if (!route) {
+    callback(pageClipboardDecision(wc, permission, url));
+    return;
+  }
   if (route.kind !== "ask") {
     callback(route.kind === "allow");
-    return true;
+    return;
   }
   const { needs } = route;
   const origin = permissionOrigin(url);
-  const host = dialogHost(url);
-  const c = contextOf(wc, origin, needs);
-  const outcome = decideSitePermission(needs, c);
-  if (outcome !== "ask") {
-    const ok = outcome.startsWith("allowed");
+  const hostOf = () => dialogHost(origin ?? url);
+  const ctx = contextOf(wc, origin, needs);
+  const outcome = ctx ? decideSitePermission(needs, ctx.c) : "denied (no pane)";
+  if (outcome !== "ask" || !ctx) {
+    const ok = isAllowed(outcome);
     const skipped = quiet.take(`${wc.id} ${needs.join("+")} ${outcome}`, Date.now());
     if (skipped !== null) {
-      const more = skipped > 0 ? ` (+${skipped} suppressed)` : "";
-      logger.info(`${permissionLog(needs, host, outcome)}${more}`);
+      logger.info(`${permissionLog(needs, hostOf(), outcome)}${suppressedNote(skipped)}`);
     }
-    if (ok && c.pane) granted(wc, c.pane.paneId, needs);
+    if (ok && ctx) ensureSystemLocation(wc, ctx.pane.paneId, needs);
     callback(ok);
-    return true;
+    return;
   }
-  const pane = c.pane;
-  if (!pane || !origin) {
-    callback(false);
-    return true;
-  }
-  const same = findPendingPermission(wc.id, origin, needs);
+  const same = findPendingPermission(wc.id, ctx.origin, needs);
   if (same) {
     same.callbacks.push(callback);
-    return true;
+    return;
   }
+  const { pane } = ctx;
+  const host = hostOf();
   // Captured now: on teardown hostWebContents is gone
   const hostWc = wc.hostWebContents ?? null;
   const id = randomUUID();
@@ -171,16 +151,13 @@ export function requestPagePermission(
     wcId: wc.id,
     paneId: pane.paneId,
     projectId: pane.projectId,
-    origin,
+    origin: ctx.origin,
     host,
     needs,
     callbacks: [callback],
     notifyClosed: () => sendTo(hostWc, "browser:permission-closed", { id }),
     timer: setTimeout(() => {
-      const p = settlePermission(id, false);
-      if (!p) return;
-      p.notifyClosed?.();
-      logger.info(permissionLog(needs, host, "timeout"));
+      if (settlePermission(id, false, true)) logger.info(permissionLog(needs, host, "timeout"));
     }, PERMISSION_TIMEOUT_MS),
   });
   sendTo(hostWc, "browser:permission-request", {
@@ -189,58 +166,42 @@ export function requestPagePermission(
     host,
     what: permissionPrompt(needs),
   });
-  return true;
 }
 
-/** Sync checks (permissions.query, Notification.permission, device labels). null: not a page */
+/** Sync checks (permissions.query, Notification.permission, device labels) of a pane's page */
 export function checkPagePermission(
-  wc: WebContents | null,
+  wc: WebContents,
   permission: string,
   mediaTypes: readonly string[],
   url: string,
-): boolean | null {
-  if (!isPage(wc)) return null;
+): boolean {
   const route = routePermission(permission, mediaTypes);
-  if (!route) return null;
+  if (!route) return pageClipboardDecision(wc, permission, url);
   if (route.kind !== "ask") return route.kind === "allow";
-  const origin = permissionOrigin(url);
-  return checkSitePermission(route.needs, contextOf(wc, origin, route.needs));
-}
-
-/** One-time grants follow the page's origin; a new document drops the bars of the old one */
-export function trackPagePermissions(wc: WebContents): void {
-  const id = wc.id;
-  wc.on("did-navigate", (_e, url) => {
-    denyPermissionsOf(id);
-    forgetOnceUnless(id, permissionOrigin(url));
-  });
-  wc.once("destroyed", () => {
-    denyPermissionsOf(id);
-    forgetOnce(id);
-  });
+  const ctx = contextOf(wc, permissionOrigin(url), route.needs);
+  return !!ctx && isAllowed(decideSitePermission(route.needs, ctx.c));
 }
 
 function answer(sender: WebContents, input: { id?: unknown; answer?: unknown }): boolean {
   if (typeof input?.id !== "string" || !isPermissionAnswer(input.answer)) return false;
   const p = getPendingPermission(input.id);
-  const wc = p ? webContents.fromId(p.wcId) : undefined;
-  if (!p || !wc || wc.isDestroyed() || wc.hostWebContents !== sender) return false;
+  const wc = hostedBy(sender, p);
+  if (!p || !wc) return false;
   const a: PermissionAnswer = input.answer;
   if (dbRef && (a === "always" || a === "block")) {
-    const decision = a === "block" ? "block" : "allow";
-    for (const perm of p.needs) saveBrowserPermission(dbRef, p.projectId, p.origin, perm, decision);
-    saved.delete(p.projectId);
+    const db = dbRef;
+    const decision: SiteDecision = a === "block" ? "block" : "allow";
+    db.transaction(() => {
+      for (const perm of p.needs) saveBrowserPermission(db, p.projectId, p.origin, perm, decision);
+    })();
+    for (const perm of p.needs) saved.get(p.projectId)?.set(savedKey(p.origin, perm), decision);
   }
   if (a === "once") grantOnce(p.wcId, p.origin, p.needs);
-  logger.info(permissionLog(p.needs, p.host, answerLog(a)));
+  logger.info(permissionLog(p.needs, p.host, ANSWER_LOG[a]));
   const ok = answerAllows(a);
   settlePermission(p.id, ok);
-  if (ok) granted(wc, p.paneId, p.needs);
+  if (ok) ensureSystemLocation(wc, p.paneId, p.needs);
   return true;
-}
-
-export interface SitePermissionRow extends SavedSitePermission {
-  label: string;
 }
 
 export function listSitePermissions(db: Database.Database, projectId: string): SitePermissionRow[] {
@@ -257,10 +218,15 @@ export function forgetSitePermission(
   permission: string,
 ): boolean {
   const removed = deleteBrowserPermission(db, projectId, origin, permission);
-  saved.delete(projectId);
+  saved.get(projectId)?.delete(savedKey(origin, permission));
   if (removed)
     logger.info(`[Browser] permission ${permission} on ${dialogHost(origin)}: forgotten`);
   return removed;
+}
+
+/** The project is gone: its rows went with it (cascade) */
+export function forgetProjectPermissions(projectId: string): void {
+  saved.delete(projectId);
 }
 
 export function installPagePermissions(db: Database.Database, lookup: PaneLookup): void {

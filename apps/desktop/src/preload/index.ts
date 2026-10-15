@@ -387,7 +387,7 @@ contextBridge.exposeInMainWorld("api", {
       listen("browser:permission-closed", callback),
     onPermissionNotice: (callback: (notice: unknown) => void) =>
       listen("browser:permission-notice", callback),
-    answerPermission: (id: string, answer: "once" | "always" | "block" | "deny") =>
+    answerPermission: (id: string, answer: import("@exegol/shared").PermissionAnswer) =>
       safe.invoke("browser:permission-answer", { id, answer }),
   },
   /** An http(s) link clicked in a Files HTML preview (main refused the navigation) */

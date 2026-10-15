@@ -1,35 +1,16 @@
+import type { SavedSitePermission, SiteDecision } from "@exegol/shared";
 import type Database from "libsql";
-
-export interface SavedSitePermission {
-  origin: string;
-  permission: string;
-  decision: "allow" | "block";
-  updatedAt: number;
-}
-
-interface Row {
-  origin: string;
-  permission: string;
-  decision: "allow" | "block";
-  updated_at: number;
-}
 
 export function listBrowserPermissions(
   db: Database.Database,
   projectId: string,
 ): SavedSitePermission[] {
-  const rows = db
+  return db
     .prepare(
-      `SELECT origin, permission, decision, updated_at FROM browser_permissions
+      `SELECT origin, permission, decision, updated_at AS updatedAt FROM browser_permissions
        WHERE project_id = ? ORDER BY origin, permission`,
     )
-    .all(projectId) as Row[];
-  return rows.map((r) => ({
-    origin: r.origin,
-    permission: r.permission,
-    decision: r.decision,
-    updatedAt: r.updated_at,
-  }));
+    .all(projectId) as SavedSitePermission[];
 }
 
 export function saveBrowserPermission(
@@ -37,7 +18,7 @@ export function saveBrowserPermission(
   projectId: string,
   origin: string,
   permission: string,
-  decision: "allow" | "block",
+  decision: SiteDecision,
 ): void {
   db.prepare(
     `INSERT INTO browser_permissions (project_id, origin, permission, decision, updated_at)

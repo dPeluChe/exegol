@@ -15,7 +15,6 @@ import {
   dialogResult,
   dropPendingOf,
   isDialogFlood,
-  MAX_PENDING_PER_PAGE,
   noteDialog,
   pendingCountOf,
   pendingOnPane,
@@ -23,6 +22,7 @@ import {
   takeDialogNotes,
   withDialogNotes,
 } from "./page-dialogs";
+import { MAX_PENDING_PER_PAGE } from "./pending-store";
 
 const ctx = {
   hasPane: true,
@@ -127,6 +127,7 @@ describe("pending dialogs", () => {
       type: "prompt",
       host: "localhost",
       answer: (ok, text) => got.push([ok, text]),
+      notifyClosed: () => {},
     });
     expect(pendingOnPane("p2")?.id).toBe("d1");
     expect(answerPending("d1", true, "name")).toBe(true);
@@ -145,6 +146,7 @@ describe("pending dialogs", () => {
       answer: () => {
         answered = true;
       },
+      notifyClosed: () => {},
     });
     expect(dropPendingOf(9).map((d) => d.id)).toEqual(["d2"]);
     expect(answered).toBe(false);

@@ -1,14 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
+import { MAX_PENDING_PER_PAGE } from "./pending-store";
 import {
   addPendingPermission,
-  checkSitePermission,
   decideSitePermission,
   denyPermissionsOf,
   findPendingPermission,
   forgetOnceUnless,
   grantedOnceOn,
   grantOnce,
-  MAX_PENDING_PERMISSIONS_PER_PAGE,
+  isAllowed,
   pendingPermissionsOf,
   permissionOrigin,
   permissionPrompt,
@@ -18,12 +18,10 @@ import {
 } from "./site-permissions";
 
 const ctx: SitePermissionContext = {
-  hasPane: true,
-  hasOrigin: true,
   agentActing: false,
   saved: {},
   grantedOnce: new Set(),
-  pendingOnPage: 0,
+  pendingOnPage: () => 0,
 };
 
 describe("routePermission", () => {
@@ -77,15 +75,6 @@ describe("decideSitePermission", () => {
     expect(decideSitePermission(["geolocation"], ctx)).toBe("ask");
   });
 
-  it("denies pages with no pane or no http(s) origin", () => {
-    expect(decideSitePermission(["geolocation"], { ...ctx, hasPane: false })).toBe(
-      "denied (no pane)",
-    );
-    expect(decideSitePermission(["geolocation"], { ...ctx, hasOrigin: false })).toBe(
-      "denied (no pane)",
-    );
-  });
-
   it("applies saved answers; one block blocks camera + mic", () => {
     expect(decideSitePermission(["geolocation"], { ...ctx, saved: { geolocation: "allow" } })).toBe(
       "allowed (saved)",
@@ -114,15 +103,15 @@ describe("decideSitePermission", () => {
   });
 
   it("caps the bars waiting on one page", () => {
-    const busy = { ...ctx, pendingOnPage: MAX_PENDING_PERMISSIONS_PER_PAGE };
+    const busy = { ...ctx, pendingOnPage: () => MAX_PENDING_PER_PAGE };
     expect(decideSitePermission(["notifications"], busy)).toBe("denied (too many)");
   });
 
-  it("checks pass only for what is already allowed", () => {
-    expect(checkSitePermission(["geolocation"], ctx)).toBe(false);
-    expect(checkSitePermission(["geolocation"], { ...ctx, saved: { geolocation: "allow" } })).toBe(
-      true,
-    );
+  it("counts as allowed only a saved or one-time grant", () => {
+    expect(isAllowed(decideSitePermission(["geolocation"], ctx))).toBe(false);
+    expect(
+      isAllowed(decideSitePermission(["geolocation"], { ...ctx, saved: { geolocation: "allow" } })),
+    ).toBe(true);
   });
 });
 
@@ -149,6 +138,8 @@ describe("pending requests", () => {
       host: "a.test",
       needs: ["geolocation"],
       callbacks: [callback],
+      notifyClosed: () => {},
+      timer: setTimeout(() => {}, 0),
     });
 
   it("settles once, with every waiting callback", () => {

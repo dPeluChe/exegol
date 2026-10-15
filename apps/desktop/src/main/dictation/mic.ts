@@ -1,7 +1,5 @@
 import type { MicStatus } from "@exegol/shared";
-import { app, type Session, session, shell, systemPreferences, type WebContents } from "electron";
-import { pageClipboardDecision } from "../browser/page-events";
-import { checkPagePermission, requestPagePermission } from "../browser/page-permissions";
+import { app, shell, systemPreferences, type WebContents } from "electron";
 import { getMainWindow } from "../windows/main-window-ref";
 import { allowMediaRequest } from "./media-policy";
 
@@ -64,16 +62,14 @@ const appOrigin = (): string => {
   }
 };
 
-function decide(
+/** App windows' permissions (browser pane pages have their own, browser/page-permissions) */
+export function appPermissionDecision(
   wc: WebContents | null,
   permission: string,
   mediaTypes: string[],
   url: string,
   check = false,
-) {
-  // One handler per session: browser pane pages' clipboard is decided here too
-  const clipboard = pageClipboardDecision(wc, permission, url);
-  if (clipboard !== null) return clipboard;
+): boolean {
   const main = getMainWindow();
   const micTest =
     !!wc && !!testArm && testArm.webContentsId === wc.id && Date.now() < testArm.until;
@@ -90,32 +86,4 @@ function decide(
   });
   if (allowed && micTest && !check) testArm = null;
   return allowed;
-}
-
-const guarded = new WeakSet<Session>();
-
-function guardSession(ses: Session): void {
-  if (guarded.has(ses)) return;
-  guarded.add(ses);
-  ses.setPermissionRequestHandler((wc, permission, callback, details) => {
-    const media = "mediaTypes" in details ? (details.mediaTypes ?? []) : [];
-    const url = details.requestingUrl ?? wc.getURL();
-    // Browser pane pages: the pane's permission bar (page-permissions), never silent
-    if (requestPagePermission(wc, permission, media, url, callback)) return;
-    callback(decide(wc, permission, media, url));
-  });
-  ses.setPermissionCheckHandler((wc, permission, origin, details) => {
-    const media = details.mediaType ? [details.mediaType] : [];
-    const url = details.requestingUrl ?? origin;
-    return (
-      checkPagePermission(wc, permission, media, url) ?? decide(wc, permission, media, url, true)
-    );
-  });
-}
-
-/** Every session (the default one and each project's browser partition): app windows by the
- *  media policy, browser pane pages by their permission bar */
-export function installMediaPermissions(): void {
-  guardSession(session.defaultSession);
-  app.on("session-created", guardSession);
 }
