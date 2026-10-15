@@ -14,14 +14,19 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Send to reaches plain terminals too, both ways: send a command an agent printed to the project's terminal (by default it lands at the prompt for you to review and run) or a shell's output to an agent. Terminals show their folder
 - Settings > Terminal > Send to: "run it (press Enter)" for terminals and "submit it (press Enter)" for agents, both off by default (paste only). An agent asking a question or a permission is never submitted to: the text is pasted and a toast says so. The Send to list's footer says what a pick does, with a link to the setting
 
+### Changed
+- The menu bar icon's menu groups running agents by project (the ones needing you first), names each by alias and task ("argo · Claude Code") with its state and age ("Working 3m · up 2h" under it on macOS), says how many need you, work or idle, and adds Open Dashboard and Settings. "Needs you" and "Working" submenus list those agents across projects, and "Plan limits" shows Claude's and Codex's 5-hour and weekly use with time to reset (the readings the status bar widget already has)
+- Send to names each session by its alias and its CLI session name ("argo · exegoldev", the CLI's icon beside it) and terminals by folder ("Terminal · web"). The list keeps the text it was opened with, so a TUI repainting under it no longer sends nothing
+- Send to lists the sessions of the pane's own project first; other projects sit behind "Other projects (N)", closed until you open it (remembered while the window is open) and open by itself when your project has nothing else. Arrow keys, Enter and Esc work in the list
+
 ### Fixed
 - Selecting text in Claude (or any TUI that uses the mouse): hold Option while dragging (Shift on Linux and Windows) to select in the terminal itself, so Copy and Send to have it; a plain drag is the TUI's own selection. The selection now stays while you move the mouse to Send to (Claude's mouse tracking used to clear it); a click, a key or the wheel still clears it
 - Right-clicking a selection in Claude (or any TUI that uses the mouse) kept only the word under the pointer, or nothing on an empty spot: the selection now stays as it is, and "Send selection to" sends all of it
+- The `[GPU]` startup line in the log and bug reports showed every feature (WebGL included) as disabled: it was read before the GPU process reported. It is now written once the GPU process is up
+- `bun run package:local` (development) builds the Rust module first when it is missing, so a test DMG made in a fresh worktree keeps worktrees and the Rust git/diff
+- Switching projects quickly (2, 3, 4 and back to 2) no longer leaves repeated characters in the terminal you land on. Output that arrived while a terminal was loading its screen was drawn twice, and output still being processed could go missing; each terminal now takes exactly the output its screen does not already hold
+- Terminals in a hidden tab or behind the Dashboard stop drawing until you look at them again, and a terminal no longer sends its program a passing size while the layout settles or after you have left it (the program redrew at each one). An agent in a full-screen view (opencode, Codex, vim) that comes back with a blank screen is asked to redraw
 - The terminal in view after an app start no longer draws for about 10 rows more than its pane until you switch pane or tab. It was sized before the bundled terminal font (MesloLGS NF and the other Nerd Fonts) had loaded, so it used the fallback font's shorter rows; it now refits once the font is in
-
-### Changed
-- Send to names each session by its alias and its CLI session name ("argo · exegoldev", the CLI's icon beside it) and terminals by folder ("Terminal · web"). The list keeps the text it was opened with, so a TUI repainting under it no longer sends nothing
-- Send to lists the sessions of the pane's own project first; other projects sit behind "Other projects (N)", closed until you open it (remembered while the window is open) and open by itself when your project has nothing else. Arrow keys, Enter and Esc work in the list
 
 ## [0.5.21] — 2026-10-13 — Folder-first launcher, sessions that survive a lost sidecar, idle auto-suspend
 
