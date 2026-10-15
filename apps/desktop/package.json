@@ -32,6 +32,7 @@
     "@radix-ui/react-dialog": "1.1.15",
     "@tanstack/react-virtual": "^3.13.24",
     "@trpc/server": "^11.0.0",
+    "semver": "^7.7.4",
     "@xterm/addon-serialize": "^0.14.0",
     "@xterm/headless": "^6.0.0",
     "croner": "^9.0.0",
