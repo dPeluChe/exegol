@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Canary 180M flash (NVIDIA, CC-BY-4.0) in Settings > Models: a 154 MB dictation model for Spanish, English, German and French with punctuation. It runs in the new Settings > Dictation > Language (English by default, or Spanish), so speech in another language comes out translated into it
 - Right-click on the Dashboard opens a menu. On a Watching card: Go to session, Copy and Send selection to (when text is selected in it), Collapse or Expand, Fit session to card, Smaller and Larger text, Float to window (when the session has a pane) and Unpin. On a pin whose session ended: Resume, Open project and Unpin. On a fleet card: Go to session, Watch or Stop watching, Mute and Suspend while it runs, Resume and Archive once it ended. A right-click in a card no longer reaches a full-screen CLI that tracks the mouse
 - Settings > Dictation > Recordings: "Keep recordings for model testing" (off by default) saves each dictation that ends with text inserted or copied, its audio and the text, in `~/.exegol/dictation-audio` on this Mac, to compare speech models later on your own speech. Recordings are deleted after 5, 10, 15 or 30 days (10 by default); turning the setting off keeps what was saved. The card shows how many there are and their size per project, with Open folder and Clear recordings; Settings > Storage lists them too. Developers can score every installed model on them with `bun apps/desktop/scripts/dictation-bench.ts` (word and character error rate, speed)
 
