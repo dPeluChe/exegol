@@ -20,7 +20,6 @@ import { getAppSettings } from "./db/queries/settings";
 import { stopEngine } from "./dictation/engine";
 import { forwardDictationEscape, forwardDictationKeys } from "./dictation/keys";
 import { releaseMediaNow } from "./dictation/media-pause";
-import { installMediaPermissions } from "./dictation/mic";
 import { applyDictationSettings, dictationSettings } from "./dictation/service";
 import { installPreviewSession, registerPreviewScheme } from "./files-preview/preview-host";
 import { startPrWatch, stopPrWatch } from "./integrations/github/pr-watch";
@@ -37,6 +36,7 @@ import {
 } from "./mcp/exegol-server";
 import { getMcpHost } from "./mcp/host";
 import { setDesktopChannelDb } from "./notifications/channels/desktop";
+import { installSessionPermissions } from "./permissions/session";
 import { getPipelineExecutor } from "./pipeline/executor";
 import { getSchedulerEngine } from "./scheduler/engine";
 import { ensureDefaultSkills } from "./skills/discovery";
@@ -96,7 +96,7 @@ app.whenReady().then(async () => {
   registerSettingsIpcHandlers();
   registerDictationIpc();
   applyDictationSettings(getDb(), dictationSettings(getDb()));
-  installMediaPermissions();
+  installSessionPermissions();
   installPreviewSession(getDb());
   installAgentBrowser(getDb());
   registerGlobalHotkey(settings.globalHotkey, showMainWindow);

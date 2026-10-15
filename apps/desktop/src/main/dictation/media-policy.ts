@@ -1,6 +1,7 @@
-/** Which page may open the mic or camera. Pages in browser panes never; the app's own main
- *  window only for audio, only while a dictation is starting (armed), only on the app origin.
- *  An app window (Settings) also once right after its mic Test button armed it (micTest) */
+/** Which app window may open the mic or camera: the main window only for audio, only while a
+ *  dictation is starting (armed), only on the app origin; an app window (Settings) also once
+ *  right after its mic Test button armed it (micTest). Pages in browser panes never reach this:
+ *  their pane's permission bar decides (browser/page-permissions); anything else is denied */
 export interface MediaRequest {
   permission: string;
   /** getUserMedia: "audio" / "video"; a permission check passes one as mediaType */
@@ -26,7 +27,7 @@ function sameOrigin(url: string, appOrigin: string): boolean {
   }
 }
 
-/** Anything but media keeps Electron's default (allowed) */
+/** Anything but media keeps Electron's default (allowed) for app windows */
 export function allowMediaRequest(r: MediaRequest): boolean {
   if (r.permission !== "media") return true;
   const audioOnly = r.mediaTypes.length > 0 && r.mediaTypes.every((t) => t === "audio");

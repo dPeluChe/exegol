@@ -1,20 +1,18 @@
 /** Page dialogs (alert / confirm / prompt) of browser panes: what to do with each, the ones
  *  waiting for the user, and the notes an agent gets about them. No Electron here */
 
+import { createPendingStore, MAX_PENDING_PER_PAGE, type PendingItem } from "./pending-store";
+
 export type PageDialogType = "alert" | "confirm" | "prompt";
 /** show: a bar in the pane; accept: alert closed as OK; cancel: confirm false, prompt null;
  *  native: Electron's own box (a webview in no pane) */
 export type PageDialogDecision = "native" | "show" | "accept" | "cancel";
 
-export interface PendingPageDialog {
-  id: string;
-  wcId: number;
+export interface PendingPageDialog extends PendingItem {
   paneId: string;
   type: PageDialogType;
   host: string;
   answer: (ok: boolean, text: string) => void;
-  /** Takes the bar away (the dialog went without an answer from it) */
-  notifyClosed?: () => void;
 }
 
 export interface PageDialogContext {
@@ -28,14 +26,13 @@ export interface PageDialogContext {
   blocked: boolean;
 }
 
-export const MAX_PENDING_PER_PAGE = 3;
 const FLOOD_COUNT = 3;
 const FLOOD_WINDOW_MS = 30_000;
 
 const MAX_NOTES = 10;
 export const MAX_DIALOG_TEXT = 2_000;
 
-const pending = new Map<string, PendingPageDialog>();
+const pending = createPendingStore<PendingPageDialog>();
 const notes = new Map<string, string[]>();
 
 /** host:port of the asking frame, what the bar and the log show */
@@ -115,55 +112,38 @@ export function withDialogNotes<T>(result: T, list: readonly string[]): T {
 }
 
 export function addPending(d: PendingPageDialog): void {
-  pending.set(d.id, d);
+  pending.add(d);
 }
 
-export function getPending(id: string): PendingPageDialog | undefined {
-  return pending.get(id);
-}
+export const getPending = (id: string): PendingPageDialog | undefined => pending.get(id);
 
 /** Answers and forgets it; false when it is already gone */
-export function answerPending(id: string, ok: boolean, text: unknown): boolean {
-  const d = pending.get(id);
+export function answerPending(id: string, ok: boolean, text: unknown, closeBar = false): boolean {
+  const d = pending.take(id);
   if (!d) return false;
-  pending.delete(id);
   const r = dialogResult(d.type, ok, text);
   d.answer(r.ok, r.text);
+  if (closeBar) d.notifyClosed();
   return true;
 }
 
 /** Chromium cancelled them (navigation, crash) or the webview is gone: no answer goes back */
 export function dropPendingOf(wcId: number): PendingPageDialog[] {
-  const out: PendingPageDialog[] = [];
-  for (const d of pending.values()) {
-    if (d.wcId !== wcId) continue;
-    pending.delete(d.id);
-    d.notifyClosed?.();
-    out.push(d);
-  }
+  const out = pending.dropOf(wcId);
+  for (const d of out) d.notifyClosed();
   return out;
 }
 
 /** Answers every dialog of a page as cancelled (the user blocked them) */
 export function cancelPendingOf(wcId: number): void {
-  for (const d of [...pending.values()]) {
-    if (d.wcId !== wcId) continue;
-    answerPending(d.id, false, "");
-    d.notifyClosed?.();
-  }
+  for (const d of pending.of(wcId)) answerPending(d.id, false, "", true);
 }
 
-export function pendingCountOf(wcId: number): number {
-  let n = 0;
-  for (const d of pending.values()) if (d.wcId === wcId) n += 1;
-  return n;
-}
+export const pendingCountOf = (wcId: number): number => pending.countOf(wcId);
 
 /** The dialog the pane shows: an agent's tool would hang on the blocked page */
-export function pendingOnPane(paneId: string): PendingPageDialog | undefined {
-  for (const d of pending.values()) if (d.paneId === paneId) return d;
-  return undefined;
-}
+export const pendingOnPane = (paneId: string): PendingPageDialog | undefined =>
+  pending.find((d) => d.paneId === paneId);
 
 export function forgetPaneDialogs(paneId: string): void {
   notes.delete(paneId);

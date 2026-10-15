@@ -285,4 +285,16 @@ export const wave3Migrations: Migration[] = [
     sql: `ALTER TABLE agents ADD COLUMN resumed_from TEXT;
     CREATE INDEX IF NOT EXISTS idx_agents_resumed_from ON agents(resumed_from);`,
   },
+  {
+    // Browser panes: the user's "Always allow" / "Block" per project, origin and permission
+    id: "w3_029_browser_permissions",
+    sql: `CREATE TABLE IF NOT EXISTS browser_permissions (
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      origin TEXT NOT NULL,
+      permission TEXT NOT NULL,
+      decision TEXT NOT NULL CHECK (decision IN ('allow', 'block')),
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (project_id, origin, permission)
+    );`,
+  },
 ];

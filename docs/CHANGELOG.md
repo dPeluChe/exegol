@@ -10,6 +10,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- A page in a browser pane that asks for your location, camera, microphone, notifications, MIDI devices or to open another app now asks you in a bar in the pane: Allow once (until the page leaves that site), Always allow on this site, or Block (Esc or × denies this time). Saved answers are per project and site, listed in Edit project > Site permissions, where × forgets one so the site asks again
+- Location works in browser panes on macOS: the first Allow asks macOS for Location Services access for Exegol (a page that was waiting may need a reload after you answer). If macOS has it turned off, a notice says where to turn it on
 - Canary 180M flash (NVIDIA, CC-BY-4.0) in Settings > Models: a 154 MB dictation model for Spanish, English, German and French with punctuation. It runs in the new Settings > Dictation > Language (English by default, or Spanish), so speech in another language comes out translated into it
 - Right-click on the Dashboard opens a menu. On a Watching card: Go to session, Copy and Send selection to (when text is selected in it), Collapse or Expand, Fit session to card, Smaller and Larger text, Float to window (when the session has a pane) and Unpin. On a pin whose session ended: Resume, Open project and Unpin. On a fleet card: Go to session, Watch or Stop watching, Mute and Suspend while it runs, Resume and Archive once it ended. A right-click in a card no longer reaches a full-screen CLI that tracks the mouse
 - Pause a dictation and pick it up again: Cmd+P (Ctrl+Shift+P on Linux and Windows) or the Pause button on the card, also from a browser page or the Settings window. While paused nothing is heard or recorded, the timer and the longest-dictation limit stand still, the waveform goes flat and the card says "Paused"; music stays paused. Resume keeps the same text and target, and Insert or Esc work while paused
@@ -31,6 +33,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Send to lists the sessions of the pane's own project first; other projects sit behind "Other projects (N)", closed until you open it (remembered while the window is open) and open by itself when your project has nothing else. Arrow keys, Enter and Esc work in the list
 - The chosen microphone is found again when the system gives it a new id (replugged, another port): the one input with the same device group or name is used and the setting follows it; with two inputs of that name it counts as not connected. A missing microphone is used again as soon as it is back
 - A microphone unplugged mid-dictation no longer ends it: the system default takes over in the same dictation (pause, text and target kept) and the card says "<name> disconnected, using system default". A new input picked in Settings while recording applies from the next dictation
+
+### Security
+- Pages in browser panes no longer get location, notifications, MIDI, idle detection, window management or external app links silently: they ask (see Added), and screen capture, USB, serial and HID are refused. While an agent drives the pane nothing asks: the request is denied, and camera and microphone stay off even with a saved Allow
 
 ### Fixed
 - Cmd+1 now gives the Dashboard the keyboard: the Watching card you last typed in (or the first open one) takes the focus, as a project terminal does on Cmd+2..9

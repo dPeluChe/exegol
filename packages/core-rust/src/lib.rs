@@ -1,11 +1,13 @@
 #![deny(clippy::all)]
 
 mod git;
+mod location;
 mod processing;
 mod search;
 mod tasks;
 
 pub use git::*;
+pub use location::*;
 pub use processing::*;
 pub use search::*;
 pub use tasks::*;

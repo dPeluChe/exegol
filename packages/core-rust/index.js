@@ -589,6 +589,7 @@ module.exports.getWorktreeDiffAsync = nativeBinding.getWorktreeDiffAsync
 module.exports.healthCheck = nativeBinding.healthCheck
 module.exports.listOplogSnapshots = nativeBinding.listOplogSnapshots
 module.exports.listWorktrees = nativeBinding.listWorktrees
+module.exports.locationAuthorization = nativeBinding.locationAuthorization
 module.exports.nativeVersion = nativeBinding.nativeVersion
 module.exports.prepareTurnSnapshot = nativeBinding.prepareTurnSnapshot
 module.exports.removeWorktree = nativeBinding.removeWorktree

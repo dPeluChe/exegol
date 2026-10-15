@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { ipcMain, type WebContents, webContents } from "electron";
+import { ipcMain, type WebContents } from "electron";
 import { logger } from "../lib/logger";
 import { allowPageClipboard, isUserGesture, originOf } from "./clipboard-policy";
 import { getPaneControl, isAgentActing } from "./control";
@@ -19,6 +19,13 @@ import {
   pendingCountOf,
   recentDialogs,
 } from "./page-dialogs";
+import {
+  denyPermissionsOf,
+  forgetOnce,
+  forgetOnceUnless,
+  permissionOrigin,
+} from "./site-permissions";
+import { hostedBy, sendTo } from "./webview-guard";
 
 /** Electron's private event (lib/browser/api/web-contents.ts, Electron 41): its default
  *  listener opens an app-modal message box. If it is renamed, that default simply stays */
@@ -63,10 +70,6 @@ function stateOf(wcId: number): PageState {
     pages.set(wcId, s);
   }
   return s;
-}
-
-function sendTo(host: WebContents | null, channel: string, payload: unknown): void {
-  if (host && !host.isDestroyed()) host.send(channel, payload);
 }
 
 function onDialog(wc: WebContents, info: RunDialogInfo, callback: DialogCallback): void {
@@ -124,7 +127,8 @@ function onDialog(wc: WebContents, info: RunDialogInfo, callback: DialogCallback
 }
 
 /** Gestures, navigation and teardown of every project webview. Its dialogs stay Electron's
- *  until a pane registers it (`takeOverPageDialogs`) */
+ *  until a pane registers it (`takeOverPageDialogs`). One-time permission grants follow the
+ *  page's origin; a new document drops the bars of the old one */
 export function trackPageEvents(wc: WebContents): void {
   const id = wc.id;
   const state = stateOf(id);
@@ -140,9 +144,15 @@ export function trackPageEvents(wc: WebContents): void {
     state.blocked = false;
     state.recent = [];
   });
+  wc.on("did-navigate", (_e, url) => {
+    denyPermissionsOf(id);
+    forgetOnceUnless(id, permissionOrigin(url));
+  });
   wc.once("destroyed", () => {
     pages.delete(id);
     dropPendingOf(id);
+    denyPermissionsOf(id);
+    forgetOnce(id);
   });
 }
 
@@ -164,30 +174,28 @@ export function markAgentInput(wcId: number): void {
   stateOf(wcId).agentInputUntil = Date.now() + AGENT_INPUT_MS;
 }
 
-/** Clipboard permissions of pages in browser panes; null for anything else */
+/** Clipboard permissions of pages in browser panes */
 export function pageClipboardDecision(
-  wc: WebContents | null,
+  wc: WebContents,
   permission: string,
   requestingUrl: string,
-): boolean | null {
-  if (!wc || wc.isDestroyed() || wc.getType() !== "webview") return null;
+): boolean {
   const gesture = pages.get(wc.id)?.gesture ?? null;
-  return allowPageClipboard({
-    permission,
-    agentActing: actingOn(wc.id),
-    sinceUserInput: gesture ? Date.now() - gesture.at : null,
-    inputOrigin: gesture?.origin ?? null,
-    requestOrigin: originOf(requestingUrl),
-  });
+  return (
+    allowPageClipboard({
+      permission,
+      agentActing: actingOn(wc.id),
+      sinceUserInput: gesture ? Date.now() - gesture.at : null,
+      inputOrigin: gesture?.origin ?? null,
+      requestOrigin: originOf(requestingUrl),
+    }) ?? false
+  );
 }
 
-/** The pending dialog's webview, when the asking window hosts it */
+/** The pending dialog, when the asking window hosts its webview */
 function hostedDialog(sender: WebContents, id: unknown) {
-  if (typeof id !== "string") return null;
-  const d = getPending(id);
-  const wc = d ? webContents.fromId(d.wcId) : undefined;
-  if (!d || !wc || wc.isDestroyed() || wc.hostWebContents !== sender) return null;
-  return d;
+  const d = typeof id === "string" ? getPending(id) : undefined;
+  return d && hostedBy(sender, d) ? d : null;
 }
 
 export function installPageEvents(lookup: (wcId: number) => string | undefined): void {

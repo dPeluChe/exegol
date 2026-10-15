@@ -11,6 +11,7 @@ import { BrowserReplayResultBar } from "./components/workspace/BrowserReplayResu
 import { DeviceFrame, PageView, useAllSizes } from "./components/workspace/BrowserViewport";
 import { DesignIssueBubble } from "./components/workspace/DesignIssueBubble";
 import { PageDialogBar } from "./components/workspace/PageDialogBar";
+import { PagePermissionBar } from "./components/workspace/PagePermissionBar";
 import { webviewIdOf } from "./components/workspace/use-browser-qa";
 import { useDesignQaModes } from "./components/workspace/use-design-qa-modes";
 import { useQaReplay } from "./components/workspace/use-qa-replay";
@@ -158,6 +159,7 @@ export function FloatingBrowser({
       {compare && <SizeChips selected={compare} onChange={setCompare} />}
       <AgentBrowserBanner paneId={paneId} />
       <PageDialogBar paneId={paneId} />
+      <PagePermissionBar paneId={paneId} />
 
       {/* Webview + floating bubble */}
       <div className="relative flex-1 overflow-hidden bg-white">

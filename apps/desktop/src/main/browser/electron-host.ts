@@ -42,6 +42,7 @@ import {
   takeOverPageDialogs,
   trackPageEvents,
 } from "./page-events";
+import { installPagePermissions } from "./page-permissions";
 import { blocksAgentRequest, logUrl } from "./request-guard";
 import {
   type BrowserHost,
@@ -573,6 +574,7 @@ export function installAgentBrowser(db: Database.Database): void {
   });
 
   installPageEvents((wcId) => paneOfWebContents(wcId)?.paneId);
+  installPagePermissions(db, paneOfWebContents);
   ipcMain.handle("browser:register-pane", (event, input) =>
     registerPane(db, event.sender, input ?? {}),
   );
