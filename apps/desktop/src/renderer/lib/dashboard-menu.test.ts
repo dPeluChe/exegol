@@ -18,7 +18,7 @@ describe("watchCardMenu", () => {
     ]);
   });
 
-  it("a selection adds Copy and the Send selection hook", () => {
+  it("a selection adds Copy and Send selection to", () => {
     expect(watchCardMenu({ ...card, hasSelection: true })[1]).toEqual(["copy", "send-selection"]);
   });
 

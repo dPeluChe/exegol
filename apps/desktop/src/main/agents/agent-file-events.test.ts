@@ -1,6 +1,7 @@
 import Database from "libsql";
 import { beforeEach, describe, expect, it } from "vitest";
 import { dispatchAgentFileEvent, type SessionMaps } from "./agent-session-callbacks";
+import { hookCwdOf } from "./hook-cwd";
 
 function setupDb(): Database.Database {
   const db = new Database(":memory:");
@@ -49,6 +50,12 @@ describe("dispatchAgentFileEvent", () => {
 
   beforeEach(() => {
     db = setupDb();
+  });
+
+  it("records the folder a hook reports, even for an event with no signal", () => {
+    insertAgent(db, "cwd1", "claude-code", "running");
+    dispatchAgentFileEvent(db, emptyMaps(), { type: "noop", agentId: "cwd1", cwd: "/p/nexus" });
+    expect(hookCwdOf("cwd1")).toBe("/p/nexus");
   });
 
   it("maps tool_use to working → running status", () => {

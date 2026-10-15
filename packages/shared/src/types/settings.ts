@@ -31,6 +31,10 @@ export type Settings = {
   globalHotkey: string;
   terminalFontSize: number;
   terminalFontFamily: string;
+  /** Send to a plain terminal also presses Enter (runs it); off = paste only */
+  sendToRunTerminal: boolean;
+  /** Send to an agent also presses Enter (submits it), never over a question on screen */
+  sendToSubmitAgent: boolean;
   notificationsEnabled: boolean;
   toastsEnabled: boolean;
   /** Commit and push a worktree's pending work to its branch when its agent ends or before a sweep */
@@ -65,6 +69,8 @@ export const DEFAULT_SETTINGS: Settings = {
   globalHotkey: "CommandOrControl+Shift+E",
   terminalFontSize: 14,
   terminalFontFamily: "Menlo, Monaco, monospace",
+  sendToRunTerminal: false,
+  sendToSubmitAgent: false,
   notificationsEnabled: true,
   toastsEnabled: true,
   saveWorktreeWork: true,

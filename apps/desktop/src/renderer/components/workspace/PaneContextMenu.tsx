@@ -12,12 +12,16 @@ import {
   PictureInPicture2,
   RefreshCw,
   Rows,
+  Send,
   TerminalSquare,
   Trash2,
 } from "lucide-react";
+import { useState } from "react";
 import { movePane, paneMoveTargets } from "../../lib/move-pane";
 import type { PaneType } from "../../stores/workspace";
 import { ContextMenu, type MenuItem, type MenuSection } from "../common/ContextMenu";
+import { SendSelectionMenu } from "../terminal/SendToList";
+import { selectionSourceFor } from "../terminal/use-send-to";
 
 interface PaneContextMenuProps {
   tabId: string;
@@ -114,10 +118,15 @@ function splitSection({
   ];
 }
 
-function buildMenuSections(actions: MenuActions): MenuSection[] {
+function buildMenuSections(actions: MenuActions, sendPage?: MenuItem["page"]): MenuSection[] {
   const isTerminal = actions.paneType === "terminal";
+  const send: MenuItem[] = sendPage
+    ? [{ label: "Send selection to", icon: Send, action: () => {}, page: sendPage }]
+    : [];
   const candidates = [
-    ...(isTerminal ? [clipboardSection(actions), terminalActionsSection(actions)] : []),
+    ...(isTerminal
+      ? [[...send, ...clipboardSection(actions)], terminalActionsSection(actions)]
+      : []),
     splitSection(actions),
     moveSection(actions),
   ];
@@ -137,6 +146,27 @@ function buildMenuSections(actions: MenuActions): MenuSection[] {
 }
 
 export function PaneContextMenu({ children, ...actions }: PaneContextMenuProps) {
+  // The selection when the menu opened: a TUI repaint or mouse report can clear it before a pick
+  const [openedWith, setOpenedWith] = useState("");
+  const readSelection = () =>
+    actions.paneType === "terminal"
+      ? (selectionSourceFor(actions.paneId)?.getSelection() ?? "")
+      : "";
+
+  const sendPage = (): MenuItem["page"] => {
+    const live = actions.paneType === "terminal" ? selectionSourceFor(actions.paneId) : undefined;
+    if (!live || !openedWith) return undefined;
+    const source = { ...live, getSelection: () => live.getSelection() || openedWith };
+    return ({ back, done }) => <SendSelectionMenu source={source} onBack={back} onDone={done} />;
+  };
+
   // Built on open only: the move list reads the tabs and sessions of that moment
-  return <ContextMenu sections={() => buildMenuSections(actions)}>{children}</ContextMenu>;
+  return (
+    <ContextMenu
+      onOpen={() => setOpenedWith(readSelection())}
+      sections={() => buildMenuSections(actions, sendPage())}
+    >
+      {children}
+    </ContextMenu>
+  );
 }

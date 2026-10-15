@@ -12,6 +12,7 @@ import {
   removeFollowUp,
   steerFollowUp,
 } from "../../agents/follow-up-queue";
+import { hookCwdOf } from "../../agents/hook-cwd";
 import { setIdleExempt } from "../../agents/idle-exempt";
 import { broadcastShellClosed } from "../../agents/spawn-env";
 import {
@@ -236,10 +237,13 @@ export const agentRouter = router({
     .input(z.object({ agentId: z.string() }))
     .query(({ ctx, input }) => worktreePathOf(ctx.db, input.agentId)),
   /** Where an ended session worked: a shell's last folder, else its worktree; null is the root
-   *  (also when that folder is gone: Files must not open a missing dir) */
+   *  (also when that folder is gone: Files must not open a missing dir). `live` first takes the
+   *  folder the CLI's hooks last reported (a cd inside the session) */
   sessionFolder: publicProcedure
-    .input(z.object({ agentId: z.string().max(128) }))
+    .input(z.object({ agentId: z.string().max(128), live: z.boolean().optional() }))
     .query(({ ctx, input }) => {
+      const live = input.live ? hookCwdOf(input.agentId) : null;
+      if (live && folderExists(live)) return live;
       // A shell's OSC 7 folder, or the folder the launcher started an agent in
       const folder =
         getAgentLastCwd(ctx.db, input.agentId) ?? worktreePathOf(ctx.db, input.agentId);

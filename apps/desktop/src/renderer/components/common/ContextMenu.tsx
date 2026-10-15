@@ -1,3 +1,5 @@
+import { ChevronRight } from "lucide-react";
+import { type ReactNode, useState } from "react";
 import { useContextMenu } from "../../hooks/use-context-menu";
 import { useFittedMenu } from "../../hooks/use-fitted-menu";
 import { appKeys } from "../../lib/keymap";
@@ -11,6 +13,8 @@ export interface MenuItem {
   shortcut?: string;
   action: () => void;
   danger?: boolean;
+  /** Opens this page of the menu instead of closing it */
+  page?: (nav: { back: () => void; done: () => void }) => ReactNode;
 }
 
 export interface MenuSection {
@@ -23,7 +27,7 @@ function MenuItemButton({ item, onClose }: { item: MenuItem; onClose: () => void
       type="button"
       onClick={() => {
         item.action();
-        onClose();
+        if (!item.page) onClose();
       }}
       className={`flex w-full items-center gap-2.5 rounded px-2.5 py-1.5 text-[11px] transition-colors ${
         item.danger ? "text-error hover:bg-error/10" : "text-text-secondary hover:bg-white/10"
@@ -34,6 +38,7 @@ function MenuItemButton({ item, onClose }: { item: MenuItem; onClose: () => void
       {item.shortcut && (
         <span className="text-[10px] text-text-muted">{appKeys(item.shortcut)}</span>
       )}
+      {item.page && <ChevronRight className="h-3 w-3 text-text-muted" />}
     </button>
   );
 }
@@ -41,21 +46,33 @@ function MenuItemButton({ item, onClose }: { item: MenuItem; onClose: () => void
 /**
  * Right-click menu around `children` (a `display: contents` wrapper, so layout is untouched).
  * `sections` runs only while the menu is open: it reads state of that moment (selection, tabs).
+ * `onOpen` runs on the right-click, after the children's own handlers (xterm selects a word).
  */
 export function ContextMenu({
   sections,
+  onOpen,
   children,
 }: {
   sections: () => MenuSection[];
+  onOpen?: () => void;
   children: React.ReactNode;
 }) {
   const { contextMenu: menu, menuRef, handleContextMenu, closeContextMenu } = useContextMenu();
   const menuStyle = useFittedMenu(menuRef, menu);
-  const shown = menu ? sections().filter((s) => s.items.length > 0) : [];
+  // The item whose page is shown, kept as clicked: its page closes over that moment's state
+  const [paged, setPaged] = useState<MenuItem | null>(null);
+  const shown = menu && !paged ? sections().filter((s) => s.items.length > 0) : [];
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: context menu wrapper
-    <div onContextMenu={handleContextMenu} className="contents">
+    <div
+      onContextMenu={(e) => {
+        setPaged(null);
+        onOpen?.();
+        handleContextMenu(e);
+      }}
+      className="contents"
+    >
       {children}
 
       {menu && (
@@ -68,13 +85,14 @@ export function ContextMenu({
             borderColor: "var(--border)",
           }}
         >
+          {paged?.page?.({ back: () => setPaged(null), done: closeContextMenu })}
           {shown.map((section, si) => (
             <div key={section.items[0]?.id ?? section.items[0]?.label ?? si}>
               {si > 0 && <div className="my-1 border-t" style={{ borderColor: "var(--border)" }} />}
               {section.items.map((item) => (
                 <MenuItemButton
                   key={item.id ?? item.label}
-                  item={item}
+                  item={item.page ? { ...item, action: () => setPaged(item) } : item}
                   onClose={closeContextMenu}
                 />
               ))}

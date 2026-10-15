@@ -7,6 +7,7 @@ import { appChord, chordKey, IS_MAC } from "../../lib/keymap";
 import { isPaneSwitcherMounted } from "../../lib/pane-switcher-control";
 import { persistShellCwd } from "../../lib/shell-cwd";
 import { useAgentStore } from "../../stores/agents";
+import { keepSelection } from "./keep-selection";
 import { chunksAfterSnapshot, createLiveBuffer, resizeToSnapshot } from "./live-seq";
 import { stripTerminalReports } from "./mirror-input";
 import {
@@ -88,6 +89,9 @@ export function setupTerminalSession(
     allowProposedApi: true,
     convertEol: true,
     disableStdin: deps.readOnly,
+    // A TUI tracking the mouse (Claude) turns xterm's selection off: Option+drag selects anyway,
+    // as Shift+drag does off macOS, so Copy and Send to still have text
+    macOptionClickForcesSelection: true,
   });
 
   const fitAddon = new FitAddon();
@@ -363,6 +367,7 @@ export function setupTerminalSession(
   if (deps.onSelectionChange) {
     const cb = deps.onSelectionChange;
     disposables.push(terminal.onSelectionChange(() => cb(terminal.hasSelection())));
+    if (terminal.element) disposables.push(keepSelection(terminal, terminal.element));
   }
 
   function dispose(): void {

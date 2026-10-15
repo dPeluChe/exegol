@@ -13,6 +13,7 @@ import { Sidebar } from "./components/layout/Sidebar";
 import { SidebarRail } from "./components/layout/SidebarRail";
 import { StatusBar } from "./components/layout/StatusBar";
 import { TitleBar } from "./components/layout/TitleBar";
+import { TerminalFileWindow } from "./components/terminal/TerminalFileWindow";
 import { PaneSwitcher } from "./components/workspace/PaneSwitcher";
 import { WorkspaceView } from "./components/workspace/WorkspaceView";
 import { ProjectProvider } from "./contexts/ProjectContext";
@@ -133,6 +134,7 @@ export default function App() {
         <StatusBar />
         <ToastStack />
         <PaneSwitcher />
+        <TerminalFileWindow />
         <DictationOverlay />
         <Suspense fallback={null}>
           <CommandPalette />

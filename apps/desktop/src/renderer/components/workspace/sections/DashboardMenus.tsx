@@ -17,6 +17,7 @@ import {
   PinOff,
   Play,
   RotateCcw,
+  Send,
 } from "lucide-react";
 import type { RefObject } from "react";
 import { useResumeAgent } from "../../../hooks/use-resume-agent";
@@ -32,14 +33,26 @@ import { type AgentState, findAgentPane } from "../../../stores/agents";
 import { DEFAULT_CARD_FONT, stepCardFont, useWatchStore } from "../../../stores/watch";
 import { useWorkspaceStore } from "../../../stores/workspace";
 import { ContextMenu, type MenuItem } from "../../common/ContextMenu";
+import { SendSelectionMenu } from "../../terminal/SendToList";
 import type { TerminalInstanceHandle } from "../../terminal/TerminalInstance";
 
-/**
- * Hook point for "Send selection to" (branch feat/send-to-grouping): its items for this
- * session's mirror selection go here. Empty until that menu lands.
- */
-function sendSelectionItems(_agentId: string, _selection: string): MenuItem[] {
-  return [];
+/** The pane menu's "Send selection to" page, for the mirror's selection */
+function sendSelectionItems(
+  agent: AgentState,
+  selection: string,
+  terminalRef: RefObject<TerminalInstanceHandle | null> | undefined,
+): MenuItem[] {
+  // A TUI repaint can clear the mirror's selection while the page is open
+  const getSelection = () => terminalRef?.current?.getSelection() || selection;
+  const source = { agentId: agent.id, projectId: agent.projectId, getSelection };
+  return [
+    {
+      label: "Send selection to",
+      icon: Send,
+      action: () => {},
+      page: ({ back, done }) => <SendSelectionMenu source={source} onBack={back} onDone={done} />,
+    },
+  ];
 }
 
 /** Labelled like ResumeButton: a CLI that cannot continue a session starts it again */
@@ -103,7 +116,7 @@ export function WatchCardMenu({
             },
           ];
         case "send-selection":
-          return sendSelectionItems(agent.id, selection);
+          return sendSelectionItems(agent, selection, terminalRef);
         case "resume":
           return [resumeItem(canResume, () => void resume(agent).catch(() => {}))];
         case "collapse":
