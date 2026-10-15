@@ -406,6 +406,16 @@ export function useXterm({
     return () => window.removeEventListener("exegol:focus-pane", handleFocus);
   }, [paneId, mirror, readOnly]);
 
+  useEffect(() => {
+    if (!mirror) return;
+    const handleFocus = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { agentId?: string } | undefined;
+      if (detail?.agentId === agentId) terminalRef.current?.focus();
+    };
+    window.addEventListener("exegol:focus-mirror", handleFocus);
+    return () => window.removeEventListener("exegol:focus-mirror", handleFocus);
+  }, [agentId, mirror]);
+
   // Pane menu "Clear Terminal": drop what this view holds (screen + scrollback) and the session's
   // history in main and the sidecar (main then sends Ctrl+L)
   useEffect(() => {

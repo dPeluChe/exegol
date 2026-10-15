@@ -10,6 +10,7 @@ import {
   X,
 } from "lucide-react";
 import { type DragEvent, useRef, useState } from "react";
+import { rememberMirrorFocus } from "../../../lib/pane-focus";
 import { type AgentState, useAgentStore } from "../../../stores/agents";
 import {
   DEFAULT_CARD_FONT,
@@ -363,6 +364,7 @@ function WatchCard({
               if (e.button === 2) e.stopPropagation();
             }}
             onFocusCapture={() => {
+              rememberMirrorFocus(agent.id);
               if (!openedByUser) toggleOpen(agent.id);
               if (needsInput) useAgentStore.getState().markAttentionRead(agent.id);
             }}
