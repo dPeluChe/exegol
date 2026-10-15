@@ -35,6 +35,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - A microphone unplugged mid-dictation no longer ends it: the system default takes over in the same dictation (pause, text and target kept) and the card says "<name> disconnected, using system default". A new input picked in Settings while recording applies from the next dictation
 
 ### Security
+- The MCP config Exegol writes in a project folder for Antigravity, Devin, OpenCode, Gemini and codex (`.agents/mcp_config.json`, `.devin/mcp_config.local.json`, `opencode.json`, `.gemini/settings.json`, `.mcp.json`) no longer holds the agent's token, so committing it leaks nothing: the token sits in `~/.exegol/mcp/tokens/` (readable only by you) and the file names its path. A config file Exegol creates is also added to the repo's `.git/info/exclude` (never your `.gitignore`), so `git add -A` skips it. Sessions started by an older version keep working until they end
 - Pages in browser panes no longer get location, notifications, MIDI, idle detection, window management or external app links silently: they ask (see Added), and screen capture, USB, serial and HID are refused. While an agent drives the pane nothing asks: the request is denied, and camera and microphone stay off even with a saved Allow
 
 ### Fixed

@@ -10,7 +10,13 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { type AgentFileTarget, agentFileTargets, sweepOrphanAgentFiles } from "./housekeeping";
+import { tokenKeyFor } from "../mcp/exegol-mcp-token-file";
+import {
+  type AgentFileTarget,
+  agentFileTargets,
+  mcpTokenTarget,
+  sweepOrphanAgentFiles,
+} from "./housekeeping";
 
 const LIVE = "live".padEnd(21, "0");
 const ARCHIVED = "archived".padEnd(21, "1");
@@ -108,5 +114,22 @@ describe("sweepOrphanAgentFiles", () => {
       return known();
     });
     expect(reads).toBe(0);
+  });
+});
+
+describe("mcpTokenTarget", () => {
+  it("removes old token files no live folder maps to, keeps live, fresh and foreign ones", async () => {
+    root = mkdtempSync(join(tmpdir(), "exegol-tokens-"));
+    const liveDir = join(root, "live-repo");
+    const target = { ...mcpTokenTarget(() => [liveDir, liveDir]), dir: join(root, "tokens") };
+    const live = file(join(target.dir, tokenKeyFor(liveDir)));
+    const orphan = file(join(target.dir, "b".repeat(32)));
+    const fresh = file(join(target.dir, "c".repeat(32)), false);
+    const foreign = file(join(target.dir, "notes.txt"));
+    // No agent ids at all: the token target is not under the reset-DB guard
+    const result = await sweepOrphanAgentFiles([target], () => new Set(), NOW);
+    expect(result).toMatchObject({ files: 1 });
+    expect(existsSync(orphan)).toBe(false);
+    for (const kept of [live, fresh, foreign]) expect(existsSync(kept)).toBe(true);
   });
 });
