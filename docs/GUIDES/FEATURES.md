@@ -39,8 +39,9 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
 - **Picture-in-Picture**: a terminal or browser pane detaches into a small always-on-top window.
 - **Terminal links**: URLs and file paths in any terminal (agents, shells, Dashboard cards) are
   clickable. A URL opens in the tab's link preview pane; a file (`src/app.ts:42:7`, `./a.tsx`,
-  `~/notes.md`, absolute) opens read-only over the terminal at its line, images as pictures, PDFs
-  in their app. Only files inside the session's project or its worktrees are links. Cmd+click (Ctrl+click on
+  `~/notes.md`, absolute) opens read-only at its line in a movable, resizable window over the
+  workspace, images as pictures, PDFs in their app. Esc or Cmd+W closes that window, never the
+  session. Only files inside the session's project or its worktrees are links. Cmd+click (Ctrl+click on
   Linux and Windows) opens a URL in the system browser and a file in the IDE at its line;
   Cmd+Shift+click shows the file in Finder. Hovering shows the target and the clicks.
 - **Open in IDE**: Settings > General picks the default IDE among the ones installed (VS Code,

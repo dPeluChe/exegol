@@ -20,7 +20,7 @@ interface PaneFolderFacts {
   sessionDir?: string | null;
 }
 
-const parentDir = (path: string) => path.slice(0, path.lastIndexOf("/")) || "/";
+export const parentDir = (path: string) => path.slice(0, path.lastIndexOf("/")) || "/";
 
 /** The folder a terminal opened from `pane` starts in; undefined is the project root */
 export function terminalCwdFor(

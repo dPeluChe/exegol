@@ -19,6 +19,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Send to lists the sessions of the pane's own project first; other projects sit behind "Other projects (N)", closed until you open it (remembered while the window is open) and open by itself when your project has nothing else. Arrow keys, Enter and Esc work in the list
 
 ### Fixed
+- Links and file paths printed by Claude (or any TUI that uses the mouse) open again on click, with Cmd+click and Cmd+Shift+click as before
+- A clicked file opens in a window over the workspace that you can move and resize, with the session still visible and typable behind it. Esc or Cmd+W closes the window, never the session; "Files pane" and "Editor" open the file there instead
 - The launcher's folder list closes on a click outside it, on Esc wherever the focus is, and with its own close button
 - Selecting text in Claude (or any TUI that uses the mouse): hold Option while dragging (Shift on Linux and Windows) to select in the terminal itself, so Copy and Send to have it; a plain drag is the TUI's own selection. The selection now stays while you move the mouse to Send to (Claude's mouse tracking used to clear it); a click, a key or the wheel still clears it
 - Right-clicking a selection in Claude (or any TUI that uses the mouse) kept only the word under the pointer, or nothing on an empty spot: the selection now stays as it is, and "Send selection to" sends all of it

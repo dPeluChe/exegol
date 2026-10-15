@@ -9,7 +9,6 @@ import { useResumeAgent } from "../../hooks/use-resume-agent";
 import { type CliSelfUpdate, useCliSelfUpdateStore } from "../../stores/cli-self-updates";
 import { ChatView } from "./ChatView";
 import { EndedSessionLauncher } from "./EndedSessionLauncher";
-import { TerminalLinkPeek } from "./FilesPeek";
 import { TerminalInstance, type TerminalInstanceHandle } from "./TerminalInstance";
 import { TerminalViewToggle } from "./TerminalToolbar";
 
@@ -139,7 +138,6 @@ export function TerminalScrollback({
               {floatingButtons}
             </>
           )}
-          <TerminalLinkPeek agentId={agentId} />
         </div>
       )}
     </div>

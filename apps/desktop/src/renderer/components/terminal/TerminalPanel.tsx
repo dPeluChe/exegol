@@ -7,12 +7,11 @@ import { useAgent, useStopAgent } from "../../hooks/use-trpc";
 import { useSessionRecovery } from "../../lib/session-recovery";
 import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
-import { closeTerminalPeek } from "../../stores/terminal-links";
 import { getProjectState, layoutHasPane, useWorkspaceStore } from "../../stores/workspace";
 import { EmptyState, LoadingSpinner } from "../common";
 import { ChatView } from "./ChatView";
 import { EndedSessionLauncher } from "./EndedSessionLauncher";
-import { FilesPeek, PeekFileOverlay, TerminalLinkPeek } from "./FilesPeek";
+import { FilesPeek, PeekFileOverlay } from "./FilesPeek";
 import { TerminalFloatingButtons } from "./TerminalFloatingButtons";
 import { TerminalInstance, type TerminalInstanceHandle } from "./TerminalInstance";
 import { type ScrollbackAgent, TerminalScrollback } from "./TerminalScrollback";
@@ -126,13 +125,13 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
 
   // Live terminal — show loading overlay until first data arrives
   return (
-    // Capture phase: with Files or a peeked file open, Esc closes it before the CLI sees it;
-    // with both closed Esc reaches the terminal as always (a dialog handles its own)
+    // Capture phase: with Files or a file picked there open, Esc closes it before the CLI sees
+    // it; with both closed Esc reaches the terminal as always (a dialog handles its own)
     <div
       className="relative flex h-full flex-col"
       onKeyDownCapture={(e) => {
         if (e.key !== "Escape" || document.querySelector('[role="dialog"]')) return;
-        if (closeTerminalPeek(agentId) || filesPeek.escape()) {
+        if (filesPeek.escape()) {
           e.preventDefault();
           e.stopPropagation();
         }
@@ -191,7 +190,6 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
               onDirtyChange={filesPeek.setFileDirty}
             />
           )}
-          <TerminalLinkPeek agentId={agentId} />
         </div>
         {filesPeek.filesOpen && filesPeek.peekProject && (
           <FilesPeek
