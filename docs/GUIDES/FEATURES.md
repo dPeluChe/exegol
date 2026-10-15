@@ -121,6 +121,10 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
   and its message thread with other agents.
 - **Watching**: pin sessions to see them as live terminals side by side (one to three columns,
   collapsible, reorderable); type into a card after clicking it.
+- **Right-click menus**: a Watching card offers Go to session, Copy (with text selected),
+  Collapse/Expand, Fit session to card, A-/A+, Float to window and Unpin; an ended pin offers
+  Resume, Open project and Unpin; a fleet card offers Go to session, Watch, Mute, Suspend, or
+  Resume and Archive once it ended.
 
 ## Browser and QA
 
