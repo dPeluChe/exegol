@@ -104,6 +104,17 @@ export function setAgentResumedFrom(db: Database.Database, id: string, from: str
   db.prepare("UPDATE agents SET resumed_from = ? WHERE id = ?").run(from, id);
 }
 
+/** The grid a session last ran at (a pane's fit), if it was ever sized */
+export function agentPtySize(
+  db: Database.Database,
+  id: string,
+): { cols: number; rows: number } | null {
+  const row = db.prepare("SELECT pty_cols, pty_rows FROM agents WHERE id = ?").get(id) as
+    | { pty_cols: number | null; pty_rows: number | null }
+    | undefined;
+  return row?.pty_cols && row.pty_rows ? { cols: row.pty_cols, rows: row.pty_rows } : null;
+}
+
 /** The newest row that resumed `id` */
 export function resumedInto(db: Database.Database, id: string): string | undefined {
   const row = db

@@ -10,6 +10,7 @@ import { isAgentQuiet, updateAgentStatus } from "../db/queries";
 import { getAgentCwd, setAgentFinalOutput } from "../db/queries/agents";
 import { releasePaths } from "../db/queries/path-claims";
 import { broadcast } from "../lib/event-bus";
+import { createLogLimiter, suppressedNote } from "../lib/log-limiter";
 import { logger } from "../lib/logger";
 import { removeAgentMcpConfig, removePerAgentMcpConfig } from "../mcp/exegol-mcp-config";
 import { revokeAgentMcpToken } from "../mcp/exegol-server";
@@ -45,6 +46,11 @@ import {
 } from "./spawn-env";
 import { stripAnsi, stripOscSequences } from "./status-parser";
 import { endTurn, forgetTurns, startTurn } from "./turn-snapshots";
+
+/** The parser re-reports the same status on every redraw (agy: each keystroke): a change always
+ *  logs, a repeat once per 10 s with its count */
+const loggedStatus = new Map<string, string>();
+const statusLogLimit = createLogLimiter(10_000);
 
 /** Shells and full-screen TUIs: their escape sequences and status-like text read as "failed"/"waiting_input" */
 const SKIP_PARSING = new Set(["shell", "crush", "opencode", "kiro"]);
@@ -377,9 +383,14 @@ export function createSpawnCallbacks(
       }
       if (scrapedStatus || result.currentStep) {
         if (scrapedStatus) {
-          logger.info(
-            `[AgentCallback] Status change: ${agent.id} (${agent.cliType}) → ${scrapedStatus}`,
-          );
+          const changed = loggedStatus.get(agent.id) !== scrapedStatus;
+          const skipped = statusLogLimit.take(agent.id, Date.now(), changed);
+          if (skipped !== null) {
+            loggedStatus.set(agent.id, scrapedStatus);
+            logger.info(
+              `[AgentCallback] Status change: ${agent.id} (${agent.cliType}) → ${scrapedStatus}${suppressedNote(skipped)}`,
+            );
+          }
           updateAgentStatus(db, agent.id, scrapedStatus as AgentStatus, result.currentStep);
           broadcastAgentStatus({
             agentId: agent.id,
@@ -412,6 +423,8 @@ export function createSpawnCallbacks(
 
       detachOutputPipeline(maps, agent.id);
       maps.sessionIdsCaptured.delete(agent.id);
+      loggedStatus.delete(agent.id);
+      statusLogLimit.forget(agent.id);
       maps.dataCallbacks.delete(agent.id);
       maps.contexts.delete(agent.id);
 
