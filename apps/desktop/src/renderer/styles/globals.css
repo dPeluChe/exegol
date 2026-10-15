@@ -201,3 +201,13 @@ body {
 @media (prefers-reduced-motion: no-preference) {
   .animate-caret { animation: caret-breathe 1.2s ease-in-out infinite; }
 }
+
+/* Dictation auto insert: the countdown bar drains once (duration and start inline, a new key restarts it) */
+@keyframes countdown-drain {
+  from { transform: scaleX(var(--from, 1)); }
+  to { transform: scaleX(0); }
+}
+.animate-countdown-drain {
+  transform-origin: left;
+  animation: countdown-drain linear forwards;
+}

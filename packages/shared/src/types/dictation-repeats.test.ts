@@ -42,10 +42,13 @@ describe("collapseRepeats: English", () => {
 
 describe("cleanDictation collapses before spoken punctuation", () => {
   it("in both languages", () => {
-    expect(cleanDictation("Claude Claude Claude revisa coma ya", { spokenPunctuation: true })).toBe(
-      "Claude revisa, ya",
-    );
-    expect(cleanDictation("bug bug bug bug fixed", { spokenPunctuation: false })).toBe("bug fixed");
+    expect(
+      cleanDictation("Claude Claude Claude revisa coma ya", { spokenPunctuation: true }),
+    ).toEqual({ text: "Claude revisa, ya", collapsed: 1 });
+    expect(cleanDictation("bug bug bug bug fixed", { spokenPunctuation: false })).toEqual({
+      text: "bug fixed",
+      collapsed: 1,
+    });
   });
 });
 

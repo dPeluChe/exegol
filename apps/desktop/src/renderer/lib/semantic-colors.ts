@@ -19,6 +19,9 @@ export const STATUS_DOT_COLORS: Record<string, string> = {
 
 // ─── Semantic badge colors (bg + text pairs) ────────────────────────────────
 
+/** The small rounded pill those colors go on */
+export const BADGE = "rounded-full px-2 py-0.5 text-[10px]";
+
 export const SEMANTIC_BADGE = {
   success: "bg-success/15 text-success",
   warning: "bg-warning/15 text-warning",

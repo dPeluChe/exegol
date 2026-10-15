@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   biasPhrase,
   type Cut,
+  decodeWithVocabulary,
   degenerateDecode,
   joinPhrases,
   SEGMENTER_START,
@@ -118,5 +119,34 @@ describe("vocabulary per phrase", () => {
     expect(degenerateDecode("Claude Claude Claude Claude Claude Claude Claude.")).toBe(true);
     expect(degenerateDecode("Okay.")).toBe(false);
     expect(degenerateDecode("no no, eso no")).toBe(false);
+  });
+
+  it("decodes with the terms only when they apply, again without them on a degenerate text", async () => {
+    const calls: (string | null)[] = [];
+    const run = (out: Record<string, string>) => async (words: string | null) => {
+      calls.push(words);
+      return out[words ?? ""] ?? "";
+    };
+    const plain = { "": "hola" };
+    expect(await decodeWithVocabulary(run(plain), null, 5000)).toEqual({
+      text: "hola",
+      unbiased: false,
+    });
+    expect(await decodeWithVocabulary(run(plain), "Claude", 400)).toEqual({
+      text: "hola",
+      unbiased: true,
+    });
+    const biased = { "": "hola", Claude: "hola Claude" };
+    expect(await decodeWithVocabulary(run(biased), "Claude", 5000)).toEqual({
+      text: "hola Claude",
+      unbiased: false,
+    });
+    const stuck = { "": "ok", Claude: "Claude Claude Claude" };
+    calls.length = 0;
+    expect(await decodeWithVocabulary(run(stuck), "Claude", 5000)).toEqual({
+      text: "ok",
+      unbiased: true,
+    });
+    expect(calls).toEqual(["Claude", null]);
   });
 });

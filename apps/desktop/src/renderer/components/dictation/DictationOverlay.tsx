@@ -1,7 +1,14 @@
 import { dictationSettingsOf, formatChord, type KeyChord } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { ArrowDown, Crosshair, Loader2, Mic, Pause, Play } from "lucide-react";
-import { type ReactNode, type UIEvent, useLayoutEffect, useRef, useState } from "react";
+import {
+  type CSSProperties,
+  type ReactNode,
+  type UIEvent,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
 import { useMountEffect } from "../../hooks/use-mount-effect";
 import { useProjects, useSettings } from "../../hooks/use-trpc";
 import { useDictationStatus } from "../../hooks/use-trpc-dictation";
@@ -262,17 +269,28 @@ function DockedPill({ phase }: { phase: DictationPhase }) {
 
 /** Auto insert's last seconds: a draining bar; a click keeps this dictation going */
 function AutoInsertCountdown({ compact = false }: { compact?: boolean }) {
-  const ms = useDictationStore((s) => s.autoInsertMs);
-  if (ms === null) return null;
-  const left = Math.max(0, Math.min(1, ms / AUTO_INSERT_COUNTDOWN_MS));
-  const bar = (
-    <span className="block h-1 overflow-hidden rounded-full bg-accent/15">
-      <span
-        className="block h-full rounded-full bg-accent transition-[width] duration-100 ease-linear motion-reduce:transition-none"
-        style={{ width: `${left * 100}%` }}
-      />
-    </span>
-  );
+  const countdown = useDictationStore((s) => s.autoInsertCountdown);
+  if (!countdown) return null;
+  return <Countdown key={countdown.endsAt} {...countdown} compact={compact} />;
+}
+
+function Countdown({ endsAt, ms, compact }: { endsAt: number; ms: number; compact: boolean }) {
+  const [secs, setSecs] = useState(Math.ceil(ms / 1000));
+  // The label changes once a second; the bar drains on its own (CSS)
+  useMountEffect(() => {
+    let id: ReturnType<typeof setTimeout>;
+    const tick = () => {
+      const left = endsAt - Date.now();
+      setSecs(Math.max(0, Math.ceil(left / 1000)));
+      if (left > 0) id = setTimeout(tick, (left % 1000 || 1000) + 5);
+    };
+    tick();
+    return () => clearTimeout(id);
+  });
+  const drain = {
+    "--from": Math.max(0, Math.min(1, ms / AUTO_INSERT_COUNTDOWN_MS)),
+    animationDuration: `${ms}ms`,
+  } as CSSProperties;
   return (
     <button
       type="button"
@@ -287,10 +305,15 @@ function AutoInsertCountdown({ compact = false }: { compact?: boolean }) {
       )}
     >
       <span className="flex items-center justify-between gap-2">
-        <span aria-live="polite">Inserting in {Math.ceil(ms / 1000)}…</span>
+        <span aria-live="polite">Inserting in {secs}…</span>
         {!compact && <span className="font-normal text-text-muted">Click to keep dictating</span>}
       </span>
-      {bar}
+      <span className="block h-1 overflow-hidden rounded-full bg-accent/15">
+        <span
+          className="animate-countdown-drain block h-full rounded-full bg-accent"
+          style={drain}
+        />
+      </span>
     </button>
   );
 }

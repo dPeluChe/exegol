@@ -32,11 +32,15 @@ export function collapseRepeats(text: string): { text: string; collapsed: number
   let i = 0;
   while (i < words.length) {
     let run: { n: number; k: number } | null = null;
-    for (let n = 1; n <= MAX_PHRASE_WORDS && !run; n++) {
-      if (words.slice(i, i + n).some((w) => !w.key) || i + n > words.length) continue;
+    for (let n = 1; n <= MAX_PHRASE_WORDS && i + n <= words.length; n++) {
+      // Words before it were checked at smaller n; one with no letters ends every longer phrase too
+      if (!words[i + n - 1]?.key) break;
       let k = 1;
       while (same(i, i + k * n, n)) k++;
-      if (k >= MIN_REPEATS) run = { n, k };
+      if (k >= MIN_REPEATS) {
+        run = { n, k };
+        break;
+      }
     }
     if (!run) {
       i++;

@@ -1,10 +1,16 @@
 import type { LocalBenchRun, ModelListItem, PublicBenchmark } from "@exegol/shared";
 import { ExternalLink } from "lucide-react";
+import { useMemo } from "react";
 import { openInBrowser } from "../../lib/open-in-browser";
-import { SEMANTIC_BADGE } from "../../lib/semantic-colors";
-import { isSelfScored, localResult, rankModels, speedFromRtf } from "../../lib/speech-models";
+import { BADGE, SEMANTIC_BADGE } from "../../lib/semantic-colors";
+import {
+  isSelfScored,
+  localResult,
+  rankModels,
+  runForLanguage,
+  speedFromRtf,
+} from "../../lib/speech-models";
 
-const BADGE = "rounded-full px-1.5 py-px text-[10px]";
 const LINK = "inline-flex items-center gap-0.5 text-accent hover:underline";
 
 const pct = (n: number) => `${n.toFixed(1)}%`;
@@ -49,8 +55,11 @@ export function ModelBenchmarks({
   run: LocalBenchRun | null;
 }) {
   const bySource = new Map<string, PublicBenchmark[]>();
-  for (const b of model.benchmarks ?? [])
-    bySource.set(b.source, [...(bySource.get(b.source) ?? []), b]);
+  for (const b of model.benchmarks ?? []) {
+    const list = bySource.get(b.source);
+    if (list) list.push(b);
+    else bySource.set(b.source, [b]);
+  }
   const local = localResult(run, model.id);
   if (bySource.size === 0 && !local) return null;
   return (
@@ -98,8 +107,8 @@ export function ModelRanking({
   runs: readonly LocalBenchRun[];
   language: string;
 }) {
-  const rows = rankModels(models, runs, language);
-  const hasLocal = runs.some((r) => r.language === language);
+  const rows = useMemo(() => rankModels(models, runs, language), [models, runs, language]);
+  const hasLocal = runForLanguage(runs, language) !== null;
   return (
     <div className="rounded-lg border border-border bg-bg-secondary p-3">
       <div className="mb-2 flex items-baseline gap-2">

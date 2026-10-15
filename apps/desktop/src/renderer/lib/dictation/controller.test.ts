@@ -6,7 +6,7 @@ const trpcMutate = vi.fn(async (path: string, _input?: unknown): Promise<unknown
   return {};
 });
 vi.mock("../trpc-client", () => ({
-  trpcInvoke: vi.fn(async () => ({ dictation: { enabled: true, autoStopSilenceSec: 0 } })),
+  trpcInvoke: vi.fn(async () => ({ dictation: { enabled: true, autoInsert: false } })),
   trpcMutate: (path: string, input?: unknown) => trpcMutate(path, input),
 }));
 vi.mock("../../hooks/use-trpc-dictation", () => ({
@@ -249,9 +249,12 @@ describe("auto insert after silence", () => {
     await startRecording();
     feed(speech());
     for (let i = 0; i < 3; i++) feed(silence());
-    expect(useDictationStore.getState().autoInsertMs).toBe(2000);
+    const countdown = useDictationStore.getState().autoInsertCountdown;
+    expect(countdown?.ms).toBe(3000);
     trpcMutate.mockImplementationOnce(async () => ({ text: "all of it" }));
     feed(silence());
+    // Set once as it starts, not on every chunk
+    expect(useDictationStore.getState().autoInsertCountdown).toBe(countdown);
     feed(silence());
     await settle();
     await settle();
@@ -274,7 +277,7 @@ describe("auto insert after silence", () => {
     feed(speech());
     for (let i = 0; i < 3; i++) feed(silence());
     cancelAutoInsert();
-    expect(useDictationStore.getState().autoInsertMs).toBeNull();
+    expect(useDictationStore.getState().autoInsertCountdown).toBeNull();
     for (let i = 0; i < 5; i++) feed(silence());
     await settle();
     expect(phase()).toBe("listening");

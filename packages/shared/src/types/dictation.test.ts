@@ -124,6 +124,10 @@ describe("dictation chord", () => {
     // Once saved, the new setting wins
     const saved = { ...DEFAULT_DICTATION_SETTINGS, autoStopSilenceSec: 3, autoInsert: false };
     expect(dictationSettingsOf(saved).autoInsert).toBe(false);
+    expect(dictationSettingsOf(saved)).not.toHaveProperty("autoStopSilenceSec");
+    expect(dictationSettingsSchema.safeParse(saved).success).toBe(true);
+    const current = { ...DEFAULT_DICTATION_SETTINGS, autoInsert: true, autoInsertSilenceSec: 10 };
+    expect(dictationSettingsOf(current as typeof DEFAULT_DICTATION_SETTINGS)).toEqual(current);
   });
 
   it("language: English by default, a row saved before it existed included", () => {

@@ -122,7 +122,7 @@ export function DictationSettings({ settings, onChange }: Props) {
           />
           <SwitchRow
             label="Auto insert after silence"
-            description="Once you have spoken, a pause inserts the text (never presses Enter). The card counts down the last 3 seconds; talk to reset it, click it to keep dictating"
+            description="After you speak, a pause inserts the text (never Enter); talk to reset the countdown, click it to keep dictating"
             value={prefs.autoInsert}
             onToggle={() => set({ autoInsert: !prefs.autoInsert })}
           />

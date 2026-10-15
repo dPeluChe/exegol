@@ -1,4 +1,4 @@
-import type { SpeechModelEntry } from "@exegol/shared";
+import { DICTATION_LANGUAGE_IDS, type SpeechModelEntry } from "@exegol/shared";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { DEFAULT_MODEL_ID, MODEL_CATALOG } from "./catalog";
@@ -9,7 +9,7 @@ const relativeFile = z
   .refine((p) => !p.startsWith("/") && !p.split("/").includes(".."), "must stay inside rootDir");
 
 const benchmarkSchema = z.object({
-  language: z.enum(["es", "en"]),
+  language: z.enum(DICTATION_LANGUAGE_IDS),
   werPercent: z.number().positive().max(100),
   speedX: z.number().positive().optional(),
   dataset: z.string().min(1),

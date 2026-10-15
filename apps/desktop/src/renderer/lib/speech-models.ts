@@ -72,9 +72,12 @@ export function groupModels(models: readonly ModelListItem[]): {
 /** x real time from a real-time factor; null when there is nothing to divide */
 export const speedFromRtf = (rtf: number): number | null => (rtf > 0 ? 1 / rtf : null);
 
+export const runForLanguage = (runs: readonly LocalBenchRun[], language: string) =>
+  runs.find((r) => r.language === language) ?? null;
+
 /** The run for the dictation language, else the newest of any language */
 export const benchRunFor = (runs: readonly LocalBenchRun[], language: string) =>
-  runs.find((r) => r.language === language) ?? runs[0] ?? null;
+  runForLanguage(runs, language) ?? runs[0] ?? null;
 
 export const localResult = (run: LocalBenchRun | null, modelId: string) =>
   run?.models.find((m) => m.modelId === modelId) ?? null;
@@ -101,7 +104,7 @@ export function rankModels(
   runs: readonly LocalBenchRun[],
   language: string,
 ): RankRow[] {
-  const run = runs.find((r) => r.language === language) ?? null;
+  const run = runForLanguage(runs, language);
   const order = { local: 0, public: 1, none: 2 };
   return models
     .filter(

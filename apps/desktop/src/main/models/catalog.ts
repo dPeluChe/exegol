@@ -1,4 +1,4 @@
-import type { PublicBenchmark, SpeechModelEntry } from "@exegol/shared";
+import type { DictationLanguage, PublicBenchmark, SpeechModelEntry } from "@exegol/shared";
 
 // Hashes and sizes checked against the downloaded assets on 2026-10-07, Canary on 2026-10-14 (see TASK_COMPLETED/2610.md)
 const SHERPA_RELEASE = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models";
@@ -16,16 +16,27 @@ const CANARY_ROOT = "sherpa-onnx-nemo-canary-180m-flash-en-es-de-fr-int8";
 // sherpa-onnx int8 exports: a guide to the ranking, not this app's exact numbers
 const HANDY = "https://models.handy.computer/languages";
 const HANDY_NOTE = "Q8_0 build; speed on an AMD Ryzen 4750U CPU";
-const handy = (language: "es" | "en", werPercent: number, speedX: number): PublicBenchmark => ({
+const handy = (
+  language: DictationLanguage,
+  werPercent: number,
+  speedX: number,
+  note = HANDY_NOTE,
+): PublicBenchmark => ({
   language,
   werPercent,
   speedX,
   dataset: "FLEURS",
   source: "Handy models",
   url: `${HANDY}/${language}/`,
-  note: HANDY_NOTE,
+  note,
 });
-const CANARY_PAPER = "https://arxiv.org/abs/2509.14128";
+const paper = (language: DictationLanguage, werPercent: number): PublicBenchmark => ({
+  language,
+  werPercent,
+  dataset: "FLEURS",
+  source: "NVIDIA paper (Table 11)",
+  url: "https://arxiv.org/abs/2509.14128",
+});
 
 const TRANSDUCER_FILES = [
   "encoder.int8.onnx",
@@ -86,20 +97,8 @@ export const MODEL_CATALOG: readonly SpeechModelEntry[] = [
     benchmarks: [
       handy("es", 3.65, 13.7),
       handy("en", 4.83, 13.7),
-      {
-        language: "es",
-        werPercent: 3.45,
-        dataset: "FLEURS",
-        source: "NVIDIA paper (Table 11)",
-        url: CANARY_PAPER,
-      },
-      {
-        language: "en",
-        werPercent: 4.85,
-        dataset: "FLEURS",
-        source: "NVIDIA paper (Table 11)",
-        url: CANARY_PAPER,
-      },
+      paper("es", 3.45),
+      paper("en", 4.85),
     ],
   },
   {
@@ -180,10 +179,10 @@ export const MODEL_CATALOG: readonly SpeechModelEntry[] = [
     files: TRANSDUCER_FILES,
     notes: "560 ms chunks: the latency and accuracy middle ground of the five exports.",
     // Handy does not say which of the five chunk-size exports it ran
-    benchmarks: [handy("es", 6.3, 10.6), handy("en", 7.9, 10.6)].map((b) => ({
-      ...b,
-      note: `${HANDY_NOTE}; chunk size not stated`,
-    })),
+    benchmarks: [
+      handy("es", 6.3, 10.6, `${HANDY_NOTE}; chunk size not stated`),
+      handy("en", 7.9, 10.6, `${HANDY_NOTE}; chunk size not stated`),
+    ],
   },
   {
     id: "qwen3-asr-0.6b-int8",

@@ -25,6 +25,8 @@ export interface RecognizerSpec {
 export interface VocabularySpec {
   terms: string[];
   score: number;
+  /** `vocabularyHash(terms, score)`, computed once per vocabulary */
+  hash: string;
   /** sentencepiece vocab derived from the model's tokens.txt: lets hotwords be plain words */
   bpeVocab: string;
 }
@@ -39,9 +41,11 @@ type Builder = (
 const offline = (
   modelConfig: Record<string, unknown>,
   numThreads: number,
-  extra: Record<string, unknown> = {},
-  featureDim = 80,
-  hotwords?: string,
+  {
+    extra = {},
+    featureDim = 80,
+    hotwords,
+  }: { extra?: Record<string, unknown>; featureDim?: number; hotwords?: string } = {},
 ): RecognizerSpec => ({
   kind: "offline",
   ...(hotwords ? { hotwords } : {}),
@@ -85,10 +89,15 @@ const BUILDERS: Record<string, Builder> = {
       },
       numThreads,
       vocab
-        ? { decodingMethod: "modified_beam_search", maxActivePaths: 4, hotwordsScore: vocab.score }
+        ? {
+            extra: {
+              decodingMethod: "modified_beam_search",
+              maxActivePaths: 4,
+              hotwordsScore: vocab.score,
+            },
+            hotwords: vocab.terms.join("/"),
+          }
         : {},
-      80,
-      vocab?.terms.join("/"),
     ),
   "whisper-large-v3-turbo-int8": (file, numThreads) =>
     offline(
@@ -146,8 +155,7 @@ const BUILDERS: Record<string, Builder> = {
         tokens: file("tokens.txt"),
       },
       numThreads,
-      {},
-      128,
+      { featureDim: 128 },
     ),
   "moonshine-v2-tiny-en": moonshine,
   "moonshine-v2-base-es": moonshine,
@@ -155,9 +163,8 @@ const BUILDERS: Record<string, Builder> = {
 
 export const hasRecognizer = (id: string): boolean => id in BUILDERS;
 
-/** Models whose sherpa-onnx recognizer takes a vocabulary: hotwords on Parakeet's NeMo transducer
- *  (modified_beam_search, offline only), a prompt on Qwen3-ASR. Whisper, Moonshine and the
- *  streaming Nemotron (greedy only for NeMo online) have no biasing in sherpa-onnx 1.13 */
+/** Hotwords per stream (Parakeet) or a prompt (Qwen3-ASR); the other models have no biasing in
+ *  sherpa-onnx 1.13 */
 const VOCABULARY_USE: Record<string, "hotwords" | "prompt"> = {
   "parakeet-tdt-0.6b-v3-int8": "hotwords",
   "qwen3-asr-0.6b-int8": "prompt",
@@ -173,16 +180,17 @@ const usedVocabulary = <T extends { terms: readonly string[] }>(id: string, voca
 export const vocabularyHash = (terms: readonly string[], score: number): string =>
   createHash("sha256").update(JSON.stringify({ terms, score })).digest("hex").slice(0, 12);
 
-/** What the loaded recognizer is cached by: the language only for models it shapes, the
- *  vocabulary only for models that use one, so other changes never reload */
+/** What the loaded recognizer is cached by: the language only for models it shapes. Hotwords go
+ *  per stream, so only their decoding (beam search, score) is in the key: new terms never reload */
 export function recognizerKey(
   id: string,
   language: DictationLanguage,
-  vocab: { terms: readonly string[]; score: number } | null = null,
+  vocab: Pick<VocabularySpec, "terms" | "score" | "hash"> | null = null,
 ): string {
   const lang = NEEDS_LANGUAGE.has(id) ? `:${language}` : "";
   const used = usedVocabulary(id, vocab);
-  return `${id}${lang}${used ? `#${vocabularyHash(used.terms, used.score)}` : ""}`;
+  if (!used) return `${id}${lang}`;
+  return `${id}${lang}#${vocabularyUse(id) === "hotwords" ? `beam${used.score}` : used.hash}`;
 }
 
 /** The recognizer for a catalog model installed in `dir`; null for a model the engine lacks */

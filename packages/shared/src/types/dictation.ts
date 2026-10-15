@@ -23,19 +23,25 @@ export function sanitizeDictation(text: string): string {
   return text.replace(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/g, "").trim();
 }
 
-/** What a dictation inserts: sanitized, runs of a repeated word collapsed, then spoken
- *  punctuation when it is on */
-export function cleanDictation(text: string, opts: { spokenPunctuation: boolean }): string {
-  const clean = collapseRepeats(sanitizeDictation(text)).text;
-  return opts.spokenPunctuation ? applySpokenPunctuation(clean) : clean;
+/** What a dictation inserts: sanitized, runs of a repeated word collapsed (`collapsed` runs, for
+ *  the log), then spoken punctuation when it is on */
+export function cleanDictation(
+  text: string,
+  opts: { spokenPunctuation: boolean },
+): { text: string; collapsed: number } {
+  const { text: clean, collapsed } = collapseRepeats(sanitizeDictation(text));
+  return { text: opts.spokenPunctuation ? applySpokenPunctuation(clean) : clean, collapsed };
 }
 
 export const DICTATION_VOCABULARY_MAX = 200;
 export const DICTATION_TERM_MAX = 64;
-/** hotwordsScore in sherpa-onnx: added per matched token while decoding (Light, Normal, Strong).
- *  Past 3 short phrases fill with terms even with the engine's guards: docs/TASK_COMPLETED/2610.md */
-export const DICTATION_VOCABULARY_BOOSTS = [1, 2, 3] as const;
-export const DICTATION_VOCABULARY_BOOST_LABELS = ["Light", "Normal", "Strong"] as const;
+/** hotwordsScore in sherpa-onnx: added per matched token while decoding. Past 3 short phrases
+ *  fill with terms even with the engine's guards: docs/TASK_COMPLETED/2610.md */
+export const DICTATION_VOCABULARY_BOOSTS = [
+  { value: 1, label: "Light" },
+  { value: 2, label: "Normal" },
+  { value: 3, label: "Strong" },
+] as const;
 
 /** One term per line. Commas, slashes and colons are the engines' separators: they become spaces */
 export function parseVocabulary(text: string | readonly string[]): string[] {
@@ -154,8 +160,6 @@ export interface DictationSettings {
   /** The loaded model is freed after this long without a dictation */
   idleUnloadMinutes: number;
   maxSeconds: number;
-  /** Replaced by autoInsert: a saved value is carried over once (dictationSettingsOf) */
-  autoStopSilenceSec: number;
   /** Insert on its own after `autoInsertSilenceSec` of silence once speech was heard; never Enter */
   autoInsert: boolean;
   autoInsertSilenceSec: DictationAutoInsertSeconds;
@@ -219,7 +223,6 @@ export const DEFAULT_DICTATION_SETTINGS: DictationSettings = {
   pauseMediaDirect: false,
   idleUnloadMinutes: 10,
   maxSeconds: 300,
-  autoStopSilenceSec: 0,
   autoInsert: false,
   autoInsertSilenceSec: 7,
   retentionDays: 30,
@@ -236,20 +239,20 @@ export const DEFAULT_DICTATION_SETTINGS: DictationSettings = {
   language: "en",
 };
 
-/** The saved settings over the defaults: a row written before a field existed lacks it */
+/** The saved settings over the defaults: a row written before a field existed lacks it.
+ *  `autoStopSilenceSec` is the old "Stop on its own after a pause of" (2-10 s), read only here */
 export function dictationSettingsOf(
-  saved: Partial<DictationSettings> | undefined,
+  saved: (Partial<DictationSettings> & { autoStopSilenceSec?: number }) | undefined,
 ): DictationSettings {
-  const settings = { ...DEFAULT_DICTATION_SETTINGS, ...saved };
-  // The old "Stop on its own after a pause of" (2-10 s): on, at the nearest delay offered
-  if (saved?.autoInsert === undefined && (saved?.autoStopSilenceSec ?? 0) > 0) {
+  const { autoStopSilenceSec = 0, ...rest } = saved ?? {};
+  const settings: DictationSettings = { ...DEFAULT_DICTATION_SETTINGS, ...rest };
+  if (rest.autoInsert === undefined && autoStopSilenceSec > 0) {
     settings.autoInsert = true;
     settings.autoInsertSilenceSec =
-      DICTATION_AUTO_INSERT_SECONDS.find((s) => s >= (saved?.autoStopSilenceSec ?? 0)) ?? 10;
+      DICTATION_AUTO_INSERT_SECONDS.find((s) => s >= autoStopSilenceSec) ?? 10;
   }
   // A boost off the scale (the old Light 1.5 and Strong 5): back to the default
-  const boosts: readonly number[] = DICTATION_VOCABULARY_BOOSTS;
-  if (!boosts.includes(settings.vocabularyBoost))
+  if (!DICTATION_VOCABULARY_BOOSTS.some((b) => b.value === settings.vocabularyBoost))
     settings.vocabularyBoost = DEFAULT_DICTATION_SETTINGS.vocabularyBoost;
   return settings;
 }

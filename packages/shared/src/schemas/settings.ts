@@ -34,7 +34,8 @@ export const dictationSettingsSchema = z.object({
   pauseMediaDirect: z.boolean(),
   idleUnloadMinutes: z.number().int().min(1).max(240),
   maxSeconds: z.number().int().min(10).max(600),
-  autoStopSilenceSec: z.number().int().min(0).max(60).default(0),
+  // Legacy, read only by dictationSettingsOf: an old row still parses
+  autoStopSilenceSec: z.number().int().min(0).max(60).optional(),
   autoInsert: z.boolean().default(false),
   autoInsertSilenceSec: z
     .number()

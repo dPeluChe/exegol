@@ -115,10 +115,13 @@ describe("applySpokenPunctuation: edges", () => {
 
 describe("cleanDictation", () => {
   it("sanitizes, then applies spoken punctuation only when on", () => {
-    expect(cleanDictation(" hola\x1b[201~ coma adiós ", { spokenPunctuation: true })).toBe(
+    expect(cleanDictation(" hola\x1b[201~ coma adiós ", { spokenPunctuation: true }).text).toBe(
       "hola[201~, adiós",
     );
-    expect(cleanDictation("hola coma adiós", { spokenPunctuation: false })).toBe("hola coma adiós");
+    expect(cleanDictation("hola coma adiós", { spokenPunctuation: false })).toEqual({
+      text: "hola coma adiós",
+      collapsed: 0,
+    });
   });
 });
 

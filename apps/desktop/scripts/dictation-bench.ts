@@ -11,7 +11,7 @@ import {
   readFileSync,
   writeFileSync,
 } from "node:fs";
-import { homedir, tmpdir } from "node:os";
+import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import {
   DEFAULT_DICTATION_SETTINGS,
@@ -19,6 +19,7 @@ import {
   type DictationLanguage,
   type LocalBenchModel,
   parseVocabulary,
+  DICTATION_SAMPLE_RATE as SAMPLE_RATE,
   type SpeechModelEntry,
 } from "@exegol/shared";
 import * as sherpa from "sherpa-onnx-node";
@@ -30,6 +31,14 @@ import {
   vocabularyHash,
   vocabularyUse,
 } from "../src/main/dictation/model-config";
+import {
+  decodeWithVocabulary,
+  joinPhrases,
+  SEGMENTER_START,
+  segment,
+  tailHasSpeech,
+  WHISPER_MIN_PHRASE_MS,
+} from "../src/main/dictation/phrases";
 import { decodeWav } from "../src/main/dictation/recording-files";
 import {
   BENCH_RESULTS_DIR,
@@ -38,6 +47,7 @@ import {
   parseBenchResults,
 } from "../src/main/models/bench-results";
 import { MODEL_CATALOG } from "../src/main/models/catalog";
+import { EXEGOL_DIR } from "../src/main/terminal/pty-sidecar-protocol";
 import {
   type ClipResult,
   charErrorRate,
@@ -48,8 +58,8 @@ import {
   wordErrorRate,
 } from "./dictation-bench-score";
 
-const SAMPLE_RATE = 16_000;
-const EXEGOL_DIR = join(homedir(), ".exegol");
+/** The renderer's capture chunk (~100 ms): phrases are cut where the app would cut them */
+const CHUNK = SAMPLE_RATE / 10;
 
 const args = process.argv.slice(2);
 const flag = (name: string) => args.includes(name);
@@ -66,6 +76,7 @@ if (!DICTATION_LANGUAGE_IDS.includes(language)) {
 const vocabFile = values("--vocab")[0];
 const vocabTerms = vocabFile ? parseVocabulary(readFileSync(resolve(vocabFile), "utf8")) : [];
 const vocabScore = Number(values("--boost")[0] ?? DEFAULT_DICTATION_SETTINGS.vocabularyBoost);
+const vocabHash = vocabularyHash(vocabTerms, vocabScore);
 
 interface Clip {
   name: string;
@@ -141,27 +152,50 @@ function loadClips(dir: string): Clip[] {
   return clips.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-/** The --vocab terms as the engine would build them, the bpe vocab in a temp folder. A full pass
- *  over each clip: the engine's per-phrase choice (no terms on a short phrase) is not applied */
-function vocabularyFor(target: ModelTarget): VocabularySpec | null {
+/** The --vocab terms as the engine would build them, the bpe vocab in a temp folder */
+function benchVocabulary(target: ModelTarget): VocabularySpec | null {
   if (vocabTerms.length === 0 || !vocabularyUse(target.entry.id)) return null;
   const dir = mkdtempSync(join(tmpdir(), "exegol-bench-vocab-"));
   const bpeVocab = join(dir, "model.bpe.vocab");
   const tokens = join(target.dir, "tokens.txt");
   if (existsSync(tokens)) writeFileSync(bpeVocab, bpeVocabFromTokens(readFileSync(tokens, "utf8")));
-  return { terms: vocabTerms, score: vocabScore, bpeVocab };
+  return { terms: vocabTerms, score: vocabScore, hash: vocabHash, bpeVocab };
+}
+
+/** The engine's offline path: phrases cut at pauses, each through decodeWithVocabulary, the tail
+ *  at the end, one full pass when nothing came out */
+async function decodeAsApp(
+  samples: Float32Array,
+  decode: (audio: Float32Array, speechMs: number) => Promise<string>,
+  minPhraseMs: number,
+): Promise<string> {
+  let seg = SEGMENTER_START;
+  const texts: string[] = [];
+  for (let at = 0; at < samples.length; at += CHUNK) {
+    const { state, cut } = segment(seg, samples.subarray(at, at + CHUNK), minPhraseMs);
+    seg = state;
+    if (cut) texts.push(await decode(samples.subarray(cut.from, cut.to), cut.speechMs));
+  }
+  if (tailHasSpeech(seg))
+    texts.push(await decode(samples.subarray(seg.start, seg.end), seg.speechMs));
+  return joinPhrases(texts) || decode(samples, Number.POSITIVE_INFINITY);
 }
 
 async function decoder(target: ModelTarget): Promise<(samples: Float32Array) => Promise<string>> {
-  const spec = recognizerSpec(target.entry, target.dir, threads, language, vocabularyFor(target));
+  const spec = recognizerSpec(target.entry, target.dir, threads, language, benchVocabulary(target));
   if (!spec) throw new Error(`${target.entry.id} has no recognizer`);
   if (spec.kind === "offline") {
     const recognizer = await sherpa.OfflineRecognizer.createAsync(spec.config);
-    return async (samples) => {
-      const stream = recognizer.createStream(spec.hotwords);
-      stream.acceptWaveform({ samples, sampleRate: SAMPLE_RATE });
-      return (await recognizer.decodeAsync(stream)).text.trim();
+    const minPhraseMs = spec.config.modelConfig.whisper ? WHISPER_MIN_PHRASE_MS : 0;
+    const decode = async (audio: Float32Array, speechMs: number) => {
+      const run = async (words: string | null) => {
+        const stream = words ? recognizer.createStream(words) : recognizer.createStream();
+        stream.acceptWaveform({ samples: audio, sampleRate: SAMPLE_RATE });
+        return (await recognizer.decodeAsync(stream)).text.trim();
+      };
+      return (await decodeWithVocabulary(run, spec.hotwords ?? null, speechMs)).text;
     };
+    return (samples) => decodeAsApp(samples, decode, minPhraseMs);
   }
   const recognizer = new sherpa.OnlineRecognizer(spec.config);
   return async (samples) => {
@@ -236,7 +270,7 @@ function saveRun(clips: readonly Clip[], models: LocalBenchModel[]): void {
     ),
     language,
     ...(vocabTerms.length > 0 && {
-      vocabulary: { terms: vocabTerms.length, hash: vocabularyHash(vocabTerms, vocabScore) },
+      vocabulary: { terms: vocabTerms.length, hash: vocabHash },
     }),
     models,
   });

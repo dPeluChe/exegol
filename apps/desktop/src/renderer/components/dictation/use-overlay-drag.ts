@@ -22,17 +22,34 @@ const onHandle = (t: EventTarget | null): boolean =>
   !!t.closest("[data-drag-handle]") &&
   !t.closest("button, a, input, textarea, select");
 
+interface Frame {
+  anchor: Rect;
+  viewport: { width: number; height: number };
+  size: { width: number; height: number };
+}
+
+function measure(
+  mode: OverlayMode,
+  paneId: string | null,
+  card: { width: number; el: HTMLElement | null },
+): Frame {
+  const viewport = { width: window.innerWidth, height: window.innerHeight };
+  const pane = mode === "pane" && paneId ? paneRoot(paneId) : null;
+  const anchor = anchorRect(mode, pane?.getBoundingClientRect() ?? null, viewport);
+  return { anchor, viewport, size: { width: card.width, height: card.el?.offsetHeight ?? 0 } };
+}
+
+const boxIn = (f: Frame, offset: Offset): OverlayBox =>
+  offsetBox(f.anchor, f.viewport, f.size, offset);
+
 export function cardBox(
   mode: OverlayMode,
   paneId: string | null,
   card: { width: number; el: HTMLElement | null },
   offset: Offset,
 ): { box: OverlayBox; anchor: Rect } {
-  const viewport = { width: window.innerWidth, height: window.innerHeight };
-  const pane = mode === "pane" && paneId ? paneRoot(paneId) : null;
-  const anchor = anchorRect(mode, pane?.getBoundingClientRect() ?? null, viewport);
-  const size = { width: card.width, height: card.el?.offsetHeight ?? 0 };
-  return { box: offsetBox(anchor, viewport, size, offset), anchor };
+  const frame = measure(mode, paneId, card);
+  return { box: boxIn(frame, offset), anchor: frame.anchor };
 }
 
 interface Gesture {
@@ -41,6 +58,8 @@ interface Gesture {
   y: number;
   /** The card's center when grabbed, in px */
   start: { x: number; y: number };
+  /** Measured once at the grab: a move only recomputes the box */
+  frame: Frame;
   moved: boolean;
 }
 
@@ -89,12 +108,14 @@ export function useOverlayDrag({
       if (!kind || e.button !== 0 || !onHandle(e.target)) return;
       e.currentTarget.setPointerCapture(e.pointerId);
       // From where the card shows: a stored offset may be clamped by a smaller window now
-      const { box } = cardBox(mode, paneId, { width, el: card }, { fx, fy });
+      const frame = measure(mode, paneId, { width, el: card });
+      const box = boxIn(frame, { fx, fy });
       gestureRef.current = {
         pointerId: e.pointerId,
         x: e.clientX,
         y: e.clientY,
         start: { x: box.left + box.width / 2, y: box.top },
+        frame,
         moved: false,
       };
     },
@@ -108,10 +129,9 @@ export function useOverlayDrag({
         gesture.moved = true;
         setDragging(true);
       }
-      const { anchor } = cardBox(mode, paneId, { width, el: card }, NO_OFFSET);
-      const offset = offsetAt(gesture.start.x + mx, gesture.start.y + my, anchor);
-      const { box } = cardBox(mode, paneId, { width, el: card }, offset);
-      live.current = offsetOf(box, anchor);
+      const { frame } = gesture;
+      const box = boxIn(frame, offsetAt(gesture.start.x + mx, gesture.start.y + my, frame.anchor));
+      live.current = offsetOf(box, frame.anchor);
       apply(box);
     },
     onPointerUp: end,

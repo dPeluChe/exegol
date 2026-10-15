@@ -1,4 +1,9 @@
-import { dictationSettingsOf, type LocalBenchRun, type ModelListItem } from "@exegol/shared";
+import {
+  dictationSettingsOf,
+  type LocalBenchRun,
+  type ModelListItem,
+  type Settings,
+} from "@exegol/shared";
 import {
   AlertTriangle,
   AudioLines,
@@ -10,10 +15,11 @@ import {
   Trash2,
   X,
 } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { create } from "zustand";
 import { useSettings } from "../../hooks/use-trpc";
 import { useBenchResults, useModelAction, useModels } from "../../hooks/use-trpc-models";
-import { SEMANTIC_BADGE } from "../../lib/semantic-colors";
+import { BADGE, SEMANTIC_BADGE } from "../../lib/semantic-colors";
 import { benchRunFor, groupModels, languagesLabel } from "../../lib/speech-models";
 import { ConfirmDialog } from "../common/ConfirmDialog";
 import { formatBytes } from "../workspace/sections/resource-format";
@@ -24,11 +30,12 @@ import { useConfirmDeleteModel } from "./use-confirm-delete-model";
 type RowAction = "download" | "cancel" | "setDefault";
 type LicensedAction = "download" | "setDefault";
 
-const BADGE = "rounded-full px-2 py-0.5 text-[10px]";
 const GROUP_HEADING = "text-[11px] font-semibold uppercase tracking-wide text-text-muted";
+const NO_RUNS: LocalBenchRun[] = [];
+const dictationLanguage = (s: Settings) => dictationSettingsOf(s.dictation).language;
 
-// Per window, for this run of the app: null until the user toggles it
-let availableOpenChoice: boolean | null = null;
+/** Available open or closed, per window for this run of the app: null until the user toggles it */
+const useAvailableChoice = create<{ open: boolean | null }>(() => ({ open: null }));
 
 export function ModelsSettings() {
   return (
@@ -58,22 +65,21 @@ export function SpeechModelList({
   grouped?: boolean;
 }) {
   const { data, isLoading } = useModels();
-  const { data: settings } = useSettings();
+  const { data: language = dictationSettingsOf(undefined).language } =
+    useSettings(dictationLanguage);
   const { data: benchRuns } = useBenchResults();
-  const runs = benchRuns ?? [];
-  const language = dictationSettingsOf(settings?.dictation).language;
+  const runs = benchRuns ?? NO_RUNS;
   // undefined: no benchmark lines (Storage)
   const run = grouped ? benchRunFor(runs, language) : undefined;
-  const models = installedFirst
-    ? data && [...data].sort((a, b) => installedRank(a) - installedRank(b))
-    : data;
-  const groups = groupModels(models ?? []);
-  const [availableChoice, setAvailableChoice] = useState(availableOpenChoice);
-  const availableOpen = availableChoice ?? groups.installed.length === 0;
-  const toggleAvailable = () => {
-    availableOpenChoice = !availableOpen;
-    setAvailableChoice(!availableOpen);
-  };
+  const models = useMemo(
+    () =>
+      installedFirst && data ? [...data].sort((a, b) => installedRank(a) - installedRank(b)) : data,
+    [data, installedFirst],
+  );
+  const groups = useMemo(() => (grouped ? groupModels(models ?? []) : null), [grouped, models]);
+  const availableChoice = useAvailableChoice((s) => s.open);
+  const availableOpen = availableChoice ?? groups?.installed.length === 0;
+  const toggleAvailable = () => useAvailableChoice.setState({ open: !availableOpen });
   const action = useModelAction();
   const { requestDelete, dialog: deleteDialog } = useConfirmDeleteModel();
   const [licenseCheck, setLicenseCheck] = useState<{
@@ -108,7 +114,7 @@ export function SpeechModelList({
     <>
       {isLoading && <p className="text-xs text-text-muted">Loading models...</p>}
       {!grouped && models && rows(models)}
-      {grouped && models && (
+      {groups && models && (
         <div className="space-y-4">
           <ModelRanking models={models} runs={runs} language={language} />
           {groups.installed.length > 0 && (

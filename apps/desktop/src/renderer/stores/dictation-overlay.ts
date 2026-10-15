@@ -5,9 +5,8 @@ import type { Offset } from "../lib/dictation/overlay-position";
 /** What the dragged card is placed relative to: the target pane, or the window */
 export type AnchorKind = "pane" | "window";
 
-/** Where the user dragged the dictation card, per anchor kind, kept across restarts. A missing
- *  offset is the default spot (centered). v1: fractions of the anchor; a v0 px offset (reapplied
- *  to a smaller pane it pushed the card to a side) goes back to center */
+/** Where the user dragged the dictation card, per anchor kind, kept across restarts; none =
+ *  centered. v1 stores fractions of the anchor (v0 px offsets reset to center) */
 interface DictationOverlayStore {
   offsets: Partial<Record<AnchorKind, Offset>>;
   setOffset: (kind: AnchorKind, offset: Offset | null) => void;

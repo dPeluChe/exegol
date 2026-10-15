@@ -9,8 +9,7 @@ import * as sherpa from "sherpa-onnx-node";
 import type { EngineReply, EngineRequest } from "./engine-protocol";
 import { isInside, type RecognizerSpec, specPaths } from "./model-config";
 import {
-  biasPhrase,
-  degenerateDecode,
+  decodeWithVocabulary,
   joinPhrases,
   SEGMENTER_START,
   type Segmenter,
@@ -81,6 +80,8 @@ function assertModelPaths(spec: RecognizerSpec): void {
 }
 
 async function load(modelId: string, key: string, spec: RecognizerSpec): Promise<void> {
+  // Set before the await: a "hotwords" message sent during the load wins
+  hotwords = spec.hotwords ?? null;
   if (loadedKey === key && loaded) {
     reply({ type: "loaded", modelId });
     return;
@@ -94,7 +95,6 @@ async function load(modelId: string, key: string, spec: RecognizerSpec): Promise
         ? { kind: "offline", recognizer: await sherpa.OfflineRecognizer.createAsync(spec.config) }
         : { kind: "online", recognizer: new sherpa.OnlineRecognizer(spec.config) };
     loadedKey = key;
-    hotwords = spec.hotwords ?? null;
     minPhraseMs = spec.config.modelConfig.whisper ? WHISPER_MIN_PHRASE_MS : 0;
     reply({ type: "loaded", modelId });
   } catch (err) {
@@ -118,8 +118,6 @@ function pump(s: Session): void {
   }
 }
 
-/** With the vocabulary only for a phrase with enough speech, and again without it when the
- *  biased text repeats itself */
 async function decodeOffline(s: Session, samples: Float32Array, speechMs: number): Promise<string> {
   await loading;
   if (loaded?.kind !== "offline") throw new Error("the model did not load");
@@ -129,11 +127,9 @@ async function decodeOffline(s: Session, samples: Float32Array, speechMs: number
     stream.acceptWaveform({ samples, sampleRate: SAMPLE_RATE });
     return (await recognizer.decodeAsync(stream)).text.trim();
   };
-  if (!hotwords) return run(null);
-  const text = biasPhrase(speechMs) ? await run(hotwords) : null;
-  if (text !== null && !degenerateDecode(text)) return text;
-  s.unbiased++;
-  return run(null);
+  const { text, unbiased } = await decodeWithVocabulary(run, hotwords, speechMs);
+  if (unbiased) s.unbiased++;
+  return text;
 }
 
 /** [from, to) of the current phrase's chunks as one buffer */
@@ -189,6 +185,8 @@ interface Finished {
   unbiased: number;
 }
 
+const EMPTY_FINISH: Finished = { text: "", phrases: 0, phraseMs: 0, fullPass: false, unbiased: 0 };
+
 async function finish(s: Session): Promise<Finished> {
   await loading;
   if (!loaded) throw new Error("the model did not load");
@@ -206,36 +204,36 @@ async function finish(s: Session): Promise<Finished> {
       });
       s.texts.push(tail);
     }
-    const phrases = s.texts.length;
+    const done = (text: string, fullPass: boolean): Finished => ({
+      text,
+      phrases: s.texts.length,
+      phraseMs: s.phraseMs,
+      fullPass,
+      unbiased: s.unbiased,
+    });
     const joined = joinPhrases(s.texts);
-    if (!s.phraseFailed && (joined || s.total === 0))
-      return { text: joined, phrases, phraseMs: s.phraseMs, fullPass: false, unbiased: s.unbiased };
+    if (!s.phraseFailed && (joined || s.total === 0)) return done(joined, false);
     // A phrase failed, or cuts split a short utterance badly: one pass over everything
-    const text = await decodeOffline(s, concat(s.all, s.total), Number.POSITIVE_INFINITY);
-    return { text, phrases, phraseMs: s.phraseMs, fullPass: true, unbiased: s.unbiased };
+    return done(await decodeOffline(s, concat(s.all, s.total), Number.POSITIVE_INFINITY), true);
   }
   // Trailing silence lets the streaming model emit its last words (upstream example: 0.4 s)
   s.pending.push(new Float32Array(SAMPLE_RATE * 0.4));
   pump(s);
   const { recognizer } = loaded;
   const stream = s.online;
-  const streamed = (text: string) => ({
-    text,
-    phrases: 0,
-    phraseMs: 0,
-    fullPass: false,
-    unbiased: 0,
-  });
-  if (!stream) return streamed("");
+  if (!stream) return EMPTY_FINISH;
   stream.inputFinished();
   while (recognizer.isReady(stream)) recognizer.decode(stream);
-  return streamed(recognizer.getResult(stream).text.trim());
+  return { ...EMPTY_FINISH, text: recognizer.getResult(stream).text.trim() };
 }
 
 function handle(msg: EngineRequest): void {
   switch (msg.type) {
     case "load":
       loading = load(msg.modelId, msg.key, msg.spec);
+      return;
+    case "hotwords":
+      hotwords = msg.hotwords;
       return;
     case "begin":
       if (session) session.cancelled = true;

@@ -2,9 +2,10 @@ import type { RecognizerSpec } from "./model-config";
 
 /** Main → engine process */
 export type EngineRequest =
-  /** `key`: the recognizer key (`recognizerKey`: model id, plus the language for models that need
-   *  one and the vocabulary hash for models that use one); a different key rebuilds the recognizer */
+  /** A different `key` (`recognizerKey`) rebuilds the recognizer */
   | { type: "load"; modelId: string; key: string; spec: RecognizerSpec }
+  /** New per-stream terms for the loaded recognizer (same key, no reload) */
+  | { type: "hotwords"; hotwords: string | null }
   | { type: "begin"; sessionId: string; maxSamples: number }
   | { type: "audio"; sessionId: string; samples: Float32Array }
   | { type: "finish"; sessionId: string }

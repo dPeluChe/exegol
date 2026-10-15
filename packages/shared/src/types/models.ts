@@ -1,11 +1,13 @@
 /** Local speech-to-text models (Settings > Models) and Exegol's disk use (Settings > Storage) */
 
+import type { DictationLanguage } from "./dictation";
+
 export type SpeechEngine = "sherpa-onnx";
 export type SpeechModelKind = "offline" | "streaming";
 
 /** A published score for a model, copied from the source as it reads there (never estimated) */
 export interface PublicBenchmark {
-  language: "es" | "en";
+  language: DictationLanguage;
   werPercent: number;
   /** Times faster than real time on CPU; absent when the source gives none */
   speedX?: number;

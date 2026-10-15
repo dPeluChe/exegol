@@ -1,4 +1,3 @@
-import { existsSync } from "node:fs";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { EXEGOL_DIR } from "../terminal/pty-sidecar-protocol";
@@ -20,13 +19,17 @@ export interface VocabularyInfo {
   applied: boolean;
 }
 
-/** Written contents per path this run: a start with the same vocabulary writes nothing */
-const written = new Map<string, string>();
+type Prepared = { spec: VocabularySpec | null; info: VocabularyInfo | null };
 
-async function writeOnce(path: string, content: () => Promise<string> | string, key: string) {
-  if (written.get(path) === key && existsSync(path)) return;
-  await writeFile(path, await content(), { mode: 0o600 });
-  written.set(path, key);
+/** The model dir each bpe vocab was written from this run: a start with the same model writes nothing */
+const written = new Map<string, string>();
+/** The last vocabulary prepared: warm-up and the start that follows share it */
+let last: { key: string; prepared: Prepared } | null = null;
+
+/** A file was deleted under us (the engine saw ENOENT): the next start writes it again */
+export function forgetVocabularyFiles(): void {
+  written.clear();
+  last = null;
 }
 
 /** The vocabulary for this model, its files written when they changed; null when there is none
@@ -36,19 +39,22 @@ export async function prepareVocabulary(
   modelDir: string,
   terms: string[],
   score: number,
-): Promise<{ spec: VocabularySpec | null; info: VocabularyInfo | null }> {
+): Promise<Prepared> {
   if (terms.length === 0) return { spec: null, info: null };
+  const key = JSON.stringify([modelId, modelDir, score, terms]);
+  if (last?.key === key) return last.prepared;
   const hash = vocabularyHash(terms, score);
   const use = vocabularyUse(modelId);
   const info = { terms: terms.length, hash, applied: use !== null };
   const bpeVocab = join(VOCAB_DIR, `${modelId}.bpe.vocab`);
-  const spec = { terms, score, bpeVocab };
-  if (use !== "hotwords") return { spec: use ? spec : null, info };
-  await mkdir(VOCAB_DIR, { recursive: true, mode: 0o700 });
-  await writeOnce(
-    bpeVocab,
-    async () => bpeVocabFromTokens(await readFile(join(modelDir, "tokens.txt"), "utf8")),
-    modelDir,
-  );
-  return { spec, info };
+  const spec = { terms, score, hash, bpeVocab };
+  if (use === "hotwords" && written.get(bpeVocab) !== modelDir) {
+    await mkdir(VOCAB_DIR, { recursive: true, mode: 0o700 });
+    const tokens = await readFile(join(modelDir, "tokens.txt"), "utf8");
+    await writeFile(bpeVocab, bpeVocabFromTokens(tokens), { mode: 0o600 });
+    written.set(bpeVocab, modelDir);
+  }
+  const prepared = { spec: use ? spec : null, info };
+  last = { key, prepared };
+  return prepared;
 }

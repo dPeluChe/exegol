@@ -1,5 +1,4 @@
 import {
-  cleanDictation,
   DICTATION_SAMPLE_RATE,
   type DictationCancelSource,
   type DictationSettings,
@@ -133,7 +132,7 @@ function reset(): void {
     pausedAt: null,
     inputName: null,
     inputNotice: null,
-    autoInsertMs: null,
+    autoInsertCountdown: null,
   });
 }
 
@@ -158,14 +157,19 @@ function onChunk(samples: Float32Array): void {
     void stopDictation("silence");
     return;
   }
-  const autoInsertMs = countdownMs(auto);
-  if (store().autoInsertMs !== autoInsertMs) store().set({ autoInsertMs });
+  const ms = countdownMs(auto);
+  const shown = store().autoInsertCountdown;
+  if (ms === null) {
+    if (shown) store().set({ autoInsertCountdown: null });
+  } else if (!shown) {
+    store().set({ autoInsertCountdown: { endsAt: Date.now() + ms, ms } });
+  }
 }
 
 /** A click on the countdown: this dictation goes on until the user inserts or cancels */
 export function cancelAutoInsert(): void {
   if (run) run.autoInsertOff = true;
-  store().set({ autoInsertMs: null });
+  store().set({ autoInsertCountdown: null });
 }
 
 async function loadStatus(): Promise<DictationStatus> {
@@ -203,7 +207,7 @@ export async function startDictation(): Promise<void> {
     pausedAt: null,
     inputName: null,
     inputNotice: null,
-    autoInsertMs: null,
+    autoInsertCountdown: null,
   });
   const current: Run = {
     settings: dictationSettingsOf(undefined),
@@ -299,7 +303,7 @@ export async function stopDictation(by: DictationStopReason): Promise<void> {
   const sessionId = r.sessionId;
   const durationMs = recordedMs(store());
   // Transcribing from here: a second Enter or chord meanwhile is swallowed, one insert only
-  store().set({ phase: "transcribing", autoInsertMs: null });
+  store().set({ phase: "transcribing", autoInsertCountdown: null });
   // The last words are still in the worklet or in flight: they reach main before the stop does
   await r.capture?.drain();
   if (run !== r) return;
@@ -314,6 +318,7 @@ export async function stopDictation(by: DictationStopReason): Promise<void> {
   }
   const target = finalTarget(r);
   try {
+    // Main returns it cleaned (sanitized, repeats collapsed, spoken punctuation)
     const { text } = await trpcMutate<{ text: string }>("dictation.stop", {
       sessionId,
       durationMs,
@@ -324,13 +329,12 @@ export async function stopDictation(by: DictationStopReason): Promise<void> {
     // Esc while transcribing: cancelled for real, nothing is inserted
     if (run !== r) return;
     reset();
-    const clean = cleanDictation(text, r.settings);
-    if (!clean) {
+    if (!text) {
       toast().addToast({ type: "info", title: "No words recognized" });
       return;
     }
     // An auto insert never sends: the user did not choose the moment
-    await insertDictation(clean, target, by !== "silence" && r.settings.pressEnter, r.field);
+    await insertDictation(text, target, by !== "silence" && r.settings.pressEnter, r.field);
   } catch (err) {
     if (run === r) fail(errorText(err));
   }
@@ -474,7 +478,7 @@ export function togglePauseDictation(): void {
   if (!r?.sessionId || phase !== "listening") return;
   const now = Date.now();
   r.paused = !r.paused;
-  if (r.paused) store().set({ pausedAt: now, autoInsertMs: null });
+  if (r.paused) store().set({ pausedAt: now, autoInsertCountdown: null });
   else {
     r.vad = resumedVad(r.vad);
     store().set({ pausedAt: null, startedAt: startedAt + (now - (pausedAt ?? now)) });

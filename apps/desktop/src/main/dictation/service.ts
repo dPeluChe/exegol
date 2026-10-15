@@ -1,6 +1,5 @@
 import {
   cleanDictation,
-  collapseRepeats,
   DEFAULT_SPEECH_MODEL_KEY,
   DICTATION_SAMPLE_RATE,
   type DictationCancelSource,
@@ -13,7 +12,6 @@ import {
   dictationVocabulary,
   parseChord,
   type SpeechModelEntry,
-  sanitizeDictation,
 } from "@exegol/shared";
 import type Database from "libsql";
 import { nanoid } from "nanoid";
@@ -158,6 +156,7 @@ export async function startDictation(
   const { entry, ready } = await pickModel(db);
   if (!ready) throw new Error("no speech model is downloaded");
   const vocabulary = await vocabularyFor(settings, entry, projectId);
+  const want = { id: entry.id, language: settings.language, vocab: vocabulary.spec };
   // Past the longest dictation the music comes back even if no end arrives (renderer died)
   const holdMs = (settings.maxSeconds + 30) * 1000;
   // A dictation replacing a running one keeps its pause while unreleased: resume then pause races
@@ -176,7 +175,7 @@ export async function startDictation(
       id,
       modelId: entry.id,
       startedAt: Date.now(),
-      cold: warmedCold ?? !modelLoaded(entry.id, settings.language, vocabulary.spec),
+      cold: warmedCold ?? !modelLoaded(want),
       media,
       audio: settings.keepRecordings ? new RecordingBuffer(settings.maxSeconds) : null,
       paused: false,
@@ -184,7 +183,7 @@ export async function startDictation(
     };
     warmedCold = null;
     // The model loads while the user speaks: audio waits in the engine until it is ready
-    ensureModel(entry.id, settings.language, vocabulary.spec).catch(() => {});
+    ensureModel(want).catch(() => {});
     beginSession(id, settings.maxSeconds);
     armDictationSession(id, settings.maxSeconds);
   } catch (err) {
@@ -248,43 +247,41 @@ export async function stopDictation(
   logger.info(
     `[Dictation] stopped by ${input.by}; ${modelId}: ${Math.round(input.durationMs / 100) / 10}s of audio, ${text.length} chars; ${loadSplit(cold)}${phraseLog}decode after stop ${decodeMs}ms${fullPass ? " (full pass)" : ""}`,
   );
-  if (text) {
-    const settings = dictationSettings(db);
-    const saved = addDictation(db, {
-      text,
-      modelId,
-      durationMs: Math.max(0, Math.round(input.durationMs)),
-      projectId: input.projectId,
-      targetKind: input.targetKind,
-    });
-    pruneDictations(db, { days: settings.retentionDays, max: settings.retentionMax });
-    broadcast("dictation:done", {});
-    const inserted = cleanDictation(text, settings);
-    const { collapsed } = collapseRepeats(sanitizeDictation(text));
-    if (collapsed > 0) logger.info(`[Dictation] collapsed ${collapsed} repeats`);
-    if (audio && inserted) {
-      const projectName = saved.projectId ? (getProject(db, saved.projectId)?.name ?? null) : null;
-      const at = new Date();
-      setImmediate(() => {
-        if (ending.cancelled) return;
-        void saveRecording({
-          sessionId: input.sessionId,
-          audio,
-          at,
-          projectId: saved.projectId,
-          projectName,
-          target: input.targetKind,
-          modelId,
-          transcribeMs: phraseMs + decodeMs,
-          historyId: saved.id,
-          text: inserted,
-          rawText: text,
-          vocabulary,
-        });
+  if (!text) return { text: "" };
+  const settings = dictationSettings(db);
+  const { text: inserted, collapsed } = cleanDictation(text, settings);
+  if (collapsed > 0) logger.info(`[Dictation] collapsed ${collapsed} repeats`);
+  const saved = addDictation(db, {
+    text,
+    modelId,
+    durationMs: Math.max(0, Math.round(input.durationMs)),
+    projectId: input.projectId,
+    targetKind: input.targetKind,
+  });
+  pruneDictations(db, { days: settings.retentionDays, max: settings.retentionMax });
+  broadcast("dictation:done", {});
+  if (audio && inserted) {
+    const projectName = saved.projectId ? (getProject(db, saved.projectId)?.name ?? null) : null;
+    const at = new Date();
+    setImmediate(() => {
+      if (ending.cancelled) return;
+      void saveRecording({
+        sessionId: input.sessionId,
+        audio,
+        at,
+        projectId: saved.projectId,
+        projectName,
+        target: input.targetKind,
+        modelId,
+        transcribeMs: phraseMs + decodeMs,
+        historyId: saved.id,
+        text: inserted,
+        rawText: text,
+        vocabulary,
       });
-    }
+    });
   }
-  return { text };
+  return { text: inserted };
 }
 
 function loadSplit(cold: boolean): string {
@@ -305,8 +302,9 @@ export async function warmDictation(
   const { entry, ready } = await pickModel(db);
   if (!ready) return { ok: false };
   const { spec } = await vocabularyFor(settings, entry, projectId);
-  warmedCold = !modelLoaded(entry.id, settings.language, spec);
-  ensureModel(entry.id, settings.language, spec).catch(() => {});
+  const want = { id: entry.id, language: settings.language, vocab: spec };
+  warmedCold = !modelLoaded(want);
+  ensureModel(want).catch(() => {});
   return { ok: true };
 }
 

@@ -111,6 +111,19 @@ export const biasPhrase = (speechMs: number): boolean => speechMs >= VOCAB_MIN_S
 /** A biased decode that repeats itself is decoded again without the vocabulary */
 export const degenerateDecode = (text: string): boolean => collapseRepeats(text).collapsed > 0;
 
+/** The app's per-phrase decode (engine and bench): the vocabulary only with enough speech, and
+ *  again without it when the biased text repeats itself */
+export async function decodeWithVocabulary(
+  run: (hotwords: string | null) => Promise<string>,
+  hotwords: string | null,
+  speechMs: number,
+): Promise<{ text: string; unbiased: boolean }> {
+  if (!hotwords) return { text: await run(null), unbiased: false };
+  const text = biasPhrase(speechMs) ? await run(hotwords) : null;
+  if (text !== null && !degenerateDecode(text)) return { text, unbiased: false };
+  return { text: await run(null), unbiased: true };
+}
+
 export function joinPhrases(texts: readonly string[]): string {
   return texts
     .map((t) => t.trim())

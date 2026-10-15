@@ -86,14 +86,26 @@ const DETERMINERS = new Set([
 ]);
 
 /** What the model writes at a pause around the spoken word: it gives way to the command */
-const SOFT_BEFORE = /[\s,.;:]*$/u;
+const isSoft = (c: string) => /[\s,.;:]/u.test(c);
+const isBlank = (c: string) => c === " " || c === "\t";
 const ATTACHED_AFTER = /^[.,;:!?]+/u;
 
-const prevWord = (text: string): string | null =>
-  /(\p{L}+)\s+$/u.exec(text)?.[1]?.toLowerCase() ?? null;
+/** Drops trailing chars walking back from the end: the text built so far is never rescanned */
+function trimEnd(text: string, drop: (c: string) => boolean): string {
+  let end = text.length;
+  while (end > 0 && drop(text[end - 1] as string)) end--;
+  return end === text.length ? text : text.slice(0, end);
+}
 
-function applies(cmd: Command, before: string, rest: string, nextIsCommand: boolean): boolean {
-  const word = prevWord(before);
+/** The word before `end`, from a short look back: determiners are short words */
+function prevWord(text: string, end: number): string | null {
+  const from = Math.max(0, end - 32);
+  const m = /(\p{L}+)\s+$/u.exec(text.slice(from, end));
+  if (!m?.[1] || (from > 0 && m.index === 0)) return null;
+  return m[1].toLowerCase();
+}
+
+function applies(cmd: Command, word: string | null, rest: string, nextIsCommand: boolean): boolean {
   if (word && DETERMINERS.has(word)) return false;
   if (cmd.guard === "notDe") return !/^\s+de(?![\p{L}\p{N}])/iu.test(rest);
   if (cmd.guard === "sentence") {
@@ -139,24 +151,24 @@ export function applySpokenPunctuation(text: string): string {
     const next = matches[i + 1];
     const nextIsCommand =
       next?.index !== undefined && text.slice(end, next.index).trim() === "" && next.index > end;
-    if (!applies(cmd, text.slice(0, start), rest, nextIsCommand)) return;
+    if (!applies(cmd, prevWord(text, start), rest, nextIsCommand)) return;
     end += ATTACHED_AFTER.exec(rest)?.[0].length ?? 0;
     emit(text.slice(pos, start));
     pos = end;
     if (cmd.kind === "close") {
-      out = out.replace(SOFT_BEFORE, "") + cmd.out;
+      out = trimEnd(out, isSoft) + cmd.out;
       spaceNext = true;
       if (/[.?!]$/.test(cmd.out)) capNext = true;
       return;
     }
     if (cmd.kind === "break") {
-      out = out.replace(/[ \t]+$/, "") + cmd.out;
+      out = trimEnd(out, isBlank) + cmd.out;
       spaceNext = false;
       capNext = true;
       pos += /^[ \t]*/.exec(text.slice(pos))?.[0].length ?? 0;
       return;
     }
-    const trimmed = out.replace(/[ \t]+$/, "");
+    const trimmed = trimEnd(out, isBlank);
     if (trimmed === "" || /[.?!\n]$/.test(trimmed)) capNext = true;
     out = trimmed && !/[\n¿¡]$/.test(trimmed) ? `${trimmed} ${cmd.out}` : trimmed + cmd.out;
     spaceNext = false;

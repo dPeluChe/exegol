@@ -82,6 +82,7 @@ describe("vocabulary", () => {
   const vocab = {
     terms: ["worktree", "pull request"],
     score: 3,
+    hash: vocabularyHash(["worktree", "pull request"], 3),
     bpeVocab: "/home/u/.exegol/dictation-vocab/p.bpe.vocab",
   };
   const spec = (id: string, v: typeof vocab | null = vocab) => {
@@ -126,12 +127,20 @@ describe("vocabulary", () => {
   });
 
   it("caches by vocabulary only for models that use one, with the language for Canary", () => {
-    const hash = vocabularyHash(vocab.terms, vocab.score);
-    expect(recognizerKey("parakeet-tdt-0.6b-v3-int8", "es", vocab)).toBe(
-      `parakeet-tdt-0.6b-v3-int8#${hash}`,
+    const parakeet = "parakeet-tdt-0.6b-v3-int8";
+    expect(recognizerKey(parakeet, "es", vocab)).toBe(`${parakeet}#beam3`);
+    // Hotwords go per stream: other terms (another project) keep the loaded recognizer
+    const other = { ...vocab, terms: ["Biome"], hash: vocabularyHash(["Biome"], 3) };
+    expect(recognizerKey(parakeet, "en", other)).toBe(recognizerKey(parakeet, "en", vocab));
+    expect(recognizerKey(parakeet, "en", { ...vocab, score: 2 })).not.toBe(
+      recognizerKey(parakeet, "en", vocab),
     );
-    expect(recognizerKey("parakeet-tdt-0.6b-v3-int8", "en", { ...vocab, score: 5 })).not.toBe(
-      recognizerKey("parakeet-tdt-0.6b-v3-int8", "en", vocab),
+    // Qwen takes them in its prompt: new terms are a new recognizer
+    expect(recognizerKey("qwen3-asr-0.6b-int8", "en", vocab)).toBe(
+      `qwen3-asr-0.6b-int8#${vocab.hash}`,
+    );
+    expect(recognizerKey("qwen3-asr-0.6b-int8", "en", other)).not.toBe(
+      recognizerKey("qwen3-asr-0.6b-int8", "en", vocab),
     );
     expect(recognizerKey("parakeet-tdt-0.6b-v3-int8", "en", { ...vocab, terms: [] })).toBe(
       "parakeet-tdt-0.6b-v3-int8",
