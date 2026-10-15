@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- The menu bar icon's menu groups running agents by project (the ones needing you first), names each by alias and task ("argo · Claude Code") with its state and age ("Working 3m · up 2h" under it on macOS), says how many need you, work or idle, and adds Open Dashboard and Settings. "Needs you" and "Working" submenus list those agents across projects, and "Plan limits" shows Claude's and Codex's 5-hour and weekly use with time to reset (the readings the status bar widget already has)
+
 ### Fixed
 - The `[GPU]` startup line in the log and bug reports showed every feature (WebGL included) as disabled: it was read before the GPU process reported. It is now written once the GPU process is up
 - `bun run package:local` (development) builds the Rust module first when it is missing, so a test DMG made in a fresh worktree keeps worktrees and the Rust git/diff
