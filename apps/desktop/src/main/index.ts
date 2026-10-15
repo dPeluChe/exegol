@@ -26,7 +26,7 @@ import { startPrWatch, stopPrWatch } from "./integrations/github/pr-watch";
 import { registerDictationIpc } from "./ipc/procedures/dictation";
 import { registerTrpcIpcHandler } from "./ipc/trpc-ipc";
 import { broadcast } from "./lib/event-bus";
-import { flushLogSync, logger, markShutdown } from "./lib/logger";
+import { flushLogSync, logger, markShutdown, startLogFile } from "./lib/logger";
 import {
   ensureExegolMcpServerStarted,
   getMcpAgentStates,
@@ -63,10 +63,12 @@ app.setName("Exegol");
 // origin until restart, leaving every terminal on the slower DOM renderer
 app.disableDomainBlockingFor3DAPIs();
 
-installDeepLinkHandling();
+const primaryInstance = installDeepLinkHandling();
+if (primaryInstance) startLogFile();
 registerPreviewScheme();
 
 app.whenReady().then(async () => {
+  if (!primaryInstance) return;
   startMark("appReady");
   // ─── Critical path: everything the window needs before first paint ──
   try {

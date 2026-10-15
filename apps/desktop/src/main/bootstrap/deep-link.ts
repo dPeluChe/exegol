@@ -51,7 +51,8 @@ function registerDeepLinkProtocol(): void {
   }
 }
 
-export function installDeepLinkHandling(): void {
+/** False when this is a second packaged copy, which is exiting */
+export function installDeepLinkHandling(): boolean {
   // T155.6: single-instance — a second launch (e.g. Windows/Linux deep link)
   // forwards its argv here and exits; macOS delivers URLs via open-url instead.
   // Dev instances share userData with packaged ones, so only a packaged app
@@ -66,6 +67,7 @@ export function installDeepLinkHandling(): void {
   } else if (app.isPackaged) {
     // quit() is async: ready still fired and the copy grabbed the hotkey and MCP socket
     app.exit(0);
+    return false;
   }
 
   // Must be registered before app ready — macOS can deliver the URL at launch.
@@ -74,4 +76,5 @@ export function installDeepLinkHandling(): void {
     handleDeepLinkUrl(url);
   });
   registerDeepLinkProtocol();
+  return true;
 }
