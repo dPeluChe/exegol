@@ -1,11 +1,11 @@
 // Dev only (not shipped): decodes kept dictation recordings with each speech model and scores
 // them against the text saved next to each clip. Usage in docs/GUIDES/DICTATION_BENCH.md.
 //   bun apps/desktop/scripts/dictation-bench.ts [--dir DIR] [--model DIR[=catalogId]]...
-//     [--no-installed] [--threads N] [--json out.json]
+//     [--no-installed] [--threads N] [--language en|es] [--json out.json]
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, join, resolve } from "node:path";
-import type { SpeechModelEntry } from "@exegol/shared";
+import type { DictationLanguage, SpeechModelEntry } from "@exegol/shared";
 import * as sherpa from "sherpa-onnx-node";
 import { hasRecognizer, recognizerSpec } from "../src/main/dictation/model-config";
 import { decodeWav } from "../src/main/dictation/recording-files";
@@ -29,6 +29,7 @@ const values = (name: string) =>
 const recordingsDir = resolve(values("--dir")[0] ?? join(EXEGOL_DIR, "dictation-audio"));
 const jsonOut = values("--json")[0];
 const threads = Number(values("--threads")[0] ?? 4);
+const language: DictationLanguage = values("--language")[0] === "es" ? "es" : "en";
 
 interface Clip {
   name: string;
@@ -93,7 +94,7 @@ function loadClips(dir: string): Clip[] {
 }
 
 async function decoder(target: ModelTarget): Promise<(samples: Float32Array) => Promise<string>> {
-  const spec = recognizerSpec(target.entry, target.dir, threads);
+  const spec = recognizerSpec(target.entry, target.dir, threads, language);
   if (!spec) throw new Error(`${target.entry.id} has no recognizer`);
   if (spec.kind === "offline") {
     const recognizer = await sherpa.OfflineRecognizer.createAsync(spec.config);

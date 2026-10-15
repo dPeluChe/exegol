@@ -1,6 +1,7 @@
 import {
   chordFromEvent,
   DEFAULT_DICTATION_SHORTCUT,
+  DICTATION_LANGUAGES,
   type DictationSettings as DictationPrefs,
   dictationSettingsOf,
   formatChord,
@@ -73,6 +74,20 @@ export function DictationSettings({ settings, onChange }: Props) {
       <MicSection />
 
       <DictationInput prefs={prefs} set={set} />
+
+      <div>
+        <h3 className={SECTION_HEADING}>Language</h3>
+        <SelectRow
+          label="Language you speak"
+          value={prefs.language}
+          options={DICTATION_LANGUAGES.map((l) => [l.id, l.label])}
+          onChange={(language) => set({ language })}
+        />
+        <p className="mt-1 text-[10px] text-text-muted">
+          Some models (Canary) need it and translate speech in another language into this one.
+          Multilingual models (Parakeet, Whisper...) detect the language on their own.
+        </p>
+      </div>
 
       <div>
         <h3 className={SECTION_HEADING}>Recording</h3>

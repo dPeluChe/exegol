@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Canary 180M flash (NVIDIA, CC-BY-4.0) in Settings > Models: a 154 MB dictation model for Spanish, English, German and French with punctuation. It runs in the new Settings > Dictation > Language (English by default, or Spanish), so speech in another language comes out translated into it
 - Right-click on the Dashboard opens a menu. On a Watching card: Go to session, Copy and Send selection to (when text is selected in it), Collapse or Expand, Fit session to card, Smaller and Larger text, Float to window (when the session has a pane) and Unpin. On a pin whose session ended: Resume, Open project and Unpin. On a fleet card: Go to session, Watch or Stop watching, Mute and Suspend while it runs, Resume and Archive once it ended. A right-click in a card no longer reaches a full-screen CLI that tracks the mouse
 - Pause a dictation and pick it up again: Cmd+P (Ctrl+Shift+P on Linux and Windows) or the Pause button on the card, also from a browser page or the Settings window. While paused nothing is heard or recorded, the timer and the longest-dictation limit stand still, the waveform goes flat and the card says "Paused"; music stays paused. Resume keeps the same text and target, and Insert or Esc work while paused
 - Settings > Dictation > Input: choose the microphone (System default first; names show once the mic was allowed). If the chosen one is unplugged, the dictation uses the system default and the card says so; the card's footer shows which input is in use

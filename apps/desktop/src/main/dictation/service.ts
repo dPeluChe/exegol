@@ -148,14 +148,14 @@ export async function startDictation(db: Database.Database, input: DictationInpu
       id,
       modelId: entry.id,
       startedAt: Date.now(),
-      cold: warmedCold ?? !modelLoaded(entry.id),
+      cold: warmedCold ?? !modelLoaded(entry.id, settings.language),
       media,
       audio: settings.keepRecordings ? new RecordingBuffer(settings.maxSeconds) : null,
       paused: false,
     };
     warmedCold = null;
     // The model loads while the user speaks: audio waits in the engine until it is ready
-    ensureModel(entry.id).catch(() => {});
+    ensureModel(entry.id, settings.language).catch(() => {});
     beginSession(id, settings.maxSeconds);
     armDictationSession(id, settings.maxSeconds);
   } catch (err) {
@@ -263,11 +263,12 @@ function loadSplit(cold: boolean): string {
 /** Called as a dictation starts in the renderer, before the mic prompt and capture: the engine
  *  spawns and loads the model while the user is still getting ready to speak */
 export async function warmDictation(db: Database.Database): Promise<{ ok: boolean }> {
-  if (!dictationSettings(db).enabled || !(await probeEngine()).ok) return { ok: false };
+  const { enabled, language } = dictationSettings(db);
+  if (!enabled || !(await probeEngine()).ok) return { ok: false };
   const { entry, ready } = await pickModel(db);
   if (!ready) return { ok: false };
-  warmedCold = !modelLoaded(entry.id);
-  ensureModel(entry.id).catch(() => {});
+  warmedCold = !modelLoaded(entry.id, language);
+  ensureModel(entry.id, language).catch(() => {});
   return { ok: true };
 }
 

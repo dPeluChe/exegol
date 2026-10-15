@@ -136,7 +136,7 @@ describe("pruneToRequired", () => {
         mkdirSync(dirname(join(dir, file)), { recursive: true });
         writeFileSync(join(dir, file), "x");
       }
-      const paths = specPaths(recognizerSpec(entry, dir, 1)?.config);
+      const paths = specPaths(recognizerSpec(entry, dir, 1, "en")?.config);
       expect(paths.length, entry.id).toBeGreaterThan(0);
       for (const path of paths) {
         const rel = path.slice(dir.length + 1);
