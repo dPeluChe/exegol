@@ -11,6 +11,7 @@ import { checkForUpdatesManual, installUpdate } from "../system/auto-updater";
 import {
   AGENT_ID,
   formatMountLine,
+  mountLogKey,
   mountLogLimit,
   parseMountStats,
   visibleLogLimit,
@@ -78,7 +79,7 @@ export function registerIpcHandlers(): void {
   ipcMain.on("terminal:mount-log", (_event, agentId: unknown, input: unknown) => {
     const mount = parseMountStats(agentId, input);
     if (!mount) return;
-    const suppressed = mountLogLimit.take(mount.agentId, Date.now());
+    const suppressed = mountLogLimit.take(mountLogKey(mount), Date.now());
     if (suppressed === null) return;
     logger.info(`${formatMountLine(mount)}${suppressedNote(suppressed)}`);
   });

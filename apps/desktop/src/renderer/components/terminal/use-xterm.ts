@@ -15,6 +15,7 @@ import {
 } from "../../stores/workspace";
 import { refitWhenFontLoads } from "./font-ready";
 import { mountRepaint } from "./live-seq";
+import { createSettleTracker, SETTLE_WINDOW_MS } from "./mount-settle";
 import { trackMousePress } from "./mouse-release";
 import {
   cancelPtyResize,
@@ -136,6 +137,14 @@ export function useXterm({
     let applied: SnapshotApplied | null = null;
     let fitted = false;
     let settled = false;
+    let settle: ReturnType<typeof createSettleTracker> | null = null;
+    let reportTimer: ReturnType<typeof setTimeout> | undefined;
+    const reportSettle = () => {
+      clearTimeout(reportTimer);
+      const report = settle?.report();
+      settle = null;
+      if (report) window.api.terminal.mountLog(agentId, report);
+    };
     const settleMount = () => {
       const t = terminalRef.current;
       if (settled || !applied || !fitted || !t) return;
@@ -162,6 +171,8 @@ export function useXterm({
         dropped: applied.dropped,
         kick: repaint === "kick",
       });
+      settle = createSettleTracker(gridLabel(t.cols, t.rows), () => performance.now());
+      reportTimer = setTimeout(reportSettle, SETTLE_WINDOW_MS);
     };
 
     // A pane mounted at startup waits for its reattach; nothing gave it the keyboard meanwhile
@@ -219,6 +230,7 @@ export function useXterm({
     }
     const refit = () => {
       if (!latest.current.sizeTerminal(next.terminal, next.fitAddon)) return;
+      settle?.fit(gridLabel(next.terminal.cols, next.terminal.rows));
       fitted = true;
       settleMount();
     };
@@ -245,6 +257,7 @@ export function useXterm({
       cancelFontRefit();
       resizeObserver.disconnect();
       cancelPtyResize(agentId, next.terminal);
+      reportSettle();
       if (settled) window.api.terminal.mountLog(agentId, { kind: "unmount" });
       untrackView();
       // WebGL context must be freed before the terminal itself is torn down.

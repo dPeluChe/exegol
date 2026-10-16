@@ -9,8 +9,13 @@ export const mountLogLimit = createLogLimiter(1_000);
 export const visibleLogLimit = createLogLimiter(1_000);
 export const resizeLogLimit = createLogLimiter(10_000);
 
+/** A settle line follows its mount within the second: limited on its own key, not dropped */
+export const mountLogKey = (m: MountLog) =>
+  m.kind === "settle" ? `${m.agentId}:settle` : m.agentId;
+
 export function forgetTerminalLogs(agentId: string): void {
   mountLogLimit.forget(agentId);
+  mountLogLimit.forget(`${agentId}:settle`);
   visibleLogLimit.forget(agentId);
   resizeLogLimit.forget(agentId);
 }
@@ -29,6 +34,20 @@ export function parseMountStats(agentId: unknown, input: unknown): MountLog | nu
   if (!input || typeof input !== "object") return null;
   const r = input as Record<string, unknown>;
   if (r.kind === "unmount") return { agentId, kind: "unmount" };
+  if (r.kind === "settle") {
+    const { mountGrid, finalGrid, afterMs, changes } = r;
+    if (!isGrid(mountGrid) || !isGrid(finalGrid) || !count(afterMs, 1e7) || !count(changes, 1e4)) {
+      return null;
+    }
+    return {
+      agentId,
+      kind: "settle",
+      mountGrid,
+      finalGrid,
+      afterMs: Math.round(afterMs),
+      changes: Math.round(changes),
+    };
+  }
   if (r.kind !== "mount") return null;
   const { snapGrid, fitGrid, snapshotBytes, snapshotMs, paintMs, replayed, dropped, kick } = r;
   if ((snapGrid !== null && !isGrid(snapGrid)) || !isGrid(fitGrid)) return null;
@@ -50,6 +69,9 @@ export function parseMountStats(agentId: unknown, input: unknown): MountLog | nu
 
 export function formatMountLine(m: MountLog): string {
   if (m.kind === "unmount") return `[TermMount] ${m.agentId} unmount`;
+  if (m.kind === "settle") {
+    return `[TermMount] ${m.agentId} settled ${m.mountGrid} -> ${m.finalGrid} after ${m.afterMs}ms (${m.changes} change${m.changes === 1 ? "" : "s"})`;
+  }
   return (
     `[TermMount] ${m.agentId} mount snapshot ${m.snapshotBytes}B ${m.snapshotMs}ms` +
     ` grid ${m.snapGrid ?? "none"} -> ${m.fitGrid}` +
