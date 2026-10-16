@@ -100,7 +100,7 @@ function useRunningProjectAgents(projectId: string | null) {
 
 export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
   const { projectId, project } = useProjectContext();
-  const { uniquePorts, preferredPort, autoPort } = useDevServerPorts(
+  const { pagePorts, helperPorts, preferredPort, autoPort } = useDevServerPorts(
     project?.path ?? null,
     projectId,
   );
@@ -185,7 +185,8 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
         designMode={qa.designMode}
         qaMode={qa.qaMode}
         qaActionCount={qa.qaActionCount}
-        uniquePorts={uniquePorts}
+        uniquePorts={pagePorts}
+        helperPorts={helperPorts}
         projectId={projectId}
         preferredPort={preferredPort}
         setUrlInputValue={setDraft}
@@ -240,7 +241,7 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
           <LoadErrorOverlay
             currentUrl={currentUrl}
             loadError={loadError}
-            hasPorts={uniquePorts.length > 0}
+            hasPorts={pagePorts.length > 0}
             onRetry={handleReload}
           />
         )}

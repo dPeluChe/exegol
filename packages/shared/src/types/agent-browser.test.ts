@@ -11,7 +11,7 @@ import {
   parseBrowserHosts,
   projectIdFromPartition,
 } from "./agent-browser";
-import { pickDevServerPort } from "./dev-servers";
+import { dedupeDevPorts, pickDevServerPort, splitDevPorts } from "./dev-servers";
 
 describe("agent browser URL policy", () => {
   it("allows local hosts by default", () => {
@@ -88,6 +88,37 @@ describe("agent browser URL policy", () => {
     expect(pickDevServerPort(ports, 8080)).toBe(8080);
     expect(pickDevServerPort(ports)).toBe(5173);
     expect(pickDevServerPort([])).toBeUndefined();
+  });
+
+  it("keeps a dev server's helper ports out of the pages, saying what each is", () => {
+    const astro = [
+      { port: 9229, source: "runtime", pid: 1, process: "node" },
+      { port: 57425, source: "runtime", pid: 1, process: "node" },
+      { port: 3141, source: "runtime", pid: 1, process: "node" },
+      { port: 57426, source: "runtime", pid: 2, process: "workerd" },
+      { port: 4321, source: "config" },
+    ];
+    const { pages, helpers } = splitDevPorts(astro);
+    expect(pages.map((p) => p.port)).toEqual([3141, 4321]);
+    expect(helpers.map((h) => [h.port.port, h.note])).toEqual([
+      [9229, "Node.js debugger (inspector)"],
+      [57425, "Internal port of node, same process as :3141"],
+      [57426, "Cloudflare Workers local runtime (workerd)"],
+    ]);
+    expect(pickDevServerPort(astro)).toBe(3141);
+  });
+
+  it("shows every port as a page when none looks like one", () => {
+    const only = [{ port: 9229, source: "runtime", pid: 1, process: "node" }];
+    expect(splitDevPorts(only)).toEqual({ pages: only, helpers: [] });
+  });
+
+  it("dedupes ports, a running server over a configured one", () => {
+    const ports = [
+      { port: 3000, source: "config" },
+      { port: 3000, source: "runtime", pid: 4 },
+    ];
+    expect(dedupeDevPorts(ports)).toEqual([{ port: 3000, source: "runtime", pid: 4 }]);
   });
 
   it("does not treat lookalike hosts as local", () => {

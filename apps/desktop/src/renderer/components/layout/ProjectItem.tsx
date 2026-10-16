@@ -1,4 +1,10 @@
-import { ideLabel, type Project, type Worktree } from "@exegol/shared";
+import {
+  dedupeDevPorts,
+  ideLabel,
+  type Project,
+  splitDevPorts,
+  type Worktree,
+} from "@exegol/shared";
 import { cn, Tooltip, TooltipContent, TooltipTrigger } from "@exegol/ui";
 import { useQueryClient } from "@tanstack/react-query";
 import {
@@ -18,7 +24,6 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFittedMenu } from "../../hooks/use-fitted-menu";
 import {
-  type PortInfo,
   useDeleteProject,
   useProjectIde,
   useProjectPorts,
@@ -43,19 +48,12 @@ function PortBadges({ projectPath }: { projectPath: string }) {
   const { data: ports } = useProjectPorts(projectPath);
 
   if (!ports || ports.length === 0) return null;
-
-  const uniquePorts = new Map<number, PortInfo>();
-  for (const p of ports) {
-    const existing = uniquePorts.get(p.port);
-    if (!existing || (p.source === "runtime" && existing.source === "config")) {
-      uniquePorts.set(p.port, p);
-    }
-  }
+  const { pages, helpers } = splitDevPorts(dedupeDevPorts(ports));
 
   return (
     <div className="ml-1 flex min-w-0 flex-wrap items-center gap-1">
       <Globe className="h-2.5 w-2.5 text-text-muted" />
-      {Array.from(uniquePorts.values()).map((p) => (
+      {pages.map((p) => (
         <button
           key={p.port}
           type="button"
@@ -79,6 +77,14 @@ function PortBadges({ projectPath }: { projectPath: string }) {
           {p.port}
         </button>
       ))}
+      {helpers.length > 0 && (
+        <span
+          className="text-[9px] text-text-muted"
+          title={helpers.map((h) => `${h.port.port}: ${h.note}`).join("\n")}
+        >
+          +{helpers.length}
+        </span>
+      )}
     </div>
   );
 }
