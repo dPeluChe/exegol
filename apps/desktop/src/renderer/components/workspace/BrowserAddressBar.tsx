@@ -15,6 +15,7 @@ import type { PortInfo } from "../../hooks/use-trpc-scheduler";
 import type { PageSize } from "../../lib/browser-viewports";
 import { openInBrowser } from "../../lib/open-in-browser";
 import { ViewportSelect } from "./BrowserViewport";
+import { type HelperPort, HelperPortsMenu } from "./HelperPortsMenu";
 
 interface BrowserAddressBarProps {
   urlInput: string;
@@ -25,6 +26,8 @@ interface BrowserAddressBarProps {
   qaMode: boolean;
   qaActionCount: number;
   uniquePorts: PortInfo[];
+  /** The dev server's other ports (debugger, workerd...), behind "+N" */
+  helperPorts?: HelperPort[];
   projectId: string | null;
   preferredPort: number | null | undefined;
   setUrlInputValue: (v: string) => void;
@@ -57,6 +60,7 @@ export function BrowserAddressBar({
   qaMode,
   qaActionCount,
   uniquePorts,
+  helperPorts = [],
   projectId,
   preferredPort,
   setUrlInputValue,
@@ -212,6 +216,7 @@ export function BrowserAddressBar({
               )}
             </div>
           ))}
+          <HelperPortsMenu helpers={helperPorts} onNavigateToPort={onNavigateToPort} />
         </div>
       )}
       <input
