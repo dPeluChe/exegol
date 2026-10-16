@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
+- The browser's element picker (Design mode) names each agent the way Send to does, with its CLI icon and session name ("argo · exegoldev"), grouped as This tab, Other tabs of the project, and Other projects (folded). Before it showed only the codenames of the project's agents, with no way to tell which session was which
 - The browser bar and the sidebar show only a dev server's pages as port chips. The other ports it opens for itself (the Node debugger on 9229, Cloudflare's workerd, ports the system assigned such as 57425) sit behind "+N", a list that says what each one is ("Internal port of node, same process as :3141"); the sidebar shows them on hover. A new browser pane no longer opens the debugger port when it happens to be listed first
 
 ## [0.5.22] — 2026-10-15 — Site permissions in browser panes, dictation pause and vocabulary, Dashboard menus

@@ -12,6 +12,7 @@ import { useAgentStore } from "../../stores/agents";
 import type { Pane } from "../../stores/workspace";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { ConfirmDialog } from "../common/ConfirmDialog";
+import { useTabTargets } from "../terminal/use-send-to";
 import { AgentBrowserBanner } from "./AgentBrowserBanner";
 import { AskAgentBar, AskAgentButton } from "./AskAgentBar";
 import { BrowserAddressBar } from "./BrowserAddressBar";
@@ -141,6 +142,7 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
   const deadPort = loadError ? Number(currentUrl.match(/:(\d+)/)?.[1]) || null : null;
   const [issueMessage, setIssueMessage] = useState("");
   const runningAgents = useRunningProjectAgents(projectId);
+  const issueTargets = useTabTargets(projectId ?? undefined, paneId);
 
   const qa = useBrowserQa({
     webviewRef,
@@ -258,7 +260,7 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
             element={qa.capturedElement}
             message={issueMessage}
             onMessageChange={setIssueMessage}
-            agents={runningAgents}
+            targets={issueTargets}
             onClear={() => {
               qa.setCapturedElement(null);
               setIssueMessage("");

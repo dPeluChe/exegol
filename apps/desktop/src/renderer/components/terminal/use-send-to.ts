@@ -8,7 +8,7 @@ import { trpcInvoke } from "../../lib/trpc-client";
 import { jumpToAgent, useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import { useToastStore } from "../../stores/toasts";
-import { useWorkspaceStore } from "../../stores/workspace";
+import { collectPaneIds, useWorkspaceStore } from "../../stores/workspace";
 import type { ProjectWorkspace } from "../../stores/workspace/types";
 import {
   buildSendSections,
@@ -16,6 +16,8 @@ import {
   type SendSections,
   type SendTarget,
   sendAction,
+  type TargetGroup,
+  tabTargetGroups,
 } from "./send-targets";
 
 const EMPTY: SendSections = { own: null, others: [] };
@@ -46,6 +48,24 @@ export function useSendSections(
         : EMPTY,
     [enabled, allAgents, agentId, projects, projectId, projectOrder, projectWorkspaces, paneCwd],
   );
+}
+
+export interface TargetPicker {
+  groups: TargetGroup[];
+  /** CLI session names by agent id */
+  names: Record<string, string>;
+}
+
+/** Agents a report from `paneId` can go to: its tab, the project's other tabs, other projects */
+export function useTabTargets(projectId: string | undefined, paneId: string): TargetPicker {
+  const sections = useSendSections("", projectId, true);
+  const pw = useWorkspaceStore((s) => (projectId ? s.projectWorkspaces[projectId] : undefined));
+  const groups = useMemo(() => {
+    const tab = pw?.tabs.find((t) => collectPaneIds(t.layout).includes(paneId));
+    const ids = (tab ? collectPaneIds(tab.layout) : []).map((id) => pw?.panes[id]?.agentId);
+    return tabTargetGroups(sections, new Set(ids.filter((id): id is string => !!id)));
+  }, [sections, pw, paneId]);
+  return { groups, names: useCliSessionNames(sections) };
 }
 
 /** Each agent's session name inside its CLI, by agent id (the launcher chips' source), one query

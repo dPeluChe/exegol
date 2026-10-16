@@ -131,3 +131,33 @@ export function sendHint(prefs: SendEnterPrefs): string {
   if (prefs.sendToSubmitAgent) return "Pastes; submits it to agents";
   return "Pastes only";
 }
+
+/** A titled run of agents in a picker; `folded` ones sit behind an "Other projects" toggle */
+export interface TargetGroup {
+  label: string;
+  targets: SendTarget[];
+  folded?: boolean;
+}
+
+/** Agents only (a report is a prompt, not a command): the source's tab, its project's other
+ *  tabs, then each other project folded */
+export function tabTargetGroups(
+  sections: SendSections,
+  tabAgentIds: ReadonlySet<string>,
+): TargetGroup[] {
+  const agents = (targets: SendTarget[]) => targets.filter((t) => t.cliType !== "shell");
+  const own = agents(sections.own?.targets ?? []);
+  const groups: TargetGroup[] = [
+    { label: "This tab", targets: own.filter((t) => tabAgentIds.has(t.id)) },
+    {
+      label: `Other tabs · ${sections.own?.projectName ?? ""}`,
+      targets: own.filter((t) => !tabAgentIds.has(t.id)),
+    },
+    ...sections.others.map((g) => ({
+      label: g.projectName,
+      targets: agents(g.targets),
+      folded: true,
+    })),
+  ];
+  return groups.filter((g) => g.targets.length > 0);
+}
