@@ -25,7 +25,18 @@ export type MountStats =
     }
   /** The view's grid moved after the mount line (layout still settling): `changes` refits that
    *  changed it, the last one `afterMs` after the mount */
-  | { kind: "settle"; mountGrid: string; finalGrid: string; afterMs: number; changes: number };
+  | { kind: "settle"; mountGrid: string; finalGrid: string; afterMs: number; changes: number }
+  /** One project switch, sent under the project id: views mounted until each applied its snapshot */
+  | {
+      kind: "switch";
+      activeMounts: number;
+      hiddenMounts: number;
+      afterMs: number;
+      snapshotBytes: number;
+      reflows: number;
+      pending: number;
+      ended: "settled" | "timeout" | "switched";
+    };
 
 export function gridLabel(cols: number, rows: number): string {
   return `${cols}x${rows}`;

@@ -15,6 +15,12 @@ xterm rebuild, the snapshot replay and the reflow. Analysis only; nothing here i
 - Coming back = new xterm per terminal, snapshot fetch and write, fit, PTY resize (the remount
   costs #405 to #407 measured and trimmed).
 
+Hidden tabs are not cheap either (checked after the first draft): showing a project mounts every
+terminal of every tab, and each one fetches its full snapshot (up to 2 MB; `HIDDEN_SNAPSHOT_BYTES`
+applies only to the startup reattach) and builds a full xterm. Only the fit and WebGL are skipped
+while hidden. A project with 3 tabs pays for all of them on every switch, and a hidden tab's normal
+buffer still reflows once shown. `[ProjectSwitch]` (#410) now logs that cost per switch.
+
 The tab mechanism is the one to extend: one `invisible` layer per kept project, same as per tab.
 
 ## What assumes one active project
@@ -68,12 +74,24 @@ Coming back still costs one screen snapshot when the session printed while hidde
    webviews first; (b) cap kept webviews across projects (for example 2); (c) the main-owned
    `WebContentsView` per browser pane already in TASK_TODO, which would make this free.
 
+## Hard requirements (from the review, 2026-10-16)
+
+- **Browser panes never share across projects.** Each keeps its `persist:project-<id>` partition
+  from its own project id, never the active one; a kept webview from the wrong scope would carry
+  another project's cookies. A test must pin it.
+- **No pane is lost** across tabs or projects: hiding or evicting only unmounts views, the layout
+  and sessions stay in the store.
+- **Only the active tab paints on a switch**: hidden tabs' terminals mount lazily (first shown) or
+  stay mounted from before, never rebuilt all at once. This is worth doing even without the LRU.
+
 ## Phases
 
-1. Terminals only: kept projects render their terminal, files and git panes; a browser pane in a
+0. Measure with `[ProjectSwitch]` and decide.
+1. Lazy hidden tabs: a tab's terminals mount the first time it is shown in this project visit.
+2. Terminals only: kept projects render their terminal, files and git panes; a browser pane in a
    hidden project unmounts as today. Gets the switch-back win with no webview memory risk.
-2. Measure (below) and pick N.
-3. Browser panes by option (a) or (b), or wait for (c).
+3. Measure (below) and pick N.
+4. Browser panes by option (a) or (b), or wait for (c).
 
 ## What to measure before and after (N = 1, 3, 4)
 

@@ -10,11 +10,13 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- A message from another agent that stayed in the receiver's input box (its Enter swallowed while the paste was still processing) is now submitted: when no turn starts within 4 s, Exegol presses Enter again, up to twice, and logs it if it still did not go through. Only for agents whose hooks report a turn start, such as Claude Code
 - A terminal shown again after a project or tab switch no longer starts two rows too tall and redraws a moment later: its toolbar now appears with it instead of a few milliseconds after, so the terminal is sized once. A shell prompt with text on the right broke on that second resize until the next repaint
 - A terminal shown again opens at the size it had, and its history is written at the final width instead of at 80 columns and rewrapped a frame later
 
 ### Changed
 - The log (and bug reports) now says when a terminal's size kept changing after it appeared, from what to what and how long it took (`settled 130x8 -> 137x6 after 42ms`), to track terminals that redraw badly after a project switch
+- The log (and bug reports) now says what each project switch cost: how many terminals mounted in the active tab and in hidden tabs, how long until all had their history, its size and how many were rewrapped (`[ProjectSwitch] … mounted 5 terminals (1 in the active tab, 4 in hidden tabs) in 212ms`), to decide whether recent projects should stay mounted
 
 ## [0.5.23] — 2026-10-16 — Dev server helper ports behind +N, element picker grouped by tab
 
