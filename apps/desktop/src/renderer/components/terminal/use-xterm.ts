@@ -38,6 +38,8 @@ import { trackTerminalView } from "./webgl-budget";
 
 /** Sessions this renderer has mounted an owner view of: the first mount kicks an alt screen */
 const mountedSessions = new Set<string>();
+/** The grid each session's pane last fitted at, for the next mount to start from */
+const lastGrids = new Map<string, { cols: number; rows: number }>();
 
 function resolveTerminalTheme(theme: string) {
   const isLight =
@@ -106,7 +108,12 @@ export function useXterm({
         return true;
       }
       // A mirror never writes the pane's size into the store
-      const onSize = mirror ? () => {} : (c: number, r: number) => setTerminalSize(agentId, c, r);
+      const onSize = mirror
+        ? () => {}
+        : (cols: number, rows: number) => {
+            setTerminalSize(agentId, cols, rows);
+            if (!readOnly) lastGrids.set(agentId, { cols, rows });
+          };
       return fitAndSyncSize(terminal, fit, agentId, readOnly, onSize);
     },
     [agentId, setTerminalSize, readOnly, mirror, fontSize, cardOwns],
@@ -206,6 +213,7 @@ export function useXterm({
         takeKeyboard();
       },
       refit: () => refitRef.current(),
+      initialGrid: readOnly || mirror ? undefined : lastGrids.get(agentId),
       initialContent,
       fontSize,
       fontFamily,
