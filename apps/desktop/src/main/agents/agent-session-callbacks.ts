@@ -22,6 +22,7 @@ import {
   hasVisibleViewer,
   noteOutputDropped,
 } from "../terminal/pty-visibility";
+import { noteTurnStarted } from "./agent-message-injection";
 import {
   clearAgentLinks,
   clearAgentMessageQueue,
@@ -106,6 +107,7 @@ function applyAgentSignals(
     }
     const derived = deriveStatusFromSignal(sig.event);
     trackTurn(db, agent, maps, sig.event);
+    if (sig.event === "turn_started") noteTurnStarted(agent.id);
 
     if (derived.status) signalStatus = derived.status;
     if (derived.turnStarted) turnStarted = derived.turnStarted;
