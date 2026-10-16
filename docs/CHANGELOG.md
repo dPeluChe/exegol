@@ -16,6 +16,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 - The log (and bug reports) now says when a terminal's size kept changing after it appeared, from what to what and how long it took (`settled 130x8 -> 137x6 after 42ms`), to track terminals that redraw badly after a project switch
+- The log (and bug reports) now says what each project switch cost: how many terminals mounted in the active tab and in hidden tabs, how long until all had their history, its size and how many were rewrapped (`[ProjectSwitch] … mounted 5 terminals (1 in the active tab, 4 in hidden tabs) in 212ms`), to decide whether recent projects should stay mounted
 
 ## [0.5.23] — 2026-10-16 — Dev server helper ports behind +N, element picker grouped by tab
 

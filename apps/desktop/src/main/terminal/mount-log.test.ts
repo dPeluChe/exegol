@@ -44,6 +44,32 @@ describe("mount log", () => {
     expect(parseMountStats("../x y", mount)).toBeNull();
   });
 
+  it("formats a project switch, settled or cut short", () => {
+    const sw = {
+      kind: "switch",
+      activeMounts: 1,
+      hiddenMounts: 4,
+      afterMs: 212.4,
+      snapshotBytes: 3_200_000,
+      reflows: 2,
+      pending: 0,
+      ended: "settled",
+    };
+    const stats = parseMountStats("project-1", sw);
+    expect(stats && formatMountLine(stats)).toBe(
+      "[ProjectSwitch] project-1 mounted 5 terminals (1 in the active tab, 4 in hidden tabs) in 212ms, snapshots 3125 KB, reflows 2",
+    );
+    const late = parseMountStats("project-1", {
+      ...sw,
+      afterMs: 3000,
+      pending: 3,
+      ended: "timeout",
+    });
+    expect(late && formatMountLine(late)).toContain("timed out after 3000ms with 3 pending,");
+    expect(parseMountStats("project-1", { ...sw, ended: "/Users/me" })).toBeNull();
+    expect(parseMountStats("project-1", { ...sw, hiddenMounts: "4" })).toBeNull();
+  });
+
   it("an unmount is one short line", () => {
     const stats = parseMountStats("a", { kind: "unmount" });
     expect(stats && formatMountLine(stats)).toBe("[TermMount] a unmount");
