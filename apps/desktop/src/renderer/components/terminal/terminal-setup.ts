@@ -41,6 +41,8 @@ interface TerminalSessionDeps {
   onSnapshotApplied?: (info: SnapshotApplied) => void;
   /** Fit the view again after a snapshot was written at its own grid */
   refit?: () => void;
+  /** The grid this view last fitted at: built at it, a remount has nothing to reflow */
+  initialGrid?: { cols: number; rows: number };
   initialContent?: string;
   fontSize: number;
   fontFamily: string;
@@ -80,6 +82,7 @@ export function setupTerminalSession(
   deps: TerminalSessionDeps,
 ): TerminalSession {
   const terminal = new Terminal({
+    ...deps.initialGrid,
     theme: deps.theme,
     fontSize: deps.fontSize,
     fontFamily: deps.fontFamily,
@@ -325,7 +328,12 @@ export function setupTerminalSession(
       }
       const fetchMs = performance.now() - askedAt;
       const data = snapshot?.data ?? "";
-      if (!deps.mirror) resizeToSnapshot(terminal, snapshot);
+      // An alt screen is written at its own grid; the normal buffer lands at the fitted width,
+      // not written at the old one and reflowed a frame later
+      if (!deps.mirror) {
+        if (snapshot?.alt) resizeToSnapshot(terminal, snapshot);
+        else deps.refit?.();
+      }
       // Chunks that raced the snapshot and are already in it would be written twice
       const { replay, dropped } = chunksAfterSnapshot(buffered, snapshot?.seq);
       snapshotResolved = true;
