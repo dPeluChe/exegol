@@ -22,6 +22,7 @@
 |----------|------------|
 | [TASK_TODO.md](./TASK_TODO.md) | The single source of truth for pending work |
 | [../CONTRIBUTING.md](../CONTRIBUTING.md) / [../AGENTS.md](../AGENTS.md) | How to contribute, for people and for AI agents |
+| [RESEARCH/KEEP_MOUNTED_PROJECTS_2026_10.md](./RESEARCH/KEEP_MOUNTED_PROJECTS_2026_10.md) | Keep the last projects mounted on a switch: what breaks, cost, phased design |
 | [RESEARCH/COMPETITIVE_UPDATE_2026_10.md](./RESEARCH/COMPETITIVE_UPDATE_2026_10.md) | October competitor review (48 repos) feeding T200 |
 | [RESEARCH/EXEGOL_REVIEW_2026_09_05.md](./RESEARCH/EXEGOL_REVIEW_2026_09_05.md) | Latest whole-app review feeding the board |
 | [ARCHITECTURE/OWL_FLEET_WATCH.md](./ARCHITECTURE/OWL_FLEET_WATCH.md) | Dashboard fleet + Watching design |
