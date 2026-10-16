@@ -22,7 +22,10 @@ export type MountStats =
       replayed: number;
       dropped: number;
       kick: boolean;
-    };
+    }
+  /** The view's grid moved after the mount line (layout still settling): `changes` refits that
+   *  changed it, the last one `afterMs` after the mount */
+  | { kind: "settle"; mountGrid: string; finalGrid: string; afterMs: number; changes: number };
 
 export function gridLabel(cols: number, rows: number): string {
   return `${cols}x${rows}`;

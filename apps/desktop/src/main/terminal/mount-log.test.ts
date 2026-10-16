@@ -21,6 +21,22 @@ describe("mount log", () => {
     );
   });
 
+  it("formats a grid that moved after the mount", () => {
+    const stats = parseMountStats("agent-1", {
+      kind: "settle",
+      mountGrid: "130x8",
+      finalGrid: "137x6",
+      afterMs: 41.6,
+      changes: 1,
+    });
+    expect(stats && formatMountLine(stats)).toBe(
+      "[TermMount] agent-1 settled 130x8 -> 137x6 after 42ms (1 change)",
+    );
+    expect(
+      parseMountStats("agent-1", { kind: "settle", mountGrid: "x", finalGrid: "1x1" }),
+    ).toBeNull();
+  });
+
   it("refuses anything that is not a count or a grid (the renderer is untrusted)", () => {
     expect(parseMountStats("agent-1", { ...mount, snapGrid: "/Users/me" })).toBeNull();
     expect(parseMountStats("agent-1", { ...mount, replayed: -1 })).toBeNull();

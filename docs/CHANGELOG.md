@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- The log (and bug reports) now says when a terminal's size kept changing after it appeared, from what to what and how long it took (`settled 130x8 -> 137x6 after 42ms`), to track terminals that redraw badly after a project switch
+
 ## [0.5.23] — 2026-10-16 — Dev server helper ports behind +N, element picker grouped by tab
 
 ### Changed
