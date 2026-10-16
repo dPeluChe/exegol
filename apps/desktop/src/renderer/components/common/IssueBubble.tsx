@@ -1,18 +1,44 @@
-import { Copy, Send } from "lucide-react";
+import { ChevronDown, ChevronRight, Copy } from "lucide-react";
+import { useState } from "react";
 import type { CapturedElement } from "../../lib/design-capture";
+import { sendLabel, type TargetGroup } from "../terminal/send-targets";
+import type { TargetPicker } from "../terminal/use-send-to";
+import { AgentIcon } from "./AgentIcon";
 
-export interface AgentRef {
-  id: string;
-  cliType: string;
-  /** The session's name ("lupus"): several Claude sessions look alike by CLI */
-  alias?: string | null;
+const SECTION = "px-1 pt-1 text-[9px] font-semibold text-text-muted";
+
+function TargetRows({
+  group,
+  names,
+  onSend,
+}: {
+  group: TargetGroup;
+  names: Record<string, string>;
+  onSend: (agentId: string) => void;
+}) {
+  return (
+    <>
+      <p className={SECTION}>{group.label}</p>
+      {group.targets.map((t) => (
+        <button
+          key={t.id}
+          type="button"
+          onClick={() => onSend(t.id)}
+          className="flex w-full items-center gap-1.5 rounded px-1.5 py-1 text-left text-[10px] text-blue-200 hover:bg-blue-500/15"
+        >
+          <AgentIcon provider={t.cliType} size={11} />
+          <span className="truncate">{sendLabel(t, names[t.id])}</span>
+        </button>
+      ))}
+    </>
+  );
 }
 
 interface IssueBubbleProps {
   element: CapturedElement;
   message: string;
   onMessageChange: (v: string) => void;
-  agents: AgentRef[];
+  targets: TargetPicker;
   onSend: (agentId: string) => void;
   onCopy: () => void;
   onDismiss: () => void;
@@ -22,11 +48,16 @@ export function IssueBubble({
   element,
   message,
   onMessageChange,
-  agents,
+  targets,
   onSend,
   onCopy,
   onDismiss,
 }: IssueBubbleProps) {
+  const [showFolded, setShowFolded] = useState(false);
+  const open = targets.groups.filter((g) => !g.folded);
+  const folded = targets.groups.filter((g) => g.folded);
+  // Nothing in this project: the other projects are the whole list
+  const foldedShown = showFolded || open.length === 0;
   const { rect } = element;
   const cx = rect.x + rect.width / 2;
   const above = rect.y > 180;
@@ -83,18 +114,34 @@ export function IssueBubble({
           className="w-full resize-none rounded border border-border bg-bg-primary px-2 py-1 text-[10px] text-text-primary placeholder:text-text-muted/50 focus:border-blue-500/50 focus:outline-none"
           rows={2}
         />
-        <div className="mt-2 flex flex-wrap items-center gap-1">
-          {agents.map((a) => (
-            <button
-              key={a.id}
-              type="button"
-              onClick={() => onSend(a.id)}
-              className="flex items-center gap-1 rounded bg-blue-500/10 px-2 py-1 text-[9px] text-blue-300 hover:bg-blue-500/20"
-              title={`Send to ${a.alias ?? a.cliType} (${a.cliType})`}
-            >
-              <Send className="h-2.5 w-2.5" /> {a.alias ?? a.cliType}
-            </button>
+        <div className="mt-2 max-h-48 overflow-y-auto">
+          {targets.groups.length === 0 && (
+            <p className="px-1 text-[10px] text-text-muted">No live agent to send to</p>
+          )}
+          {open.map((g) => (
+            <TargetRows key={g.label} group={g} names={targets.names} onSend={onSend} />
           ))}
+          {open.length > 0 && folded.length > 0 && (
+            <button
+              type="button"
+              aria-expanded={showFolded}
+              onClick={() => setShowFolded(!showFolded)}
+              className="mt-1 flex w-full items-center gap-1 rounded px-1 py-0.5 text-[9px] text-text-muted hover:bg-white/10 hover:text-text-primary"
+            >
+              {showFolded ? (
+                <ChevronDown className="h-3 w-3" />
+              ) : (
+                <ChevronRight className="h-3 w-3" />
+              )}
+              Other projects ({folded.length})
+            </button>
+          )}
+          {foldedShown &&
+            folded.map((g) => (
+              <TargetRows key={g.label} group={g} names={targets.names} onSend={onSend} />
+            ))}
+        </div>
+        <div className="mt-2 flex items-center">
           <button
             type="button"
             onClick={onCopy}

@@ -195,7 +195,20 @@ export function FloatingBrowser({
             element={modes.capturedElement}
             message={issueMessage}
             onMessageChange={setIssueMessage}
-            agents={runningAgents}
+            targets={{
+              groups: [
+                {
+                  label: "This project",
+                  targets: runningAgents.map((a) => ({
+                    id: a.id,
+                    name: a.alias ?? a.cliType,
+                    cliType: a.cliType,
+                    projectId: a.projectId,
+                  })),
+                },
+              ].filter((g) => g.targets.length > 0),
+              names: {},
+            }}
             onClear={() => {
               modes.setCapturedElement(null);
               setIssueMessage("");

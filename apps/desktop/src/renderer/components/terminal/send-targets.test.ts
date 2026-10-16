@@ -7,6 +7,7 @@ import {
   sendHint,
   sendLabel,
   sendToActive,
+  tabTargetGroups,
 } from "./send-targets";
 
 const session = (
@@ -196,5 +197,32 @@ describe("sendHint", () => {
     expect(hint(true, false)).toBe("Pastes; runs it in terminals");
     expect(hint(false, true)).toBe("Pastes; submits it to agents");
     expect(hint(true, true)).toBe("Pastes and presses Enter");
+  });
+});
+
+describe("tabTargetGroups", () => {
+  const t = (id: string, projectId: string, cliType = "claude-code") => ({
+    id,
+    name: id,
+    cliType,
+    projectId,
+  });
+  it("splits this tab, the project's other tabs and other projects (folded), agents only", () => {
+    const groups = tabTargetGroups(
+      {
+        own: {
+          projectId: "p",
+          projectName: "Web",
+          targets: [t("a", "p"), t("b", "p"), t("sh", "p", "shell")],
+        },
+        others: [{ projectId: "q", projectName: "Api", targets: [t("c", "q")] }],
+      },
+      new Set(["a", "sh"]),
+    );
+    expect(groups).toEqual([
+      { label: "This tab", targets: [t("a", "p")] },
+      { label: "Other tabs · Web", targets: [t("b", "p")] },
+      { label: "Api", targets: [t("c", "q")], folded: true },
+    ]);
   });
 });
