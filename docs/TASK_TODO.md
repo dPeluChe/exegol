@@ -523,6 +523,13 @@ exchange-bus MVP only, no headless council executions. Absorbs:
 
 ---
 
+### T209: Agent messages, ideas from ttt `added: 2026-10-16`
+**Priority**: P3 | **Effort**: S-M | **Source**: review of tasarren/ttt (2026-10-16); the submit retry landed in `feat/msg-submit-confirm`
+
+- **Coalesce a burst to one target**: two or more agents messaging the same one get one notice per boundary ("3 waiting from X, Y; call messages_check") instead of one turn per message. `deliverPendingAgentMessages`, `formatInjection`
+- **`replace_key` and `ttl` on `agent_send`**: a newer status ping supersedes the queued one, stale ones expire. `exegol-protocol.ts`, `exegol-tools.ts`, a `w3_` migration
+- **Read another agent's screen** as an MCP tool (borders and spinners stripped, grep), gated by access mode. Main already holds every ring
+
 ### T165 — Messaging stack hardening (simplify follow-ups) `added: 2026-08-12`
 **Priority**: P2 | **Effort**: M | **Source**: 4-agent /simplify over T157–T162 (2026-08-12) — correctness landed in PR #102; these are the larger/architectural residuals
 
