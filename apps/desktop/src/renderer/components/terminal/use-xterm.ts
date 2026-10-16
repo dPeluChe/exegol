@@ -7,12 +7,14 @@ import { useLatest } from "../../hooks/use-latest";
 import { useSettings } from "../../hooks/use-trpc";
 import { GPU_REPAINT_EVENT, type GpuRepaintDetail } from "../../lib/gpu-repaint";
 import { claimPaneFocus } from "../../lib/pane-focus";
+import { noteSwitchMount } from "../../lib/project-switch-log";
 import { useTerminalStore } from "../../stores/terminals";
 import {
   getFocusedOrFirstPaneId,
   getProjectState,
   useWorkspaceStore,
 } from "../../stores/workspace";
+import { layoutHasPane } from "../../stores/workspace/helpers";
 import { refitWhenFontLoads } from "./font-ready";
 import { mountRepaint } from "./live-seq";
 import { createSettleTracker, SETTLE_WINDOW_MS } from "./mount-settle";
@@ -183,6 +185,10 @@ export function useXterm({
     };
 
     // A pane mounted at startup waits for its reattach; nothing gave it the keyboard meanwhile
+    // Counted for the project switch log ([ProjectSwitch]), hidden tabs included
+    const switchLanded =
+      mirror || !paneId || (readOnly && !liveFeed) ? null : noteSwitchMount(inActiveTab(paneId));
+
     const takeKeyboard = () => {
       if (readOnly || mirror || !paneId) return;
       // Opened for the user: the menu or button that started it may hold the focus by now
@@ -208,6 +214,11 @@ export function useXterm({
       mirrorOwnsSize: () => latest.current.cardOwns,
       onSnapshotApplied: (info) => {
         applied = info;
+        const t = terminalRef.current;
+        switchLanded?.({
+          bytes: info.bytes,
+          reflow: !!info.grid && !!t && (info.grid.cols !== t.cols || info.grid.rows !== t.rows),
+        });
         if (!mirror || latest.current.cardOwns) refitRef.current();
         settleMount();
         takeKeyboard();
@@ -266,6 +277,7 @@ export function useXterm({
       resizeObserver.disconnect();
       cancelPtyResize(agentId, next.terminal);
       reportSettle();
+      switchLanded?.(null);
       if (settled) window.api.terminal.mountLog(agentId, { kind: "unmount" });
       untrackView();
       // WebGL context must be freed before the terminal itself is torn down.
@@ -476,6 +488,12 @@ export function useXterm({
   }, [handleResize]);
 
   return { containerRef, terminalRef, fitAddonRef, serializeAddonRef, shown };
+}
+
+function inActiveTab(paneId: string): boolean {
+  const { tabs, activeTabId } = getProjectState();
+  const tab = tabs.find((t) => t.id === activeTabId);
+  return !!tab && layoutHasPane(tab.layout, paneId);
 }
 
 /** On the container's parent: the container itself is display: none while hidden, and a hidden

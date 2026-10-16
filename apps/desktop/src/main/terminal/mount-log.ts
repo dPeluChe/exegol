@@ -11,7 +11,7 @@ export const resizeLogLimit = createLogLimiter(10_000);
 
 /** A settle line follows its mount within the second: limited on its own key, not dropped */
 export const mountLogKey = (m: MountLog) =>
-  m.kind === "settle" ? `${m.agentId}:settle` : m.agentId;
+  m.kind === "settle" || m.kind === "switch" ? `${m.agentId}:${m.kind}` : m.agentId;
 
 export function forgetTerminalLogs(agentId: string): void {
   mountLogLimit.forget(agentId);
@@ -48,6 +48,23 @@ export function parseMountStats(agentId: unknown, input: unknown): MountLog | nu
       changes: Math.round(changes),
     };
   }
+  if (r.kind === "switch") {
+    const { activeMounts, hiddenMounts, afterMs, snapshotBytes, reflows, pending, ended } = r;
+    if (!count(activeMounts, 1e4) || !count(hiddenMounts, 1e4) || !count(afterMs, 1e7)) return null;
+    if (!count(snapshotBytes) || !count(reflows, 1e4) || !count(pending, 1e4)) return null;
+    if (ended !== "settled" && ended !== "timeout" && ended !== "switched") return null;
+    return {
+      agentId,
+      kind: "switch",
+      activeMounts: Math.round(activeMounts),
+      hiddenMounts: Math.round(hiddenMounts),
+      afterMs: Math.round(afterMs),
+      snapshotBytes: Math.round(snapshotBytes),
+      reflows: Math.round(reflows),
+      pending: Math.round(pending),
+      ended,
+    };
+  }
   if (r.kind !== "mount") return null;
   const { snapGrid, fitGrid, snapshotBytes, snapshotMs, paintMs, replayed, dropped, kick } = r;
   if ((snapGrid !== null && !isGrid(snapGrid)) || !isGrid(fitGrid)) return null;
@@ -69,6 +86,18 @@ export function parseMountStats(agentId: unknown, input: unknown): MountLog | nu
 
 export function formatMountLine(m: MountLog): string {
   if (m.kind === "unmount") return `[TermMount] ${m.agentId} unmount`;
+  if (m.kind === "switch") {
+    const total = m.activeMounts + m.hiddenMounts;
+    const outcome =
+      m.ended === "settled"
+        ? `in ${m.afterMs}ms`
+        : `${m.ended === "timeout" ? "timed out" : "cut short by another switch"} after ${m.afterMs}ms with ${m.pending} pending`;
+    return (
+      `[ProjectSwitch] ${m.agentId} mounted ${total} terminal${total === 1 ? "" : "s"}` +
+      ` (${m.activeMounts} in the active tab, ${m.hiddenMounts} in hidden tabs) ${outcome},` +
+      ` snapshots ${Math.round(m.snapshotBytes / 1024)} KB, reflows ${m.reflows}`
+    );
+  }
   if (m.kind === "settle") {
     return `[TermMount] ${m.agentId} settled ${m.mountGrid} -> ${m.finalGrid} after ${m.afterMs}ms (${m.changes} change${m.changes === 1 ? "" : "s"})`;
   }
