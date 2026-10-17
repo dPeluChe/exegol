@@ -9,6 +9,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.24] — 2026-10-17 — Terminals that stop redrawing on switch, browser zoom and screenshots
+
 ### Added
 - Browser pane zoom: zoom out, the percent (click to reset) and zoom in in the address bar, or `Cmd+=` / `Cmd+-` / `Cmd+0` while the pane is focused (`Ctrl+Shift+` the same keys on Linux and Windows). Each pane keeps its zoom across page loads and restarts; elsewhere the keys still zoom Exegol
 - Browser pane screenshots: the camera button saves the visible area or the full page as PNG or JPEG (by the extension you pick), or copies the visible area to the clipboard. Also in the pane's right-click menu
