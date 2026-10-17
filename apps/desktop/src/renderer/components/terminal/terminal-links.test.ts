@@ -5,6 +5,7 @@ import {
   findFileMatches,
   findUrlMatches,
   linkAction,
+  linkBrowserPane,
   linkClick,
   linkHint,
 } from "./terminal-links";
@@ -162,5 +163,22 @@ describe("covers", () => {
     expect(covers(m, 4)).toBe(true);
     expect(covers(m, 10)).toBe(true);
     expect(covers(m, 11)).toBe(false);
+  });
+});
+
+describe("linkBrowserPane", () => {
+  const panes = {
+    t: { type: "terminal" },
+    b: { type: "browser" },
+    p: { type: "browser", linkPreview: true },
+    f: { type: "browser" },
+  };
+  it("prefers the link preview pane, then the user's browser pane", () => {
+    expect(linkBrowserPane(["t", "b", "p"], panes, {})).toBe("p");
+    expect(linkBrowserPane(["t", "b"], panes, {})).toBe("b");
+  });
+  it("skips a floating browser and splits when there is none", () => {
+    expect(linkBrowserPane(["t", "f"], panes, { f: {} })).toBeUndefined();
+    expect(linkBrowserPane(["t"], panes, {})).toBeUndefined();
   });
 });

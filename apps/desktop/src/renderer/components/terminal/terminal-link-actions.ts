@@ -20,7 +20,7 @@ import {
   getProjectState,
   useWorkspaceStore,
 } from "../../stores/workspace";
-import { type LinkClick, type LinkMatch, linkAction } from "./terminal-links";
+import { type LinkClick, type LinkMatch, linkAction, linkBrowserPane } from "./terminal-links";
 
 /** A PiP window has no workspace to open a pane or a peek in */
 const inFloatingWindow = () => new URLSearchParams(window.location.search).has("floatingPane");
@@ -49,15 +49,14 @@ function workspaceTarget(agentId: string) {
   return where;
 }
 
-/** One link preview pane per tab: reused and navigated, else split beside the terminal */
+/** The tab's browser pane (its link preview one first) is reused and navigated, else a preview
+ *  pane splits beside the terminal */
 function showInPreviewPane(tabId: string, paneId: string, projectId: string, url: string): void {
   const ws = useWorkspaceStore.getState();
   const pw = ws.projectWorkspaces[projectId];
   const tab = pw?.tabs.find((t) => t.id === tabId);
   if (!pw || !tab) return;
-  const preview = collectPaneIds(tab.layout).find(
-    (id) => pw.panes[id]?.type === "browser" && pw.panes[id]?.linkPreview,
-  );
+  const preview = linkBrowserPane(collectPaneIds(tab.layout), pw.panes, ws.floatingPanes);
   if (!preview) {
     ws.splitPane(tabId, paneId, "horizontal", "browser", { url, linkPreview: true });
     return;
