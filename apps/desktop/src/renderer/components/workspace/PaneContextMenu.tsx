@@ -1,6 +1,7 @@
 import {
   ArrowDownToLine,
   ArrowUpToLine,
+  Camera,
   Clipboard,
   ClipboardPaste,
   Columns,
@@ -40,6 +41,8 @@ interface PaneContextMenuProps {
   onPaste?: () => void;
   onScrollTop?: () => void;
   onScrollBottom?: () => void;
+  /** Browser panes: save the page as an image */
+  onScreenshot?: () => void;
   children: React.ReactNode;
 }
 
@@ -87,6 +90,12 @@ function terminalActionsSection({ agentId, onScrollTop, onScrollBottom }: MenuAc
   return items;
 }
 
+function browserSection({ onScreenshot }: MenuActions): MenuItem[] {
+  return present([
+    onScreenshot && { label: "Save Screenshot...", icon: Camera, action: onScreenshot },
+  ]);
+}
+
 function moveSection({ paneId }: MenuActions): MenuItem[] {
   return paneMoveTargets(paneId).map((target) => ({
     id: `move:${target.tabId}`,
@@ -127,6 +136,7 @@ function buildMenuSections(actions: MenuActions, sendPage?: MenuItem["page"]): M
     ...(isTerminal
       ? [[...send, ...clipboardSection(actions)], terminalActionsSection(actions)]
       : []),
+    browserSection(actions),
     splitSection(actions),
     moveSection(actions),
   ];

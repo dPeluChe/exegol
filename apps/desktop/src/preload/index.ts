@@ -350,6 +350,11 @@ contextBridge.exposeInMainWorld("api", {
       safe.invoke("browser:execute-js", { code, webContentsId }),
     captureScreenshot: (webContentsId?: number) =>
       safe.invoke("browser:capture-screenshot", { webContentsId }),
+    /** Save the page as an image (Save dialog) or copy it */
+    saveScreenshot: (webContentsId: number, target: "file" | "clipboard", fullPage: boolean) =>
+      safe.invoke("browser:save-screenshot", { webContentsId, target, fullPage }),
+    /** Cmd+= / Cmd+- / Cmd+0 pressed in a pane's page (main forwards them) */
+    onZoomKey: (callback: (key: unknown) => void) => listen("browser:zoom-key", callback),
     /** Agent browser: this pane's webview may be driven by its project's agents */
     registerPane: (paneId: string, projectId: string, webContentsId: number) =>
       safe.invoke("browser:register-pane", { paneId, projectId, webContentsId }),

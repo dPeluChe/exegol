@@ -4,6 +4,7 @@ import { join } from "node:path";
 import { app, clipboard, dialog, ipcMain, webContents } from "electron";
 import { getAgentManager } from "../agents/manager";
 import { isHostedWebview } from "../browser/electron-host";
+import { savePaneScreenshot } from "../browser/screenshot";
 import { broadcast } from "../lib/event-bus";
 import { suppressedNote } from "../lib/log-limiter";
 import { logger } from "../lib/logger";
@@ -208,6 +209,20 @@ export function registerIpcHandlers(): void {
       if (!wv) return null;
       const image = await wv.capturePage();
       return image.toPNG().toString("base64");
+    },
+  );
+
+  // The user's own Save Screenshot (camera button): a file they pick, or the clipboard
+  ipcMain.handle(
+    "browser:save-screenshot",
+    async (event, args?: { webContentsId?: unknown; target?: unknown; fullPage?: unknown }) => {
+      if (typeof args?.webContentsId !== "number") return "failed";
+      const wv = findWebview(event.sender, args.webContentsId);
+      if (!wv) return "failed";
+      return savePaneScreenshot(wv, event.sender, {
+        target: args.target === "clipboard" ? "clipboard" : "file",
+        fullPage: args.fullPage === true,
+      });
     },
   );
 }

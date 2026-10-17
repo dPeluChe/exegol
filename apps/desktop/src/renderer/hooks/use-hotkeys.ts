@@ -1,3 +1,4 @@
+import { paneZoomKey, type ZoomAction } from "@exegol/shared";
 import { useEffect } from "react";
 import { focusAddressBar } from "../lib/address-bar";
 import { closeActivePane, reopenClosed } from "../lib/close-target";
@@ -36,6 +37,26 @@ export function useHotkeys() {
         e.preventDefault();
         if (chord.shift) void reopenClosed();
         else addTabAndFocus();
+        return;
+      }
+
+      // Cmd+= / Cmd+- / Cmd+0 on a focused browser pane zoom its page; elsewhere Cmd+0 is a
+      // project and the app menu zooms Exegol. A focused page gets them from main (onZoomKey)
+      const zoom = paneZoomKey(
+        {
+          meta: e.metaKey,
+          control: e.ctrlKey,
+          shift: e.shiftKey,
+          alt: e.altKey,
+          code: e.code,
+          key: e.key,
+        },
+        IS_MAC,
+      );
+      const zoomPane = zoom ? focusedBrowserPaneId() : null;
+      if (zoom && zoomPane) {
+        e.preventDefault();
+        zoomBrowserPane(zoomPane, zoom);
         return;
       }
 
@@ -189,6 +210,9 @@ export function useHotkeys() {
     };
 
     window.addEventListener("keydown", handleKeyDown);
+    const unsubZoom = window.api.browser.onZoomKey(({ paneId, action }) =>
+      zoomBrowserPane(paneId, action),
+    );
 
     // Also listen for menu-driven actions from the macOS app menu. The
     // menu routes Cmd+W to "menu:close-pane" so the OS default "Close
@@ -210,6 +234,7 @@ export function useHotkeys() {
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       unsubMenu();
+      unsubZoom();
     };
   }, [toggleSidebar, setActiveView]);
 }
@@ -232,6 +257,10 @@ function focusedBrowserPaneId(): string | null {
   return useAppStore.getState().activeView === "workspace" && pane?.type === "browser"
     ? pane.id
     : null;
+}
+
+function zoomBrowserPane(paneId: string, action: ZoomAction): void {
+  window.dispatchEvent(new CustomEvent("exegol:zoom-pane", { detail: { paneId, action } }));
 }
 
 function focusBrowserAddress(): boolean {

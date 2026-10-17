@@ -47,6 +47,7 @@ Every jump puts the cursor in the pane it lands on, ready to type.
 | `R` `N` `T` `F` `B` `1-9` | same | In an ended session's pane (no field focused): Resume (Restart, or Reopen for a terminal), new session of the same CLI there, Terminal, Files, Browser, switch to another agent in the same place |
 | `Cmd+L` | `Ctrl+Shift+L` | Browser pane (or floating browser): select its address bar |
 | `Cmd+R` | `Ctrl+Shift+R` | Browser pane (or floating browser): reload its page. Elsewhere on macOS Cmd+R reloads the window |
+| `Cmd+=` / `Cmd+-` / `Cmd+0` | `Ctrl+Shift+=` / `Ctrl+Shift+-` / `Ctrl+Shift+0` | Browser pane: zoom its page in / out / back to 100%. Elsewhere Cmd+= / Cmd+- zoom Exegol and Cmd+0 is a project |
 | `Cmd+Enter` | `Ctrl+Enter` | Launch from the spawn dialogs, send a diff comment |
 
 ## Window

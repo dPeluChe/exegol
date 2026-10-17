@@ -166,6 +166,14 @@ interface Window {
       /** `webContentsId`: the pane's own webview; without it the window's first one */
       executeJs: (code: string, webContentsId?: number) => Promise<unknown>;
       captureScreenshot: (webContentsId?: number) => Promise<string | null>;
+      saveScreenshot: (
+        webContentsId: number,
+        target: "file" | "clipboard",
+        fullPage: boolean,
+      ) => Promise<"saved" | "copied" | "canceled" | "failed">;
+      onZoomKey: (
+        callback: (key: { paneId: string; action: import("@exegol/shared").ZoomAction }) => void,
+      ) => () => void;
       registerPane: (paneId: string, projectId: string, webContentsId: number) => Promise<boolean>;
       control: (paneId: string, action: "take-over" | "hand-back") => Promise<boolean>;
       agentStates: () => Promise<import("@exegol/shared").AgentBrowserPaneState[]>;

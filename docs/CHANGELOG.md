@@ -9,6 +9,10 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Browser pane zoom: zoom out, the percent (click to reset) and zoom in in the address bar, or `Cmd+=` / `Cmd+-` / `Cmd+0` while the pane is focused (`Ctrl+Shift+` the same keys on Linux and Windows). Each pane keeps its zoom across page loads and restarts; elsewhere the keys still zoom Exegol
+- Browser pane screenshots: the camera button saves the visible area or the full page as PNG or JPEG (by the extension you pick), or copies the visible area to the clipboard. Also in the pane's right-click menu
+
 ### Fixed
 - A terminal in another tab no longer opens about 5% narrow and widens a moment later when you switch to it (`130 -> 137` columns): it was measured before its GPU renderer came back, whose characters are a fraction of a pixel narrower
 - The first terminal shown after starting Exegol no longer opens a few columns narrow and widens a moment later: the terminal font now loads at startup instead of when the first terminal asks for it
