@@ -36,7 +36,7 @@ import {
 } from "./terminal-types";
 import { createWebglController, type WebglController } from "./terminal-webgl";
 import { HIDE_DEBOUNCE_MS, useTerminalVisibility } from "./use-terminal-visibility";
-import { trackTerminalView } from "./webgl-budget";
+import { trackTerminalView, webglBudget } from "./webgl-budget";
 
 /** Sessions this renderer has mounted an owner view of: the first mount kicks an alt screen */
 const mountedSessions = new Set<string>();
@@ -81,6 +81,9 @@ export function useXterm({
   const refitRef = useRef<() => void>(() => {});
   // A hide dropped a size this view was settling: refit once it is back on screen
   const resizeDroppedRef = useRef(false);
+  // WebGL cells are whole device pixels (8.0 vs the DOM's 8.43 px): a fit before the addon attaches
+  // lands ~5% fewer columns and refits a frame later (`settled 130x57 -> 137x57`)
+  const webglPendingRef = useRef(false);
   // The live session in state, so the visibility effects re-run on every rebuild
   const [session, setSession] = useState<TerminalSession | null>(null);
   // Inactive tabs and the Agents area under the Dashboard are `invisible`, which xterm and an
@@ -247,7 +250,9 @@ export function useXterm({
     if (live.cardOwns && live.cardFont) {
       next.terminal.options.fontSize = live.cardFont;
     }
+    webglPendingRef.current = wantsWebgl(mirror, live.cliType);
     const refit = () => {
+      if (webglPendingRef.current) return;
       if (!latest.current.sizeTerminal(next.terminal, next.fitAddon)) return;
       settle?.fit(gridLabel(next.terminal.cols, next.terminal.rows));
       fitted = true;
@@ -359,7 +364,7 @@ export function useXterm({
     if (!terminal || terminal !== terminalRef.current) return;
     // Mirrors draw on canvas: several open at once would eat into Chromium's
     // ~16 WebGL contexts, and each one rebuilds its atlas on every font fit
-    const useCanvas = mirror || (cliType && CANVAS_ONLY_CLI_TYPES.has(cliType));
+    const useCanvas = !wantsWebgl(mirror, cliType);
     const onScreen = isVisible && shown;
     // A size measured just before hiding is not the one it comes back to
     if (!onScreen && cancelPtyResize(agentId, terminal)) resizeDroppedRef.current = true;
@@ -374,12 +379,17 @@ export function useXterm({
       );
       controller.attach();
       webglRef.current = controller;
+      if (webglPendingRef.current) {
+        webglPendingRef.current = false;
+        refitRef.current();
+      }
     } else if (!onScreen && webglRef.current) {
       // Debounced like the IPC hide: scrolling past must not tear down and
       // rebuild a GL context and its glyph atlas every time
       const timer = setTimeout(() => {
         webglRef.current?.dispose();
         webglRef.current = null;
+        webglPendingRef.current = !useCanvas && !webglBudget.isDomOnly();
       }, HIDE_DEBOUNCE_MS);
       return () => clearTimeout(timer);
     }
@@ -494,6 +504,11 @@ function inActiveTab(paneId: string): boolean {
   const { tabs, activeTabId } = getProjectState();
   const tab = tabs.find((t) => t.id === activeTabId);
   return !!tab && layoutHasPane(tab.layout, paneId);
+}
+
+/** Mirrors and canvas-only CLIs never take WebGL, nor anything once the GPU fell back for good */
+function wantsWebgl(mirror: boolean, cliType: string | undefined): boolean {
+  return !mirror && !(cliType && CANVAS_ONLY_CLI_TYPES.has(cliType)) && !webglBudget.isDomOnly();
 }
 
 /** On the container's parent: the container itself is display: none while hidden, and a hidden
