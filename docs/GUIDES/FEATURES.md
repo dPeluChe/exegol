@@ -130,6 +130,8 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
 
 - **Browser pane**: a webview with URL bar and navigation, next to your agents. It remembers
   the page it was on, and can show it at a device size (desktop, laptop, tablet, mobile).
+  Zoom per pane (address bar or Cmd+= / Cmd+- / Cmd+0), and a camera button that saves the
+  visible area or the full page as PNG or JPEG, or copies it.
   A page's `alert()`, `confirm()` and `prompt()` show as a bar inside the pane, never as a
   window-wide dialog. A page asking for location, camera, microphone, notifications, MIDI or to
   open another app gets a bar too: Allow once, Always allow on this site, or Block. Saved answers

@@ -564,6 +564,14 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
                 )
             : undefined
         }
+        onScreenshot={
+          pane.type === "browser"
+            ? () =>
+                window.dispatchEvent(
+                  new CustomEvent("exegol:screenshot-pane", { detail: { paneId } }),
+                )
+            : undefined
+        }
         onClose={() => closeWithConfirm(closeTargetFor(getProjectState(), tabId, paneId, false))}
       >
         <div className="flex-1 overflow-hidden">

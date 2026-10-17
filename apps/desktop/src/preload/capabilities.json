@@ -425,6 +425,8 @@
     "updater:status",
     "browser:execute-js",
     "browser:capture-screenshot",
+    "browser:save-screenshot",
+    "browser:zoom-key",
     "floating:open",
     "floating:close",
     "floating:self-close",

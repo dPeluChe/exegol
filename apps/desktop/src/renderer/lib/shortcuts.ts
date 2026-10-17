@@ -174,6 +174,13 @@ const MAC_SHORTCUTS: Shortcut[] = [
     category: "terminal",
   },
   {
+    id: "browser-zoom",
+    label: "Browser: Zoom In / Out / Reset",
+    description: "Zoom the focused browser pane's page (Cmd+- out, Cmd+0 back to 100%)",
+    keys: "Cmd+=",
+    category: "terminal",
+  },
+  {
     id: "split-h",
     label: "Split Horizontal",
     description: "New pane to the right",

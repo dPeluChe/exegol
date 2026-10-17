@@ -50,6 +50,7 @@ import {
   setBrowserHost,
   setNeedsUserNotifier,
 } from "./tool-guards";
+import { forwardPaneZoomKeys } from "./zoom-keys";
 
 const PANE_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 /** Our own isolated world in the page: refs live there, out of the page's reach */
@@ -550,7 +551,10 @@ export function installAgentBrowser(db: Database.Database): void {
     if (contents.getType() === "webview") {
       // A Files preview: its own session and guard, never an agent browser pane
       if (isPreviewSession(contents.session)) guardPreviewContents(contents);
-      else trackWebview(contents);
+      else {
+        trackWebview(contents);
+        forwardPaneZoomKeys(contents, (wcId) => paneOfWebContents(wcId)?.paneId);
+      }
       return;
     }
     contents.on("will-attach-webview", (event, webPreferences, params) => {
