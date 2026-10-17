@@ -159,3 +159,14 @@ export function cellAt(
 }
 
 export const covers = (m: LinkMatch, col: number) => col >= m.index && col < m.index + m.length;
+
+/** Where a URL opens in a tab: its link preview pane, else a browser pane the user already has
+ *  there (not one floating in its own window); undefined = split a new preview pane */
+export function linkBrowserPane(
+  paneIds: readonly string[],
+  panes: Readonly<Record<string, { type: string; linkPreview?: boolean } | undefined>>,
+  floating: Readonly<Record<string, unknown>>,
+): string | undefined {
+  const browsers = paneIds.filter((id) => panes[id]?.type === "browser" && !floating[id]);
+  return browsers.find((id) => panes[id]?.linkPreview) ?? browsers[0];
+}

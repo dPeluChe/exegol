@@ -125,7 +125,7 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
     window.addEventListener("exegol:reload-pane", onReload);
     return () => window.removeEventListener("exegol:reload-pane", onReload);
   }, [paneId, handleReload]);
-  // A URL clicked in a terminal of this tab: the link preview pane goes there
+  // A URL clicked in a terminal of this tab: the tab's browser pane goes there
   useEffect(() => {
     const onNavigate = (e: Event) => {
       const { detail } = e as CustomEvent<{ paneId: string; url: string }>;
