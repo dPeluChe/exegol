@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- The first terminal shown after starting Exegol no longer opens a few columns narrow and widens a moment later: the terminal font now loads at startup instead of when the first terminal asks for it
 - A message from another agent that stayed in the receiver's input box (its Enter swallowed while the paste was still processing) is now submitted: when no turn starts within 4 s, Exegol presses Enter again, up to twice, and logs it if it still did not go through. Only for agents whose hooks report a turn start, such as Claude Code
 - A terminal shown again after a project or tab switch no longer starts two rows too tall and redraws a moment later: its toolbar now appears with it instead of a few milliseconds after, so the terminal is sized once. A shell prompt with text on the right broke on that second resize until the next repaint
 - A terminal shown again opens at the size it had, and its history is written at the final width instead of at 80 columns and rewrapped a frame later
