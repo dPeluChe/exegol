@@ -72,6 +72,7 @@ export function useXterm({
   onReady,
   onScrollPosition,
   onSelectionChange,
+  onTuiCopy,
 }: UseXtermArgs) {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -139,6 +140,7 @@ export function useXterm({
     sizeTerminal,
     onScrollPosition,
     onSelectionChange,
+    onTuiCopy,
   });
 
   useEffect(() => {
@@ -238,6 +240,7 @@ export function useXterm({
       onSelectionChange: live.onSelectionChange
         ? (...args) => latest.current.onSelectionChange?.(...args)
         : undefined,
+      onTuiCopy: live.onTuiCopy ? (text) => latest.current.onTuiCopy?.(text) : undefined,
       setPaneCwd,
       setPaneLastExit,
     });

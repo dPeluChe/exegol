@@ -40,12 +40,8 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
   const { scrollAtTop, scrollAtBottom, hasNewOutput, handleScrollPosition } =
     useTerminalScrollState();
   const terminalRef = useRef<TerminalInstanceHandle>(null);
-  const { sendSections, showSendTo, setShowSendTo, onSelectionChange } = useSendTo(
-    agentId,
-    storeAgent?.projectId ?? activeProjectId ?? undefined,
-    terminalRef,
-    paneId,
-  );
+  const { sendSections, showSendTo, setShowSendTo, onSelectionChange, onTuiCopy, getSelection } =
+    useSendTo(agentId, storeAgent?.projectId ?? activeProjectId ?? undefined, terminalRef, paneId);
   const { viewMode, setViewMode, liveSnapshot, toggleLiveView } = useLiveViewMode(terminalRef);
   const stopAgent = useStopAgent();
   const resumeAgent = useResumeAgent();
@@ -88,6 +84,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
       scrollAtBottom={scrollAtBottom}
       hasNewOutput={hasNewOutput}
       sendSections={sendSections}
+      getSelection={getSelection}
       showSendTo={showSendTo}
       setShowSendTo={setShowSendTo}
     />
@@ -178,6 +175,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
                 onReady={onReady}
                 onScrollPosition={handleScrollPosition}
                 onSelectionChange={onSelectionChange}
+                onTuiCopy={onTuiCopy}
               />
               {floatingButtons}
             </>

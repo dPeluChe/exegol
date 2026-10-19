@@ -1,4 +1,5 @@
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
+import { useLatest } from "../../hooks/use-latest";
 import { useProject } from "../../hooks/use-trpc";
 import { sendToActive } from "./send-targets";
 import type { TerminalInstanceHandle } from "./terminal-types";
@@ -6,6 +7,8 @@ import { registerSelectionSource, useSendSections } from "./use-send-to";
 import { useTerminalUrlDetector } from "./use-terminal-url-detector";
 
 type TerminalHandleRef = RefObject<TerminalInstanceHandle | null>;
+
+const TUI_COPY_MS = 20_000;
 
 /** T128: localhost URL detector → "Open preview" toolbar chip */
 export function useLocalhostPreview(
@@ -74,18 +77,36 @@ export function useSendTo(
   terminalRef: TerminalHandleRef,
   paneId?: string,
 ) {
-  const [showSendTo, setShowSendTo] = useState(false);
+  const [showSendTo, setShowSendToState] = useState(false);
   const [hasSelection, setHasSelection] = useState(false);
-  const sendSections = useSendSections(agentId, projectId, sendToActive(hasSelection, showSendTo));
+  // What the TUI copied from its own mouse selection (OSC 52): xterm holds none then
+  const [tuiCopy, setTuiCopy] = useState<string | null>(null);
+  const tuiCopyRef = useLatest(tuiCopy);
+  const sendSections = useSendSections(
+    agentId,
+    projectId,
+    sendToActive(hasSelection || tuiCopy !== null, showSendTo),
+  );
+  const getSelection = useCallback(
+    () => terminalRef.current?.getSelection() || (tuiCopyRef.current ?? ""),
+    [terminalRef, tuiCopyRef],
+  );
+  const setShowSendTo = useCallback((open: boolean) => {
+    setShowSendToState(open);
+    if (!open) setTuiCopy(null);
+  }, []);
 
   useEffect(() => {
     if (!paneId) return;
-    return registerSelectionSource(paneId, {
-      agentId,
-      projectId,
-      getSelection: () => terminalRef.current?.getSelection() ?? "",
-    });
-  }, [paneId, agentId, projectId, terminalRef]);
+    return registerSelectionSource(paneId, { agentId, projectId, getSelection });
+  }, [paneId, agentId, projectId, getSelection]);
+
+  // Offered while fresh: an unused copy goes away, an open list keeps it
+  useEffect(() => {
+    if (tuiCopy === null || showSendTo) return;
+    const timer = window.setTimeout(() => setTuiCopy(null), TUI_COPY_MS);
+    return () => window.clearTimeout(timer);
+  }, [tuiCopy, showSendTo]);
 
   // An open list stays: a TUI's mouse mode or repaint clears xterm's selection under it, and the
   // list sends the text it opened with
@@ -96,6 +117,8 @@ export function useSendTo(
     showSendTo,
     setShowSendTo,
     onSelectionChange,
+    onTuiCopy: setTuiCopy,
+    getSelection,
   };
 }
 

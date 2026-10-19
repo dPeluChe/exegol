@@ -15,6 +15,8 @@ interface TerminalFloatingButtonsProps {
   hasNewOutput?: boolean;
   /** Live agents, this project first; empty while nothing is selected (the button hides) */
   sendSections: SendSections;
+  /** xterm's selection, else what the TUI just copied */
+  getSelection: () => string;
   showSendTo: boolean;
   setShowSendTo: (v: boolean) => void;
 }
@@ -25,6 +27,7 @@ export function TerminalFloatingButtons({
   scrollAtBottom,
   hasNewOutput = false,
   sendSections,
+  getSelection,
   showSendTo,
   setShowSendTo,
 }: TerminalFloatingButtonsProps) {
@@ -41,7 +44,7 @@ export function TerminalFloatingButtons({
           </p>
           <SendToList
             sections={sendSections}
-            getSelection={() => terminalRef.current?.getSelection() ?? ""}
+            getSelection={getSelection}
             onSent={() => setShowSendTo(false)}
             onEscape={() => {
               setShowSendTo(false);
