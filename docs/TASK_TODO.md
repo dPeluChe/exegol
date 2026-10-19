@@ -27,7 +27,7 @@
    ~~T200.4 queue + steer~~ (`feat/queue-steer`), ~~T200.5 undo turn~~ (`feat/undo-turn`), ~~T142 PR
    loop phase 1 (T200.7)~~ (`feat/pr-watch`, `TASK_COMPLETED/2610.md`).
 6. **Daily bugs**: opencode dies across app quit (Verify live below), ~~git pane renames / MM
-   files / silent failures~~ (`fix/git-pane-audit`), T138 split modes, ~~T185.11 scheduler
+   files / silent failures~~ (`fix/git-pane-audit`), ~~T138 split modes~~ (`fix/headless-modes-parser`), ~~T185.11 scheduler
    timeout~~ (`fix/scheduler-timeout`), T193.2 execPath.
 
 Next round (after 0.5.16): **worktree hygiene** (T142 "Worktree hygiene" item: remove worktrees
@@ -1451,10 +1451,6 @@ Core shipped in v0.4.3 (types, spawn injection, modal selector, badge, pipeline 
 ### T137 — Hunk Assignment + Absorb (GitPane) `added: 2026-07-04`
 **Priority**: P2 | **Effort**: M-L | **Source**: GitButler `but-hunk-assignment` + `absorb.rs`
 - Stable hunk UUIDs surviving edits → attribute uncommitted hunks to agents/branches; "absorb" redistributes agent fixups to the right commits.
-
-### T138 — ModeTracker Headless `added: 2026-07-04`
-**Priority**: P2 | **Effort**: S | **Source**: superset `terminal-mode-tracker.ts` (VSCode XtermSerializer lineage)
-- A `HeadlessEmulator` exists (`main/terminal/headless-emulator.ts`) but reads modes with a per-write regex: a bracketed-paste sequence split across two writes leaves the mode off, and multi-mode `;` sequences fail (review 2026-09-05 #8). Track modes through the xterm parser, serialize only after the parser drained. Acceptance: splitting any supported sequence at any position gives the same final state.
 
 ### T139 — Skills Security Scan (pre-import) `added: 2026-07-04`
 **Priority**: P2 | **Effort**: S-M | **Source**: mission-control Skills Hub scanner

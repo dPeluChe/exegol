@@ -50,6 +50,18 @@ export class HeadlessEmulator {
     this.terminal = new Terminal({ cols, rows, scrollback, allowProposedApi: true });
     this.serializer = new SerializeAddon();
     this.terminal.loadAddon(this.serializer);
+    // In the parser, not a regex per write: a sequence split across writes or `?1049;1006h`
+    // counts, and the modes match what is parsed (T138). false: xterm still applies them
+    const decMode = (enabled: boolean) => (params: (number | number[])[]) => {
+      for (const p of params) if (typeof p === "number") this.setDecMode(p, enabled);
+      return false;
+    };
+    this.terminal.parser.registerCsiHandler({ prefix: "?", final: "h" }, decMode(true));
+    this.terminal.parser.registerCsiHandler({ prefix: "?", final: "l" }, decMode(false));
+    this.terminal.parser.registerEscHandler({ final: "c" }, () => {
+      this._modes = { ...DEFAULT_MODES };
+      return false;
+    });
   }
 
   /** Feed raw terminal data */
@@ -72,7 +84,6 @@ export class HeadlessEmulator {
   private queue(data: string, onParsed?: () => void): void {
     this._revision++;
     if (data.length > 0) this._hasContent = true;
-    this.parseDecModes(data);
     this.terminal.write(data, onParsed);
   }
 
@@ -205,49 +216,43 @@ export class HeadlessEmulator {
     this.terminal.dispose();
   }
 
-  /** Track DECSET/DECRST mode changes from terminal output */
-  private parseDecModes(data: string): void {
-    // biome-ignore lint/suspicious/noControlCharactersInRegex: intentional ANSI DECSET/DECRST matching
-    const regex = /\x1b\[\?(\d+)([hl])/g;
-    for (let match = regex.exec(data); match !== null; match = regex.exec(data)) {
-      const mode = Number.parseInt(match[1] ?? "0", 10);
-      const enabled = match[2] === "h";
-      switch (mode) {
-        case 1:
-          this._modes.applicationCursorKeys = enabled;
-          break;
-        case 6:
-          this._modes.originMode = enabled;
-          break;
-        case 7:
-          this._modes.autoWrap = enabled;
-          break;
-        case 25:
-          this._modes.cursorVisible = enabled;
-          break;
-        case 1000:
-          this._modes.mouseTrackingNormal = enabled;
-          break;
-        case 1002:
-          this._modes.mouseTrackingButtonEvent = enabled;
-          break;
-        case 1003:
-          this._modes.mouseTrackingAnyEvent = enabled;
-          break;
-        case 1006:
-          this._modes.mouseSgr = enabled;
-          break;
-        case 1004:
-          this._modes.focusReporting = enabled;
-          break;
-        case 2004:
-          this._modes.bracketedPaste = enabled;
-          break;
-        case 1049:
-        case 47:
-          this._modes.alternateScreen = enabled;
-          break;
-      }
+  private setDecMode(mode: number, enabled: boolean): void {
+    switch (mode) {
+      case 1:
+        this._modes.applicationCursorKeys = enabled;
+        break;
+      case 6:
+        this._modes.originMode = enabled;
+        break;
+      case 7:
+        this._modes.autoWrap = enabled;
+        break;
+      case 25:
+        this._modes.cursorVisible = enabled;
+        break;
+      case 1000:
+        this._modes.mouseTrackingNormal = enabled;
+        break;
+      case 1002:
+        this._modes.mouseTrackingButtonEvent = enabled;
+        break;
+      case 1003:
+        this._modes.mouseTrackingAnyEvent = enabled;
+        break;
+      case 1006:
+        this._modes.mouseSgr = enabled;
+        break;
+      case 1004:
+        this._modes.focusReporting = enabled;
+        break;
+      case 2004:
+        this._modes.bracketedPaste = enabled;
+        break;
+      case 1049:
+      case 1047:
+      case 47:
+        this._modes.alternateScreen = enabled;
+        break;
     }
   }
 }
