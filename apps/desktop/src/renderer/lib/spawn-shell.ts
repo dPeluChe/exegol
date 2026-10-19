@@ -1,7 +1,9 @@
 import type { Agent } from "@exegol/shared";
+import { nanoid } from "nanoid";
 import { toAgentState, useAgentStore } from "../stores/agents";
 import { useTerminalStore } from "../stores/terminals";
 import { findFirstPaneId, getProjectState, useWorkspaceStore } from "../stores/workspace";
+import { dispatchRefitTerminals } from "./dispatch-refit";
 import type { CustomLayoutSlot, SlotAgent } from "./layout-presets";
 import { trpcMutate } from "./trpc-client";
 
@@ -27,7 +29,7 @@ export async function spawnShellIntoPane(
 
 /** Run a command in a new tab's shell, typed once the shell is ready (its first output, or 2s
  *  for a shell that prints no prompt): the palette's `!cmd`, a CLI update */
-export async function runCommandInNewTab(projectId: string, cmd: string): Promise<void> {
+export async function runCommandInNewTab(projectId: string, cmd: string): Promise<string> {
   const agent = await trpcMutate<Agent>("agents.spawn", {
     projectId,
     cliType: "shell",
@@ -39,15 +41,35 @@ export async function runCommandInNewTab(projectId: string, cmd: string): Promis
   const tab = getProjectState().tabs.find((t) => t.id === tabId);
   const paneId = tab ? findFirstPaneId(tab.layout) : null;
   if (paneId) store.updatePane(paneId, { type: "terminal", agentId: agent.id });
+  typeWhenReady(agent.id, cmd);
+  return agent.id;
+}
 
+/** The same in a shell split beside `paneId` (in the active project's `tabId`): a CLI update
+ *  next to its session */
+export async function runCommandBeside(
+  projectId: string,
+  tabId: string,
+  paneId: string,
+  cmd: string,
+): Promise<string> {
+  const id = nanoid(8);
+  useWorkspaceStore.getState().splitPane(tabId, paneId, "horizontal", "empty", { id });
+  dispatchRefitTerminals();
+  const agentId = await spawnShellIntoPane(projectId, id, `! ${cmd.slice(0, 30)}`);
+  typeWhenReady(agentId, cmd);
+  return agentId;
+}
+
+function typeWhenReady(agentId: string, cmd: string): void {
   let typed = false;
   const type = () => {
     if (typed) return;
     typed = true;
     unsub();
-    window.api.terminal.write(agent.id, `${cmd}\n`);
+    window.api.terminal.write(agentId, `${cmd}\n`);
   };
-  const unsub = window.api.terminal.onData(agent.id, type);
+  const unsub = window.api.terminal.onData(agentId, type);
   setTimeout(type, 2000);
 }
 

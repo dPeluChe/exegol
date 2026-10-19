@@ -14,6 +14,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 - A new or resumed agent's terminal no longer loses two rows a second after it opens: the toolbar is there from the start instead of appearing with the first output
+- A CLI's Update from a session's toolbar runs in a terminal beside that session, not in a new tab; for a CLI you typed in a terminal and closed, it runs right there and Continue then starts the new version
+- A terminal running `opencode upgrade`, `claude update` or a `--version` check no longer turns into an agent session
+- "Restarts after the update" no longer stays forever when the update installs nothing newer: it gives up 30 s after the update's terminal ends (10 min at most) and says so
 
 ## [0.5.24] — 2026-10-17 — Terminals that stop redrawing on switch, browser zoom and screenshots
 
