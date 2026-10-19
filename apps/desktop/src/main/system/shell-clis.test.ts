@@ -38,6 +38,23 @@ describe("matchShellClis", () => {
     ];
     expect(matchShellClis([{ id: "s", pid: 10 }], rows, commands)).toEqual({ s: "agy" });
   });
+
+  it("an update or a version check is no session", () => {
+    const rows = [
+      { pid: 10, ppid: 1, args: "zsh" },
+      { pid: 11, ppid: 10, args: "claude update" },
+      { pid: 20, ppid: 1, args: "zsh" },
+      { pid: 21, ppid: 20, args: "/opt/homebrew/bin/node /opt/homebrew/bin/codex --version" },
+      { pid: 30, ppid: 1, args: "zsh" },
+      { pid: 31, ppid: 30, args: "claude --resume x" },
+    ];
+    const shells = [
+      { id: "u", pid: 10 },
+      { id: "v", pid: 20 },
+      { id: "s", pid: 30 },
+    ];
+    expect(matchShellClis(shells, rows, commands)).toEqual({ s: "claude-code" });
+  });
 });
 
 describe("foregroundCommands", () => {

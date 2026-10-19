@@ -31,8 +31,28 @@ function programTokens(args: string): string[] {
   return [base(rest[0] ?? ""), ...rest.slice(1)];
 }
 
+/** `opencode upgrade`, `claude --version`: the CLI runs, but no session does */
+const MAINTENANCE = new Set([
+  "upgrade",
+  "update",
+  "install",
+  "uninstall",
+  "version",
+  "--version",
+  "-v",
+  "-V",
+  "help",
+  "--help",
+  "-h",
+  "doctor",
+  "login",
+  "logout",
+  "auth",
+]);
+
 function cliNames(args: string): string[] {
-  return programTokens(args).slice(0, 1);
+  const [name, first] = programTokens(args);
+  return first && MAINTENANCE.has(first) ? [] : [name ?? ""];
 }
 
 /** For each shell, the command its terminal runs in the foreground; null at the prompt */
