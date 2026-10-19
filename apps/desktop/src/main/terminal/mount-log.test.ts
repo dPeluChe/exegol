@@ -70,6 +70,25 @@ describe("mount log", () => {
     expect(parseMountStats("project-1", { ...sw, hiddenMounts: "4" })).toBeNull();
   });
 
+  it("formats a Send to with counts only, and drops anything else", () => {
+    const send = {
+      kind: "send",
+      target: "agent",
+      chars: 120,
+      lines: 3,
+      from: "opened",
+      action: "paste",
+    };
+    const stats = parseMountStats("a", send);
+    expect(stats && formatMountLine(stats)).toBe(
+      "[SendTo] a (agent) paste: 120 chars, 3 lines, opened selection",
+    );
+    expect(parseMountStats("a", { ...send, text: "secret", chars: "120" })).toBeNull();
+    expect(parseMountStats("a", { ...send, action: "typed" })).toBeNull();
+    const extra = parseMountStats("a", { ...send, text: "secret" });
+    expect(JSON.stringify(extra)).not.toContain("secret");
+  });
+
   it("an unmount is one short line", () => {
     const stats = parseMountStats("a", { kind: "unmount" });
     expect(stats && formatMountLine(stats)).toBe("[TermMount] a unmount");

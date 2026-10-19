@@ -146,23 +146,22 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
           onOpenTerminal={handleOpenShellHere}
         />
       )}
-      {hasData && (
-        <TerminalToolbar
-          paneId={paneId}
-          agent={storeAgent ?? null}
-          accessMode={agent?.accessMode}
-          isolationMode={isolationMode}
-          branchName={gitInfo.branchName}
-          dirtyCount={gitInfo.dirtyCount}
-          viewMode={viewMode}
-          onToggleView={toggleLiveView}
-          preview={preview}
-          repoUrl={gitInfo.repoUrl}
-          onOpenRepo={openBesideInBrowser}
-          filesOpen={filesPeek.filesOpen}
-          onToggleFiles={filesPeek.toggleFiles}
-        />
-      )}
+      {/* Drawn from the first mount (under the start overlay): adding it on first data refitted a new session two rows shorter */}
+      <TerminalToolbar
+        paneId={paneId}
+        agent={storeAgent ?? null}
+        accessMode={agent?.accessMode}
+        isolationMode={isolationMode}
+        branchName={gitInfo.branchName}
+        dirtyCount={gitInfo.dirtyCount}
+        viewMode={viewMode}
+        onToggleView={toggleLiveView}
+        preview={preview}
+        repoUrl={gitInfo.repoUrl}
+        onOpenRepo={openBesideInBrowser}
+        filesOpen={filesPeek.filesOpen}
+        onToggleFiles={filesPeek.toggleFiles}
+      />
       {/* min-h-0: a flex item never shrinks below its content by default, so the
           terminal's own rows set the box height and each fit stepped it down a row */}
       <div className="flex min-h-0 flex-1">
