@@ -117,12 +117,26 @@ export async function sendSelectionTo(
   text: string,
   target: SendTarget,
   prefs: SendEnterPrefs,
+  from: "live" | "opened" = "live",
 ): Promise<void> {
-  if (!text) return;
+  const log = (action: "paste" | "enter" | "held" | "empty") =>
+    window.api.terminal.mountLog(target.id, {
+      kind: "send",
+      target: target.cliType === "shell" ? "shell" : "agent",
+      chars: text.length,
+      lines: text ? text.split("\n").length : 0,
+      from,
+      action,
+    });
+  if (!text) {
+    log("empty");
+    return;
+  }
   const wantsEnter = sendAction(target, prefs, false) === "enter";
   const asks = wantsEnter && target.cliType !== "shell" && (await agentAsksQuestion(target.id));
   const action = sendAction(target, prefs, asks);
   pasteToAgent(target.id, text);
+  log(action);
   if (action === "enter") {
     setTimeout(() => window.api.terminal.write(target.id, "\r"), ENTER_DELAY_MS);
   } else if (action === "held") {

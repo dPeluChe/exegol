@@ -2,8 +2,8 @@ import { ENDED_STATUSES } from "@exegol/shared";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useScrollback } from "../../hooks/use-trpc";
 
-// Sessions that already showed output in this window: a remount (project or tab switch) draws the
-// toolbar at once. Waiting for hasContent fitted the terminal without it, two rows too tall
+// Sessions that already showed output in this window: a remount (project or tab switch) skips the
+// start overlay instead of flashing it until hasContent answers
 const sessionsWithData = new Set<string>();
 
 /**

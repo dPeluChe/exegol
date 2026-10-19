@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- A new or resumed agent's terminal no longer loses two rows a second after it opens: the toolbar is there from the start instead of appearing with the first output
+
 ## [0.5.24] — 2026-10-17 — Terminals that stop redrawing on switch, browser zoom and screenshots
 
 ### Added

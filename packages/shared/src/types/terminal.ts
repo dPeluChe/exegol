@@ -36,6 +36,16 @@ export type MountStats =
       reflows: number;
       pending: number;
       ended: "settled" | "timeout" | "switched";
+    }
+  /** One Send to, sent under the target's id: what reached it, never the text. `from`: the
+   *  selection at pick time or the one the list opened with */
+  | {
+      kind: "send";
+      target: "agent" | "shell";
+      chars: number;
+      lines: number;
+      from: "live" | "opened";
+      action: "paste" | "enter" | "held" | "empty";
     };
 
 export function gridLabel(cols: number, rows: number): string {

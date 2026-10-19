@@ -11,11 +11,14 @@ export const resizeLogLimit = createLogLimiter(10_000);
 
 /** A settle line follows its mount within the second: limited on its own key, not dropped */
 export const mountLogKey = (m: MountLog) =>
-  m.kind === "settle" || m.kind === "switch" ? `${m.agentId}:${m.kind}` : m.agentId;
+  m.kind === "settle" || m.kind === "switch" || m.kind === "send"
+    ? `${m.agentId}:${m.kind}`
+    : m.agentId;
 
 export function forgetTerminalLogs(agentId: string): void {
   mountLogLimit.forget(agentId);
   mountLogLimit.forget(`${agentId}:settle`);
+  mountLogLimit.forget(`${agentId}:send`);
   visibleLogLimit.forget(agentId);
   resizeLogLimit.forget(agentId);
 }
@@ -65,6 +68,24 @@ export function parseMountStats(agentId: unknown, input: unknown): MountLog | nu
       ended,
     };
   }
+  if (r.kind === "send") {
+    const { target, chars, lines, from, action } = r;
+    if (target !== "agent" && target !== "shell") return null;
+    if (!count(chars, 1e8) || !count(lines, 1e7)) return null;
+    if (from !== "live" && from !== "opened") return null;
+    if (action !== "paste" && action !== "enter" && action !== "held" && action !== "empty") {
+      return null;
+    }
+    return {
+      agentId,
+      kind: "send",
+      target,
+      chars: Math.round(chars),
+      lines: Math.round(lines),
+      from,
+      action,
+    };
+  }
   if (r.kind !== "mount") return null;
   const { snapGrid, fitGrid, snapshotBytes, snapshotMs, paintMs, replayed, dropped, kick } = r;
   if ((snapGrid !== null && !isGrid(snapGrid)) || !isGrid(fitGrid)) return null;
@@ -97,6 +118,9 @@ export function formatMountLine(m: MountLog): string {
       ` (${m.activeMounts} in the active tab, ${m.hiddenMounts} in hidden tabs) ${outcome},` +
       ` snapshots ${Math.round(m.snapshotBytes / 1024)} KB, reflows ${m.reflows}`
     );
+  }
+  if (m.kind === "send") {
+    return `[SendTo] ${m.agentId} (${m.target}) ${m.action}: ${m.chars} chars, ${m.lines} line${m.lines === 1 ? "" : "s"}, ${m.from} selection`;
   }
   if (m.kind === "settle") {
     return `[TermMount] ${m.agentId} settled ${m.mountGrid} -> ${m.finalGrid} after ${m.afterMs}ms (${m.changes} change${m.changes === 1 ? "" : "s"})`;

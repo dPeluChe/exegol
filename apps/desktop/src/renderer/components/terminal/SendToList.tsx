@@ -128,9 +128,9 @@ export function SendToList({
   const [opened] = useState(getSelection);
   const names = useCliSessionNames(sections);
   const onPick = (t: SendTarget) => {
-    const text = getSelection() || opened;
+    const live = getSelection();
     onSent();
-    void sendSelectionTo(text, t, prefs);
+    void sendSelectionTo(live || opened, t, prefs, live ? "live" : "opened");
   };
   const { own, others } = sections;
   // Nothing in this project: the others are the whole list, shown without the extra click
