@@ -6,7 +6,14 @@
  * the user has configured.
  */
 
-import { existsSync, mkdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  unlinkSync,
+  writeFileSync,
+} from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { excludeFromGit } from "../lib/git-exclude";
@@ -335,4 +342,49 @@ function removeFromJsonConfig(configPath: string, sectionKey: string): void {
   } catch (err) {
     logger.warn(`[ExegolMcp] Failed to clean ${configPath}:`, err);
   }
+}
+
+/** The app moved (`swap` puts its paths under the new root): Exegol's entries in these files,
+ *  nothing else. Returns how many files changed */
+export function relocateMcpConfigs(folders: string[], swap: <T>(value: T) => T): number {
+  let changed = 0;
+  const rewrite = (path: string, before: unknown, after: unknown) => {
+    if (JSON.stringify(before) === JSON.stringify(after)) return;
+    writeFileSync(path, `${JSON.stringify(after, null, 2)}\n`, "utf-8");
+    changed++;
+  };
+  const files = existsSync(MCP_CONFIG_DIR) ? readdirSync(MCP_CONFIG_DIR) : [];
+  for (const name of files.filter((n) => n.endsWith(".json"))) {
+    const path = join(MCP_CONFIG_DIR, name);
+    const parsed = readMcpJson(path);
+    if (parsed) rewrite(path, parsed, swap(parsed));
+  }
+  for (const cwd of new Set(folders)) {
+    for (const config of Object.values(PROJECT_CONFIGS)) {
+      const path = join(cwd, config.relPath);
+      if (!existsSync(path)) continue;
+      const file = readMcpJson(path) as Record<string, unknown> | null;
+      const section = file?.[config.section] as Record<string, unknown> | undefined;
+      if (!file || !section?.[EXEGOL_SERVER_KEY]) continue;
+      const updated = {
+        ...file,
+        [config.section]: { ...section, [EXEGOL_SERVER_KEY]: swap(section[EXEGOL_SERVER_KEY]) },
+      };
+      rewrite(path, file, updated);
+    }
+  }
+  const codexPath = join(homedir(), ".codex", "config.toml");
+  if (existsSync(codexPath)) {
+    const text = readFileSync(codexPath, "utf-8");
+    const start = text.indexOf(CODEX_MARK_START);
+    const end = text.indexOf(CODEX_MARK_END, start);
+    if (start !== -1 && end !== -1) {
+      const updated = text.slice(0, start) + swap(text.slice(start, end)) + text.slice(end);
+      if (updated !== text) {
+        writeFileSync(codexPath, updated, "utf-8");
+        changed++;
+      }
+    }
+  }
+  return changed;
 }

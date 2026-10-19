@@ -28,7 +28,7 @@
    loop phase 1 (T200.7)~~ (`feat/pr-watch`, `TASK_COMPLETED/2610.md`).
 6. **Daily bugs**: opencode dies across app quit (Verify live below), ~~git pane renames / MM
    files / silent failures~~ (`fix/git-pane-audit`), ~~T138 split modes~~ (`fix/headless-modes-parser`), ~~T185.11 scheduler
-   timeout~~ (`fix/scheduler-timeout`), T193.2 execPath.
+   timeout~~ (`fix/scheduler-timeout`), ~~T193.2 execPath~~ (`fix/execpath-moved`).
 
 Next round (after 0.5.16): **worktree hygiene** (T142 "Worktree hygiene" item: remove worktrees
 whose PR merged or whose agent closed clean and pushed, size warning in Storage and the status
@@ -697,9 +697,6 @@ Notarization (since 0.5.4) and GitHub releases are done. The build is still arm6
 **Priority**: P1 unless noted | **Source**: 2026-09-22 pre-build audit. Fixed items are in `TASK_COMPLETED/2609.md`.
 
 **Distribution**
-2. `process.execPath` is written into hooks, `.mcp.json` and CLI configs: launching from the DMG
-   volume or a translocated path breaks them once the app moves. Install to /Applications first;
-   long term, rewrite those paths at startup when execPath changed.
 3. arm64 only: merged into T195.2.
 4. node-pty `prebuilds/darwin-arm64/spawn-helper` has no exec bit; works only because
    `rebuild:native` builds `build/Release/spawn-helper`. chmod in an afterPack hook.

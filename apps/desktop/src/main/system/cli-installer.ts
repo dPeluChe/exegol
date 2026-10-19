@@ -5,6 +5,7 @@ import {
   lstatSync,
   mkdirSync,
   readFileSync,
+  readlinkSync,
   rmSync,
   symlinkSync,
 } from "node:fs";
@@ -101,4 +102,23 @@ export function uninstallCli(): string[] {
     removed.push(target);
   }
   return removed;
+}
+
+/** The app moved: a CLI symlink into its old bundle points into the new one */
+export function relocateCliLink(swap: (path: string) => string): number {
+  let changed = 0;
+  for (const target of installCandidates()) {
+    if (!isSymlink(target)) continue;
+    try {
+      const old = readlinkSync(target);
+      const moved = swap(old);
+      if (moved === old || !existsSync(moved)) continue;
+      rmSync(target);
+      symlinkSync(moved, target);
+      changed++;
+    } catch {
+      /* best-effort: a root-owned /usr/local/bin is reinstalled from Settings */
+    }
+  }
+  return changed;
 }

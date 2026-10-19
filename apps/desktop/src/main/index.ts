@@ -41,6 +41,7 @@ import { getPipelineExecutor } from "./pipeline/executor";
 import { getSchedulerEngine } from "./scheduler/engine";
 import { ensureDefaultSkills } from "./skills/discovery";
 import { ensureCanonicalPaths } from "./skills/paths";
+import { offerMoveToApplications, relocateAppPaths } from "./system/app-relocation";
 import { integrateAppImage } from "./system/appimage-integration";
 import { initAutoUpdater, stopAutoUpdater } from "./system/auto-updater";
 import { captureConsole } from "./system/console-capture";
@@ -120,10 +121,12 @@ app.whenReady().then(async () => {
   warmShellPath();
   endMark("windowCreated");
   initTray();
+  void offerMoveToApplications();
 
   // Background: non-blocking filesystem init (skills + wrappers)
   (() => {
     try {
+      relocateAppPaths(getDb());
       ensureDefaultSkills();
       ensureShellWrappers();
       ensureShellIntegration();
