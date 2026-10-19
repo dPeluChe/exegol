@@ -20,6 +20,7 @@ import { getScrollPosition } from "./terminal-buffer";
 import { createDormantPipe, type DormantPipe } from "./terminal-dormant-wiring";
 import { registerTerminalLinkProviders } from "./terminal-link-providers";
 import type { TerminalInstanceProps } from "./terminal-types";
+import { watchTuiCopy } from "./tui-copy";
 import { tuneWheelSensitivity } from "./tui-wheel";
 
 const CTRL_V = "\x16";
@@ -49,6 +50,7 @@ interface TerminalSessionDeps {
   theme: ITerminalOptions["theme"];
   onScrollPosition: TerminalInstanceProps["onScrollPosition"];
   onSelectionChange?: TerminalInstanceProps["onSelectionChange"];
+  onTuiCopy?: TerminalInstanceProps["onTuiCopy"];
   setPaneCwd: (paneId: string, cwd: string) => void;
   setPaneLastExit: (paneId: string, code: number | null) => void;
 }
@@ -376,6 +378,9 @@ export function setupTerminalSession(
     const cb = deps.onSelectionChange;
     disposables.push(terminal.onSelectionChange(() => cb(terminal.hasSelection())));
     if (terminal.element) disposables.push(keepSelection(terminal, terminal.element));
+  }
+  if (deps.onTuiCopy && terminal.element) {
+    disposables.push(watchTuiCopy(terminal, terminal.element, deps.onTuiCopy));
   }
 
   function dispose(): void {

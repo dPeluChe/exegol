@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Send to after selecting text inside Claude Code (or another CLI that selects with the mouse and says "copied"): the Send to button appears with what it copied, also in the right-click menu, for 20 seconds
+
 ### Fixed
 - A new or resumed agent's terminal no longer loses two rows a second after it opens: the toolbar is there from the start instead of appearing with the first output
 
