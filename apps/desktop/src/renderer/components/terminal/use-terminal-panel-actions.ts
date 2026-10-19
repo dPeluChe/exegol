@@ -1,4 +1,5 @@
 import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
+import { useLatest } from "../../hooks/use-latest";
 import { useProject } from "../../hooks/use-trpc";
 import { sendToActive } from "./send-targets";
 import type { TerminalInstanceHandle } from "./terminal-types";
@@ -80,8 +81,7 @@ export function useSendTo(
   const [hasSelection, setHasSelection] = useState(false);
   // What the TUI copied from its own mouse selection (OSC 52): xterm holds none then
   const [tuiCopy, setTuiCopy] = useState<string | null>(null);
-  const tuiCopyRef = useRef<string | null>(null);
-  tuiCopyRef.current = tuiCopy;
+  const tuiCopyRef = useLatest(tuiCopy);
   const sendSections = useSendSections(
     agentId,
     projectId,
@@ -89,7 +89,7 @@ export function useSendTo(
   );
   const getSelection = useCallback(
     () => terminalRef.current?.getSelection() || (tuiCopyRef.current ?? ""),
-    [terminalRef],
+    [terminalRef, tuiCopyRef],
   );
   const setShowSendTo = useCallback((open: boolean) => {
     setShowSendToState(open);
