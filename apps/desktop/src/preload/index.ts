@@ -146,6 +146,9 @@ contextBridge.exposeInMainWorld("api", {
   app: {
     getVersion: () => safe.invoke("app:version"),
     getPlatform: () => process.platform,
+    /** Linux/Windows keys for what the macOS menu does: zoom this window's UI, quit */
+    zoom: (action: "in" | "out" | "reset") => safe.send("app:zoom", action),
+    quit: () => safe.send("app:quit"),
   },
   // Menu-driven actions (macOS app menu routes accelerators via IPC so the
   // renderer can close panes/tabs instead of the whole window on Cmd+W).

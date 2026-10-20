@@ -7,6 +7,7 @@ import {
   editKeys,
   fileManagerLabel,
   hasClickModifier,
+  windowKey,
 } from "./keymap";
 
 const ev = (over: Partial<KeyboardEvent>) =>
@@ -80,6 +81,26 @@ describe("editKeys / chordBadge", () => {
   it("badges", () => {
     expect(chordBadge("2", true)).toBe("⌘2");
     expect(chordBadge("2", false)).toBe("^⇧2");
+  });
+});
+
+describe("windowKey", () => {
+  const chord = { ctrlKey: true, shiftKey: true };
+
+  it("off macOS: Ctrl+Shift+= / - zoom, Ctrl+Shift+Alt+0 resets, Ctrl+Shift+Q quits", () => {
+    expect(windowKey(ev({ ...chord, code: "Equal", key: "+" }), false)).toBe("in");
+    expect(windowKey(ev({ ...chord, code: "Minus", key: "_" }), false)).toBe("out");
+    expect(windowKey(ev({ ...chord, altKey: true, code: "Digit0", key: ")" }), false)).toBe(
+      "reset",
+    );
+    expect(windowKey(ev({ ...chord, code: "KeyQ", key: "Q" }), false)).toBe("quit");
+  });
+
+  it("leaves Ctrl+Shift+0 to the projects, Ctrl alone to the terminal, macOS to its menu", () => {
+    expect(windowKey(ev({ ...chord, code: "Digit0", key: ")" }), false)).toBeNull();
+    expect(windowKey(ev({ ctrlKey: true, code: "Equal", key: "=" }), false)).toBeNull();
+    expect(windowKey(ev({ ctrlKey: true, code: "KeyQ", key: "q" }), false)).toBeNull();
+    expect(windowKey(ev({ metaKey: true, code: "KeyQ", key: "q" }), true)).toBeNull();
   });
 });
 

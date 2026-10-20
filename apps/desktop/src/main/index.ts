@@ -56,8 +56,8 @@ import { ensureShellIntegration, ensureShellWrappers } from "./terminal/shell-wr
 import { startSidecarHealthWatch, stopSidecarHealthWatch } from "./terminal/sidecar-health-watch";
 import { installAppMenu } from "./windows/app-menu";
 import { closeAllFloatingPanes, registerFloatingIpcHandlers } from "./windows/floating";
-import { forwardSwitcherKeys } from "./windows/pane-switcher-keys";
 import { closeSettingsWindow, registerSettingsIpcHandlers } from "./windows/settings";
+import { forwardWebviewKeys } from "./windows/webview-keys";
 
 app.setName("Exegol");
 // After a GPU crash (moving the window across displays) Chromium may block WebGL for the
@@ -198,7 +198,7 @@ let stopWorkGuard: (() => void) | null = null;
 app.on("web-contents-created", (_event, contents) => {
   captureConsole(contents);
   if (contents.getType() === "webview") {
-    forwardSwitcherKeys(contents);
+    forwardWebviewKeys(contents);
     forwardDictationKeys(contents);
   }
   // Every Exegol window (settings and floating ones too, not only main): a link must not open

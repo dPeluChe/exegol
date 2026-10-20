@@ -71,6 +71,18 @@ export function hasClickModifier(e: { metaKey: boolean; ctrlKey: boolean }, mac 
   return mac ? e.metaKey : e.ctrlKey;
 }
 
+/** Off macOS, the keys of the macOS menu's zoom and quit, which no menu bar handles there:
+ *  Cmd+= / Cmd+- zoom Exegol (a focused browser pane takes them first), Cmd+Shift+0 resets,
+ *  Cmd+Q quits. macOS: null, the menu's own accelerators */
+export function windowKey(e: ChordEvent, mac = IS_MAC): "in" | "out" | "reset" | "quit" | null {
+  const chord = !mac && appChord(e, mac);
+  if (!chord) return null;
+  if (chord.alt) return e.code === "Digit0" || e.code === "Numpad0" ? "reset" : null;
+  if (e.code === "Equal" || e.code === "NumpadAdd") return "in";
+  if (e.code === "Minus" || e.code === "NumpadSubtract") return "out";
+  return chordKey(e) === "q" ? "quit" : null;
+}
+
 /** A short badge for an app chord plus one key: "⌘2", or "^⇧2" off macOS */
 export function chordBadge(key: string, mac = IS_MAC): string {
   return mac ? `⌘${key}` : `^⇧${key}`;

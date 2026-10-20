@@ -26,7 +26,7 @@ import {
 } from "../terminal/pty-visibility";
 import { whenSessionReady } from "../terminal/reattach-gate";
 import { requestPtyResize } from "../terminal/resize-request";
-import { popupAppMenu } from "../windows/app-menu";
+import { popupAppMenu, zoomWindow } from "../windows/app-menu";
 import { getMainWindow } from "./window";
 
 /** webContents we already wired a destroy listener for. */
@@ -48,6 +48,12 @@ export function registerIpcHandlers(): void {
   ipcMain.on("app:toggle-devtools", (event) => {
     event.sender.toggleDevTools();
   });
+
+  // Linux/Windows app keys (no menu bar): zoom the asking window's UI, quit
+  ipcMain.on("app:zoom", (event, action: unknown) => {
+    if (action === "in" || action === "out" || action === "reset") zoomWindow(event.sender, action);
+  });
+  ipcMain.on("app:quit", () => app.quit());
 
   // Terminal resize: renderer -> main -> pty
   ipcMain.on("terminal:resize", (_event, agentId: string, cols: number, rows: number) => {

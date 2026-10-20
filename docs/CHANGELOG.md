@@ -13,6 +13,10 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Linux: an `.rpm` package for Fedora and openSUSE (`sudo dnf install ./exegol-<v>.x86_64.rpm`), updating itself like the `.deb`
 - Windows: an installer (`Exegol-<v>-x64.exe`) attached to each release, updating itself like the Mac app. Not signed yet: on first run SmartScreen asks, More info → Run anyway
 - Linux and Windows: a menu button at the left of the title bar opens the menus the macOS menu bar has (File, View, Window, Help with Report a Bug… and Open Logs Folder)
+- Linux and Windows: Ctrl+Shift+= / Ctrl+Shift+- zoom Exegol, Ctrl+Shift+Alt+0 resets the zoom and Ctrl+Shift+Q quits; the menu button lists the keys
+
+### Fixed
+- Linux and Windows: New Tab, Close Pane, Open Location and Reload keys (Ctrl+Shift+T, W, L, R) now work while a page in a browser pane has the focus, and Ctrl+Shift+R reloads the window when no browser pane is focused, as Cmd+R does on macOS
 
 ## [0.5.25] — 2026-10-20 — Linux tray reopens the window, Send to from Claude Code, CLI updates beside the session
 

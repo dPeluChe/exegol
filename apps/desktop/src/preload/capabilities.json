@@ -397,6 +397,8 @@
     "gpu:dom-only",
     "terminal:resized",
     "app:version",
+    "app:zoom",
+    "app:quit",
     "menu:new-tab",
     "menu:close-pane",
     "menu:reload",

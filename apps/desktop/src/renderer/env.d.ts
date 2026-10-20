@@ -71,6 +71,8 @@ interface Window {
     app: {
       getVersion: () => Promise<string>;
       getPlatform: () => string;
+      zoom: (action: "in" | "out" | "reset") => void;
+      quit: () => void;
     };
     onMenuAction: (
       callback: (
