@@ -417,6 +417,7 @@
     "pipeline:status-changed",
     "dialog:showOpenDialog",
     "window:minimize",
+    "window:app-menu",
     "window:maximize",
     "window:close",
     "notification:navigate",

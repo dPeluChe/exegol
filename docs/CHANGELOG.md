@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Linux and Windows: a menu button at the left of the title bar opens the menus the macOS menu bar has (File, View, Window, Help with Report a Bug… and Open Logs Folder)
+
 ## [0.5.25] — 2026-10-20 — Linux tray reopens the window, Send to from Claude Code, CLI updates beside the session
 
 ### Added

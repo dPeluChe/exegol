@@ -95,6 +95,7 @@ interface Window {
       minimize: () => void;
       maximize: () => void;
       close: () => void;
+      appMenu: (x: number, y: number) => void;
     };
     pathForFile?: (file: File) => string;
     onAgentStatus: (callback: (event: AgentStatusEvent) => void) => () => void;

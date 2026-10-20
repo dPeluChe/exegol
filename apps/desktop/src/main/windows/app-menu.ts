@@ -36,7 +36,7 @@ export function installAppMenu(): void {
     });
   }
   if (process.platform !== "darwin") {
-    // On Windows/Linux we don't force a menu — the default is fine.
+    // Frameless window: no menu bar; the title bar's menu button pops up `popupAppMenu`
     Menu.setApplicationMenu(null);
     return;
   }
@@ -88,14 +88,7 @@ export function installAppMenu(): void {
             sendToRenderer(browserWindow as BaseWindow | undefined, "menu:focus-location"),
         },
         { type: "separator" },
-        {
-          label: "Install 'exegol' CLI",
-          click: () => handleInstallCli(),
-        },
-        {
-          label: "Uninstall 'exegol' CLI",
-          click: () => handleUninstallCli(),
-        },
+        ...cliItems(),
       ],
     },
     {
@@ -136,27 +129,79 @@ export function installAppMenu(): void {
       label: "Window",
       submenu: [{ role: "minimize" }, { role: "zoom" }, { type: "separator" }, { role: "front" }],
     },
-    {
-      role: "help",
-      submenu: [
-        {
-          label: "Report a Bug…",
-          click: () => showMainWindowWith("menu:report-bug"),
-        },
-        {
-          label: "Open Logs Folder",
-          click: () => void shell.openPath(LOG_DIR),
-        },
-        { type: "separator" },
-        {
-          label: "Learn More",
-          click: () => shell.openExternal(EXEGOL_REPO_URL),
-        },
-      ],
-    },
+    { role: "help", submenu: helpItems() },
   ];
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+function cliItems(): MenuItemConstructorOptions[] {
+  return [
+    { label: "Install 'exegol' CLI", click: () => handleInstallCli() },
+    { label: "Uninstall 'exegol' CLI", click: () => handleUninstallCli() },
+  ];
+}
+
+function helpItems(): MenuItemConstructorOptions[] {
+  return [
+    { label: "Report a Bug…", click: () => showMainWindowWith("menu:report-bug") },
+    { label: "Open Logs Folder", click: () => void shell.openPath(LOG_DIR) },
+    { type: "separator" },
+    { label: "Learn More", click: () => shell.openExternal(EXEGOL_REPO_URL) },
+  ];
+}
+
+/** Linux and Windows: the macOS menu bar's entries, from the title bar's menu button. No Edit
+ *  menu (the button holds the focus) and no accelerators: the renderer handles the keys */
+export function popupAppMenu(win: BrowserWindow, x: number, y: number): void {
+  const template: MenuItemConstructorOptions[] = [
+    {
+      label: "File",
+      submenu: [
+        { label: "New Tab", click: () => win.webContents.send("menu:new-tab") },
+        { label: "Close Pane", click: () => win.webContents.send("menu:close-pane") },
+        { label: "Open Location", click: () => win.webContents.send("menu:focus-location") },
+        { type: "separator" },
+        { label: "Settings…", click: () => openSettingsWindow() },
+        { type: "separator" },
+        ...cliItems(),
+        { type: "separator" },
+        { label: `Quit ${app.name}`, click: () => app.quit() },
+      ],
+    },
+    {
+      label: "View",
+      submenu: [
+        { label: "Reload", click: () => handleReloadAccelerator(win) },
+        { label: "Force Reload", click: () => win.webContents.reloadIgnoringCache() },
+        { label: "Toggle Developer Tools", click: () => win.webContents.toggleDevTools() },
+        { type: "separator" },
+        { label: "Actual Size", click: () => win.webContents.setZoomLevel(0) },
+        {
+          label: "Zoom In",
+          click: () => win.webContents.setZoomLevel(win.webContents.getZoomLevel() + 0.5),
+        },
+        {
+          label: "Zoom Out",
+          click: () => win.webContents.setZoomLevel(win.webContents.getZoomLevel() - 0.5),
+        },
+        { type: "separator" },
+        { label: "Toggle Full Screen", click: () => win.setFullScreen(!win.isFullScreen()) },
+      ],
+    },
+    {
+      label: "Window",
+      submenu: [
+        { label: "Minimize", click: () => win.minimize() },
+        {
+          label: win.isMaximized() ? "Restore" : "Maximize",
+          click: () => (win.isMaximized() ? win.unmaximize() : win.maximize()),
+        },
+      ],
+    },
+    { label: "Help", submenu: [...helpItems(), { role: "about" }] },
+  ];
+  Menu.buildFromTemplate(template).popup({ window: win, x: Math.round(x), y: Math.round(y) });
 }
 
 /** T155.6: symlink resources/bin/exegol onto PATH and report the result. */
