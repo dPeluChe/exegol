@@ -25,6 +25,8 @@ const EXE_NAME = "Exegol-${version}-${arch}.exe";
 const APPIMAGE_NAME = "Exegol-${version}-${arch}.AppImage";
 // biome-ignore lint/suspicious/noTemplateCurlyInString: electron-builder template vars
 const DEB_NAME = "exegol_${version}_${arch}.deb";
+// biome-ignore lint/suspicious/noTemplateCurlyInString: electron-builder template vars
+const RPM_NAME = "exegol-${version}.${arch}.rpm";
 
 const config: Configuration = {
   appId: "com.exegol.desktop",
@@ -142,7 +144,8 @@ const config: Configuration = {
 
   // ─── Linux ──────────────────────────────────────────────────────────
   // Built on Linux by .github/workflows/linux.yml (native modules cannot be cross-built from a Mac).
-  // AppImage runs on most distros and self-updates; the .deb installs natively on Debian/Ubuntu
+  // AppImage runs on most distros and self-updates; the .deb (Debian/Ubuntu) and the .rpm
+  // (Fedora/openSUSE) install natively and update through electron-updater's own deb/rpm updaters
   linux: {
     // Without it the binary, the .desktop file and the icon took the scoped package name
     // ("@exegoldesktop"); `exegol` itself is the CLI opener on PATH
@@ -152,6 +155,7 @@ const config: Configuration = {
     target: [
       { target: "AppImage", arch: ["x64"] },
       { target: "deb", arch: ["x64"] },
+      { target: "rpm", arch: ["x64"] },
     ],
     category: "Development",
     artifactName: APPIMAGE_NAME,
@@ -170,6 +174,24 @@ const config: Configuration = {
     ],
     // safeStorage keeps API keys in the desktop keyring (libsecret); without it they fall back
     depends: ["libsecret-1-0", "libnotify4", "libxss1", "libnss3"],
+  },
+  rpm: {
+    artifactName: RPM_NAME,
+    fpm: [
+      `${resolve("src/resources/linux/com.exegol.desktop.metainfo.xml")}=/usr/share/metainfo/com.exegol.desktop.metainfo.xml`,
+    ],
+    // electron-builder's rpm defaults plus libsecret (the keyring for API keys); depends replaces them
+    depends: [
+      "gtk3",
+      "libnotify",
+      "nss",
+      "libXScrnSaver",
+      "(libXtst or libXtst6)",
+      "xdg-utils",
+      "at-spi2-core",
+      "(libuuid or libuuid1)",
+      "libsecret",
+    ],
   },
 
   // ─── Auto-update publish config (GitHub Releases) ──────────────────

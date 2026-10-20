@@ -9,6 +9,10 @@ on:
       tag:
         description: "Release tag to attach the packages to (empty: the latest release)"
         required: false
+      test:
+        description: "Build the selected branch and keep the packages as a run artifact, attach nothing"
+        type: boolean
+        default: false
 permissions:
   contents: write
 concurrency:
@@ -30,15 +34,15 @@ jobs:
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
-          ref: ${{ steps.tag.outputs.tag }}
+          ref: ${{ inputs.test && github.ref || steps.tag.outputs.tag }}
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
         with:
           node-version: '22'
       - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
         with:
           bun-version: '1.2.23'
-      - name: System packages for node-pty, libsecret and the .deb
-        run: sudo apt-get update && sudo apt-get install -y build-essential python3 libsecret-1-dev fakeroot dpkg
+      - name: System packages for node-pty, libsecret, the .deb and the .rpm
+        run: sudo apt-get update && sudo apt-get install -y build-essential python3 libsecret-1-dev fakeroot dpkg rpm
       - run: bun install --frozen-lockfile
       # Rust is preinstalled on GitHub's Ubuntu images; this builds core-rust.linux-x64-gnu.node
       - run: bun run build:rust
@@ -50,13 +54,24 @@ jobs:
           npx electron-vite build
           npx electron-builder --config electron-builder.ts --linux --publish never \
             -c.extraMetadata.homepage=https://github.com/dPeluChe/exegol
+      - name: Keep the test packages
+        if: ${{ inputs.test }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: linux-packages
+          path: |
+            apps/desktop/dist/*/*.AppImage
+            apps/desktop/dist/*/*.deb
+            apps/desktop/dist/*/*.rpm
+          retention-days: 7
       - name: Attach to the release
+        if: ${{ !inputs.test }}
         run: |
           VERSION="${{ steps.tag.outputs.tag }}"
           DIR="apps/desktop/dist/${VERSION#v}"
           ls -la "$DIR"
-          # Whatever this version's config builds (an older tag has no .deb target)
+          # Whatever this version's config builds (an older tag has no .deb or .rpm target)
           shopt -s nullglob
-          FILES=("$DIR"/*.AppImage "$DIR"/*.deb "$DIR"/latest-linux.yml)
+          FILES=("$DIR"/*.AppImage "$DIR"/*.deb "$DIR"/*.rpm "$DIR"/latest-linux.yml)
           if [ ${#FILES[@]} -eq 0 ]; then echo "No Linux packages were built"; exit 1; fi
           gh release upload "${{ steps.tag.outputs.tag }}" --repo "${{ github.repository }}" --clobber "${FILES[@]}"

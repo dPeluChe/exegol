@@ -201,18 +201,21 @@ Until a build is notarized, a user can still open it: System Settings → Privac
 
 Native modules are built per platform, so Linux packages come from CI, not from the Mac:
 `.github/workflows/linux.yml` runs on Ubuntu 22.04 (older glibc, wider distro reach) when a
-release is published, builds core-rust and node-pty for Linux, packages an AppImage and a `.deb`,
-and attaches them plus `latest-linux.yml` (auto-update for the AppImage) to that release. Rerun it
-by hand from Actions → Linux build (optionally with a tag).
+release is published, builds core-rust and node-pty for Linux, packages an AppImage, a `.deb` and an
+`.rpm`, and attaches them plus `latest-linux.yml` (auto-update for all three) to that release. Rerun it
+by hand from Actions → Linux build (optionally with a tag). With `test` checked it builds the selected
+branch instead and keeps the packages as a run artifact (7 days), attaching nothing:
+`gh workflow run linux.yml --ref <branch> -f test=true`.
 
 Install: `chmod +x Exegol-<v>-x86_64.AppImage && ./Exegol-<v>-x86_64.AppImage`, or
-`sudo apt install ./exegol_<v>_amd64.deb`. Runtime needs: a desktop keyring (gnome-keyring or
+`sudo apt install ./exegol_<v>_amd64.deb`, or `sudo dnf install ./exegol-<v>.x86_64.rpm`. Runtime needs: a desktop keyring (gnome-keyring or
 kwallet) for encrypted API keys, and `lsof` for ports (the Doctor warns about both).
 
 Updates: both update themselves from `latest-linux.yml`. The AppImage replaces its own file
 (it must be writable). The `.deb` carries `resources/package-type` = `deb`, so electron-updater
 uses its DebUpdater: it downloads the new `.deb` and installs it with `pkexec` (asks for the admin
-password) when the app quits or on Restart. There is no `.rpm`: on Fedora use the AppImage.
+password) when the app quits or on Restart. The `.rpm` (`package-type` = `rpm`) goes through the
+RpmUpdater the same way (dnf, zypper or rpm, through `pkexec`).
 
 ### 6. Publish to GitHub Releases
 
