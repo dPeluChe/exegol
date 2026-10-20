@@ -9,28 +9,26 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.26] — 2026-10-20 — Windows and Fedora builds, Linux and Windows parity
+
 ### Added
+- Windows (experimental): an installer (`Exegol-<v>-x64.exe`) attached to each release, updating itself like the Mac app. Not signed yet: on first run SmartScreen asks, More info → Run anyway
+- Windows: terminals and agents start in PowerShell 7, else Windows PowerShell, else cmd.exe, with prompts quoted for that shell; the terminal host and the agent tools server listen on per-user named pipes; Claude Code status comes from its hook file events; VS Code style `.cmd` launchers open from Open in IDE. Port and dev server detection, process stats and the "CLI typed in a terminal becomes an agent" watcher are off on Windows for now
 - Linux: an `.rpm` package for Fedora and openSUSE (`sudo dnf install ./exegol-<v>.x86_64.rpm`), updating itself like the `.deb`
-- Windows: an installer (`Exegol-<v>-x64.exe`) attached to each release, updating itself like the Mac app. Not signed yet: on first run SmartScreen asks, More info → Run anyway
 - Linux and Windows: a menu button at the left of the title bar opens the menus the macOS menu bar has (File, View, Window, Help with Report a Bug… and Open Logs Folder)
-- Windows groundwork (no Windows build yet): terminals and agents start in PowerShell 7, else Windows PowerShell, else cmd.exe, with prompts quoted for that shell; the terminal host and the agent tools server listen on per-user named pipes; Claude Code status comes from its hook file events; VS Code style `.cmd` launchers open from Open in IDE. Port and dev server detection, process stats and the "CLI typed in a terminal becomes an agent" watcher are off on Windows for now
 - Linux: Doctor warns when `playerctl` is missing (Pause music while dictating needs it)
 
 ### Fixed
 - Linux AppImage: agent terminals, Exegol MCP tools and the claim guard keep working after Exegol quits and reopens; they pointed into the AppImage's temporary mount, gone once the app closed
 - Linux Wayland: the global hotkey asks the desktop to bind it (GlobalShortcuts portal) instead of silently doing nothing, and the log says when the desktop has no portal or refused it
 - Linux without `lsof`: idle auto-suspend no longer takes a missing lsof for "no dev server running" and skips agents instead; process folders come from `/proc` without it
-- Linux and Windows: Ctrl+Shift+= / Ctrl+Shift+- zoom Exegol, Ctrl+Shift+Alt+0 resets the zoom and Ctrl+Shift+Q quits; the menu button lists the keys
-- Windows: file claims between agents now block a write inside a claimed folder, orphaned worktrees are recognized for cleanup and their work saved, Claude trust is inherited by worktree folders, speech models unpack with the system tar, and the project indexer skips nested `node_modules`
-
-### Fixed
 - Linux and Windows: New Tab, Close Pane, Open Location and Reload keys (Ctrl+Shift+T, W, L, R) now work while a page in a browser pane has the focus, and Ctrl+Shift+R reloads the window when no browser pane is focused, as Cmd+R does on macOS
-
-### Fixed
+- Linux and Windows: Ctrl+Shift+= / Ctrl+Shift+- zoom Exegol, Ctrl+Shift+Alt+0 resets the zoom and Ctrl+Shift+Q quits; the menu button lists the keys
 - Linux and Windows: `exegol .` opens the folder when Exegol was not running (it only opened the app)
 - Linux and Windows: "Reveal in File Explorer" (Windows) and the detected file manager (Linux, "Files" by default) instead of "Reveal in Finder"; Settings > Shortcuts descriptions show Ctrl+Shift keys there
 - Files "Open" reveals Windows (.exe, .bat, .ps1, .js, .lnk, .msi, .scr...) and Linux (.desktop, .deb, .rpm, .AppImage, .run, .fish...) launchers instead of running them
 - Install 'exegol' CLI says when its folder (such as ~/.local/bin) is not on your PATH, with the line to add
+- Windows: file claims between agents now block a write inside a claimed folder, orphaned worktrees are recognized for cleanup and their work saved, Claude trust is inherited by worktree folders, speech models unpack with the system tar, and the project indexer skips nested `node_modules`
 
 ## [0.5.25] — 2026-10-20 — Linux tray reopens the window, Send to from Claude Code, CLI updates beside the session
 
