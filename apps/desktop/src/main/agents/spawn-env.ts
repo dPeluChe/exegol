@@ -19,7 +19,7 @@ import { logger } from "../lib/logger";
 import { resolveClaimGuardPath } from "../mcp/exegol-mcp-config";
 import { getNotificationBus } from "../notifications/bus";
 import { getApiKey } from "../security/keystore";
-import { nodeLaunch, nodeShellCommand } from "../system/node-launch";
+import { type NodeLaunch, nodeLaunch, nodeShellCommand } from "../system/node-launch";
 import { refreshTray } from "../system/tray";
 import {
   deliverPendingAgentMessages,
@@ -29,8 +29,13 @@ import {
 } from "./agent-messaging";
 import { COMMAND_ALIASES } from "./cli-catalog";
 import { scoreAgent } from "./scoring";
-import { HOOKS_DIR, type NotifyEvent, notifyCommand } from "./wrappers";
+import { windowsShell } from "./shell-dialect";
+import { bashPath, HOOKS_DIR, type NotifyEvent, notifyCommand } from "./wrappers";
 
+/** Claude runs hooks through Git Bash on Windows, which wants forward-slash paths */
+function gitBashLaunch(launch: NodeLaunch): NodeLaunch {
+  return { command: bashPath(launch.command), args: launch.args.map((a) => bashPath(a)) };
+}
 export interface AgentContext {
   id: string;
   /** Mutable: a CLI typed in a terminal promotes the live session (shell-promotion.ts) */
@@ -224,11 +229,14 @@ function oscNotifyCommand(agentId: string, event: AgentSignalType, stdoutFallbac
  */
 export function buildClaudeCodeHooksFile(
   agentId: string,
-  opts: { enforceClaims?: boolean } = {},
+  opts: { enforceClaims?: boolean; platform?: NodeJS.Platform } = {},
 ): string | null {
   try {
     mkdirSync(HOOKS_DIR, { recursive: true });
     const path = join(HOOKS_DIR, `${agentId}.json`);
+    // Claude Code runs hooks in Git Bash on Windows, which has no /dev/tty into our ConPTY:
+    // there the file events alone carry the status
+    const osc = (opts.platform ?? process.platform) !== "win32";
     // The file event rides along: it carries Claude's session id (OSC has none) and was the
     // global settings.json's job, which now skips sessions that have this file
     const fileEvent = (event: NotifyEvent) => ({
@@ -237,7 +245,9 @@ export function buildClaudeCodeHooksFile(
     });
     const hookEntry = (event: AgentSignalType, stdoutFallback = true, file?: NotifyEvent) => ({
       hooks: [
-        { type: "command", command: oscNotifyCommand(agentId, event, stdoutFallback) },
+        ...(osc
+          ? [{ type: "command", command: oscNotifyCommand(agentId, event, stdoutFallback) }]
+          : []),
         ...(file ? [fileEvent(file)] : []),
       ],
     });
@@ -250,7 +260,8 @@ export function buildClaudeCodeHooksFile(
     const settings = {
       hooks: {
         PreToolUse: [
-          hookEntry("working"),
+          // OSC only: PostToolUse's tool_use file event reports working
+          ...(osc ? [hookEntry("working")] : []),
           ...(guardPath
             ? [
                 {
@@ -261,7 +272,7 @@ export function buildClaudeCodeHooksFile(
                   hooks: [
                     {
                       type: "command",
-                      command: nodeShellCommand(nodeLaunch(guardPath)),
+                      command: nodeShellCommand(gitBashLaunch(nodeLaunch(guardPath))),
                       timeout: 5,
                     },
                   ],
@@ -335,8 +346,11 @@ export const DEFAULT_PTY_ROWS = 30;
  * Get the full user shell PATH. Electron doesn't inherit the full PATH
  * from the user's shell on macOS/Linux.
  */
-/** The login shell: $SHELL, else the account's, else the platform default (zsh is macOS's, not Linux's) */
+/** The login shell: $SHELL, else the account's, else the platform default (zsh is macOS's, not
+ *  Linux's). Windows has none: PowerShell, else cmd.exe ($SHELL there is often an MSYS path
+ *  ConPTY cannot start) */
 export function loginShell(): string {
+  if (process.platform === "win32") return windowsShell(process.env, findOnPath);
   let account = "";
   try {
     account = userInfo().shell ?? "";
@@ -349,6 +363,8 @@ export function loginShell(): string {
 const shellPathCommand = () => `${loginShell()} -ilc 'echo $PATH'`;
 
 function getShellPath(): string {
+  // A Windows app inherits the user's full PATH; there is no login shell to ask
+  if (process.platform === "win32") return process.env.PATH ?? "";
   try {
     const result = execSync(shellPathCommand(), {
       encoding: "utf-8",
@@ -380,6 +396,7 @@ let resolvedPath: string | null = null;
 
 /** Resolve the login-shell PATH off the main thread so the first spawn or Doctor run doesn't block on it. */
 export function warmShellPath(): void {
+  if (process.platform === "win32") return;
   exec(shellPathCommand(), { timeout: SHELL_PATH_TIMEOUT_MS }, (err, stdout) => {
     // Overwrites a sync fallback too: the real shell PATH wins whenever it arrives
     if (!err && stdout.trim()) {

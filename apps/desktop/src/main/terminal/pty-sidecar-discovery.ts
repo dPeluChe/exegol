@@ -8,6 +8,7 @@ import { promisify } from "node:util";
 import { logger } from "../lib/logger";
 import { withTimeout } from "../lib/timeout";
 import { nodeLaunch } from "../system/node-launch";
+import { readProcessTable } from "../system/process-table";
 import { SidecarClient } from "./pty-sidecar-client";
 import {
   type PidFile,
@@ -116,6 +117,8 @@ function spawnSidecar(token: string): void {
     env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", EXEGOL_SIDECAR_TOKEN: token },
     stdio: ["ignore", log, log],
     detached: true,
+    // Windows: a detached child gets its own console window unless hidden
+    windowsHide: true,
   });
   child.unref();
   if (typeof log === "number") closeSync(log);
@@ -225,6 +228,10 @@ export async function reconnectSidecar(): Promise<SidecarClient> {
 /** The pid file's process, if it still runs our sidecar entry (a pid can be recycled) */
 async function runsSidecar(pid: number): Promise<boolean> {
   try {
+    if (process.platform === "win32") {
+      const row = (await readProcessTable()).find((r) => r.pid === pid);
+      return !!row?.args.includes(SIDECAR_ENTRY);
+    }
     const { stdout } = await promisify(execFile)("ps", ["-o", "args=", "-p", String(pid)], {
       timeout: 3_000,
     });

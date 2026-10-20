@@ -13,6 +13,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Linux: an `.rpm` package for Fedora and openSUSE (`sudo dnf install ./exegol-<v>.x86_64.rpm`), updating itself like the `.deb`
 - Windows: an installer (`Exegol-<v>-x64.exe`) attached to each release, updating itself like the Mac app. Not signed yet: on first run SmartScreen asks, More info → Run anyway
 - Linux and Windows: a menu button at the left of the title bar opens the menus the macOS menu bar has (File, View, Window, Help with Report a Bug… and Open Logs Folder)
+- Windows groundwork (no Windows build yet): terminals and agents start in PowerShell 7, else Windows PowerShell, else cmd.exe, with prompts quoted for that shell; the terminal host and the agent tools server listen on per-user named pipes; Claude Code status comes from its hook file events; VS Code style `.cmd` launchers open from Open in IDE. Port and dev server detection, process stats and the "CLI typed in a terminal becomes an agent" watcher are off on Windows for now
 - Linux: Doctor warns when `playerctl` is missing (Pause music while dictating needs it)
 
 ### Fixed

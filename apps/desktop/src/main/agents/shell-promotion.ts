@@ -175,6 +175,11 @@ const POLL_MS = 3_000;
  * One `ps` per tick, only while a terminal session is live.
  */
 export function startShellPromotion(db: Database.Database, maps: SessionMaps): () => void {
+  // A Windows process read starts PowerShell (~0.5 s CPU): too heavy every 3 s
+  if (process.platform === "win32") {
+    logger.info("[ShellPromotion] Off on Windows: a CLI typed in a terminal stays a terminal");
+    return () => {};
+  }
   let busy = false;
   const tick = async () => {
     if (busy) return;

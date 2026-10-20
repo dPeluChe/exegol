@@ -193,7 +193,7 @@ export class AgentManager {
             liveSessionIds(db, agent.projectId, agent.cliType),
           )
         : undefined;
-    const { shell, args, env, stdinCommand, enableMarker, isPlainShell, blindResume } =
+    const { shell, args, env, stdinCommand, submit, enableMarker, isPlainShell, blindResume } =
       buildPtyInvocation(db, agent, config, cwd, registry, cliConfig, project.path, last);
 
     if (!isPlainShell) attachOutputPipeline(this.getSessionMaps(), agent);
@@ -241,10 +241,10 @@ export class AgentManager {
       if (enableMarker) {
         // PtyHost queues pre-ready writes and flushes them on the shell-ready
         // marker (or its timeout) — no blind delay racing shell startup.
-        ptyHost.write(agent.id, `${stdinCommand}\n`);
+        ptyHost.write(agent.id, `${stdinCommand}${submit}`);
       } else {
         setTimeout(() => {
-          ptyHost.write(agent.id, `${stdinCommand}\n`);
+          ptyHost.write(agent.id, `${stdinCommand}${submit}`);
         }, 500);
       }
     }
