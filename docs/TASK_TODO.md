@@ -186,6 +186,18 @@ Checked by the user on the 0.5.15 build: status bar widgets, Ctrl+Tab switcher, 
   `FILE_LINK_RE` and `resolveLinkPath` only know POSIX paths, so `C:\repo\src\app.ts` and
   backslash-relative paths printed on Windows are plain text. Before a Windows build: match
   drive letters and `\`, resolve them in main with `path.win32`
+- **Windows runtime, unverified** (2026-10-20, `feat/windows-runtime`): written and unit-tested on
+  macOS only. On Windows 11 check: pwsh and powershell.exe 5.1 plain terminals (profile.ps1
+  marker, OSC 7 folder, no console window flash); a prompt with quotes, `$` and newlines reaching
+  Claude through `-Command` (5.1's legacy native-arg passing drops embedded `"`; npm `.cmd` shims
+  re-parse newlines); typed interactive CLIs submitted with CR and the pane ending with the CLI;
+  cmd.exe fallback (`& exit` exit code, `%` in prompts); sidecar named pipe, detached sidecar
+  surviving an app restart, replacement on a version bump (pipe released before the successor
+  listens); MCP pipe for shim and claim guard; Claude hooks under Git Bash (`C:/` paths, `-x` on
+  notify.sh, `$HOME/.exegol/events` = Exegol's folder); `code.cmd` via cmd.exe; Restart terminals
+  and pane close through `Get-CimInstance`. Still off there: ports and dev servers, process
+  metrics, shell promotion; renderer writes ending in `\n` (`spawn-shell`, CLI updates, launcher
+  folder commands) may not submit in PowerShell
 - **Windows install commands, unverified**: `CLI_SETUP` has a `win` command per CLI taken from
   each vendor's docs (2026-10-01), but Exegol ships no Windows build, so none has been run.
   Before a Windows build: run each on Windows 11 (PowerShell vs cmd: `runCommandInNewTab`

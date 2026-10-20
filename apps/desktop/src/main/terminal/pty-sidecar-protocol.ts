@@ -3,18 +3,20 @@
 
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { ipcEndpoint } from "../lib/ipc-endpoint";
 
 // ─── Paths ──────────────────────────────────────────────────────────────
 
 export const EXEGOL_DIR = join(homedir(), ".exegol");
-export const SIDECAR_SOCK_PATH = join(EXEGOL_DIR, "pty-sidecar.sock");
+export const SIDECAR_SOCK_PATH = ipcEndpoint("pty-sidecar");
 export const SIDECAR_PID_PATH = join(EXEGOL_DIR, "pty-sidecar.pid");
 /** The sidecar's own log (sidecar-log.ts), also its stdout/stderr */
 export const SIDECAR_LOG_PATH = join(EXEGOL_DIR, "logs", "sidecar.log");
 /**
  * BUMP THIS whenever you change code the sidecar bundles (pty-sidecar-entry,
  * pty-sidecar-eviction, pty-sidecar-flusher, pty-sidecar-queries, this file,
- * pty-sidecar-lease, ring-buffer, terminal-modes, sidecar-log, lib/frame-reader). The
+ * pty-sidecar-lease, ring-buffer, terminal-modes, sidecar-log, lib/frame-reader,
+ * lib/ipc-endpoint). The
  * sidecar is detached so it outlives both an app restart AND an app update —
  * on a version mismatch, discovery shuts the old one down and spawns a fresh
  * one. Forget the bump and the fix silently never loads: that is a released
@@ -31,6 +33,8 @@ export const SIDECAR_LOG_PATH = join(EXEGOL_DIR, "logs", "sidecar.log");
  *        `sidecar.shuttingDown` notice before it kills its sessions, the pid file released first
  *        and session.create refused while it shuts down (2026-10-12)
  * 1.7.1: no protocol change; test builds of 1.7.0 shipped without the shutdown notice (2026-10-13)
+ * (2026-10-20, no bump: the Windows named pipe from lib/ipc-endpoint changes nothing on macOS or
+ *  Linux, and Windows had no earlier sidecar to replace)
  */
 export const SIDECAR_VERSION = "1.7.1";
 

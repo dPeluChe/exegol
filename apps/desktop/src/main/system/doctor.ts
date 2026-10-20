@@ -18,6 +18,8 @@ import { getProviderRegistry } from "../agents/registry";
 import { _getFullPath, coreRust } from "../agents/spawn-env";
 import { getAppSettings } from "../db/queries/settings";
 import { checkOllamaStatus } from "../indexer/ollama-client";
+import { isNamedPipe } from "../lib/ipc-endpoint";
+import { MCP_SOCK_PATH } from "../mcp/exegol-protocol";
 import { getApiKey } from "../security/keystore";
 import { cliInstalls } from "./cli-versions";
 
@@ -86,16 +88,17 @@ function checkPtySidecar(): DoctorCheck {
 }
 
 function checkMcpSocket(): Promise<DoctorCheck> {
-  const sockPath = join(homedir(), ".exegol", "mcp-server.sock");
-  if (!existsSync(sockPath)) {
-    return Promise.resolve({
-      id: "exegol-mcp",
-      label: "Exegol MCP server",
-      status: "ok",
-      detail: "Not running — starts with the first agent spawn",
-      category: "system",
-    });
-  }
+  const sockPath = MCP_SOCK_PATH;
+  const notRunning: DoctorCheck = {
+    id: "exegol-mcp",
+    label: "Exegol MCP server",
+    status: "ok",
+    detail: "Not running — starts with the first agent spawn",
+    category: "system",
+  };
+  // A named pipe exists only while served: there the connect below tells
+  const pipe = isNamedPipe(sockPath);
+  if (!pipe && !existsSync(sockPath)) return Promise.resolve(notRunning);
   return new Promise((resolve) => {
     const sock = createConnection(sockPath);
     const done = (status: DoctorStatus, detail: string) => {
@@ -106,7 +109,9 @@ function checkMcpSocket(): Promise<DoctorCheck> {
     sock.on("connect", () => done("ok", "Listening — agents can reach memory/knowledge tools"));
     sock.on("timeout", () => done("warn", "Socket file present but not answering"));
     sock.on("error", () =>
-      done("warn", "Stale socket file — server not listening; respawns with the next agent"),
+      pipe
+        ? done(notRunning.status, notRunning.detail)
+        : done("warn", "Stale socket file — server not listening; respawns with the next agent"),
     );
   });
 }

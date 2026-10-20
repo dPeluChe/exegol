@@ -54,6 +54,7 @@ vi.mock("../terminal/shell-wrappers", () => ({
   shellSupportsMarker: () => mocks.marker,
   getShellIntegrationZdotdir: () => "/integration/zdotdir",
   getShellIntegrationBashRcfile: () => "/integration/bashrc",
+  getShellIntegrationPwshProfile: () => "C:\\x\\profile.ps1",
   getFishInitCommand: () => "init-fish",
 }));
 
@@ -422,5 +423,99 @@ describe("buildPtyInvocation", () => {
         "/tmp/p1",
       ),
     ).toThrow(/safety guard/);
+  });
+
+  // Byte-identical to what every release wrote for codex on macOS and Linux
+  it("passes codex its per-session MCP env in POSIX single quotes", () => {
+    const [agent, config] = makeAgent("codex");
+    const inv = buildPtyInvocation(
+      db,
+      agent,
+      config,
+      "/tmp/cwd",
+      registry,
+      { command: "codex", args: [], env: {} },
+      "/tmp/p1",
+    );
+    expect(inv.stdinCommand).toBe(
+      `exec codex -c 'mcp_servers.exegol.env.ELECTRON_RUN_AS_NODE="1"' -c 'mcp_servers.exegol.env.EXEGOL_MCP_TOKEN="test-mcp-token"'`,
+    );
+    expect(inv.submit).toBe("\n");
+  });
+
+  describe("on Windows", () => {
+    const realPlatform = process.platform;
+    const PWSH = "C:\\Program Files\\PowerShell\\7\\pwsh.exe";
+    beforeEach(() => {
+      Object.defineProperty(process, "platform", { value: "win32" });
+      process.env.SHELL = PWSH;
+    });
+    afterEach(() => {
+      Object.defineProperty(process, "platform", { value: realPlatform });
+    });
+
+    it("opens a plain PowerShell with the integration and the ready marker", () => {
+      const [agent, config] = makeAgent("shell");
+      const inv = buildPtyInvocation(db, agent, config, "/tmp/p1", registry, cliConfig, "/tmp/p1");
+      expect(inv.shell).toBe(PWSH);
+      expect(inv.args).toEqual([
+        "-NoLogo",
+        "-ExecutionPolicy",
+        "Bypass",
+        "-NoExit",
+        "-Command",
+        '. "C:\\x\\profile.ps1"',
+      ]);
+      expect(inv.enableMarker).toBe(true);
+    });
+
+    it("runs a prompt-arg CLI through -Command, paths and codex values quoted for PowerShell", () => {
+      mocks.hooksPath = "C:\\Users\\Jo Ann\\.exegol\\hooks\\a.json";
+      const [agent, config] = makeAgent("claude-code");
+      const inv = buildPtyInvocation(db, agent, config, "/tmp/cwd", registry, cliConfig, "/tmp/p1");
+      expect(inv.args.slice(0, 4)).toEqual(["-NoLogo", "-ExecutionPolicy", "Bypass", "-Command"]);
+      expect(inv.args[4]).toContain('--settings "C:\\Users\\Jo Ann\\.exegol\\hooks\\a.json"');
+      expect(inv.stdinCommand).toBeNull();
+    });
+
+    it("types an interactive CLI and exits with it, submitted with CR", () => {
+      const [agent, config] = makeAgent("codex");
+      const inv = buildPtyInvocation(
+        db,
+        agent,
+        config,
+        "/tmp/cwd",
+        registry,
+        { command: "codex", args: [], env: {} },
+        "/tmp/p1",
+      );
+      expect(inv.args).toContain("-NoExit");
+      expect(inv.stdinCommand).toBe(
+        'codex -c "mcp_servers.exegol.env.ELECTRON_RUN_AS_NODE=`"1`"" -c "mcp_servers.exegol.env.EXEGOL_MCP_TOKEN=`"test-mcp-token`""; exit $LASTEXITCODE',
+      );
+      expect(inv.submit).toBe("\r");
+      expect(inv.enableMarker).toBe(true);
+    });
+
+    it("types every command into cmd.exe, which has no marker", () => {
+      process.env.SHELL = "C:\\Windows\\system32\\cmd.exe";
+      mocks.lifecycle = { beforeAgent: "npm install" };
+      const [agent, config] = makeAgent("claude-code");
+      const inv = buildPtyInvocation(db, agent, config, "/tmp/cwd", registry, cliConfig, "/tmp/p1");
+      expect(inv.args).toEqual([]);
+      expect(inv.stdinCommand?.startsWith("((npm install) || echo [Exegol] beforeAgent")).toBe(
+        true,
+      );
+      expect(inv.stdinCommand?.endsWith(" & exit")).toBe(true);
+      expect(inv.enableMarker).toBe(false);
+      expect(inv.submit).toBe("\r");
+    });
+
+    it("keeps the PowerShell beforeAgent prefix on one line", () => {
+      const prefix = beforeAgentPrefix("npm install", PWSH, "pwsh");
+      expect(prefix).not.toContain("\n");
+      expect(prefix.startsWith("npm install; if (-not $?)")).toBe(true);
+      expect(prefix.endsWith("}; ")).toBe(true);
+    });
   });
 });

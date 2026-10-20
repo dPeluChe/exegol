@@ -1,23 +1,9 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { MODEL_ID_PATTERN, MODEL_LAUNCH, YOLO_FLAGS } from "@exegol/shared";
 import { providerBinaries } from "../agents/cli-catalog";
 import { getProviderRegistry } from "../agents/registry";
+import type { ProcRow } from "./process-table";
 
-const execFileAsync = promisify(execFile);
-
-export interface ProcRow {
-  pid: number;
-  ppid: number;
-  /** Process group, and the foreground group of its terminal (0 without one) */
-  pgid?: number;
-  tpgid?: number;
-  /** Controlling terminal (`ttys003`), "??" without one */
-  tty?: string;
-  /** Resident memory in KB */
-  rss?: number;
-  args: string;
-}
+export { type ProcRow, readProcessTable } from "./process-table";
 
 /** Interpreters whose script (the next token) names the CLI: `node .../codex` */
 const RUNTIMES = new Set(["node", "bun", "deno", "python", "python3"]);
@@ -127,44 +113,6 @@ export function launchFlagsFromArgs(
     if (value && MODEL_ID_PATTERN.test(value)) model = value;
   }
   return { yolo: !!yoloFlag && tokens.includes(yoloFlag), model };
-}
-
-let inFlight: Promise<ProcRow[]> | null = null;
-
-/** Every process on the machine, one `ps` for all the terminals watched. Callers at the same
- *  time (a tab closing several terminals, the promotion poll) share one read */
-export function readProcessTable(): Promise<ProcRow[]> {
-  inFlight ??= readTable().finally(() => {
-    inFlight = null;
-  });
-  return inFlight;
-}
-
-async function readTable(): Promise<ProcRow[]> {
-  const { stdout } = await execFileAsync(
-    "ps",
-    ["-A", "-o", "pid=,ppid=,pgid=,tpgid=,tty=,rss=,args="],
-    {
-      timeout: 5000,
-      maxBuffer: 8 * 1024 * 1024,
-    },
-  );
-  const rows: ProcRow[] = [];
-  for (const line of stdout.split("\n")) {
-    const m = line.trim().match(/^(\d+)\s+(\d+)\s+(\d+)\s+(-?\d+)\s+(\S+)\s+(\d+)\s+(.*)$/);
-    if (m) {
-      rows.push({
-        pid: Number(m[1]),
-        ppid: Number(m[2]),
-        pgid: Number(m[3]),
-        tpgid: Number(m[4]),
-        tty: m[5],
-        rss: Number(m[6]),
-        args: m[7] ?? "",
-      });
-    }
-  }
-  return rows;
 }
 
 /** Binary name → provider id. Renamed binaries count too: `kilo` in a shell is Kilo Code */

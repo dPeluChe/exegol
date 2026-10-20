@@ -30,7 +30,10 @@ import { logger } from "../lib/logger";
 const EXEGOL_DIR = join(homedir(), ".exegol");
 export const HOOKS_DIR = join(EXEGOL_DIR, "hooks");
 const EVENTS_DIR = join(EXEGOL_DIR, "events");
-const NOTIFY_SCRIPT = join(HOOKS_DIR, "notify.sh");
+/** Hook commands run in Git Bash on Windows: `C:/x/notify.sh` there, which Node also opens */
+export const bashPath = (path: string, platform: NodeJS.Platform = process.platform): string =>
+  platform === "win32" ? path.replace(/\\/g, "/") : path;
+const NOTIFY_SCRIPT = bashPath(join(HOOKS_DIR, "notify.sh"));
 const CLAUDE_SETTINGS = join(homedir(), ".claude", "settings.json");
 const CODEX_HOOKS = join(homedir(), ".codex", "hooks.json");
 

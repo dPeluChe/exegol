@@ -7,6 +7,7 @@ import { getMcpHost } from "../mcp/host";
 import { buildMemoryContext, getMemoriesForInjection } from "../memory/store";
 import { discoverSkills } from "../skills/discovery";
 import type { AgentProviderRegistry } from "./registry";
+import { quoteArg, type ShellKind } from "./shell-dialect";
 
 // ─── T58: Access mode system prompts ──────────────────────────────────────
 
@@ -126,6 +127,7 @@ export function buildShellCommand(
   cliConfig: { command: string; args: string[] },
   contextPrefix: string,
   accessMode?: AgentAccessMode,
+  shell: ShellKind = "posix",
 ): string {
   const provider = registry.get(agent.cliType);
   const caps = provider?.capabilities;
@@ -145,15 +147,14 @@ export function buildShellCommand(
     return cmdParts.join(" ");
   }
 
-  // Shell-escape the prompt
-  const escaped = fullPrompt.replace(/'/g, "'\\''");
+  const quoted = quoteArg(shell, fullPrompt);
 
   if (caps?.promptFlag) {
     // Use the specific flag (e.g. --message for Aider)
-    cmdParts.push(caps.promptFlag, `'${escaped}'`);
-  } else if (caps?.supportsPromptArg) {
-    // Pass as positional argument
-    cmdParts.push(`'${escaped}'`);
+    cmdParts.push(caps.promptFlag, quoted);
+  } else if (caps?.supportsPromptArg || shell === "pwsh" || shell === "cmd") {
+    // Positional argument; Windows shells have no heredoc, and quoteArg keeps it on one line
+    cmdParts.push(quoted);
   } else {
     // Interactive CLI: use heredoc to pipe prompt via stdin
     // This works for Gemini, OpenCode, Kiro, etc.

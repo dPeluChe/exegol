@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { readFile, readlink } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { logger } from "../lib/logger";
 import { AsyncLruCache } from "../lib/lru-cache";
 
 const execFileAsync = promisify(execFile);
@@ -62,10 +63,22 @@ export async function readProcCwds(
   return new Map(found.filter((f) => f !== null));
 }
 
+let lsofOffLogged = false;
+
+/** Windows has no lsof (and no other process's cwd): port detection is off there, said once */
+function lsofMissing(): boolean {
+  if (process.platform !== "win32") return false;
+  if (!lsofOffLogged) {
+    lsofOffLogged = true;
+    logger.info("[Ports] Port and dev server detection is off on Windows");
+  }
+  return true;
+}
+
 async function scanProcessCwds(pids: number[]): Promise<Map<number, string>> {
   const cwds = process.platform === "linux" ? await readProcCwds(pids) : new Map<number, string>();
   const rest = pids.filter((pid) => !cwds.has(pid));
-  if (rest.length === 0) return cwds;
+  if (rest.length === 0 || lsofMissing()) return cwds;
   let stdout = "";
   try {
     ({ stdout } = await execFileAsync("lsof", ["-a", "-d", "cwd", "-p", rest.join(","), "-Fpn"], {
@@ -120,6 +133,7 @@ export function listTcpListeners(uid?: string, fresh = false): Promise<TcpListen
 }
 
 async function scanTcpListeners(uid?: string): Promise<TcpListener[]> {
+  if (lsofMissing()) return [];
   let stdout = "";
   try {
     ({ stdout } = await execFileAsync(

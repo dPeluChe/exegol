@@ -8,9 +8,10 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import { MEMORY_CATEGORIES } from "@exegol/shared";
+import { ipcEndpoint } from "../lib/ipc-endpoint";
 
 export const EXEGOL_DIR = join(homedir(), ".exegol");
-export const MCP_SOCK_PATH = join(EXEGOL_DIR, "mcp-server.sock");
+export const MCP_SOCK_PATH = ipcEndpoint("mcp-server");
 
 // ─── JSON-RPC 2.0 (socket side — NDJSON framed) ─────────────────────────────
 

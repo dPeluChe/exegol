@@ -35,6 +35,11 @@ export function getShellIntegrationBashRcfile(): string {
   return join(SHELL_INTEGRATION_DIR, "bashrc.bash");
 }
 
+/** PowerShell (Windows): OSC 7 + OSC 133 and the ready marker from its prompt function */
+export function getShellIntegrationPwshProfile(): string {
+  return join(SHELL_INTEGRATION_DIR, "profile.ps1");
+}
+
 /** Check if a shell supports readiness markers */
 export function shellSupportsMarker(shellPath: string): boolean {
   const name = shellPath.split("/").pop() ?? "";
@@ -163,7 +168,7 @@ export function ensureShellIntegration(): void {
     writeFileSync(join(SHELL_INTEGRATION_DIR, ".zlogin"), zlogin);
     writeFileSync(join(SHELL_INTEGRATION_DIR, ".zshrc"), zshrc);
     writeFileSync(join(SHELL_INTEGRATION_DIR, "bashrc.bash"), bashrcBash);
-    writeFileSync(join(SHELL_INTEGRATION_DIR, "profile.ps1"), profilePs1);
+    writeFileSync(getShellIntegrationPwshProfile(), profilePs1);
     logger.info("[ShellIntegration] OSC 7 + OSC 133 scripts written");
   } catch (err) {
     logger.error("[ShellIntegration] Failed to materialize scripts:", err);

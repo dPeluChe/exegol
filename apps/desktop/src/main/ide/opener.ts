@@ -2,16 +2,19 @@ import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import { type IdeInfo, ideLabel } from "@exegol/shared";
 import type Database from "libsql";
+import { quoteArg, shellKind } from "../agents/shell-dialect";
 import { loginShell } from "../agents/spawn-env";
 import { getProject } from "../db/queries/projects";
 import { getAppSettings } from "../db/queries/settings";
+import { launchFor } from "../lib/win-launch";
 import { IDE_LAUNCH, targetArgs } from "./catalog";
 import { detectIdes } from "./detect";
 
 const execFileAsync = promisify(execFile);
 
+/** Quoted for the shell an Exegol terminal runs (PowerShell or cmd.exe on Windows) */
 function shellEscape(s: string): string {
-  return `'${s.replace(/'/g, "'\\''")}'`;
+  return quoteArg(shellKind(loginShell(), process.platform), s);
 }
 
 /** The project's IDE (Edit project), else the one in Settings */
@@ -32,6 +35,11 @@ export async function openInIde(
   line?: number,
 ): Promise<{ terminalCommand?: string }> {
   if (ide === "custom" && customPath) {
+    // No login shell on Windows: the configured program itself (a .cmd goes through cmd.exe)
+    if (process.platform === "win32") {
+      await launch([customPath, path], "the custom IDE");
+      return {};
+    }
     await execFileAsync(loginShell(), ["-ilc", `${shellEscape(customPath)} ${shellEscape(path)}`], {
       timeout: 10_000,
     });
@@ -54,9 +62,18 @@ export async function openInIde(
 
 /** Detached: a JetBrains script may stay up while the IDE runs. An exit within 3s is checked */
 function launch(argv: string[], label: string): Promise<void> {
-  const [command, ...args] = argv as [string, ...string[]];
+  const { command, args, verbatim } = launchFor(
+    argv as [string, ...string[]],
+    process.platform,
+    process.env.ComSpec,
+  );
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { detached: true, stdio: "ignore" });
+    const child = spawn(command, args, {
+      detached: true,
+      stdio: "ignore",
+      windowsVerbatimArguments: verbatim,
+      windowsHide: true,
+    });
     const timer = setTimeout(() => {
       child.unref();
       resolve();

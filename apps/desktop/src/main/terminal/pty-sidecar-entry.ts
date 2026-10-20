@@ -6,6 +6,7 @@ import { mkdirSync, unlinkSync } from "node:fs";
 import { createServer, type Socket } from "node:net";
 import * as pty from "node-pty";
 import { createFrameReader } from "../lib/frame-reader";
+import { isNamedPipe } from "../lib/ipc-endpoint";
 import {
   clearHistory,
   computeMemoryInfo,
@@ -392,7 +393,7 @@ function start(): void {
   mkdirSync(EXEGOL_DIR, { recursive: true });
   log(`start: version ${SIDECAR_VERSION}, pid ${process.pid}`, true);
   try {
-    unlinkSync(SIDECAR_SOCK_PATH);
+    if (!isNamedPipe(SIDECAR_SOCK_PATH)) unlinkSync(SIDECAR_SOCK_PATH);
   } catch {
     /* no stale socket */
   }

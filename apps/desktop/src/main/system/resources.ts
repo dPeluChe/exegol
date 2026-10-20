@@ -301,9 +301,13 @@ async function getProcessUsage(cores: number): Promise<ProcessUsage> {
     exegolMemory += m.memory.workingSetSize * 1024;
   }
   const sidecarPid = readPidFile()?.pid ?? 0;
-  const { stdout } = await execFileAsync("ps", ["-A", "-o", "pid=,ppid=,rss=,%cpu="], {
-    timeout: 5_000,
-  });
+  // No ps on Windows: Exegol's own Electron processes only
+  const { stdout } =
+    process.platform === "win32"
+      ? { stdout: "" }
+      : await execFileAsync("ps", ["-A", "-o", "pid=,ppid=,rss=,%cpu="], {
+          timeout: 5_000,
+        });
   const rows = stdout
     .trim()
     .split("\n")
@@ -424,7 +428,8 @@ async function getChildPids(parentPid: number): Promise<number[]> {
 async function getAgentProcessMetrics(
   pids: number[],
 ): Promise<{ pid: number; cpu: number; memory: number }[]> {
-  if (pids.length === 0) return [];
+  // No pgrep or ps on Windows (readProcessMetrics is empty there)
+  if (pids.length === 0 || process.platform === "win32") return [];
 
   try {
     // For each agent shell PID, find its child processes (the real CLI tool)

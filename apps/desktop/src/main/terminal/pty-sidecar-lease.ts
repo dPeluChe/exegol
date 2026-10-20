@@ -1,6 +1,7 @@
 // The sidecar's pid file is its lease: discovery reuses the sidecar it names, and a sidecar exits
 // once the file no longer names its token. Bundled by the sidecar.
 import { readFileSync, statSync, unlinkSync, writeFileSync } from "node:fs";
+import { isNamedPipe } from "../lib/ipc-endpoint";
 import {
   holdsLease,
   type PidFile,
@@ -35,7 +36,8 @@ export function createSidecarLease(token: string) {
   return {
     /** Right after listen(): name ourselves in the pid file */
     claim(): void {
-      socketIno = statSync(SIDECAR_SOCK_PATH).ino;
+      // A named pipe has no inode and closes with us: nothing to clean up
+      if (!isNamedPipe(SIDECAR_SOCK_PATH)) socketIno = statSync(SIDECAR_SOCK_PATH).ino;
       const pidFile: PidFile = {
         pid: process.pid,
         token,

@@ -59,7 +59,10 @@ describe("slugifyBranchName", () => {
 // The hooks file is an external contract owned by Claude Code: a wrong shape
 // does not throw, it silently stops delivering signals and enforcement.
 describe("buildClaudeCodeHooksFile", () => {
-  function written(agentId: string, opts?: { enforceClaims?: boolean }) {
+  function written(
+    agentId: string,
+    opts?: { enforceClaims?: boolean; platform?: NodeJS.Platform },
+  ) {
     fs.writeFileSync.mockClear();
     buildClaudeCodeHooksFile(agentId, opts);
     const [, json] = fs.writeFileSync.mock.calls[0] as [string, string];
@@ -79,6 +82,22 @@ describe("buildClaudeCodeHooksFile", () => {
       timeout: 5,
       command: expect.stringContaining("/bundle/guard.js"),
     });
+  });
+
+  // Git Bash has no /dev/tty into ConPTY: Windows keeps only the file events (and the guard)
+  it("writes no OSC hook on Windows, only file events", () => {
+    const hooks = written("a1", { enforceClaims: true, platform: "win32" });
+    const commands = Object.values(hooks).flatMap((entries) =>
+      entries.flatMap((e) => e.hooks.map((h) => String((h as { command?: string }).command))),
+    );
+    expect(commands.some((c) => c.includes("777;notify"))).toBe(false);
+    expect(hooks.PreToolUse).toHaveLength(1);
+    expect(hooks.PreToolUse?.[0]?.matcher).toBe("^(Edit|Write|MultiEdit|NotebookEdit)$");
+    for (const entry of [...(hooks.Stop ?? []), ...(hooks.Notification ?? [])]) {
+      expect(entry.hooks).toHaveLength(1);
+      expect(String((entry.hooks[0] as { command: string }).command)).toContain("notify.sh");
+    }
+    expect(hooks.SessionStart?.[0]?.hooks).toHaveLength(1);
   });
 
   // Claude's idle reminder ("waiting for your input", 60s after a reply) is no question: read as

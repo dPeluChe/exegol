@@ -21,6 +21,7 @@ import type Database from "libsql";
 import { forgetBrowserAgent } from "../browser/agent-browser-tools";
 import { listActiveAgents } from "../db/queries/agents";
 import { findBlockingClaim } from "../db/queries/path-claims";
+import { isNamedPipe } from "../lib/ipc-endpoint";
 import { logger } from "../lib/logger";
 import { getNotificationBus } from "../notifications/bus";
 import { realpathSafeSync } from "../security/path-guard";
@@ -157,6 +158,9 @@ export function getMcpAgentStates(db: Database.Database): Record<string, McpAgen
  *  `ps` at all), but some CLIs interpose a wrapper — walking a couple of levels
  *  finds the PTY process anyway. Kept short: this blocks the main process. */
 function parentOf(pid: number): number | null {
+  // Windows has no ps, and starting PowerShell here would block the main process: past hop 0 the
+  // token alone identifies the shim
+  if (process.platform === "win32") return null;
   try {
     const out = execFileSync("ps", ["-o", "ppid=", "-p", String(pid)], {
       encoding: "utf-8",
@@ -614,11 +618,23 @@ function startListening(db: Database.Database): void {
   });
 
   srv.on("error", (err) => {
-    logger.warn("[ExegolMcp] Server error:", err);
+    // A named pipe in use is another live instance's (the probe below is for socket files)
+    if ((err as NodeJS.ErrnoException).code === "EADDRINUSE" && isNamedPipe(MCP_SOCK_PATH)) {
+      logger.warn(
+        "[ExegolMcp] Another live instance owns the MCP pipe, not starting a second server",
+      );
+    } else {
+      logger.warn("[ExegolMcp] Server error:", err);
+    }
     server = null; // allow a later ensure() to retry
   });
 
   srv.listen(MCP_SOCK_PATH, () => {
+    if (isNamedPipe(MCP_SOCK_PATH)) {
+      // Per-user name, default DACL (owner, SYSTEM, admins); the per-agent token still gates calls
+      logger.info("[ExegolMcp] Listening on a named pipe");
+      return;
+    }
     try {
       chmodSync(MCP_SOCK_PATH, 0o600);
     } catch (err) {
@@ -636,7 +652,7 @@ export function ensureExegolMcpServerStarted(db: Database.Database): void {
 
   mkdirSync(EXEGOL_DIR, { recursive: true, mode: 0o700 });
 
-  if (!existsSync(MCP_SOCK_PATH)) {
+  if (isNamedPipe(MCP_SOCK_PATH) || !existsSync(MCP_SOCK_PATH)) {
     startListening(db);
     return;
   }
@@ -682,7 +698,9 @@ export function stopExegolMcpServer(): void {
   tokensByAgent.clear();
   connectedBy.clear();
   try {
-    if (owned && existsSync(MCP_SOCK_PATH)) unlinkSync(MCP_SOCK_PATH);
+    if (owned && !isNamedPipe(MCP_SOCK_PATH) && existsSync(MCP_SOCK_PATH)) {
+      unlinkSync(MCP_SOCK_PATH);
+    }
   } catch {
     /* best-effort */
   }
