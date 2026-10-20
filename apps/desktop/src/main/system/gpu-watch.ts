@@ -34,6 +34,8 @@ function gpuFeatures(): Record<string, string> | null {
 }
 
 function note(name: string): void {
+  // Linux (logind) delivers suspend and resume twice within milliseconds: one line each
+  if (lastEvent?.name === name && Date.now() - lastEvent.at < 2000) return;
   lastEvent = { name, at: Date.now() };
   logger.info(`[System] ${name}`);
 }
