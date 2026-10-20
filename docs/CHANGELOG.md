@@ -11,6 +11,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 - Linux: an `.rpm` package for Fedora and openSUSE (`sudo dnf install ./exegol-<v>.x86_64.rpm`), updating itself like the `.deb`
+- Windows: an installer (`Exegol-<v>-x64.exe`) attached to each release, updating itself like the Mac app. Not signed yet: on first run SmartScreen asks, More info → Run anyway
 - Linux and Windows: a menu button at the left of the title bar opens the menus the macOS menu bar has (File, View, Window, Help with Report a Bug… and Open Logs Folder)
 
 ## [0.5.25] — 2026-10-20 — Linux tray reopens the window, Send to from Claude Code, CLI updates beside the session

@@ -12,7 +12,7 @@ Electron 41 · React 18 · TailwindCSS 4 · Rust (napi-rs + memchr) · libSQL ·
 ## Development
 
 Releases: macOS builds are signed + notarized (`APPLE_KEYCHAIN_PROFILE=<notarytool profile>`), Linux
-AppImage/.deb come from `.github/workflows/linux.yml` on each published release, installed apps
+AppImage/.deb/.rpm come from `.github/workflows/linux.yml` and the unsigned Windows NSIS installer from `windows.yml` on each published release, installed apps
 auto-update (title-bar button). Steps: `docs/GUIDES/RELEASE.md`.
 
 ```bash
