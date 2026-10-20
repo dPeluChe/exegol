@@ -2,9 +2,11 @@ import { tmpdir } from "node:os";
 import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
+// node as a portable echo: Windows has no /bin/echo
 vi.mock("../agents/spawn-env", () => ({
-  findOnPath: (command: string) => (command === "echo" ? "/bin/echo" : null),
+  findOnPath: (command: string) => (command === "echo" ? process.execPath : null),
 }));
+const echo = (text: string) => ["-e", "console.log(process.argv.at(-1))", text];
 
 import { cliListing, eachCwd, forgetCliListing } from "./cli-list";
 import { hasLocalSession } from "./index";
@@ -22,7 +24,7 @@ describe("cliListing", () => {
 
   // V8 puts the input text in a JSON SyntaxError: a bad listing must not carry it into a log
   it("turns output it cannot parse into StoreUnavailable without the output", async () => {
-    const err = await cliListing("t1", "echo", ["secret prompt text"], dir, ids).catch(
+    const err = await cliListing("t1", "echo", echo("secret prompt text"), dir, ids).catch(
       (e: unknown) => e,
     );
     expect(err).toBeInstanceOf(StoreUnavailable);
@@ -30,12 +32,12 @@ describe("cliListing", () => {
   });
 
   it("parses against the schema and caches per provider and folder", async () => {
-    const first = await cliListing("t2", "echo", ['[{"id":"a"}]'], dir, ids);
+    const first = await cliListing("t2", "echo", echo('[{"id":"a"}]'), dir, ids);
     expect(first).toEqual([{ id: "a" }]);
     // Same key: served from the cache, whatever the args
-    expect(await cliListing("t2", "echo", ["[]"], dir, ids)).toEqual([{ id: "a" }]);
+    expect(await cliListing("t2", "echo", echo("[]"), dir, ids)).toEqual([{ id: "a" }]);
     forgetCliListing("t2", dir);
-    expect(await cliListing("t2", "echo", ["[]"], dir, ids)).toEqual([]);
+    expect(await cliListing("t2", "echo", echo("[]"), dir, ids)).toEqual([]);
   });
 });
 

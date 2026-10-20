@@ -64,7 +64,7 @@ describe("buildClaudeCodeHooksFile", () => {
     opts?: { enforceClaims?: boolean; platform?: NodeJS.Platform },
   ) {
     fs.writeFileSync.mockClear();
-    buildClaudeCodeHooksFile(agentId, opts);
+    buildClaudeCodeHooksFile(agentId, { platform: "darwin", ...opts });
     const [, json] = fs.writeFileSync.mock.calls[0] as [string, string];
     return JSON.parse(json).hooks as Record<string, { matcher?: string; hooks: unknown[] }[]>;
   }

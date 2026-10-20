@@ -48,8 +48,11 @@ describe("writeTokenFile / readTokenFile", () => {
   it("writes 0600 in a 0700 dir, reads it back trimmed, removes it", () => {
     const path = writeTokenFile(repo, "abc123", tokens);
     expect(path).toBe(tokenFilePathFor(repo, tokens));
-    expect(statSync(tokens).mode & 0o777).toBe(0o700);
-    expect(statSync(path).mode & 0o777).toBe(0o600);
+    // Windows has no POSIX modes: the user profile's ACL guards ~/.exegol there
+    if (process.platform !== "win32") {
+      expect(statSync(tokens).mode & 0o777).toBe(0o700);
+      expect(statSync(path).mode & 0o777).toBe(0o600);
+    }
     writeFileSync(path, "abc123\n");
     expect(readTokenFile(path, tokens)).toBe("abc123");
     expect(writeTokenFile(repo, "newer", tokens)).toBe(path);

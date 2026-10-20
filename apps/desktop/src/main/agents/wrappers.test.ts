@@ -118,7 +118,9 @@ describe("notifyScript", () => {
     const home = mkdtempSync(join(tmpdir(), "exegol-notify-home-"));
     const file = join(home, "notify.sh");
     writeFileSync(file, notifyScript(), { mode: 0o755 });
-    execFileSync(file, ["tool_use", "agent"], {
+    // Windows has no shebang exec: Claude runs hooks there through Git Bash, whose sh is bash
+    const [cmd, args] = process.platform === "win32" ? ["sh", [file]] : [file, [] as string[]];
+    execFileSync(cmd, [...args, "tool_use", "agent"], {
       env: { PATH: process.env.PATH ?? "", HOME: home, EXEGOL_AGENT_ID: "a1" },
       input: payload,
     });

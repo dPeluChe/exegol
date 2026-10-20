@@ -1,12 +1,24 @@
 import { execFile } from "node:child_process";
 import { chmod, lstat, mkdir, readdir, rename, rm, stat } from "node:fs/promises";
-import { join, posix } from "node:path";
+import { join, posix, win32 } from "node:path";
 import { promisify } from "node:util";
 
 const execFileAsync = promisify(execFile);
 const EXTRACT_TIMEOUT_MS = 10 * 60_000;
 
 export class UnsafeArchiveError extends Error {}
+
+/**
+ * Windows: its own bsdtar in System32. A GNU tar earlier on PATH (Git's) reads `C:\...` as a
+ * remote `host:file` archive and fails
+ */
+export function tarCommand(
+  platform: NodeJS.Platform = process.platform,
+  env: NodeJS.ProcessEnv = process.env,
+): string {
+  if (platform !== "win32") return "tar";
+  return win32.join(env.SystemRoot || env.windir || "C:\\Windows", "System32", "tar.exe");
+}
 
 /** Why an extracted entry may not be kept, null for a plain file or folder */
 export function unsafeEntryReason(info: {
@@ -82,7 +94,7 @@ export function pruneJunk(dir: string): Promise<string[]> {
 }
 
 /**
- * Extracts a .tar.bz2 with the system tar (bsdtar on macOS, GNU tar on Linux: both
+ * Extracts a .tar.bz2 with the system tar (bsdtar on macOS and Windows, GNU tar on Linux: all
  * refuse absolute and `..` paths without -P) into `tmpDir`, refuses the whole archive
  * on any link or special file, keeps only the required files, then moves `<tmpDir>/<rootDir>` to `destDir` in one rename.
  */
@@ -98,7 +110,7 @@ export async function extractTarBz2(opts: {
   await mkdir(opts.tmpDir, { recursive: true });
   try {
     await execFileAsync(
-      "tar",
+      tarCommand(),
       ["-xjf", opts.archive, "-C", opts.tmpDir, "--no-same-owner", "--no-same-permissions"],
       { signal: opts.signal, timeout: EXTRACT_TIMEOUT_MS, maxBuffer: 1024 * 1024 },
     ).catch((err: { stderr?: string; code?: string | number }) => {

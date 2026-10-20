@@ -1,4 +1,7 @@
-import { dirname, relative } from "node:path";
+import { posix } from "node:path";
+
+// The AppImage case is Linux only: POSIX paths, so a test of it reads the same on any host
+const { dirname, relative } = posix;
 
 /** A bundled script run with the app's own binary as Node (ELECTRON_RUN_AS_NODE=1 in its env) */
 export interface NodeLaunch {

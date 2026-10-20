@@ -1,6 +1,6 @@
-import { lstatSync, readdirSync, readFileSync, realpathSync } from "node:fs";
+import { lstatSync, readdirSync, readFileSync } from "node:fs";
 import { rename, rm } from "node:fs/promises";
-import { basename, dirname, join, resolve } from "node:path";
+import { basename, dirname, join } from "node:path";
 import type Database from "libsql";
 import { announceSave, type SaveTarget, saveWorktreeWork } from "../agents/worktree-save";
 import { removingWorktrees } from "../agents/worktrees";
@@ -10,6 +10,7 @@ import { getAppSettings } from "../db/queries/settings";
 import {
   type GitRunner,
   isLockedOrUnknown,
+  pathKey,
   pruneWorktrees,
   runGit,
   worktreeSafety,
@@ -38,13 +39,6 @@ interface Row {
   last_archived: number | null;
 }
 
-const norm = (p: string) => {
-  try {
-    return realpathSync(p);
-  } catch {
-    return resolve(p);
-  }
-};
 const isDir = (path: string) => lstatSync(path, { throwIfNoEntry: false })?.isDirectory() ?? false;
 
 /** Worktrees an active pipeline or a race still needs, by path or by agent */
@@ -56,7 +50,7 @@ function inUse(db: Database.Database): { paths: Set<string>; agents: Set<string>
           "SELECT worktree_path FROM pipeline_runs WHERE worktree_path IS NOT NULL AND status IN ('pending','running','paused')",
         )
         .all() as { worktree_path: string }[]
-    ).map((r) => norm(r.worktree_path)),
+    ).map((r) => pathKey(r.worktree_path)),
   );
   const agents = new Set<string>();
   // A completed race with no promoted agent still waits for the user's pick
@@ -100,7 +94,7 @@ async function removeIfSafe(
   save: Omit<SaveTarget, "dir"> | null,
 ): Promise<boolean> {
   const repo = repoOf(path);
-  if (!repo || !repos.has(norm(repo))) return false;
+  if (!repo || !repos.has(pathKey(repo))) return false;
   if (await isLockedOrUnknown(repo, path, git)) return false;
   // Dirty or unpushed work goes to its branch's remote first, then the rule is checked again
   if (save && stillFree()) announceSave(await saveWorktreeWork({ dir: path, ...save }, git), save);
@@ -148,12 +142,14 @@ export async function sweepOrphanWorktrees(
     )
     .all(...busy.agents) as (Row & { racing: number })[];
   const projectRepos = new Set(
-    (db.prepare("SELECT path FROM projects").all() as { path: string }[]).map((p) => norm(p.path)),
+    (db.prepare("SELECT path FROM projects").all() as { path: string }[]).map((p) =>
+      pathKey(p.path),
+    ),
   );
 
   for (const row of rows) {
     if (countLiveAgentsInWorktree(db, row.id) > 0 || row.racing > 0) continue;
-    if (busy.paths.has(norm(row.path))) continue;
+    if (busy.paths.has(pathKey(row.path))) continue;
     if (!lstatSync(row.path, { throwIfNoEntry: false })) {
       dbRemoveWorktree(db, row.id);
       await pruneWorktrees(row.repo, git);
@@ -176,7 +172,7 @@ export async function sweepOrphanWorktrees(
     }
   }
 
-  const known = new Set(rows.map((r) => norm(r.path)));
+  const known = new Set(rows.map((r) => pathKey(r.path)));
   for (const root of roots) {
     if (!isDir(root)) continue;
     for (const project of readdirSync(root)) {
@@ -189,7 +185,7 @@ export async function sweepOrphanWorktrees(
           await rm(path, { recursive: true, force: true }).catch(() => {});
           continue;
         }
-        if (known.has(norm(path)) || busy.paths.has(norm(path))) continue;
+        if (known.has(pathKey(path)) || busy.paths.has(pathKey(path))) continue;
         const gitFile = lstatSync(join(path, ".git"), { throwIfNoEntry: false });
         // A day old at least: a spawn creates the directory a moment before its row
         if (gitFile && now - gitFile.mtimeMs < DAY_MS) continue;

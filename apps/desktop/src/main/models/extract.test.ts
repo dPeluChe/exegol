@@ -13,7 +13,14 @@ import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { recognizerSpec, specPaths } from "../dictation/model-config";
 import { MODEL_CATALOG } from "./catalog";
-import { extractTarBz2, keepsPath, pruneJunk, pruneToRequired, unsafeEntryReason } from "./extract";
+import {
+  extractTarBz2,
+  keepsPath,
+  pruneJunk,
+  pruneToRequired,
+  tarCommand,
+  unsafeEntryReason,
+} from "./extract";
 
 interface Entry {
   name: string;
@@ -87,6 +94,15 @@ describe("unsafeEntryReason", () => {
   it("refuses links, special files and hard links", () => {
     expect(unsafeEntryReason(info("link"))).toBe("link or special file");
     expect(unsafeEntryReason(info("file", 2))).toBe("hard link");
+  });
+});
+
+describe("tarCommand", () => {
+  it("is tar off Windows, the System32 bsdtar on Windows whatever PATH holds", () => {
+    expect(tarCommand("darwin", {})).toBe("tar");
+    expect(tarCommand("linux", { SystemRoot: "C:\\Windows" })).toBe("tar");
+    expect(tarCommand("win32", { SystemRoot: "D:\\WIN" })).toBe("D:\\WIN\\System32\\tar.exe");
+    expect(tarCommand("win32", {})).toBe("C:\\Windows\\System32\\tar.exe");
   });
 });
 

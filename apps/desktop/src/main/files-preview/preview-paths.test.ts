@@ -24,7 +24,7 @@ let root: string;
 let outside: string;
 
 beforeAll(() => {
-  base = realpathSync(mkdtempSync(join(tmpdir(), "exegol-preview-")));
+  base = realpathSync.native(mkdtempSync(join(tmpdir(), "exegol-preview-")));
   root = join(base, "site");
   outside = join(base, "outside");
   mkdirSync(join(root, "css"), { recursive: true });
