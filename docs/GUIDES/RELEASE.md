@@ -2,7 +2,7 @@
 
 ## Current State
 
-- **Build config**: `apps/desktop/electron-builder.ts` (macOS DMG/ZIP, Windows NSIS, Linux AppImage)
+- **Build config**: `apps/desktop/electron-builder.ts` (macOS DMG/ZIP, Windows NSIS, Linux AppImage/.deb/.rpm; Windows and Linux built in CI, steps 5b and 5c)
 - **Auto-updater**: `apps/desktop/src/main/system/auto-updater.ts` (electron-updater, GitHub Releases, feed `dPeluChe/exegol`)
 - **Icons**: `apps/desktop/src/resources/build/icons/` (icns, ico, png)
 - **Version**: `apps/desktop/package.json` and the matching heading in `docs/CHANGELOG.md`.
@@ -217,6 +217,25 @@ uses its DebUpdater: it downloads the new `.deb` and installs it with `pkexec` (
 password) when the app quits or on Restart. The `.rpm` (`package-type` = `rpm`) goes through the
 RpmUpdater the same way (dnf, zypper or rpm, through `pkexec`).
 
+### 5c. Windows (NSIS installer)
+
+Same model as Linux: `.github/workflows/windows.yml` runs on `windows-latest` when a release is
+published, builds core-rust (`core-rust.win32-x64-msvc.node`) and node-pty for Electron, packages the
+NSIS installer and attaches `Exegol-<v>-x64.exe`, its `.exe.blockmap` and `latest.yml` to that release.
+Rerun it by hand from Actions → Windows build (optionally with a tag). With `test` checked it builds
+the selected branch, keeps the installer as a run artifact (7 days), attaches nothing, and runs
+`bun run test` + `bun run test:shared` on Windows in a separate job (to see what breaks on Windows
+paths; nothing depends on it): `gh workflow run windows.yml --ref <branch> -f test=true`.
+
+Unsigned: no code-signing certificate yet, so SmartScreen shows "Windows protected your PC" on the
+first run of the downloaded installer; More info → Run anyway. The installer is per user (no admin),
+lets the user pick the folder and keeps app data on uninstall.
+
+Updates: the NSIS updater reads `latest.yml` from the same feed as macOS
+(`releases/latest/download/`), downloads the new `.exe` (differential through the `.blockmap` when the
+old one is there too) and runs it on quit or Restart. With no `publisherName` in the config, the
+updater does not check a signature.
+
 ### 6. Publish to GitHub Releases
 
 ```bash
@@ -236,7 +255,7 @@ gh release create v0.5.1 \
 ### 7. Auto-Update Flow
 
 Once a release is published:
-1. Running Exegol instances check `https://github.com/{owner}/{repo}/releases/latest/download/latest-mac.yml`
+1. Running Exegol instances check `https://github.com/{owner}/{repo}/releases/latest/download/latest-mac.yml` (`latest.yml` on Windows, `latest-linux.yml` on Linux)
 2. If version in manifest > current version → auto-download in background
 3. User sees "Update ready — Restart to install" banner
 4. On restart (or app quit) → update installs automatically
