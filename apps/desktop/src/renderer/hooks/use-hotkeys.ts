@@ -1,10 +1,11 @@
+import { paneZoomKey, type ZoomAction } from "@exegol/shared";
 import { useEffect } from "react";
 import { focusAddressBar } from "../lib/address-bar";
 import { closeActivePane, reopenClosed } from "../lib/close-target";
-import { appChord, chordKey, IS_MAC } from "../lib/keymap";
+import { appChord, chordKey, IS_MAC, windowKey } from "../lib/keymap";
 import { goToShortcut } from "../lib/live-tabs";
-import { cyclePane, focusActivePane, paneRoot } from "../lib/pane-focus";
-import { terminalForActivePane } from "../lib/split-terminal";
+import { cyclePane, focusActivePane, focusDashboard, paneRoot } from "../lib/pane-focus";
+import { addTabAndFocus, splitActivePane, terminalForActivePane } from "../lib/split-terminal";
 import { trpcMutate } from "../lib/trpc-client";
 import { jumpToAgent, sortAttentionItems, useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
@@ -35,17 +36,47 @@ export function useHotkeys() {
       if (key === "t") {
         e.preventDefault();
         if (chord.shift) void reopenClosed();
-        else useWorkspaceStore.getState().addTab();
+        else addTabAndFocus();
+        return;
+      }
+
+      // Cmd+= / Cmd+- / Cmd+0 on a focused browser pane zoom its page; elsewhere Cmd+0 is a
+      // project and the app menu zooms Exegol. A focused page gets them from main (onZoomKey)
+      const zoom = paneZoomKey(
+        {
+          meta: e.metaKey,
+          control: e.ctrlKey,
+          shift: e.shiftKey,
+          alt: e.altKey,
+          code: e.code,
+          key: e.key,
+        },
+        IS_MAC,
+      );
+      const zoomPane = zoom ? focusedBrowserPaneId() : null;
+      if (zoom && zoomPane) {
+        e.preventDefault();
+        zoomBrowserPane(zoomPane, zoom);
+        return;
+      }
+
+      // Off macOS (no menu bar): Exegol's zoom and Quit (lib/keymap windowKey)
+      const winKey = windowKey(e);
+      if (winKey) {
+        e.preventDefault();
+        if (winKey === "quit") window.api.app.quit();
+        else window.api.app.zoom(winKey);
         return;
       }
 
       // Cmd+L / Cmd+R on a focused browser pane: its address bar / its page (macOS gets them
-      // through the app menu, which also fires while the page itself has the focus)
+      // through the app menu, which also fires while the page itself has the focus). Off macOS
+      // Cmd+R with no browser pane reloads the window, as the macOS menu does
       if (key === "l" && focusBrowserAddress()) {
         e.preventDefault();
         return;
       }
-      if (key === "r" && focusedBrowserPaneId()) {
+      if (key === "r" && (!IS_MAC || focusedBrowserPaneId())) {
         e.preventDefault();
         reloadFocusedBrowserOrWindow();
         return;
@@ -76,14 +107,14 @@ export function useHotkeys() {
       // Cmd+Shift+D: Split vertical
       if (chord.shift && key === "d") {
         e.preventDefault();
-        useWorkspaceStore.getState().splitFocusedPane("vertical");
+        splitActivePane("vertical");
         return;
       }
 
       // Cmd+D: Split horizontal
       if (key === "d") {
         e.preventDefault();
-        useWorkspaceStore.getState().splitFocusedPane("horizontal");
+        splitActivePane("horizontal");
         return;
       }
 
@@ -152,6 +183,7 @@ export function useHotkeys() {
         e.preventDefault();
         if (digit === "1") {
           useAppStore.getState().openDashboard();
+          focusDashboard();
           return;
         }
         const flash = goToShortcut(digit);
@@ -188,13 +220,16 @@ export function useHotkeys() {
     };
 
     window.addEventListener("keydown", handleKeyDown);
+    const unsubZoom = window.api.browser.onZoomKey(({ paneId, action }) =>
+      zoomBrowserPane(paneId, action),
+    );
 
     // Also listen for menu-driven actions from the macOS app menu. The
     // menu routes Cmd+W to "menu:close-pane" so the OS default "Close
     // Window" never fires.
     const unsubMenu = window.api.onMenuAction((action) => {
       if (action === "new-tab") {
-        useWorkspaceStore.getState().addTab();
+        addTabAndFocus();
       } else if (action === "close-pane") {
         void closeActivePane();
       } else if (action === "reload") {
@@ -203,12 +238,15 @@ export function useHotkeys() {
         focusBrowserAddress();
       } else if (action === "open-dashboard") {
         useAppStore.getState().openDashboard();
+      } else if (action === "report-bug") {
+        window.dispatchEvent(new CustomEvent("exegol:report-bug"));
       }
     });
 
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
       unsubMenu();
+      unsubZoom();
     };
   }, [toggleSidebar, setActiveView]);
 }
@@ -231,6 +269,10 @@ function focusedBrowserPaneId(): string | null {
   return useAppStore.getState().activeView === "workspace" && pane?.type === "browser"
     ? pane.id
     : null;
+}
+
+function zoomBrowserPane(paneId: string, action: ZoomAction): void {
+  window.dispatchEvent(new CustomEvent("exegol:zoom-pane", { detail: { paneId, action } }));
 }
 
 function focusBrowserAddress(): boolean {

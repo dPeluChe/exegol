@@ -1,9 +1,11 @@
 // Sidecar health watch: calls left unanswered start pings with backoff, a stall is logged (with
 // the sidecar's CPU and RSS) and pushed on `sidecar:health`. Main's own event-loop lag is logged
-// too, to tell a stuck main from a stuck sidecar.
+// too, to tell a stuck main from a stuck sidecar; a system sleep is not a stall (loopVerdict).
 import { monitorEventLoopDelay } from "node:perf_hooks";
 import { SIDECAR_HEALTHY, type SidecarHealth } from "@exegol/shared";
+import { powerMonitor } from "electron";
 import { broadcast } from "../lib/event-bus";
+import { createLogLimiter, suppressedNote } from "../lib/log-limiter";
 import { logger } from "../lib/logger";
 import { withTimeout } from "../lib/timeout";
 import { readProcessMetrics } from "../system/process-metrics";
@@ -13,12 +15,11 @@ import {
   CallTracker,
   describeProcess,
   FAILURE_LOG_MS,
-  LOOP_LAG_MS,
   LOOP_SAMPLE_MS,
+  loopVerdict,
   PING_TIMEOUT_MS,
   type PingResult,
   pingResult,
-  RateLimiter,
   STALL_AFTER_MS,
   type StallEvent,
   StallWatch,
@@ -28,8 +29,10 @@ import {
 let clientSource: (() => SidecarClient | null) | null = null;
 const watch = new StallWatch();
 const calls = new CallTracker();
-const failureLog = new RateLimiter(FAILURE_LOG_MS);
+const failureLog = createLogLimiter(FAILURE_LOG_MS);
 let lastLoopLog = 0;
+let asleep = false;
+let sleptSinceSample = false;
 /** Snapshot replies are megabytes: calls queued behind one are slow, not stalled */
 let bulkInFlight = 0;
 let checkTimer: ReturnType<typeof setTimeout> | null = null;
@@ -63,11 +66,12 @@ export function trackSidecarCall(
     const now = Date.now();
     calls.settle(false, now);
     if (clientSource?.() !== client) return;
-    if (failureLog.allow(method, now)) {
+    const suppressed = failureLog.take(method, now);
+    if (suppressed !== null) {
       const reason = err instanceof Error && /timeout/i.test(err.message) ? "timed out" : "failed";
       const detail = err instanceof Error && reason === "failed" ? ` (${err.message})` : "";
       logger.warn(
-        `[Sidecar] ${method} to ${sessionId} ${reason} after ${seconds(now - started)}${detail}`,
+        `[Sidecar] ${method} to ${sessionId} ${reason} after ${seconds(now - started)}${detail}${suppressedNote(suppressed)}`,
       );
     }
     suspect(started);
@@ -166,22 +170,49 @@ export function startSidecarHealthWatch(source: () => SidecarClient | null): voi
   const loop = monitorEventLoopDelay({ resolution: 50 });
   loop.enable();
   loopMonitor = loop;
+  let last = { wall: Date.now(), mono: performance.now(), cpu: process.cpuUsage() };
+  powerMonitor.on("suspend", onSuspend);
+  powerMonitor.on("resume", onResume);
   loopTimer = setInterval(() => {
-    const maxMs = loop.max / 1e6;
+    const now = { wall: Date.now(), mono: performance.now(), cpu: process.cpuUsage() };
+    const cpu = process.cpuUsage(last.cpu);
+    const sample = {
+      lagMs: loop.max / 1e6,
+      wallMs: now.wall - last.wall,
+      monoMs: now.mono - last.mono,
+      cpuMs: (cpu.user + cpu.system) / 1000,
+      slept: asleep || sleptSinceSample,
+    };
     loop.reset();
-    const now = Date.now();
-    if (maxMs > LOOP_LAG_MS && now - lastLoopLog >= FAILURE_LOG_MS) {
-      lastLoopLog = now;
-      logger.warn(`[Main] event loop blocked for ${seconds(maxMs)}`);
+    last = now;
+    sleptSinceSample = false;
+    if (loopVerdict(sample) === "stall" && now.wall - lastLoopLog >= FAILURE_LOG_MS) {
+      lastLoopLog = now.wall;
+      logger.warn(`[Main] event loop blocked for ${seconds(sample.lagMs)}`);
     }
   }, LOOP_SAMPLE_MS);
   loopTimer.unref?.();
+}
+
+function onSuspend(): void {
+  asleep = true;
+}
+
+/** The delay the sleep left in the histogram is dropped; the flag covers a sample already taken */
+function onResume(): void {
+  asleep = false;
+  sleptSinceSample = true;
+  loopMonitor?.reset();
 }
 
 export function stopSidecarHealthWatch(): void {
   clientSource = null;
   for (const t of [checkTimer, pingTimer]) if (t) clearTimeout(t);
   if (loopTimer) clearInterval(loopTimer);
+  if (loopMonitor) {
+    powerMonitor.off("suspend", onSuspend);
+    powerMonitor.off("resume", onResume);
+  }
   loopMonitor?.disable();
   loopMonitor = null;
   checkTimer = pingTimer = loopTimer = null;

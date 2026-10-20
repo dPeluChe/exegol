@@ -19,6 +19,7 @@ import { logger } from "../lib/logger";
 import { resolveClaimGuardPath } from "../mcp/exegol-mcp-config";
 import { getNotificationBus } from "../notifications/bus";
 import { getApiKey } from "../security/keystore";
+import { type NodeLaunch, nodeLaunch, nodeShellCommand } from "../system/node-launch";
 import { refreshTray } from "../system/tray";
 import {
   deliverPendingAgentMessages,
@@ -28,8 +29,13 @@ import {
 } from "./agent-messaging";
 import { COMMAND_ALIASES } from "./cli-catalog";
 import { scoreAgent } from "./scoring";
-import { HOOKS_DIR } from "./wrappers";
+import { windowsShell } from "./shell-dialect";
+import { bashPath, HOOKS_DIR, type NotifyEvent, notifyCommand } from "./wrappers";
 
+/** Claude runs hooks through Git Bash on Windows, which wants forward-slash paths */
+function gitBashLaunch(launch: NodeLaunch): NodeLaunch {
+  return { command: bashPath(launch.command), args: launch.args.map((a) => bashPath(a)) };
+}
 export interface AgentContext {
   id: string;
   /** Mutable: a CLI typed in a terminal promotes the live session (shell-promotion.ts) */
@@ -99,6 +105,18 @@ function statusChangedAt(
   }
   statusSince.set(agentId, at);
   return at;
+}
+
+/** A closed shell's row is gone: every window drops it, not only the one that closed it */
+export function broadcastShellClosed(agent: { id: string; projectId: string }): void {
+  broadcastAgentStatus({
+    agentId: agent.id,
+    projectId: agent.projectId,
+    status: "stopped",
+    currentStep: null,
+    cliType: "shell",
+    timestamp: Date.now(),
+  });
 }
 
 /** Broadcast an agent status event to all renderer windows + refresh tray badge */
@@ -204,19 +222,34 @@ function oscNotifyCommand(agentId: string, event: AgentSignalType, stdoutFallbac
 /**
  * Write a per-agent Claude Code hooks settings file that emits OSC-777 notify
  * signals on Stop/Notification/PreToolUse/SessionStart so the PTY stream carries
- * deterministic lifecycle events instead of relying on scraped output.
+ * deterministic lifecycle events instead of relying on scraped output, plus the
+ * notify.sh file events (NotifyHandler) the global settings.json used to send.
  * Returns the settings file path, or null if it couldn't be written
  * (non-fatal — the scraping parser remains the fallback).
  */
 export function buildClaudeCodeHooksFile(
   agentId: string,
-  opts: { enforceClaims?: boolean } = {},
+  opts: { enforceClaims?: boolean; platform?: NodeJS.Platform } = {},
 ): string | null {
   try {
     mkdirSync(HOOKS_DIR, { recursive: true });
     const path = join(HOOKS_DIR, `${agentId}.json`);
-    const hookEntry = (event: AgentSignalType, stdoutFallback = true) => ({
-      hooks: [{ type: "command", command: oscNotifyCommand(agentId, event, stdoutFallback) }],
+    // Claude Code runs hooks in Git Bash on Windows, which has no /dev/tty into our ConPTY:
+    // there the file events alone carry the status
+    const osc = (opts.platform ?? process.platform) !== "win32";
+    // The file event rides along: it carries Claude's session id (OSC has none) and was the
+    // global settings.json's job, which now skips sessions that have this file
+    const fileEvent = (event: NotifyEvent) => ({
+      type: "command",
+      command: notifyCommand(event, "agent"),
+    });
+    const hookEntry = (event: AgentSignalType, stdoutFallback = true, file?: NotifyEvent) => ({
+      hooks: [
+        ...(osc
+          ? [{ type: "command", command: oscNotifyCommand(agentId, event, stdoutFallback) }]
+          : []),
+        ...(file ? [fileEvent(file)] : []),
+      ],
     });
     // T175: the claim guard runs on write-shaped tools only, and BEFORE the
     // write — the one moment where "which agent touched this" is still known.
@@ -227,7 +260,8 @@ export function buildClaudeCodeHooksFile(
     const settings = {
       hooks: {
         PreToolUse: [
-          hookEntry("working"),
+          // OSC only: PostToolUse's tool_use file event reports working
+          ...(osc ? [hookEntry("working")] : []),
           ...(guardPath
             ? [
                 {
@@ -238,7 +272,7 @@ export function buildClaudeCodeHooksFile(
                   hooks: [
                     {
                       type: "command",
-                      command: `ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${guardPath}"`,
+                      command: nodeShellCommand(gitBashLaunch(nodeLaunch(guardPath))),
                       timeout: 5,
                     },
                   ],
@@ -247,11 +281,18 @@ export function buildClaudeCodeHooksFile(
             : []),
         ],
         Notification: [
-          { matcher: CLAUDE_ATTENTION_NOTIFICATIONS, ...hookEntry("attention") },
-          { matcher: CLAUDE_IDLE_NOTIFICATIONS, ...hookEntry("idle") },
+          {
+            matcher: CLAUDE_ATTENTION_NOTIFICATIONS,
+            ...hookEntry("attention", true, "permission_needed"),
+          },
+          { matcher: CLAUDE_IDLE_NOTIFICATIONS, ...hookEntry("idle", true, "session_ready") },
         ],
-        SessionStart: [{ matcher: CLAUDE_SESSION_READY_SOURCES, ...hookEntry("idle", false) }],
-        Stop: [hookEntry("finished")],
+        SessionStart: [
+          { matcher: CLAUDE_SESSION_READY_SOURCES, ...hookEntry("idle", false, "session_ready") },
+        ],
+        Stop: [hookEntry("finished", true, "stop")],
+        PostToolUse: [{ matcher: "*", hooks: [fileEvent("tool_use")] }],
+        UserPromptSubmit: [{ hooks: [fileEvent("prompt_submit")] }],
       },
     };
     writeFileSync(path, JSON.stringify(settings, null, 2), "utf-8");
@@ -305,8 +346,11 @@ export const DEFAULT_PTY_ROWS = 30;
  * Get the full user shell PATH. Electron doesn't inherit the full PATH
  * from the user's shell on macOS/Linux.
  */
-/** The login shell: $SHELL, else the account's, else the platform default (zsh is macOS's, not Linux's) */
+/** The login shell: $SHELL, else the account's, else the platform default (zsh is macOS's, not
+ *  Linux's). Windows has none: PowerShell, else cmd.exe ($SHELL there is often an MSYS path
+ *  ConPTY cannot start) */
 export function loginShell(): string {
+  if (process.platform === "win32") return windowsShell(process.env, findOnPath);
   let account = "";
   try {
     account = userInfo().shell ?? "";
@@ -319,6 +363,8 @@ export function loginShell(): string {
 const shellPathCommand = () => `${loginShell()} -ilc 'echo $PATH'`;
 
 function getShellPath(): string {
+  // A Windows app inherits the user's full PATH; there is no login shell to ask
+  if (process.platform === "win32") return process.env.PATH ?? "";
   try {
     const result = execSync(shellPathCommand(), {
       encoding: "utf-8",
@@ -350,6 +396,7 @@ let resolvedPath: string | null = null;
 
 /** Resolve the login-shell PATH off the main thread so the first spawn or Doctor run doesn't block on it. */
 export function warmShellPath(): void {
+  if (process.platform === "win32") return;
   exec(shellPathCommand(), { timeout: SHELL_PATH_TIMEOUT_MS }, (err, stdout) => {
     // Overwrites a sync fallback too: the real shell PATH wins whenever it arrives
     if (!err && stdout.trim()) {

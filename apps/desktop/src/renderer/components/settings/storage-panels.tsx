@@ -2,7 +2,7 @@ import type { BrowserPartitionUsage, StorageOtherEntry } from "@exegol/shared";
 import { FolderOpen, LayoutDashboard, Trash2 } from "lucide-react";
 import { useAllWorktrees } from "../../hooks/use-trpc";
 import { useStorageAction, useWorktreeSizes } from "../../hooks/use-trpc-models";
-import { SEMANTIC_BADGE } from "../../lib/semantic-colors";
+import { BADGE, SEMANTIC_BADGE } from "../../lib/semantic-colors";
 import { summarizeOther } from "../../lib/storage-overview";
 import { useToastStore } from "../../stores/toasts";
 import { formatBytes } from "../workspace/sections/resource-format";
@@ -10,12 +10,12 @@ import { SMALL_BUTTON } from "./settings-ui";
 
 export type Pending =
   | { kind: "clearScreenshots"; bytes: number }
+  | { kind: "clearRecordings"; bytes: number }
   | { kind: "clearOldLogs" }
   | { kind: "clearBrowserCache"; projectId: string; projectName: string; bytes: number };
 
 const LIST = "divide-y divide-border rounded-lg border border-border bg-bg-secondary";
 const ROW = "flex items-center gap-3 px-3 py-1.5";
-const BADGE = "rounded-full px-2 py-0.5 text-[10px]";
 const OTHER_LIMIT = 12;
 const ROOT_LABEL = { exegol: "~/.exegol", userData: "App data" } as const;
 

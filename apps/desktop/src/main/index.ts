@@ -1,5 +1,6 @@
 import { app, dialog, globalShortcut, shell } from "electron";
 import { seedAgentLinkCache, stopSweep } from "./agents/agent-messaging";
+import { startIdleSuspend } from "./agents/idle-suspend-sweep";
 import { getAgentManager } from "./agents/manager";
 import { cleanupOldEvents, startNotifyHandler, stopNotifyHandler } from "./agents/notify-handler";
 import { getQueueExecutor } from "./agents/queue";
@@ -7,7 +8,7 @@ import { getProviderRegistry } from "./agents/registry";
 import { warmShellPath } from "./agents/spawn-env";
 import { ensureAgentWrappers, sweepStaleAgentEvents } from "./agents/wrappers";
 import { installDeepLinkHandling } from "./bootstrap/deep-link";
-import { registerGlobalHotkey } from "./bootstrap/global-hotkey";
+import { enableShortcutsPortal, registerGlobalHotkey } from "./bootstrap/global-hotkey";
 import { registerIpcHandlers } from "./bootstrap/ipc-handlers";
 import { cleanupStaleData, runStartupRecovery } from "./bootstrap/recovery";
 import { installSignalHandlers, runTeardown } from "./bootstrap/shutdown";
@@ -19,7 +20,6 @@ import { getAppSettings } from "./db/queries/settings";
 import { stopEngine } from "./dictation/engine";
 import { forwardDictationEscape, forwardDictationKeys } from "./dictation/keys";
 import { releaseMediaNow } from "./dictation/media-pause";
-import { installMediaPermissions } from "./dictation/mic";
 import { applyDictationSettings, dictationSettings } from "./dictation/service";
 import { installPreviewSession, registerPreviewScheme } from "./files-preview/preview-host";
 import { startPrWatch, stopPrWatch } from "./integrations/github/pr-watch";
@@ -27,7 +27,7 @@ import { registerDictationIpc } from "./ipc/procedures/dictation";
 import { registerSimulatorIpc } from "./ipc/procedures/simulator";
 import { registerTrpcIpcHandler } from "./ipc/trpc-ipc";
 import { broadcast } from "./lib/event-bus";
-import { flushLogSync, logger, markShutdown } from "./lib/logger";
+import { flushLogSync, logger, markShutdown, startLogFile } from "./lib/logger";
 import {
   ensureExegolMcpServerStarted,
   getMcpAgentStates,
@@ -37,14 +37,17 @@ import {
 } from "./mcp/exegol-server";
 import { getMcpHost } from "./mcp/host";
 import { setDesktopChannelDb } from "./notifications/channels/desktop";
+import { installSessionPermissions } from "./permissions/session";
 import { getPipelineExecutor } from "./pipeline/executor";
 import { getSchedulerEngine } from "./scheduler/engine";
 import { stopAllStreams } from "./simulator/stream";
 import { ensureDefaultSkills } from "./skills/discovery";
 import { ensureCanonicalPaths } from "./skills/paths";
+import { offerMoveToApplications, relocateAppPaths } from "./system/app-relocation";
 import { integrateAppImage } from "./system/appimage-integration";
 import { initAutoUpdater, stopAutoUpdater } from "./system/auto-updater";
 import { captureConsole } from "./system/console-capture";
+import { handleGpuProcessGone, startGpuWatch, stopGpuWatch } from "./system/gpu-watch";
 import { scheduleHousekeeping } from "./system/housekeeping";
 import { backfillProjectIcons } from "./system/project-icons";
 import { startMetricsCollector, stopMetricsCollector } from "./system/resources";
@@ -55,18 +58,21 @@ import { ensureShellIntegration, ensureShellWrappers } from "./terminal/shell-wr
 import { startSidecarHealthWatch, stopSidecarHealthWatch } from "./terminal/sidecar-health-watch";
 import { installAppMenu } from "./windows/app-menu";
 import { closeAllFloatingPanes, registerFloatingIpcHandlers } from "./windows/floating";
-import { forwardSwitcherKeys } from "./windows/pane-switcher-keys";
 import { closeSettingsWindow, registerSettingsIpcHandlers } from "./windows/settings";
+import { forwardWebviewKeys } from "./windows/webview-keys";
 
 app.setName("Exegol");
 // After a GPU crash (moving the window across displays) Chromium may block WebGL for the
 // origin until restart, leaving every terminal on the slower DOM renderer
 app.disableDomainBlockingFor3DAPIs();
+enableShortcutsPortal();
 
-installDeepLinkHandling();
+const primaryInstance = installDeepLinkHandling();
+if (primaryInstance) startLogFile();
 registerPreviewScheme();
 
 app.whenReady().then(async () => {
+  if (!primaryInstance) return;
   startMark("appReady");
   // ─── Critical path: everything the window needs before first paint ──
   try {
@@ -97,7 +103,7 @@ app.whenReady().then(async () => {
   registerDictationIpc();
   registerSimulatorIpc();
   applyDictationSettings(getDb(), dictationSettings(getDb()));
-  installMediaPermissions();
+  installSessionPermissions();
   installPreviewSession(getDb());
   installAgentBrowser(getDb());
   registerGlobalHotkey(settings.globalHotkey, showMainWindow);
@@ -119,10 +125,12 @@ app.whenReady().then(async () => {
   warmShellPath();
   endMark("windowCreated");
   initTray();
+  void offerMoveToApplications();
 
   // Background: non-blocking filesystem init (skills + wrappers)
   (() => {
     try {
+      relocateAppPaths(getDb());
       ensureDefaultSkills();
       ensureShellWrappers();
       ensureShellIntegration();
@@ -144,6 +152,7 @@ app.whenReady().then(async () => {
   void runStartupRecovery().finally(() => {
     getSchedulerEngine().start(getDb());
     scheduleHousekeeping(getDb());
+    startIdleSuspend(getDb());
   });
 
   // Background services (non-blocking, start after window)
@@ -162,6 +171,7 @@ app.whenReady().then(async () => {
   });
   startMetricsCollector();
   startSidecarHealthWatch(() => getPtyHost().getSidecarClient());
+  startGpuWatch();
   getQueueExecutor().start(getDb());
   getAgentManager().startShellPromotion(getDb());
   startPrWatch();
@@ -192,7 +202,7 @@ let stopWorkGuard: (() => void) | null = null;
 app.on("web-contents-created", (_event, contents) => {
   captureConsole(contents);
   if (contents.getType() === "webview") {
-    forwardSwitcherKeys(contents);
+    forwardWebviewKeys(contents);
     forwardDictationKeys(contents);
   }
   // Every Exegol window (settings and floating ones too, not only main): a link must not open
@@ -222,9 +232,13 @@ app.on("render-process-gone", (_event, contents, details) => {
 });
 app.on("child-process-gone", (_event, details) => {
   if (details.reason === "clean-exit") return;
+  // Only Exegol kills its utility processes (the dictation probe and idle unload)
+  if (details.type === "Utility" && details.reason === "killed") return;
   logger.error(
     `[Crash] ${details.type} process gone (${details.reason}, exit ${details.exitCode})${details.name ? `: ${details.name}` : ""}`,
   );
+  // WebGL terminals stay blank after this (worst when the window was hidden): renderers rebuild
+  if (details.type === "GPU") handleGpuProcessGone(details);
 });
 
 installSignalHandlers(() => runTeardown(teardownSteps()));
@@ -267,6 +281,7 @@ function teardownSteps() {
     { name: "queueExecutor", run: () => getQueueExecutor().stop() },
     { name: "metrics", run: stopMetricsCollector },
     { name: "sidecarHealth", run: stopSidecarHealthWatch },
+    { name: "gpuWatch", run: stopGpuWatch },
     { name: "messageSweep", run: stopSweep },
     { name: "prWatch", run: stopPrWatch },
     { name: "database", run: closeDatabase },

@@ -14,7 +14,10 @@ export type DictationPhase =
 interface DictationStore {
   phase: DictationPhase;
   sessionId: string | null;
+  /** Shifted forward by each pause on resume, so now - startedAt is the time recorded */
   startedAt: number;
+  /** Set while paused: the mic stays open, no audio leaves, the timer stands still */
+  pausedAt: number | null;
   /** The pane the overlay sits over (the one the text goes to), null = the window */
   anchorPaneId: string | null;
   /** Where Insert puts the text, for the overlay (insertHint) */
@@ -26,6 +29,13 @@ interface DictationStore {
   partial: string;
   error: string | null;
   modelLoading: boolean;
+  /** The mic this dictation opened, for the overlay's footer */
+  inputName: string | null;
+  /** The picked mic was missing: the overlay says the system default is used */
+  inputNotice: string | null;
+  /** Auto insert's countdown, set once as it starts (a restart is a new object): `ms` was left
+   *  then, `endsAt` is when it inserts. Null outside the countdown */
+  autoInsertCountdown: { endsAt: number; ms: number } | null;
   /** The overlay's Download was pressed: dictation starts once the model is ready */
   downloadRequested: boolean;
   set: (patch: Partial<Omit<DictationStore, "set">>) => void;
@@ -35,6 +45,7 @@ export const useDictationStore = create<DictationStore>((set) => ({
   phase: "idle",
   sessionId: null,
   startedAt: 0,
+  pausedAt: null,
   anchorPaneId: null,
   targetKind: "clipboard",
   targetAgentId: null,
@@ -42,9 +53,16 @@ export const useDictationStore = create<DictationStore>((set) => ({
   partial: "",
   error: null,
   modelLoading: false,
+  inputName: null,
+  inputNotice: null,
   downloadRequested: false,
+  autoInsertCountdown: null,
   set: (patch) => set(patch),
 }));
 
 export const isRecording = (phase: DictationPhase): boolean =>
   phase === "starting" || phase === "listening";
+
+/** Time recorded so far: a pause stops the count */
+export const recordedMs = (s: { startedAt: number; pausedAt: number | null }, now = Date.now()) =>
+  Math.max(0, (s.pausedAt ?? now) - s.startedAt);

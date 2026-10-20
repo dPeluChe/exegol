@@ -1,21 +1,26 @@
-import { CLIPBOARD_IMAGE } from "@exegol/shared";
+import { CLIPBOARD_IMAGE, type LiveSnapshot } from "@exegol/shared";
 import { FitAddon } from "@xterm/addon-fit";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { type ITerminalOptions, Terminal } from "@xterm/xterm";
 import { isDictationChord } from "../../lib/dictation/shortcut";
 import { appChord, chordKey, IS_MAC } from "../../lib/keymap";
 import { isPaneSwitcherMounted } from "../../lib/pane-switcher-control";
+import { persistShellCwd } from "../../lib/shell-cwd";
 import { useAgentStore } from "../../stores/agents";
+import { keepSelection } from "./keep-selection";
+import { chunksAfterSnapshot, createLiveBuffer, resizeToSnapshot } from "./live-seq";
 import { stripTerminalReports } from "./mirror-input";
 import {
   createShellIntegrationState,
   type OscHandlersDisposable,
   registerOscHandlers,
 } from "./osc-handlers";
+import { createResizeStabilizer } from "./resize-stabilizer";
 import { getScrollPosition } from "./terminal-buffer";
 import { createDormantPipe, type DormantPipe } from "./terminal-dormant-wiring";
 import { registerTerminalLinkProviders } from "./terminal-link-providers";
 import type { TerminalInstanceProps } from "./terminal-types";
+import { watchTuiCopy } from "./tui-copy";
 import { tuneWheelSensitivity } from "./tui-wheel";
 
 const CTRL_V = "\x16";
@@ -33,16 +38,31 @@ interface TerminalSessionDeps {
   mirror?: boolean;
   /** Mirror whose card sizes the session (T194 "fit session to card"): read live */
   mirrorOwnsSize?: () => boolean;
-  /** After the snapshot lands at the PTY's grid: a sizing card re-applies its own */
-  onSnapshotApplied?: () => void;
+  /** A frame after the snapshot is parsed */
+  onSnapshotApplied?: (info: SnapshotApplied) => void;
+  /** Fit the view again after a snapshot was written at its own grid */
+  refit?: () => void;
+  /** The grid this view last fitted at: built at it, a remount has nothing to reflow */
+  initialGrid?: { cols: number; rows: number };
   initialContent?: string;
   fontSize: number;
   fontFamily: string;
   theme: ITerminalOptions["theme"];
   onScrollPosition: TerminalInstanceProps["onScrollPosition"];
   onSelectionChange?: TerminalInstanceProps["onSelectionChange"];
+  onTuiCopy?: TerminalInstanceProps["onTuiCopy"];
   setPaneCwd: (paneId: string, cwd: string) => void;
   setPaneLastExit: (paneId: string, code: number | null) => void;
+}
+
+export interface SnapshotApplied {
+  bytes: number;
+  fetchMs: number;
+  /** From mount */
+  paintMs: number;
+  grid: { cols: number; rows: number } | null;
+  replayed: number;
+  dropped: number;
 }
 
 export interface TerminalSession {
@@ -64,6 +84,7 @@ export function setupTerminalSession(
   deps: TerminalSessionDeps,
 ): TerminalSession {
   const terminal = new Terminal({
+    ...deps.initialGrid,
     theme: deps.theme,
     fontSize: deps.fontSize,
     fontFamily: deps.fontFamily,
@@ -73,6 +94,9 @@ export function setupTerminalSession(
     allowProposedApi: true,
     convertEol: true,
     disableStdin: deps.readOnly,
+    // A TUI tracking the mouse (Claude) turns xterm's selection off: Option+drag selects anyway,
+    // as Shift+drag does off macOS, so Copy and Send to still have text
+    macOptionClickForcesSelection: true,
   });
 
   const fitAddon = new FitAddon();
@@ -89,7 +113,10 @@ export function setupTerminalSession(
     oscHandlers = registerOscHandlers(
       terminal,
       {
-        setCwd: (cwd) => deps.setPaneCwd(paneId, cwd),
+        setCwd: (cwd) => {
+          deps.setPaneCwd(paneId, cwd);
+          persistShellCwd(deps.agentId, cwd);
+        },
         setLastExit: (code) => deps.setPaneLastExit(paneId, code),
         // Read at answer time, not captured: a theme switch mid-session must
         // change what the next query gets back.
@@ -129,11 +156,18 @@ export function setupTerminalSession(
     });
   }
 
+  const fetchSnapshot = async (): Promise<LiveSnapshot | null> => {
+    const snapshot = await window.api.terminal.getSnapshot(deps.agentId).catch(() => null);
+    // Main's grid: another window or a card may have moved the PTY since this renderer sent one
+    if (snapshot) ptyResizes.noteSize(deps.agentId, snapshot.cols, snapshot.rows);
+    return snapshot;
+  };
   const live = !deps.readOnly || !!deps.liveFeed;
   const dormantPipe = createDormantPipe(
     terminal,
     true,
-    live ? () => window.api.terminal.getSnapshot(deps.agentId) : undefined,
+    live ? fetchSnapshot : undefined,
+    deps.refit,
   );
   if (deps.initialContent) terminal.write(deps.initialContent);
 
@@ -243,15 +277,16 @@ export function setupTerminalSession(
   // Live feed runs for interactive terminals AND liveFeed viewers (T156):
   // snapshot replay first, buffering any output that races it.
   if (!deps.readOnly || deps.liveFeed) {
+    const mountedAt = performance.now();
     let snapshotResolved = false;
     let liveDisposed = false;
-    const liveBuffer: string[] = [];
-    unsubData = window.api.terminal.onData(deps.agentId, (data) => {
+    const liveBuffer = createLiveBuffer();
+    unsubData = window.api.terminal.onData(deps.agentId, (data, seq) => {
       if (liveDisposed) return;
       if (!snapshotResolved) {
-        liveBuffer.push(data);
+        liveBuffer.push({ data, seq });
       } else {
-        dormantPipe.push(data);
+        dormantPipe.push(data, seq);
       }
     });
 
@@ -280,21 +315,51 @@ export function setupTerminalSession(
       });
     }
 
-    sized
-      .then(() => window.api.terminal.getSnapshot(deps.agentId))
-      .then((snapshot) => {
-        if (liveDisposed) return;
-        if (snapshot) terminal.write(snapshot);
-        deps.onSnapshotApplied?.();
-        snapshotResolved = true;
-        for (const chunk of liveBuffer) dormantPipe.push(chunk);
-        liveBuffer.length = 0;
+    let askedAt = mountedAt;
+    const askSnapshot = () => {
+      askedAt = performance.now();
+      return fetchSnapshot();
+    };
+    const applySnapshot = (snapshot: LiveSnapshot | null): void => {
+      if (liveDisposed) return;
+      const buffered = liveBuffer.take();
+      // Too much output raced it: a newer snapshot holds all of it
+      if (buffered === null) {
+        void askSnapshot().then(applySnapshot);
+        return;
+      }
+      const fetchMs = performance.now() - askedAt;
+      const data = snapshot?.data ?? "";
+      // An alt screen is written at its own grid; the normal buffer lands at the fitted width,
+      // not written at the old one and reflowed a frame later
+      if (!deps.mirror) {
+        if (snapshot?.alt) resizeToSnapshot(terminal, snapshot);
+        else deps.refit?.();
+      }
+      // Chunks that raced the snapshot and are already in it would be written twice
+      const { replay, dropped } = chunksAfterSnapshot(buffered, snapshot?.seq);
+      snapshotResolved = true;
+      terminal.write(data, () => {
+        requestAnimationFrame(() => {
+          if (liveDisposed) return;
+          deps.onSnapshotApplied?.({
+            bytes: data.length,
+            fetchMs,
+            paintMs: performance.now() - mountedAt,
+            grid: snapshot ? { cols: snapshot.cols, rows: snapshot.rows } : null,
+            replayed: replay.length,
+            dropped,
+          });
+        });
       });
+      for (const chunk of replay) dormantPipe.push(chunk.data, chunk.seq);
+    };
+    void sized.then(askSnapshot).then(applySnapshot);
 
     disposables.push({
       dispose: () => {
         liveDisposed = true;
-        liveBuffer.length = 0;
+        liveBuffer.take();
       },
     });
   }
@@ -312,6 +377,10 @@ export function setupTerminalSession(
   if (deps.onSelectionChange) {
     const cb = deps.onSelectionChange;
     disposables.push(terminal.onSelectionChange(() => cb(terminal.hasSelection())));
+    if (terminal.element) disposables.push(keepSelection(terminal, terminal.element));
+  }
+  if (deps.onTuiCopy && terminal.element) {
+    disposables.push(watchTuiCopy(terminal, terminal.element, deps.onTuiCopy));
   }
 
   function dispose(): void {
@@ -340,33 +409,33 @@ export function fitAndSyncSize(
   agentId: string,
   readOnly: boolean,
   onSize: (cols: number, rows: number) => void,
-): void {
+): boolean {
   try {
     const host = measureHost(terminal);
-    // Unlaid-out box: the addon would fall back to 80x24 and the PTY would
-    // redraw (and rewrap) at 80 columns for a frame
-    if (!host?.width || !host?.height) return;
+    // Unlaid-out or hidden (display: none) box, or cells not measured yet: the addon would fall
+    // back to 80x24 and the PTY would redraw (and rewrap) at 80 columns for a frame
+    if (!host?.width || !host?.height) return false;
+    const dims = fitAddon.proposeDimensions();
+    if (!dims || !Number.isFinite(dims.cols) || !Number.isFinite(dims.rows)) return false;
     fitAddon.fit();
     const { cols, rows } = terminal;
     onSize(cols, rows);
-    if (!readOnly) sendPtyResize(agentId, cols, rows);
+    if (!readOnly) ptyResizes.request(agentId, terminal, cols, rows);
+    return true;
   } catch {
     /* container may not be ready */
+    return false;
   }
 }
 
-/** Layout settles over a few frames on mount (toolbar, tabs); each size the
- *  PTY sees makes the CLI redraw, so only the last of a burst is sent. */
-const pendingResize = new Map<string, ReturnType<typeof setTimeout>>();
-function sendPtyResize(agentId: string, cols: number, rows: number): void {
-  clearTimeout(pendingResize.get(agentId));
-  pendingResize.set(
-    agentId,
-    setTimeout(() => {
-      pendingResize.delete(agentId);
-      window.api.terminal.resize(agentId, cols, rows);
-    }, 80),
-  );
+const ptyResizes = createResizeStabilizer((agentId, cols, rows) =>
+  window.api.terminal.resize(agentId, cols, rows),
+);
+
+/** A view that unmounts or hides drops the size it was settling: a transient layout size
+ *  reached the PTY after the user had already left. True when there was one */
+export function cancelPtyResize(agentId: string, terminal: Terminal): boolean {
+  return ptyResizes.cancel(agentId, terminal);
 }
 
 /** Latest fit per terminal: a newer call makes older rAF retry chains exit, so

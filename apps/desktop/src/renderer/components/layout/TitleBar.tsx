@@ -1,11 +1,12 @@
 import { cn } from "@exegol/ui";
-import { Code, Minus, Square, X } from "lucide-react";
+import { Code, Menu, Minus, Square, X } from "lucide-react";
 import { useProject } from "../../hooks/use-trpc";
 import { useAppStore } from "../../stores/app";
 import { ProjectAvatar } from "../common/ProjectAvatar";
 import { AttentionQueue } from "./AttentionQueue";
 import { BugReportButton } from "./BugReportDialog";
 import { useWidgetLayout, WidgetZone } from "./bar-widgets";
+import { TestBuildBadge } from "./TestBuildBadge";
 import { UpdateButton } from "./UpdateButton";
 
 /** Fixed: traffic-light room, the title bar buttons, the project name, window controls. The
@@ -30,6 +31,21 @@ export function TitleBar() {
     >
       <div className="flex items-center gap-3">
         <div className="titlebar-no-drag flex shrink-0 items-center gap-2">
+          {/* Linux/Windows: no menu bar on the frameless window, so its menus live here */}
+          {!isMac && (
+            <button
+              type="button"
+              onClick={(e) => {
+                const r = e.currentTarget.getBoundingClientRect();
+                window.api.windowControls.appMenu(r.left, r.bottom);
+              }}
+              aria-label="Menu"
+              title="Menu"
+              className="flex h-6 w-6 items-center justify-center rounded text-text-muted transition-colors hover:bg-white/10 hover:text-text-primary"
+            >
+              <Menu className="h-3.5 w-3.5" />
+            </button>
+          )}
           <AttentionQueue />
           <button
             type="button"
@@ -41,6 +57,7 @@ export function TitleBar() {
           </button>
           <BugReportButton />
           <UpdateButton />
+          <TestBuildBadge />
         </div>
         <WidgetZone layout={layout} bar="header" slot="left" />
       </div>

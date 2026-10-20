@@ -1,3 +1,4 @@
+import type { ZoomAction } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import {
   ArrowLeft,
@@ -15,6 +16,8 @@ import type { PortInfo } from "../../hooks/use-trpc-scheduler";
 import type { PageSize } from "../../lib/browser-viewports";
 import { openInBrowser } from "../../lib/open-in-browser";
 import { ViewportSelect } from "./BrowserViewport";
+import { ScreenshotMenu, type ScreenshotTarget, ZoomControls } from "./BrowserZoomControls";
+import { type HelperPort, HelperPortsMenu } from "./HelperPortsMenu";
 
 interface BrowserAddressBarProps {
   urlInput: string;
@@ -25,6 +28,8 @@ interface BrowserAddressBarProps {
   qaMode: boolean;
   qaActionCount: number;
   uniquePorts: PortInfo[];
+  /** The dev server's other ports (debugger, workerd...), behind "+N" */
+  helperPorts?: HelperPort[];
   projectId: string | null;
   preferredPort: number | null | undefined;
   setUrlInputValue: (v: string) => void;
@@ -44,6 +49,10 @@ interface BrowserAddressBarProps {
   onStopPort?: (port: PortInfo) => void;
   viewport?: PageSize;
   onViewport?: (viewport: PageSize | undefined) => void;
+  /** The page's zoom factor; without onZoom the controls are hidden (floating window) */
+  zoom?: number;
+  onZoom?: (action: ZoomAction) => void;
+  onScreenshot?: (target: ScreenshotTarget, fullPage: boolean) => void;
   /** More controls after the page size (the floating window's Sizes) */
   extra?: React.ReactNode;
 }
@@ -57,6 +66,7 @@ export function BrowserAddressBar({
   qaMode,
   qaActionCount,
   uniquePorts,
+  helperPorts = [],
   projectId,
   preferredPort,
   setUrlInputValue,
@@ -74,6 +84,9 @@ export function BrowserAddressBar({
   onStopPort,
   viewport,
   onViewport,
+  zoom = 1,
+  onZoom,
+  onScreenshot,
   extra,
 }: BrowserAddressBarProps) {
   return (
@@ -122,6 +135,8 @@ export function BrowserAddressBar({
       >
         <ExternalLink className="h-3 w-3" />
       </button>
+      {onScreenshot && <ScreenshotMenu onScreenshot={onScreenshot} />}
+      {onZoom && <ZoomControls zoom={zoom} onZoom={onZoom} />}
       {onViewport && <ViewportSelect value={viewport} onChange={onViewport} />}
       {extra}
       {/* T102: Design Mode + QA Mode toggles */}
@@ -212,6 +227,7 @@ export function BrowserAddressBar({
               )}
             </div>
           ))}
+          <HelperPortsMenu helpers={helperPorts} onNavigateToPort={onNavigateToPort} />
         </div>
       )}
       <input

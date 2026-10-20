@@ -1,13 +1,14 @@
-import type { AgentStatus } from "@exegol/shared";
-import { type RefObject, useCallback, useMemo, useRef, useState } from "react";
-import { useProject, useProjects } from "../../hooks/use-trpc";
-import { isPasteTarget, pasteToAgent } from "../../lib/agent-input";
-import { focusActivePane } from "../../lib/pane-focus";
-import { jumpToAgent, useAgentStore } from "../../stores/agents";
+import { type RefObject, useCallback, useEffect, useRef, useState } from "react";
+import { useLatest } from "../../hooks/use-latest";
+import { useProject } from "../../hooks/use-trpc";
+import { sendToActive } from "./send-targets";
 import type { TerminalInstanceHandle } from "./terminal-types";
+import { registerSelectionSource, useSendSections } from "./use-send-to";
 import { useTerminalUrlDetector } from "./use-terminal-url-detector";
 
 type TerminalHandleRef = RefObject<TerminalInstanceHandle | null>;
+
+const TUI_COPY_MS = 20_000;
 
 /** T128: localhost URL detector → "Open preview" toolbar chip */
 export function useLocalhostPreview(
@@ -68,97 +69,56 @@ export function useFilesPeek(projectId: string | undefined) {
   };
 }
 
-/** A live agent that can receive a selection, with the project it belongs to */
-export interface SendTarget {
-  id: string;
-  name: string;
-  cliType: string;
-  projectId: string;
-}
-
-/** Live agents other than `selfId`, never shells, grouped by project: this project first,
- *  then the others by name */
-export function groupSendTargets(
-  agents: Array<{
-    id: string;
-    alias?: string | null;
-    cliType: string;
-    projectId: string;
-    status: AgentStatus;
-  }>,
-  selfId: string,
-  projectNames: Map<string, string>,
-  currentProjectId: string | undefined,
-) {
-  const targets: SendTarget[] = agents
-    .filter((a) => a.id !== selfId && isPasteTarget(a))
-    .map((a) => ({
-      id: a.id,
-      name: a.alias ?? a.cliType,
-      cliType: a.cliType,
-      projectId: a.projectId,
-    }));
-  const nameOf = (id: string) => projectNames.get(id) ?? id.slice(0, 8);
-  return [...new Set(targets.map((t) => t.projectId))]
-    .sort((a, b) =>
-      a === currentProjectId ? -1 : b === currentProjectId ? 1 : nameOf(a).localeCompare(nameOf(b)),
-    )
-    .map((id) => ({
-      projectId: id,
-      projectName: nameOf(id),
-      targets: targets.filter((t) => t.projectId === id),
-    }));
-}
-
-/** "Send to": the selected text goes into another live agent's input (not submitted: the user
- *  adds context there). Only agents: pasting prose into a shell would run it line by line */
+/** "Send to": the selection goes into another live agent or terminal (SendToList sends it).
+ *  With a pane, its right-click menu offers the same list (registerSelectionSource) */
 export function useSendTo(
   agentId: string,
   projectId: string | undefined,
   terminalRef: TerminalHandleRef,
+  paneId?: string,
 ) {
-  const [showSendTo, setShowSendTo] = useState(false);
+  const [showSendTo, setShowSendToState] = useState(false);
   const [hasSelection, setHasSelection] = useState(false);
-  const allAgents = useAgentStore((s) => s.agents);
-  const { data: projects = [] } = useProjects();
-
-  // Only built while text is selected: every agent push would redo it for every panel
-  const groups = useMemo(
-    () =>
-      hasSelection
-        ? groupSendTargets(
-            Object.values(allAgents),
-            agentId,
-            new Map(projects.map((p) => [p.id, p.name])),
-            projectId,
-          )
-        : [],
-    [hasSelection, allAgents, agentId, projects, projectId],
+  // What the TUI copied from its own mouse selection (OSC 52): xterm holds none then
+  const [tuiCopy, setTuiCopy] = useState<string | null>(null);
+  const tuiCopyRef = useLatest(tuiCopy);
+  const sendSections = useSendSections(
+    agentId,
+    projectId,
+    sendToActive(hasSelection || tuiCopy !== null, showSendTo),
   );
-
-  const handleSendTo = useCallback(
-    (target: SendTarget) => {
-      const text = terminalRef.current?.getSelection();
-      if (!text) return;
-      pasteToAgent(target.id, text);
-      setShowSendTo(false);
-      jumpToAgent(target.id, target.projectId);
-      focusActivePane();
-    },
-    [terminalRef],
+  const getSelection = useCallback(
+    () => terminalRef.current?.getSelection() || (tuiCopyRef.current ?? ""),
+    [terminalRef, tuiCopyRef],
   );
-
-  const onSelectionChange = useCallback((selected: boolean) => {
-    setHasSelection(selected);
-    if (!selected) setShowSendTo(false);
+  const setShowSendTo = useCallback((open: boolean) => {
+    setShowSendToState(open);
+    if (!open) setTuiCopy(null);
   }, []);
 
+  useEffect(() => {
+    if (!paneId) return;
+    return registerSelectionSource(paneId, { agentId, projectId, getSelection });
+  }, [paneId, agentId, projectId, getSelection]);
+
+  // Offered while fresh: an unused copy goes away, an open list keeps it
+  useEffect(() => {
+    if (tuiCopy === null || showSendTo) return;
+    const timer = window.setTimeout(() => setTuiCopy(null), TUI_COPY_MS);
+    return () => window.clearTimeout(timer);
+  }, [tuiCopy, showSendTo]);
+
+  // An open list stays: a TUI's mouse mode or repaint clears xterm's selection under it, and the
+  // list sends the text it opened with
+  const onSelectionChange = useCallback((selected: boolean) => setHasSelection(selected), []);
+
   return {
-    sendGroups: groups,
+    sendSections,
     showSendTo,
     setShowSendTo,
-    handleSendTo,
     onSelectionChange,
+    onTuiCopy: setTuiCopy,
+    getSelection,
   };
 }
 

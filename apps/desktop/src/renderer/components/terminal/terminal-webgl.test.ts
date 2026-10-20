@@ -96,3 +96,46 @@ describe("createWebglController — max retries", () => {
     expect(addonInstances).toHaveLength(1);
   });
 });
+
+describe("createWebglController — rebuild after a GPU crash", () => {
+  beforeEach(() => {
+    addonInstances.length = 0;
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("swaps in a fresh addon and gives WebGL back to a terminal that fell back", () => {
+    const controller = createWebglController(makeFakeTerminal());
+    controller.attach();
+    for (let i = 0; i < 4; i++) {
+      addonInstances[i]?.trigger();
+      vi.advanceTimersByTime(5_000);
+    }
+    expect(controller.hasFallenBack()).toBe(true);
+    const before = addonInstances.length;
+
+    controller.rebuild();
+    expect(addonInstances[before - 1]?.dispose).toHaveBeenCalled();
+    expect(addonInstances).toHaveLength(before + 1);
+    expect(controller.hasFallenBack()).toBe(false);
+  });
+
+  it("cancels a pending retry so it does not attach a second addon", () => {
+    const controller = createWebglController(makeFakeTerminal());
+    controller.attach();
+    addonInstances[0]?.trigger();
+    controller.rebuild();
+    vi.advanceTimersByTime(5_000);
+    expect(addonInstances).toHaveLength(2);
+  });
+
+  it("does nothing once disposed", () => {
+    const controller = createWebglController(makeFakeTerminal());
+    controller.attach();
+    controller.dispose();
+    controller.rebuild();
+    expect(addonInstances).toHaveLength(1);
+  });
+});

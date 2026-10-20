@@ -2,6 +2,7 @@ import { type Agent, type AgentCreate, appliedModelRoles, YOLO_FLAGS } from "@ex
 import type Database from "libsql";
 import {
   activateAgent,
+  agentPtySize,
   getAgent,
   insertActivity,
   setAgentCliVersion,
@@ -92,7 +93,7 @@ export class AgentManager {
   /** T123: NotifyHandler file events (Claude Code hooks) → signal pipeline. */
   handleAgentFileEvent(
     db: Database.Database,
-    event: { type: string; agentId: string; sessionId?: string },
+    event: { type: string; agentId: string; sessionId?: string; cwd?: string },
   ): void {
     dispatchAgentFileEvent(db, this.getSessionMaps(), event);
   }
@@ -192,7 +193,7 @@ export class AgentManager {
             liveSessionIds(db, agent.projectId, agent.cliType),
           )
         : undefined;
-    const { shell, args, env, stdinCommand, enableMarker, isPlainShell, blindResume } =
+    const { shell, args, env, stdinCommand, submit, enableMarker, isPlainShell, blindResume } =
       buildPtyInvocation(db, agent, config, cwd, registry, cliConfig, project.path, last);
 
     if (!isPlainShell) attachOutputPipeline(this.getSessionMaps(), agent);
@@ -222,9 +223,14 @@ export class AgentManager {
       if (missed) reportMissedResume(agent);
     };
 
+    // A resume lands in its source's pane: start at that grid, not redraw from 120x30
+    const size = (config.resumeFromAgentId && agentPtySize(db, config.resumeFromAgentId)) || {
+      cols: DEFAULT_PTY_COLS,
+      rows: DEFAULT_PTY_ROWS,
+    };
     const { pid } = await ptyHost.createSession(
       agent.id,
-      { shell, args, cwd, cols: DEFAULT_PTY_COLS, rows: DEFAULT_PTY_ROWS, env },
+      { shell, args, cwd, cols: size.cols, rows: size.rows, env },
       callbacks,
       { scrollbackPath, shellReadyGating: enableMarker, smallRingBuffer: isPlainShell },
     );
@@ -235,10 +241,10 @@ export class AgentManager {
       if (enableMarker) {
         // PtyHost queues pre-ready writes and flushes them on the shell-ready
         // marker (or its timeout) — no blind delay racing shell startup.
-        ptyHost.write(agent.id, `${stdinCommand}\n`);
+        ptyHost.write(agent.id, `${stdinCommand}${submit}`);
       } else {
         setTimeout(() => {
-          ptyHost.write(agent.id, `${stdinCommand}\n`);
+          ptyHost.write(agent.id, `${stdinCommand}${submit}`);
         }, 500);
       }
     }
@@ -329,6 +335,11 @@ export class AgentManager {
 
   resize(agentId: string, cols: number, rows: number): void {
     getPtyHost().resize(agentId, cols, rows);
+  }
+
+  /** A pipeline or the queue waits on this agent's exit */
+  hasCompletionCallback(agentId: string): boolean {
+    return this.completionCallbacks.has(agentId);
   }
 
   onAgentComplete(agentId: string, callback: (exitCode: number) => void): void {

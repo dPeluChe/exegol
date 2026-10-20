@@ -19,6 +19,8 @@ interface Shortcut {
   keys: string;
   /** Linux/Windows keys when the Cmd → Ctrl+Shift rule does not say it best */
   otherKeys?: string;
+  /** Linux/Windows description when `appKeys` on the macOS one would be wrong */
+  otherDescription?: string;
   category: ShortcutCategory;
 }
 
@@ -118,6 +120,27 @@ const MAC_SHORTCUTS: Shortcut[] = [
     category: "navigation",
   },
   {
+    id: "app-zoom",
+    label: "Zoom In / Out",
+    description: "Zoom all of Exegol (a focused browser pane zooms its page instead)",
+    keys: "Cmd+= / Cmd+-",
+    category: "navigation",
+  },
+  {
+    id: "app-zoom-reset",
+    label: "Actual Size",
+    description: "Put Exegol's zoom back to 100%",
+    keys: "Cmd+Shift+0",
+    category: "navigation",
+  },
+  {
+    id: "quit",
+    label: "Quit",
+    description: "Quit Exegol",
+    keys: "Cmd+Q",
+    category: "navigation",
+  },
+  {
     id: "new-agent",
     label: "New Agent",
     description: "Open the launch dialog",
@@ -170,7 +193,16 @@ const MAC_SHORTCUTS: Shortcut[] = [
     id: "browser-reload",
     label: "Browser: Reload Page",
     description: "Reload the focused browser pane's page; elsewhere Cmd+R reloads the window",
+    // Off macOS the menu's Reload has no accelerator: the chord only reaches browser panes
+    otherDescription: "Reload the focused browser pane's page",
     keys: "Cmd+R",
+    category: "terminal",
+  },
+  {
+    id: "browser-zoom",
+    label: "Browser: Zoom In / Out / Reset",
+    description: "Zoom the focused browser pane's page (Cmd+- out, Cmd+0 back to 100%)",
+    keys: "Cmd+=",
     category: "terminal",
   },
   {
@@ -202,6 +234,13 @@ const MAC_SHORTCUTS: Shortcut[] = [
       "Speak into the focused pane: press to start and again to insert, or hold while you talk (Esc cancels). Change it in Settings > Dictation",
     keys: "Cmd+Shift+Space",
     otherKeys: "Ctrl+Shift+Space",
+    category: "terminal",
+  },
+  {
+    id: "dictation-pause",
+    label: "Pause dictation",
+    description: "While a dictation records: pause it and resume it (same text, same target)",
+    keys: "Cmd+P",
     category: "terminal",
   },
 ];
@@ -240,6 +279,7 @@ export function shortcutClash(keys: string): string | null {
 export const SHORTCUTS: Shortcut[] = MAC_SHORTCUTS.map((s) => ({
   ...s,
   keys: IS_MAC ? s.keys : (s.otherKeys ?? appKeys(s.keys)),
+  description: IS_MAC ? s.description : (s.otherDescription ?? appKeys(s.description)),
 }));
 
 /** The list with the dictation chord the user set (Settings > Dictation), without it when off */
@@ -247,6 +287,7 @@ export function shortcutsWith(dictation: Partial<DictationSettings> | undefined)
   const d = dictationSettingsOf(dictation);
   const chord = d.enabled ? parseChord(d.shortcut) : null;
   return SHORTCUTS.flatMap((s) => {
+    if (s.id === "dictation-pause") return chord ? [s] : [];
     if (s.id !== "dictation") return [s];
     return chord ? [{ ...s, keys: formatChord(chord, IS_MAC) }] : [];
   });

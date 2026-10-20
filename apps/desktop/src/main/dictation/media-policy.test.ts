@@ -15,12 +15,30 @@ describe("allowMediaRequest", () => {
     expect(allowMediaRequest(base)).toBe(true);
   });
 
-  it("denies a browser pane, a disarmed window, another origin and the camera", () => {
+  it("denies another window, a disarmed window, another origin and the camera", () => {
     expect(allowMediaRequest({ ...base, isMainWindow: false })).toBe(false);
     expect(allowMediaRequest({ ...base, armed: false })).toBe(false);
     expect(allowMediaRequest({ ...base, url: "https://example.com/" })).toBe(false);
     expect(allowMediaRequest({ ...base, mediaTypes: ["audio", "video"] })).toBe(false);
     expect(allowMediaRequest({ ...base, mediaTypes: [] })).toBe(false);
+  });
+
+  it("lets the app's windows check the mic (device names) without opening it", () => {
+    const check = { ...base, isMainWindow: false, armed: false, check: true, isAppWindow: true };
+    expect(allowMediaRequest(check)).toBe(true);
+    expect(allowMediaRequest({ ...check, check: false })).toBe(false);
+    expect(allowMediaRequest({ ...check, isAppWindow: false })).toBe(false);
+    expect(allowMediaRequest({ ...check, url: "https://example.com/" })).toBe(false);
+    expect(allowMediaRequest({ ...check, mediaTypes: ["video"] })).toBe(false);
+  });
+
+  it("lets an app window open the mic only while its Test button armed it, audio only", () => {
+    const test = { ...base, isMainWindow: false, armed: false, micTest: true, isAppWindow: true };
+    expect(allowMediaRequest(test)).toBe(true);
+    expect(allowMediaRequest({ ...test, micTest: false })).toBe(false);
+    expect(allowMediaRequest({ ...test, isAppWindow: false })).toBe(false);
+    expect(allowMediaRequest({ ...test, url: "https://example.com/" })).toBe(false);
+    expect(allowMediaRequest({ ...test, mediaTypes: ["audio", "video"] })).toBe(false);
   });
 
   it("matches the dev server origin exactly", () => {

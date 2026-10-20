@@ -1,21 +1,29 @@
 // PTY Host — manages PTY subprocess sessions from the main process (T35+T36+T37).
-import type { ScreenDialog } from "@exegol/shared";
-import { broadcast } from "../lib/event-bus";
+import type { LiveSnapshot, ScreenDialog } from "@exegol/shared";
+import { noteSessionActivity } from "../agents/session-activity";
+import { createLimiter } from "../lib/concurrency";
 import { logger } from "../lib/logger";
 import { terminalProcesses, terminateAll } from "../system/process-tree";
 import { readProcessTable } from "../system/shell-clis";
-import { HeadlessEmulator } from "./headless-emulator";
+import { ExitWaiters } from "./exit-waiters";
+import { SidecarLossHandler } from "./pty-host-loss";
+import {
+  newSidecarSession,
+  type ReattachedSession,
+  type ReattachHost,
+  type ReattachOptions,
+  reattachSidecarSession,
+} from "./pty-host-reattach";
 import {
   encodeFrame,
   encodeJson,
   encodeString,
-  FRAME_DISPOSE,
   FRAME_KILL,
   FRAME_RESIZE,
   FRAME_WRITE,
   type SpawnPayload,
 } from "./pty-ipc";
-import { doCreateLegacy, type LegacyHostDeps } from "./pty-legacy-session";
+import { doCreateLegacy, forceKillSession, type LegacyHostDeps } from "./pty-legacy-session";
 import { flushScrollbackSync, scheduleScrollbackFlush } from "./pty-scrollback";
 import {
   MAX_CONCURRENT_SPAWNS,
@@ -23,22 +31,18 @@ import {
   type SessionCallbacks,
   SHELL_READY_TIMEOUT_MS,
 } from "./pty-session-types";
-import { scanForMarker } from "./pty-shell-ready";
+import { resolveShellReady, scanForMarker } from "./pty-shell-ready";
 import type { SidecarClient } from "./pty-sidecar-client";
 import { type SessionMemoryResult, SHELL_RING_BUFFER_CAPACITY } from "./pty-sidecar-protocol";
-import { awaitsRepaint, REPAINT_CAP_MS, REPAINT_QUIET_MS } from "./reattach-repaint";
 import { readScreenDialog } from "./screen-dialog";
-import { trackSidecarCall, whileSidecarBulk } from "./sidecar-health-watch";
+import { trackSidecarCall } from "./sidecar-health-watch";
+import { isFrameGap, isStaleFrame, lostFrames, resyncFromRing } from "./sidecar-resync";
 
+export type { ReattachedSession } from "./pty-host-reattach";
 export type { SessionCallbacks } from "./pty-session-types";
 
-export interface ReattachedSession {
-  snapshot: string | null;
-  fetchMs: number;
-  parseMs: number;
-  /** Set when the pane's size reflowed a TUI's frame: resolves once the CLI repainted it */
-  repainted: Promise<void> | null;
-}
+/** A snapshot waits at most this long for queued output to parse, then goes without a seq */
+const SNAPSHOT_PARSE_DEADLINE_MS = 1_500;
 
 export class PtyHost {
   private sessions = new Map<string, Session>();
@@ -48,10 +52,14 @@ export class PtyHost {
   /** Ring not parsed yet: a resize now would parse the rest of the ring at the wrong grid */
   private reattaching = new Set<string>();
   private outputWatchers = new Map<string, () => void>();
-  private activeSpawns = 0;
-  private spawnQueue: Array<() => void> = [];
+  private spawnSlot = createLimiter(MAX_CONCURRENT_SPAWNS);
   private sidecarClient: SidecarClient | null = null;
-  private exitWaiters = new Map<string, Array<() => void>>();
+  private exitWaiters = new ExitWaiters();
+  private loss = new SidecarLossHandler({
+    sessions: this.sessions,
+    finishNormal: (s, code, signal) => this.finishExitNow(s, code, signal),
+    finishLost: (s, reason, persist) => this.finishLost(s, reason, persist),
+  });
 
   // ─── Sidecar integration ────────────────────────────────────────────
 
@@ -59,35 +67,21 @@ export class PtyHost {
   connectToSidecar(client: SidecarClient): void {
     this.sidecarClient = client;
 
-    client.onSessionData((id, data) => {
+    client.onSessionData((id, data, seq) => {
       const s = this.sessions.get(id);
       if (!s) return;
-
-      let processedData = data;
-      if (s.shellReadyState === "pending") {
-        const scan = scanForMarker(data, s);
-        processedData = scan.processedData;
-        if (scan.markerFound) {
-          this.resolveShellReady(s, "ready");
-        }
+      if (s.heldFrames) {
+        s.heldFrames.push({ data, seq });
+        return;
       }
-
-      if (processedData.length > 0) {
-        s.emulator.write(processedData);
-        s.resyncTail?.push(processedData);
-        scheduleScrollbackFlush(s);
-        s.callbacks.onData(processedData);
-        this.outputWatchers.get(id)?.();
-      }
+      this.applyFrame(s, data, seq);
     });
 
     client.onSessionExit((id, exitCode, signal) => {
       const s = this.sessions.get(id);
       if (!s) return;
-      s.alive = false;
-      flushScrollbackSync(s);
-      this.cleanup(id);
-      s.callbacks.onExit(exitCode, signal);
+      if (s.heldFrames) s.pendingExit = { exitCode, signal };
+      else this.finishExit(s, exitCode, signal);
     });
 
     client.onSessionError((id, message) => {
@@ -96,46 +90,82 @@ export class PtyHost {
       s.callbacks.onError(message);
     });
 
+    client.onShuttingDown((reason, ids) => this.loss.notice(reason, ids));
+    client.onClose(() => {
+      if (this.sidecarClient === client) this.loss.socketClosed();
+    });
+
     logger.info("[PtyHost] Connected to sidecar");
   }
 
-  /** Retry: the new client takes over before the old socket closes. Both carried the same
-   *  output, unevenly (the old one was stuck), so each live model is rebuilt from the ring */
-  swapSidecarClient(client: SidecarClient): Promise<void> {
+  /** A sidecar exit: the CLI's own, or one the sidecar's stop caused (pty-host-loss.ts) */
+  private finishExit(s: Session, exitCode: number, signal?: number): void {
+    this.loss.exit(s, exitCode, signal);
+  }
+
+  private finishExitNow(s: Session, exitCode: number, signal?: number): void {
+    this.endSession(s);
+    s.callbacks.onExit(exitCode, signal);
+  }
+
+  private finishLost(s: Session, reason: string, persist: boolean): void {
+    this.endSession(s);
+    if (s.callbacks.onLost) s.callbacks.onLost(reason, persist);
+    else s.callbacks.onExit(1);
+  }
+
+  /** After the sessions a sidecar stop took are marked lost (not while relaunching) */
+  onSidecarLost(fn: (reason: string) => void): void {
+    this.loss.onSidecarLost(fn);
+  }
+
+  /** Restart terminals: the relaunch's recovery takes the sessions */
+  expectRelaunch(): void {
+    this.loss.expectRelaunch();
+  }
+
+  private applyFrame(s: Session, data: string, seq: number | undefined): void {
+    if (isStaleFrame(s.lastSeq, seq)) return;
+    if (isFrameGap(s.lastSeq, seq)) s.seqGap = true;
+    if (seq !== undefined) s.lastSeq = seq;
+
+    let processedData = data;
+    if (s.shellReadyState === "pending") {
+      const scan = scanForMarker(data, s);
+      processedData = scan.processedData;
+      if (scan.markerFound) {
+        this.resolveShellReady(s, "ready");
+      }
+    }
+
+    if (processedData.length > 0) {
+      s.emulator.write(processedData);
+      s.resyncTail?.push(processedData);
+      scheduleScrollbackFlush(s);
+      s.callbacks.onData(processedData, s.lastSeq);
+      this.outputWatchers.get(s.id)?.();
+    }
+  }
+
+  /** Retry: the new client takes over before the old socket closes. Only sessions that lost
+   *  frames on the old socket (by seq) are rebuilt from the ring; the rest were exact already */
+  async swapSidecarClient(client: SidecarClient): Promise<void> {
     const old = this.sidecarClient;
     this.connectToSidecar(client);
     old?.disconnect();
+    // Answered after every frame sent before it, on the same socket
+    const info = await client.listSessionsInfo().catch(() => null);
+    const sent = new Map(info?.map((i) => [i.id, i.seq]));
     const live = [...this.sessions.values()].filter(
       (s) => s.mode === "sidecar" && s.alive && !this.reattaching.has(s.id),
     );
-    return Promise.all(live.map((s) => this.resyncSession(s, client))).then(() => {});
-  }
-
-  /** Output read before the ring's reply is in it; output after it is replayed on top. Views
-   *  reset (RIS) and repaint in the same stream, as the visibility repaint does */
-  private async resyncSession(s: Session, client: SidecarClient): Promise<void> {
-    const ring = await whileSidecarBulk(client.snapshot(s.id)).catch(() => null);
-    if (ring === null || this.sessions.get(s.id) !== s || s.resyncTail) return;
-    const tail: string[] = [];
-    s.resyncTail = tail;
-    const { cols, rows } = s.emulator.size;
-    const fresh = new HeadlessEmulator(cols, rows);
-    try {
-      await fresh.writeParsed(ring);
-    } finally {
-      s.resyncTail = undefined;
-    }
-    if (this.sessions.get(s.id) !== s) {
-      fresh.dispose();
-      return;
-    }
-    const size = s.emulator.size;
-    if (size.cols !== cols || size.rows !== rows) fresh.resize(size.cols, size.rows);
-    const snapshot = (fresh.snapshot() ?? "") + fresh.modeSequence();
-    for (const chunk of tail) fresh.write(chunk);
-    s.emulator.dispose();
-    s.emulator = fresh;
-    broadcast("terminal:data", s.id, `\x1bc${snapshot}${tail.join("")}`);
+    const lost = live.filter((s) => !info || lostFrames(s.lastSeq, sent.get(s.id), !!s.seqGap));
+    logger.info(
+      `[Sidecar] swap: ${live.length - lost.length} session(s) exact by seq, ${lost.length} rebuilt from the ring`,
+    );
+    await Promise.all(
+      lost.map((s) => resyncFromRing(s, client, () => this.sessions.get(s.id) === s)),
+    );
   }
 
   getSidecarClient(): SidecarClient | null {
@@ -168,12 +198,8 @@ export class PtyHost {
     return this.sidecarClient.listSessions();
   }
 
-  /**
-   * List sessions with alive flag + exit info.
-   * Use this over listSidecarSessions() for crash recovery, because the
-   * sidecar keeps dead sessions in its map for 60s (snapshot grace period).
-   * Treating them as alive leaves agents stuck in "running" with no PTY.
-   */
+  /** With alive + exit info: the sidecar keeps dead sessions 60s, and crash recovery must not
+   *  read them as running */
   async listSidecarSessionsInfo(): Promise<
     Array<{ id: string; alive: boolean; exitCode: number | null; signal: string | null }>
   > {
@@ -191,83 +217,28 @@ export class PtyHost {
     }
   }
 
+  private reattachHost(): ReattachHost {
+    return {
+      sessions: this.sessions,
+      reattaching: this.reattaching,
+      pendingSizes: this.pendingSizes,
+      outputWatchers: this.outputWatchers,
+      client: () => this.sidecarClient,
+      applyFrame: (s, data, seq) => this.applyFrame(s, data, seq),
+      finishExit: (s, code, signal) => this.finishExit(s, code, signal),
+      resize: (id, cols, rows) => this.resize(id, cols, rows),
+      redraw: (id) => this.redraw(id),
+    };
+  }
+
   /** Reattach to a session that survived in the sidecar after app restart */
-  async reattachSession(
+  reattachSession(
     id: string,
     spawnOpts: { cols: number; rows: number },
     callbacks: SessionCallbacks,
-    options?: { scrollbackPath?: string; tui?: boolean },
+    options?: ReattachOptions,
   ): Promise<ReattachedSession | null> {
-    if (!this.sidecarClient?.isConnected()) return null;
-
-    const emulator = new HeadlessEmulator(spawnOpts.cols, spawnOpts.rows);
-    const session: Session = {
-      id,
-      mode: "sidecar",
-      child: null,
-      decoder: null,
-      emulator,
-      pid: null,
-      alive: true,
-      callbacks,
-      scrollbackPath: options?.scrollbackPath ?? null,
-      flushTimer: null,
-      shellReadyState: "unsupported",
-      preReadyStdinQueue: [],
-      markerMatchPos: 0,
-      markerHeldBytes: "",
-      shellReadyTimeout: null,
-    };
-    this.sessions.set(id, session);
-    this.reattaching.add(id);
-
-    // The ring rebuilds the model only (replayed through onData it re-fired old status/OSC);
-    // the caller seeds its scrollback from the returned snapshot
-    let snapshot: string | null = null;
-    const started = performance.now();
-    let fetched = started;
-    try {
-      snapshot = await whileSidecarBulk(this.sidecarClient.snapshot(id));
-      fetched = performance.now();
-      if (snapshot) await emulator.writeParsed(snapshot);
-    } catch {
-      // Snapshot unavailable — session still reattaches, just without scrollback history
-    } finally {
-      this.reattaching.delete(id);
-    }
-    const parsed = performance.now();
-
-    const pending = this.pendingSizes.get(id);
-    let repainted: Promise<void> | null = null;
-    if (pending) {
-      this.pendingSizes.delete(id);
-      const kind = { tui: options?.tui ?? false, alternateScreen: emulator.alternateScreen };
-      const repaint = awaitsRepaint(emulator.size, pending, kind);
-      if (repaint) repainted = this.waitForRepaint(id);
-      this.resize(id, pending.cols, pending.rows);
-      // The PTY may already be at this size (a stale saved grid): no SIGWINCH, no repaint
-      if (repaint) this.redraw(id);
-      broadcast("terminal:resized", id, pending.cols, pending.rows);
-    }
-    return { snapshot, fetchMs: fetched - started, parseMs: parsed - fetched, repainted };
-  }
-
-  /** Resolves once the CLI's output pauses after the resize, or at the cap */
-  private waitForRepaint(id: string): Promise<void> {
-    return new Promise((resolve) => {
-      let quiet: ReturnType<typeof setTimeout> | undefined;
-      const done = () => {
-        clearTimeout(quiet);
-        clearTimeout(cap);
-        this.outputWatchers.delete(id);
-        resolve();
-      };
-      const cap = setTimeout(done, REPAINT_CAP_MS);
-      this.outputWatchers.set(id, () => {
-        clearTimeout(quiet);
-        quiet = setTimeout(done, REPAINT_QUIET_MS);
-      });
-    });
+    return reattachSidecarSession(this.reattachHost(), id, spawnOpts, callbacks, options);
   }
 
   /** Create a new PTY session — uses sidecar if available, falls back to subprocess */
@@ -281,12 +252,7 @@ export class PtyHost {
     if (this.sidecarClient?.isConnected()) {
       return this.doCreateSidecar(id, spawnOpts, callbacks, options);
     }
-    await this.acquireSpawnSlot();
-    try {
-      return await this.doCreateLegacy(id, spawnOpts, callbacks, options);
-    } finally {
-      this.releaseSpawnSlot();
-    }
+    return this.spawnSlot(() => this.doCreateLegacy(id, spawnOpts, callbacks, options));
   }
 
   private async doCreateSidecar(
@@ -295,24 +261,14 @@ export class PtyHost {
     callbacks: SessionCallbacks,
     options?: { scrollbackPath?: string; shellReadyGating?: boolean; smallRingBuffer?: boolean },
   ): Promise<{ pid: number }> {
-    const emulator = new HeadlessEmulator(spawnOpts.cols, spawnOpts.rows);
-    const session: Session = {
+    const session = newSidecarSession(
       id,
-      mode: "sidecar",
-      child: null,
-      decoder: null,
-      emulator,
-      pid: null,
-      alive: true,
+      spawnOpts,
       callbacks,
-      scrollbackPath: options?.scrollbackPath ?? null,
-      flushTimer: null,
-      shellReadyState: options?.shellReadyGating ? "pending" : "unsupported",
-      preReadyStdinQueue: [],
-      markerMatchPos: 0,
-      markerHeldBytes: "",
-      shellReadyTimeout: null,
-    };
+      options?.scrollbackPath,
+      options?.shellReadyGating ? "pending" : "unsupported",
+    );
+    session.lastSeq = 0;
     this.sessions.set(id, session);
 
     if (session.shellReadyState === "pending") {
@@ -354,20 +310,13 @@ export class PtyHost {
   write(id: string, data: string): void {
     const s = this.sessions.get(id);
     if (!s?.alive) return;
+    noteSessionActivity(id, "input");
     if (s.shellReadyState === "pending") {
       if (data.startsWith("\x1b")) return;
       s.preReadyStdinQueue.push(data);
       return;
     }
-    if (s.mode === "sidecar") {
-      this.callSidecar("session.write", id, (c) => c.write(id, data));
-      return;
-    }
-    try {
-      s.child?.stdin?.write(encodeString(FRAME_WRITE, data));
-    } catch {
-      /* pipe broken */
-    }
+    this.sendNow(s, data);
   }
 
   resize(id: string, cols: number, rows: number): void {
@@ -468,11 +417,24 @@ export class PtyHost {
     return this.sessions.get(id)?.emulator.snapshot() ?? null;
   }
 
-  /** For a live view that resets and repaints: the screen plus the modes its program set */
-  getLiveSnapshot(id: string): string | null {
-    const emulator = this.sessions.get(id)?.emulator;
-    const snapshot = emulator?.snapshot();
-    return emulator && snapshot ? snapshot + emulator.modeSequence() : null;
+  /** The screen holding exactly the output up to `seq`, serialized once that output is parsed */
+  parsedLiveSnapshot(id: string): Promise<LiveSnapshot | null> {
+    const s = this.sessions.get(id);
+    if (!s) return Promise.resolve(null);
+    const { emulator } = s;
+    const seq = s.lastSeq;
+    return emulator.afterParsed(SNAPSHOT_PARSE_DEADLINE_MS, (parsed) => {
+      if (this.sessions.get(id) !== s) return null;
+      // A Retry resync may have swapped the model meanwhile: its screen is not the one `seq` names
+      const model = s.emulator;
+      const snapshot = model.snapshot();
+      return {
+        data: snapshot ? snapshot + model.modeSequence() : null,
+        seq: parsed && model === emulator ? seq : undefined,
+        alt: model.alternateScreen,
+        ...model.size,
+      };
+    });
   }
 
   /** The numbered dialog the session's screen shows now, if any */
@@ -492,31 +454,7 @@ export class PtyHost {
   /** Resolve when the session is cleaned up (exit), or after timeoutMs as a fallback. */
   waitForExit(id: string, timeoutMs: number): Promise<void> {
     if (!this.sessions.has(id)) return Promise.resolve();
-    return new Promise((resolve) => {
-      const waiter = () => {
-        clearTimeout(timer);
-        resolve();
-      };
-      const timer = setTimeout(() => {
-        const list = this.exitWaiters.get(id);
-        if (list) {
-          const idx = list.indexOf(waiter);
-          if (idx !== -1) list.splice(idx, 1);
-          if (list.length === 0) this.exitWaiters.delete(id);
-        }
-        resolve();
-      }, timeoutMs);
-      const list = this.exitWaiters.get(id) ?? [];
-      list.push(waiter);
-      this.exitWaiters.set(id, list);
-    });
-  }
-
-  private notifyExitWaiters(id: string): void {
-    const waiters = this.exitWaiters.get(id);
-    if (!waiters) return;
-    this.exitWaiters.delete(id);
-    for (const w of waiters) w();
+    return this.exitWaiters.wait(id, timeoutMs);
   }
 
   listSessions(): string[] {
@@ -525,77 +463,35 @@ export class PtyHost {
 
   destroyAll(): void {
     for (const [, session] of this.sessions) {
-      this.forceKillSession(session);
+      forceKillSession(session, this.sidecarClient);
     }
     this.sessions.clear();
-    for (const id of [...this.exitWaiters.keys()]) {
-      this.notifyExitWaiters(id);
-    }
-  }
-
-  /** Force-kill a session: flush scrollback, send dispose, then SIGKILL as safety net */
-  private forceKillSession(session: Session): void {
-    if (!session.alive) return;
-    session.alive = false;
-    flushScrollbackSync(session);
-
-    if (session.mode === "sidecar") {
-      this.sidecarClient?.destroy(session.id).catch(() => {});
-    } else if (session.child) {
-      try {
-        session.child.stdin?.write(encodeFrame(FRAME_DISPOSE, Buffer.alloc(0)));
-      } catch {
-        /* pipe closed */
-      }
-      const child = session.child;
-      setTimeout(() => {
-        if (!child.killed) {
-          try {
-            child.kill("SIGKILL");
-          } catch {
-            /* already dead */
-          }
-        }
-      }, 1000);
-    }
-
-    if (session.flushTimer) clearTimeout(session.flushTimer);
-    session.emulator.dispose();
+    this.exitWaiters.notifyAll();
   }
 
   // ─── Private ──────────────────────────────────────────────────────────
 
   private resolveShellReady(session: Session, state: "ready" | "timed_out"): void {
-    if (session.shellReadyState !== "pending") return;
-    session.shellReadyState = state;
-    if (session.shellReadyTimeout) {
-      clearTimeout(session.shellReadyTimeout);
-      session.shellReadyTimeout = null;
+    resolveShellReady(session, state, (data) => this.sendNow(session, data));
+  }
+
+  /** A write past the shell-ready gate */
+  private sendNow(s: Session, data: string): void {
+    if (s.mode === "sidecar") {
+      this.callSidecar("session.write", s.id, (c) => c.write(s.id, data));
+      return;
     }
-    // Flush any held marker bytes as regular output (partial match that never completed)
-    if (session.markerHeldBytes.length > 0) {
-      session.emulator.write(session.markerHeldBytes);
-      session.callbacks.onData(session.markerHeldBytes);
-      session.markerHeldBytes = "";
+    try {
+      s.child?.stdin?.write(encodeString(FRAME_WRITE, data));
+    } catch {
+      /* pipe broken */
     }
-    session.markerMatchPos = 0;
-    // Flush queued stdin writes in FIFO order
-    const queue = session.preReadyStdinQueue;
-    session.preReadyStdinQueue = [];
-    for (const data of queue) {
-      if (session.mode === "sidecar") {
-        this.callSidecar("session.write", session.id, (c) => c.write(session.id, data));
-      } else {
-        try {
-          session.child?.stdin?.write(encodeString(FRAME_WRITE, data));
-        } catch {
-          /* pipe broken */
-        }
-      }
-    }
-    if (state === "timed_out") {
-      logger.warn(`[PtyHost] Shell ready marker timed out for ${session.id} — unblocking writes`);
-    }
+  }
+
+  private endSession(s: Session): void {
+    s.alive = false;
+    flushScrollbackSync(s);
+    this.cleanup(s.id);
   }
 
   private cleanup(id: string): void {
@@ -606,28 +502,8 @@ export class PtyHost {
     flushScrollbackSync(session);
     session.emulator.dispose();
     this.sessions.delete(id);
-    this.notifyExitWaiters(id);
-  }
-
-  // ── Spawn semaphore (max 3 concurrent) ────────────────────────────────
-
-  private acquireSpawnSlot(): Promise<void> {
-    if (this.activeSpawns < MAX_CONCURRENT_SPAWNS) {
-      this.activeSpawns++;
-      return Promise.resolve();
-    }
-    return new Promise((resolve) => {
-      this.spawnQueue.push(resolve);
-    });
-  }
-
-  private releaseSpawnSlot(): void {
-    const next = this.spawnQueue.shift();
-    if (next) {
-      next();
-    } else {
-      this.activeSpawns--;
-    }
+    this.pendingSizes.delete(id);
+    this.exitWaiters.notify(id);
   }
 }
 

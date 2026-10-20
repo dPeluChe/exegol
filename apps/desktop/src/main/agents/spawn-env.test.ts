@@ -59,9 +59,12 @@ describe("slugifyBranchName", () => {
 // The hooks file is an external contract owned by Claude Code: a wrong shape
 // does not throw, it silently stops delivering signals and enforcement.
 describe("buildClaudeCodeHooksFile", () => {
-  function written(agentId: string, opts?: { enforceClaims?: boolean }) {
+  function written(
+    agentId: string,
+    opts?: { enforceClaims?: boolean; platform?: NodeJS.Platform },
+  ) {
     fs.writeFileSync.mockClear();
-    buildClaudeCodeHooksFile(agentId, opts);
+    buildClaudeCodeHooksFile(agentId, { platform: "darwin", ...opts });
     const [, json] = fs.writeFileSync.mock.calls[0] as [string, string];
     return JSON.parse(json).hooks as Record<string, { matcher?: string; hooks: unknown[] }[]>;
   }
@@ -79,6 +82,22 @@ describe("buildClaudeCodeHooksFile", () => {
       timeout: 5,
       command: expect.stringContaining("/bundle/guard.js"),
     });
+  });
+
+  // Git Bash has no /dev/tty into ConPTY: Windows keeps only the file events (and the guard)
+  it("writes no OSC hook on Windows, only file events", () => {
+    const hooks = written("a1", { enforceClaims: true, platform: "win32" });
+    const commands = Object.values(hooks).flatMap((entries) =>
+      entries.flatMap((e) => e.hooks.map((h) => String((h as { command?: string }).command))),
+    );
+    expect(commands.some((c) => c.includes("777;notify"))).toBe(false);
+    expect(hooks.PreToolUse).toHaveLength(1);
+    expect(hooks.PreToolUse?.[0]?.matcher).toBe("^(Edit|Write|MultiEdit|NotebookEdit)$");
+    for (const entry of [...(hooks.Stop ?? []), ...(hooks.Notification ?? [])]) {
+      expect(entry.hooks).toHaveLength(1);
+      expect(String((entry.hooks[0] as { command: string }).command)).toContain("notify.sh");
+    }
+    expect(hooks.SessionStart?.[0]?.hooks).toHaveLength(1);
   });
 
   // Claude's idle reminder ("waiting for your input", 60s after a reply) is no question: read as
@@ -135,6 +154,22 @@ describe("buildClaudeCodeHooksFile", () => {
       String((entry?.hooks[0] as { command?: string } | undefined)?.command);
     expect(command(hooks.SessionStart?.[0])).toMatch(/> \/dev\/tty 2>\/dev\/null \|\| true$/);
     expect(command(hooks.Stop?.[0])).toMatch(/\|\| printf '/);
+  });
+
+  // The global settings.json skips sessions with this file: it must drop the same file events
+  it("drops the notify.sh file events the global settings.json used to", () => {
+    const hooks = written("a1");
+    const fileEvent = (entry: { hooks: unknown[] } | undefined) =>
+      (entry?.hooks as { command?: string }[] | undefined)
+        ?.map((h) => h.command?.match(/notify\.sh" ([a-z_]+) agent$/)?.[1])
+        .find(Boolean);
+    expect(fileEvent(hooks.Stop?.[0])).toBe("stop");
+    expect(fileEvent(hooks.Notification?.[0])).toBe("permission_needed");
+    expect(fileEvent(hooks.Notification?.[1])).toBe("session_ready");
+    expect(fileEvent(hooks.SessionStart?.[0])).toBe("session_ready");
+    expect(fileEvent(hooks.PostToolUse?.[0])).toBe("tool_use");
+    expect(fileEvent(hooks.UserPromptSubmit?.[0])).toBe("prompt_submit");
+    expect(JSON.stringify(hooks)).not.toContain("EXEGOL_HOOKS_FILE");
   });
 
   it("omits the guard when claims cannot collide", () => {

@@ -1,3 +1,6 @@
+import { homedir } from "node:os";
+import { dirname } from "node:path";
+import { testBuildOf, type ZoomAction } from "@exegol/shared";
 import {
   app,
   type BaseWindow,
@@ -6,9 +9,15 @@ import {
   Menu,
   type MenuItemConstructorOptions,
   shell,
+  type WebContents,
 } from "electron";
+import { _getFullPath } from "../agents/spawn-env";
+import { showMainWindowWith } from "../bootstrap/window";
+import { LOG_DIR } from "../lib/logger";
 import { EXEGOL_REPO_URL } from "../lib/repo";
 import { installCli, uninstallCli } from "../system/cli-installer";
+import { cliPathHint } from "../system/cli-path-hint";
+import type { AppKeyAction } from "./app-keys";
 import { openSettingsWindow } from "./settings";
 
 /**
@@ -25,8 +34,15 @@ import { openSettingsWindow } from "./settings";
  * closes the actual window.
  */
 export function installAppMenu(): void {
+  const test = testBuildOf(app.getVersion());
+  if (test) {
+    app.setAboutPanelOptions({
+      applicationVersion: app.getVersion(),
+      version: `TEST build, commit ${test.commit}${test.dirty ? " + local changes" : ""}`,
+    });
+  }
   if (process.platform !== "darwin") {
-    // On Windows/Linux we don't force a menu — the default is fine.
+    // Frameless window: no menu bar; the title bar's menu button pops up `popupAppMenu`
     Menu.setApplicationMenu(null);
     return;
   }
@@ -78,14 +94,7 @@ export function installAppMenu(): void {
             sendToRenderer(browserWindow as BaseWindow | undefined, "menu:focus-location"),
         },
         { type: "separator" },
-        {
-          label: "Install 'exegol' CLI",
-          click: () => handleInstallCli(),
-        },
-        {
-          label: "Uninstall 'exegol' CLI",
-          click: () => handleUninstallCli(),
-        },
+        ...cliItems(),
       ],
     },
     {
@@ -126,28 +135,129 @@ export function installAppMenu(): void {
       label: "Window",
       submenu: [{ role: "minimize" }, { role: "zoom" }, { type: "separator" }, { role: "front" }],
     },
-    {
-      role: "help",
-      submenu: [
-        {
-          label: "Learn More",
-          click: () => shell.openExternal(EXEGOL_REPO_URL),
-        },
-      ],
-    },
+    { role: "help", submenu: helpItems() },
   ];
 
   Menu.setApplicationMenu(Menu.buildFromTemplate(template));
+}
+
+function cliItems(): MenuItemConstructorOptions[] {
+  return [
+    { label: "Install 'exegol' CLI", click: () => handleInstallCli() },
+    { label: "Uninstall 'exegol' CLI", click: () => handleUninstallCli() },
+  ];
+}
+
+function helpItems(): MenuItemConstructorOptions[] {
+  return [
+    { label: "Report a Bug…", click: () => showMainWindowWith("menu:report-bug") },
+    { label: "Open Logs Folder", click: () => void shell.openPath(LOG_DIR) },
+    { type: "separator" },
+    { label: "Learn More", click: () => shell.openExternal(EXEGOL_REPO_URL) },
+  ];
+}
+
+/** Labels only: use-hotkeys and webview-keys handle these keys */
+const keys = (accelerator: string) => ({ accelerator, registerAccelerator: false });
+
+/** Linux and Windows: the macOS menu bar's entries, from the title bar's menu button. No Edit
+ *  menu (the button holds the focus) */
+export function popupAppMenu(win: BrowserWindow, x: number, y: number): void {
+  const template: MenuItemConstructorOptions[] = [
+    {
+      label: "File",
+      submenu: [
+        {
+          label: "New Tab",
+          ...keys("Ctrl+Shift+T"),
+          click: () => win.webContents.send("menu:new-tab"),
+        },
+        {
+          label: "Close Pane",
+          ...keys("Ctrl+Shift+W"),
+          click: () => win.webContents.send("menu:close-pane"),
+        },
+        {
+          label: "Open Location",
+          ...keys("Ctrl+Shift+L"),
+          click: () => win.webContents.send("menu:focus-location"),
+        },
+        { type: "separator" },
+        { label: "Settings…", ...keys("Ctrl+Shift+,"), click: () => openSettingsWindow() },
+        { type: "separator" },
+        ...cliItems(),
+        { type: "separator" },
+        { label: `Quit ${app.name}`, ...keys("Ctrl+Shift+Q"), click: () => app.quit() },
+      ],
+    },
+    {
+      label: "View",
+      submenu: [
+        { label: "Reload", ...keys("Ctrl+Shift+R"), click: () => handleReloadAccelerator(win) },
+        { label: "Force Reload", click: () => win.webContents.reloadIgnoringCache() },
+        { label: "Toggle Developer Tools", click: () => win.webContents.toggleDevTools() },
+        { type: "separator" },
+        {
+          label: "Actual Size",
+          ...keys("Ctrl+Shift+Alt+0"),
+          click: () => zoomWindow(win.webContents, "reset"),
+        },
+        {
+          label: "Zoom In",
+          ...keys("Ctrl+Shift+="),
+          click: () => zoomWindow(win.webContents, "in"),
+        },
+        {
+          label: "Zoom Out",
+          ...keys("Ctrl+Shift+-"),
+          click: () => zoomWindow(win.webContents, "out"),
+        },
+        { type: "separator" },
+        { label: "Toggle Full Screen", click: () => win.setFullScreen(!win.isFullScreen()) },
+      ],
+    },
+    {
+      label: "Window",
+      submenu: [
+        { label: "Minimize", click: () => win.minimize() },
+        {
+          label: win.isMaximized() ? "Restore" : "Maximize",
+          click: () => (win.isMaximized() ? win.unmaximize() : win.maximize()),
+        },
+      ],
+    },
+    { label: "Help", submenu: [...helpItems(), { role: "about" }] },
+  ];
+  Menu.buildFromTemplate(template).popup({ window: win, x: Math.round(x), y: Math.round(y) });
+}
+
+/** Zoom the Exegol UI of a window, as the macOS menu's zoom roles do */
+export function zoomWindow(contents: WebContents, action: ZoomAction): void {
+  if (action === "reset") contents.setZoomLevel(0);
+  else contents.setZoomLevel(contents.getZoomLevel() + (action === "in" ? 0.5 : -0.5));
+}
+
+/** Off macOS: an app chord pressed in a webview page, run as its macOS menu item would */
+export function runAppKey(action: AppKeyAction, win: BrowserWindow): void {
+  if (action === "close-pane") handleCloseAccelerator(win);
+  else if (action === "reload") handleReloadAccelerator(win);
+  else if (action === "reset-zoom") zoomWindow(win.webContents, "reset");
+  else if (action === "quit") app.quit();
+  else win.webContents.send(`menu:${action}`);
 }
 
 /** T155.6: symlink resources/bin/exegol onto PATH and report the result. */
 function handleInstallCli(): void {
   try {
     const target = installCli();
+    const hint = cliPathHint(target, _getFullPath(), homedir(), process.env.SHELL);
+    const pathNote = hint
+      ? `\n\n${dirname(target)} is not on your PATH. Add this line to ${hint.file}, then open a new terminal:\n${hint.line}`
+      : "";
     void dialog.showMessageBox({
       type: "info",
       message: "exegol CLI installed",
-      detail: `Symlinked at ${target}. Run \`exegol .\` in any project to open it here.`,
+      detail: `Installed at ${target}. Run \`exegol .\` in any project to open it here.${pathNote}`,
     });
   } catch (err) {
     dialog.showErrorBox(

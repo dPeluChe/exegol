@@ -6,10 +6,10 @@ import {
   LIVE_STATUSES,
 } from "@exegol/shared";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { queryClient } from "../lib/query-client";
 import { suspendAgent } from "../lib/session-quiet";
-import { runCommandInNewTab } from "../lib/spawn-shell";
+import { runCommandBeside, runCommandInNewTab } from "../lib/spawn-shell";
 import { trpcInvoke } from "../lib/trpc-client";
 import {
   type AgentState,
@@ -18,13 +18,13 @@ import {
   showProject,
   useAgentStore,
 } from "../stores/agents";
-import { useCliRestartStore } from "../stores/cli-restarts";
+import { updateGaveUp, useCliRestartStore } from "../stores/cli-restarts";
 import { useCliSelfUpdateStore } from "../stores/cli-self-updates";
 import { toastError, useToastStore } from "../stores/toasts";
 import { useLatest } from "./use-latest";
 import { useMountEffect } from "./use-mount-effect";
 import { useEnabledProviders } from "./use-providers";
-import { useResumeAgent } from "./use-resume-agent";
+import { markResuming, useResumeAgent } from "./use-resume-agent";
 
 const CHECK_MS = 10 * 60 * 1000;
 /** While an update runs in a tab: how soon its new version is noticed (a --version per CLI,
@@ -74,13 +74,34 @@ export function restartNeeded(
   );
 }
 
-/** Run the update commands in one visible tab and restart these sessions once the new version is
- *  installed and each is free. `;` so one failed update does not skip the others */
-export function updateAndRestart(projectId: string, commands: string[], agentIds: string[]) {
+/** Run the update commands in one visible shell and restart these sessions once the new version
+ *  is installed and each is free. `;` so one failed update does not skip the others. From a
+ *  session's toolbar (`sourceId`) the shell is beside it, or its own shell when its CLI was typed
+ *  there and exited; else a new tab */
+export async function updateAndRestart(
+  projectId: string,
+  commands: string[],
+  agentIds: string[],
+  sourceId?: string,
+): Promise<void> {
+  const agents = useAgentStore.getState().agents;
+  // A CLI typed in a shell restarts by Continue there: Suspend + Resume would replace the shell
+  const restartIds = agentIds.filter((id) => !agents[id]?.launchedInShell);
   const restarts = useCliRestartStore.getState();
-  for (const id of agentIds) restarts.request(id, "update");
+  for (const id of restartIds) restarts.request(id, "update");
+  restarts.watchUpdate(restartIds, null);
   showProject(projectId);
-  return runCommandInNewTab(projectId, [...new Set(commands)].join(" ; "));
+  const cmd = [...new Set(commands)].join(" ; ");
+  const source = sourceId ? agents[sourceId] : undefined;
+  if (source?.launchedInShell && source.status === "idle") {
+    window.api.terminal.write(source.id, `${cmd}\n`);
+    return;
+  }
+  const at = source?.projectId === projectId ? findAgentPane(source.id, projectId) : null;
+  const shellId = at
+    ? await runCommandBeside(projectId, at.tabId, at.paneId, cmd)
+    : await runCommandInNewTab(projectId, cmd);
+  restarts.watchUpdate(restartIds, shellId);
 }
 
 /** Free to restart: not in the middle of a turn */
@@ -90,34 +111,64 @@ const busy = (a: AgentState) => a.status === "running" || a.status === "spawning
  *  conversation in its pane (the Suspend + Resume path). Mounted once, in App */
 export function useCliRestarts(): void {
   const pending = useCliRestartStore((s) => s.pending);
+  const updates = useCliRestartStore((s) => s.updates);
   const agents = useAgentStore((s) => s.agents);
   const statuses = useCliUpdates();
   const { resume } = useResumeAgent();
+  // While an update is awaited, look again now and then: its give-up time passes with no event
+  const [now, setNow] = useState(Date.now);
+  const awaiting = Object.values(pending).includes("update");
+  useEffect(() => {
+    if (!awaiting) return;
+    const timer = window.setInterval(() => setNow(Date.now()), AWAIT_MS);
+    return () => window.clearInterval(timer);
+  }, [awaiting]);
 
   useEffect(() => {
+    const restarts = useCliRestartStore.getState();
     for (const id of Object.keys(pending)) {
       const agent = agents[id];
       if (!agent) {
-        useCliRestartStore.getState().cancel(id);
+        restarts.cancel(id);
         continue;
       }
       const when = pending[id];
-      if (when === "update" && !restartNeeded(agent, statuses.get(agent.cliType))) continue;
+      if (when === "update" && !restartNeeded(agent, statuses.get(agent.cliType))) {
+        const run = updates[id];
+        const shell = run?.shellId ? agents[run.shellId] : undefined;
+        const shellLive = !!shell && LIVE_STATUSES.has(shell.status);
+        if (run?.shellId && run.shellEndedAt === undefined && !shellLive) {
+          restarts.shellEnded(id, Date.now());
+          void queryClient.invalidateQueries({ queryKey: ["cliUpdates"] });
+        } else if (updateGaveUp(run, now)) {
+          restarts.cancel(id);
+          useToastStore.getState().addToast({
+            type: "info",
+            title: `${agent.cliType} update finished without a newer version: restart cancelled`,
+            agentId: agent.id,
+          });
+        }
+        continue;
+      }
       if (busy(agent) && when !== "now") continue;
-      useCliRestartStore.getState().cancel(id);
+      restarts.cancel(id);
       const pane = findAgentPane(agent.id, agent.projectId)?.paneId;
       // Said out loud: it happens away from the click (after the turn), or nothing seemed to
       useToastStore.getState().addToast({
         type: "info",
-        title: `Restarting ${agent.alias ?? agent.cliType} on the new version`,
+        title: `Restarting ${agent.alias ?? agent.cliType}`,
         agentId: agent.id,
       });
+      // Held from the suspend on: the ended pane must not offer to replace it meanwhile
+      markResuming([agent.id], true);
       void (async () => {
         if (LIVE_STATUSES.has(agent.status)) await suspendAgent(agent.id);
         await resume(agent, pane);
-      })().catch(toastError(`${agent.alias ?? agent.cliType} did not restart`));
+      })()
+        .catch(toastError(`${agent.alias ?? agent.cliType} did not restart`))
+        .finally(() => markResuming([agent.id], false));
     }
-  }, [pending, agents, statuses, resume]);
+  }, [pending, updates, agents, statuses, resume, now]);
 }
 
 /** Every copy of each installed CLI on PATH (first = the one that runs): Settings > CLIs and the

@@ -25,6 +25,7 @@ function otherSessions(agent: AgentState, status: CliUpdateStatus, update: boole
     (a) =>
       a.id !== agent.id &&
       a.cliType === agent.cliType &&
+      !a.launchedInShell &&
       LIVE_STATUSES.has(a.status) &&
       (update || restartNeeded(a, status)),
   );
@@ -45,7 +46,7 @@ interface ScopeChoice {
 }
 
 /** Restart onto a CLI version installed since the session started (after this turn if it is
- *  working), or Update when a newer release is out: the command runs in a new tab you can see.
+ *  working), or Update when a newer release is out: the command runs in a terminal beside it.
  *  With other sessions of the same CLI concerned, it asks: only this one, or all (listed) */
 export function CliUpdateControl({ agentId }: { agentId: string }) {
   const agent = useAgentStore((s) => s.agents[agentId]);
@@ -93,7 +94,9 @@ export function CliUpdateControl({ agentId }: { agentId: string }) {
     );
   }
 
-  if (status && restartNeeded(agent, status)) {
+  // A CLI typed in a shell restarts by Continue there: Suspend + Resume would replace the shell
+  const restartable = !agent.launchedInShell;
+  if (status && restartable && restartNeeded(agent, status)) {
     return (
       <>
         <button
@@ -128,11 +131,12 @@ export function CliUpdateControl({ agentId }: { agentId: string }) {
                 agent.projectId,
                 [cmd],
                 all ? liveSessionsOf(agent.cliType) : [agentId],
+                agentId,
               ).catch((err) => console.error("[CliUpdate] Update failed to start:", err)),
             )
           }
           className={`${chip} text-text-muted hover:text-text-primary`}
-          title={`${status.latest} is out (installed: ${status.installed}). Runs \`${cmd}\` in a new tab, then restarts the sessions you choose on it as each one is free (the conversation, model, YOLO and mode carry over)${status.updateNote ? `. ${status.updateNote}` : ""}`}
+          title={`${status.latest} is out (installed: ${status.installed}). Runs \`${cmd}\` ${restartable ? "in a terminal beside this session, then restarts the sessions you choose on it as each one is free (the conversation, model, YOLO and mode carry over)" : "in this terminal once its CLI is closed (else beside it); Continue then starts the new version"}${status.updateNote ? `. ${status.updateNote}` : ""}`}
         >
           <ArrowUpCircle className="h-2.5 w-2.5" />
           Update {status.latest}
@@ -141,6 +145,7 @@ export function CliUpdateControl({ agentId }: { agentId: string }) {
       </>
     );
   }
+  if (!restartable) return null;
   // Always there: restart by hand (a CLI that asks to be reopened, a stuck session)
   return (
     <button

@@ -125,7 +125,7 @@ export function linkAction(kind: "url" | "file", click: LinkClick, path = ""): L
 const ACTION_LABEL: Record<LinkAction, (mac: boolean) => string> = {
   pane: () => "open in the preview pane",
   browser: () => "open in the system browser",
-  peek: () => "open here",
+  peek: () => "open in a floating viewer",
   system: () => "open with the default app",
   ide: () => "open in the IDE",
   reveal: (mac) => (mac ? "reveal in Finder" : "show in the file manager"),
@@ -142,4 +142,31 @@ export function linkHint(
   const hint = `${label}\nClick: ${say("plain")} · ${editKeys("Cmd+click", mac)}: ${say("mod")}`;
   if (kind === "url") return hint;
   return `${hint} · ${editKeys("Cmd+Shift+click", mac)}: ${say("modShift")}`;
+}
+
+/** The 1-based buffer cell under a pointer, from the screen element's box */
+export function cellAt(
+  box: { left: number; top: number; width: number; height: number },
+  cols: number,
+  rows: number,
+  viewportY: number,
+  point: { x: number; y: number },
+): { col: number; y: number } | null {
+  const col = Math.floor(((point.x - box.left) / box.width) * cols);
+  const row = Math.floor(((point.y - box.top) / box.height) * rows);
+  if (col < 0 || col >= cols || row < 0 || row >= rows) return null;
+  return { col, y: viewportY + row + 1 };
+}
+
+export const covers = (m: LinkMatch, col: number) => col >= m.index && col < m.index + m.length;
+
+/** Where a URL opens in a tab: its link preview pane, else a browser pane the user already has
+ *  there (not one floating in its own window); undefined = split a new preview pane */
+export function linkBrowserPane(
+  paneIds: readonly string[],
+  panes: Readonly<Record<string, { type: string; linkPreview?: boolean } | undefined>>,
+  floating: Readonly<Record<string, unknown>>,
+): string | undefined {
+  const browsers = paneIds.filter((id) => panes[id]?.type === "browser" && !floating[id]);
+  return browsers.find((id) => panes[id]?.linkPreview) ?? browsers[0];
 }

@@ -1,20 +1,29 @@
+import { gridLabel } from "@exegol/shared";
 import type { FitAddon } from "@xterm/addon-fit";
 import type { SerializeAddon } from "@xterm/addon-serialize";
 import type { Terminal } from "@xterm/xterm";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLatest } from "../../hooks/use-latest";
 import { useSettings } from "../../hooks/use-trpc";
+import { GPU_REPAINT_EVENT, type GpuRepaintDetail } from "../../lib/gpu-repaint";
 import { claimPaneFocus } from "../../lib/pane-focus";
+import { noteSwitchMount } from "../../lib/project-switch-log";
 import { useTerminalStore } from "../../stores/terminals";
 import {
   getFocusedOrFirstPaneId,
   getProjectState,
   useWorkspaceStore,
 } from "../../stores/workspace";
+import { layoutHasPane } from "../../stores/workspace/helpers";
+import { refitWhenFontLoads } from "./font-ready";
+import { mountRepaint } from "./live-seq";
+import { createSettleTracker, SETTLE_WINDOW_MS } from "./mount-settle";
 import { trackMousePress } from "./mouse-release";
 import {
+  cancelPtyResize,
   fitAndSyncSize,
   fitMirror,
+  type SnapshotApplied,
   setupTerminalSession,
   type TerminalSession,
 } from "./terminal-setup";
@@ -27,9 +36,12 @@ import {
 } from "./terminal-types";
 import { createWebglController, type WebglController } from "./terminal-webgl";
 import { HIDE_DEBOUNCE_MS, useTerminalVisibility } from "./use-terminal-visibility";
+import { trackTerminalView, webglBudget } from "./webgl-budget";
 
-/** Sessions already kicked by this renderer (see kickAltScreen) */
-const kickedSessions = new Set<string>();
+/** Sessions this renderer has mounted an owner view of: the first mount kicks an alt screen */
+const mountedSessions = new Set<string>();
+/** The grid each session's pane last fitted at, for the next mount to start from */
+const lastGrids = new Map<string, { cols: number; rows: number }>();
 
 function resolveTerminalTheme(theme: string) {
   const isLight =
@@ -60,6 +72,7 @@ export function useXterm({
   onReady,
   onScrollPosition,
   onSelectionChange,
+  onTuiCopy,
 }: UseXtermArgs) {
   const containerRef = useRef<HTMLDivElement>(null);
   const terminalRef = useRef<Terminal | null>(null);
@@ -67,8 +80,16 @@ export function useXterm({
   const serializeAddonRef = useRef<SerializeAddon | null>(null);
   const webglRef = useRef<WebglController | null>(null);
   const refitRef = useRef<() => void>(() => {});
+  // A hide dropped a size this view was settling: refit once it is back on screen
+  const resizeDroppedRef = useRef(false);
+  // WebGL cells are whole device pixels (8.0 vs the DOM's 8.43 px): a fit before the addon attaches
+  // lands ~5% fewer columns and refits a frame later (`settled 130x57 -> 137x57`)
+  const webglPendingRef = useRef(false);
   // The live session in state, so the visibility effects re-run on every rebuild
   const [session, setSession] = useState<TerminalSession | null>(null);
+  // Inactive tabs and the Agents area under the Dashboard are `invisible`, which xterm and an
+  // IntersectionObserver still count as on screen: the container then takes display: none
+  const [shown, setShown] = useState(true);
 
   const setTerminalReady = useTerminalStore((s) => s.setTerminalReady);
   const setTerminalSize = useTerminalStore((s) => s.setTerminalSize);
@@ -84,16 +105,22 @@ export function useXterm({
   const cardOwns = mirror && cardFont !== undefined;
 
   // One sizing path: a plain mirror follows the PTY's grid and rescales its
-  // font; a pane (or a card that sizes its session) fits and tells the PTY
+  // font; a pane (or a card that sizes its session) fits and tells the PTY.
+  // False while the box is unmeasured (hidden): nothing was fitted
   const sizeTerminal = useCallback(
-    (terminal: Terminal, fit: FitAddon) => {
+    (terminal: Terminal, fit: FitAddon): boolean => {
       if (mirror && !cardOwns) {
         fitMirror(terminal, fontSize);
-        return;
+        return true;
       }
       // A mirror never writes the pane's size into the store
-      const onSize = mirror ? () => {} : (c: number, r: number) => setTerminalSize(agentId, c, r);
-      fitAndSyncSize(terminal, fit, agentId, readOnly, onSize);
+      const onSize = mirror
+        ? () => {}
+        : (cols: number, rows: number) => {
+            setTerminalSize(agentId, cols, rows);
+            if (!readOnly) lastGrids.set(agentId, { cols, rows });
+          };
+      return fitAndSyncSize(terminal, fit, agentId, readOnly, onSize);
     },
     [agentId, setTerminalSize, readOnly, mirror, fontSize, cardOwns],
   );
@@ -113,24 +140,60 @@ export function useXterm({
     sizeTerminal,
     onScrollPosition,
     onSelectionChange,
+    onTuiCopy,
   });
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    // T155.4 SIGWINCH kick: alt-screen TUIs (opencode/devin/vim) reattach to a black pane after
-    // a reload; only the app can repaint an alt screen. Once per session per renderer, and main
-    // does the jiggle without telling mirrors
-    const kickAltScreen = () => {
+    // Repaint decided once the snapshot is parsed AND the box measured (mountRepaint)
+    let applied: SnapshotApplied | null = null;
+    let fitted = false;
+    let settled = false;
+    let settle: ReturnType<typeof createSettleTracker> | null = null;
+    let reportTimer: ReturnType<typeof setTimeout> | undefined;
+    const reportSettle = () => {
+      clearTimeout(reportTimer);
+      const report = settle?.report();
+      settle = null;
+      if (report) window.api.terminal.mountLog(agentId, report);
+    };
+    const settleMount = () => {
       const t = terminalRef.current;
-      if (!t || readOnly || mirror || kickedSessions.has(agentId)) return;
-      if (t.buffer.active.type !== "alternate") return;
-      kickedSessions.add(agentId);
-      window.api.terminal.redraw(agentId);
+      if (settled || !applied || !fitted || !t) return;
+      settled = true;
+      const owner = !readOnly && !mirror;
+      const repaint = mountRepaint({
+        owner,
+        alternate: t.buffer.active.type === "alternate",
+        firstMount: !mountedSessions.has(agentId),
+        snapshotBytes: applied.bytes,
+        snap: applied.grid,
+        fit: { cols: t.cols, rows: t.rows },
+      });
+      if (owner) mountedSessions.add(agentId);
+      if (repaint === "kick") window.api.terminal.redraw(agentId);
+      window.api.terminal.mountLog(agentId, {
+        kind: "mount",
+        snapshotBytes: applied.bytes,
+        snapshotMs: applied.fetchMs,
+        paintMs: applied.paintMs,
+        snapGrid: applied.grid ? gridLabel(applied.grid.cols, applied.grid.rows) : null,
+        fitGrid: gridLabel(t.cols, t.rows),
+        replayed: applied.replayed,
+        dropped: applied.dropped,
+        kick: repaint === "kick",
+      });
+      settle = createSettleTracker(gridLabel(t.cols, t.rows), () => performance.now());
+      reportTimer = setTimeout(reportSettle, SETTLE_WINDOW_MS);
     };
 
     // A pane mounted at startup waits for its reattach; nothing gave it the keyboard meanwhile
+    // Counted for the project switch log ([ProjectSwitch]), hidden tabs included
+    const switchLanded =
+      mirror || !paneId || (readOnly && !liveFeed) ? null : noteSwitchMount(inActiveTab(paneId));
+
     const takeKeyboard = () => {
       if (readOnly || mirror || !paneId) return;
       // Opened for the user: the menu or button that started it may hold the focus by now
@@ -154,13 +217,19 @@ export function useXterm({
       liveFeed,
       mirror,
       mirrorOwnsSize: () => latest.current.cardOwns,
-      onSnapshotApplied: () => {
-        if (latest.current.cardOwns) requestAnimationFrame(() => refitRef.current());
-        // The alt-screen kick needs the snapshot in the buffer; at startup it waits for the
-        // reattach, so a fixed timer ran before it and never kicked
-        kickAltScreen();
+      onSnapshotApplied: (info) => {
+        applied = info;
+        const t = terminalRef.current;
+        switchLanded?.({
+          bytes: info.bytes,
+          reflow: !!info.grid && !!t && (info.grid.cols !== t.cols || info.grid.rows !== t.rows),
+        });
+        if (!mirror || latest.current.cardOwns) refitRef.current();
+        settleMount();
         takeKeyboard();
       },
+      refit: () => refitRef.current(),
+      initialGrid: readOnly || mirror ? undefined : lastGrids.get(agentId),
       initialContent,
       fontSize,
       fontFamily,
@@ -171,6 +240,7 @@ export function useXterm({
       onSelectionChange: live.onSelectionChange
         ? (...args) => latest.current.onSelectionChange?.(...args)
         : undefined,
+      onTuiCopy: live.onTuiCopy ? (text) => latest.current.onTuiCopy?.(text) : undefined,
       setPaneCwd,
       setPaneLastExit,
     });
@@ -183,7 +253,14 @@ export function useXterm({
     if (live.cardOwns && live.cardFont) {
       next.terminal.options.fontSize = live.cardFont;
     }
-    const refit = () => latest.current.sizeTerminal(next.terminal, next.fitAddon);
+    webglPendingRef.current = wantsWebgl(mirror, live.cliType);
+    const refit = () => {
+      if (webglPendingRef.current) return;
+      if (!latest.current.sizeTerminal(next.terminal, next.fitAddon)) return;
+      settle?.fit(gridLabel(next.terminal.cols, next.terminal.rows));
+      fitted = true;
+      settleMount();
+    };
     refitRef.current = refit;
 
     // Double-RAF: first frame settles layout, second fits terminal accurately
@@ -192,19 +269,25 @@ export function useXterm({
     });
 
     const settleTimer = setTimeout(refit, 150);
-
-    const kickTimer = setTimeout(kickAltScreen, 350);
+    const cancelFontRefit = refitWhenFontLoads(next.terminal, refit);
 
     if (!mirror) setTerminalReady(agentId);
     onReady?.();
 
     const resizeObserver = observeContainerSize(container, mirror, refit);
+    const untrackView = trackTerminalView();
+    setShown(isShown(container));
     const mousePress = trackMousePress(container);
 
     return () => {
       clearTimeout(settleTimer);
-      clearTimeout(kickTimer);
+      cancelFontRefit();
       resizeObserver.disconnect();
+      cancelPtyResize(agentId, next.terminal);
+      reportSettle();
+      switchLanded?.(null);
+      if (settled) window.api.terminal.mountLog(agentId, { kind: "unmount" });
+      untrackView();
       // WebGL context must be freed before the terminal itself is torn down.
       webglRef.current?.dispose();
       webglRef.current = null;
@@ -257,6 +340,22 @@ export function useXterm({
 
   const isVisible = useTerminalVisibility(containerRef, agentId);
 
+  // Shown again after display: none: the ResizeObserver can fire before the cells are measured
+  const wasShownRef = useRef(shown);
+  useEffect(() => {
+    const back = shown && !wasShownRef.current;
+    wasShownRef.current = shown;
+    if (!back) return;
+    let inner = 0;
+    const outer = requestAnimationFrame(() => {
+      inner = requestAnimationFrame(() => refitRef.current());
+    });
+    return () => {
+      cancelAnimationFrame(outer);
+      cancelAnimationFrame(inner);
+    };
+  }, [shown]);
+
   // T115: hidden writes buffer into the dormant ring and replay on un-hide
   useEffect(() => {
     session?.dormantPipe.setVisible(isVisible);
@@ -268,24 +367,36 @@ export function useXterm({
     if (!terminal || terminal !== terminalRef.current) return;
     // Mirrors draw on canvas: several open at once would eat into Chromium's
     // ~16 WebGL contexts, and each one rebuilds its atlas on every font fit
-    const useCanvas = mirror || (cliType && CANVAS_ONLY_CLI_TYPES.has(cliType));
-    if (isVisible && !webglRef.current && !useCanvas) {
+    const useCanvas = !wantsWebgl(mirror, cliType);
+    const onScreen = isVisible && shown;
+    // A size measured just before hiding is not the one it comes back to
+    if (!onScreen && cancelPtyResize(agentId, terminal)) resizeDroppedRef.current = true;
+    if (onScreen && resizeDroppedRef.current) {
+      resizeDroppedRef.current = false;
+      refitRef.current();
+    }
+    if (onScreen && !webglRef.current && !useCanvas) {
       // Same as the menu's Refresh Terminal: the resize makes a TUI redraw its screen
       const controller = createWebglController(terminal, () =>
         window.dispatchEvent(new CustomEvent("exegol:kick-terminal", { detail: { agentId } })),
       );
       controller.attach();
       webglRef.current = controller;
-    } else if (!isVisible && webglRef.current) {
+      if (webglPendingRef.current) {
+        webglPendingRef.current = false;
+        refitRef.current();
+      }
+    } else if (!onScreen && webglRef.current) {
       // Debounced like the IPC hide: scrolling past must not tear down and
       // rebuild a GL context and its glyph atlas every time
       const timer = setTimeout(() => {
         webglRef.current?.dispose();
         webglRef.current = null;
+        webglPendingRef.current = !useCanvas && !webglBudget.isDomOnly();
       }, HIDE_DEBOUNCE_MS);
       return () => clearTimeout(timer);
     }
-  }, [session, isVisible, mirror, cliType, agentId]);
+  }, [session, isVisible, shown, mirror, cliType, agentId]);
 
   // T155 (verify session): manual "Refresh Terminal" from the pane menu —
   // refit + SIGWINCH jiggle + repaint, for TUIs stuck black after reload.
@@ -307,6 +418,29 @@ export function useXterm({
     return () => window.removeEventListener("exegol:kick-terminal", handleKick);
   }, [agentId, mirror, readOnly, handleResize]);
 
+  // GPU process crashed (lib/gpu-repaint): a context xterm "restored" while hidden can stay
+  // blank, so every view takes a new addon, refits, repaints and kicks an alt-screen TUI
+  useEffect(() => {
+    const handleGpuRepaint = (e: Event) => {
+      const terminal = terminalRef.current;
+      if (!terminal) return;
+      const detail = (e as CustomEvent<GpuRepaintDetail>).detail;
+      detail.views++;
+      try {
+        webglRef.current?.rebuild();
+        handleResize();
+        terminal.refresh(0, terminal.rows - 1);
+        if (!mirror && !readOnly && terminal.buffer.active.type === "alternate") {
+          window.api.terminal.redraw(agentId);
+        }
+      } catch {
+        /* not ready */
+      }
+    };
+    window.addEventListener(GPU_REPAINT_EVENT, handleGpuRepaint);
+    return () => window.removeEventListener(GPU_REPAINT_EVENT, handleGpuRepaint);
+  }, [agentId, mirror, readOnly, handleResize]);
+
   // Keyboard navigation (lib/pane-focus) hands this pane the cursor
   useEffect(() => {
     if (mirror || readOnly) return;
@@ -317,6 +451,16 @@ export function useXterm({
     window.addEventListener("exegol:focus-pane", handleFocus);
     return () => window.removeEventListener("exegol:focus-pane", handleFocus);
   }, [paneId, mirror, readOnly]);
+
+  useEffect(() => {
+    if (!mirror) return;
+    const handleFocus = (e: Event) => {
+      const detail = (e as CustomEvent).detail as { agentId?: string } | undefined;
+      if (detail?.agentId === agentId) terminalRef.current?.focus();
+    };
+    window.addEventListener("exegol:focus-mirror", handleFocus);
+    return () => window.removeEventListener("exegol:focus-mirror", handleFocus);
+  }, [agentId, mirror]);
 
   // Pane menu "Clear Terminal": drop what this view holds (screen + scrollback) and the session's
   // history in main and the sidecar (main then sends Ctrl+L)
@@ -338,6 +482,8 @@ export function useXterm({
     // session (the dashboard hides; the workspace dispatches a refit)
     const handleRefit = () => {
       const terminal = terminalRef.current;
+      const container = containerRef.current;
+      if (container) setShown(isShown(container));
       if (!terminal) return;
       try {
         handleResize();
@@ -354,7 +500,25 @@ export function useXterm({
     };
   }, [handleResize]);
 
-  return { containerRef, terminalRef, fitAddonRef, serializeAddonRef };
+  return { containerRef, terminalRef, fitAddonRef, serializeAddonRef, shown };
+}
+
+function inActiveTab(paneId: string): boolean {
+  const { tabs, activeTabId } = getProjectState();
+  const tab = tabs.find((t) => t.id === activeTabId);
+  return !!tab && layoutHasPane(tab.layout, paneId);
+}
+
+/** Mirrors and canvas-only CLIs never take WebGL, nor anything once the GPU fell back for good */
+function wantsWebgl(mirror: boolean, cliType: string | undefined): boolean {
+  return !mirror && !(cliType && CANVAS_ONLY_CLI_TYPES.has(cliType)) && !webglBudget.isDomOnly();
+}
+
+/** On the container's parent: the container itself is display: none while hidden, and a hidden
+ *  tab or the Agents area under the Dashboard is `visibility: hidden` */
+function isShown(container: HTMLElement): boolean {
+  const el = container.parentElement ?? container;
+  return el.checkVisibility?.({ visibilityProperty: true }) ?? true;
 }
 
 /** Refits on every box change; `disconnect` also cancels a pending mirror refit */

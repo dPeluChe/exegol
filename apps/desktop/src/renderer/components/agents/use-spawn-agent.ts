@@ -37,9 +37,20 @@ function spawnInput(projectId: string, c: SpawnForm) {
     baseBranch: c.useWorktree && c.baseBranch ? c.baseBranch : undefined,
     model: MODEL_LAUNCH[c.providerId] && c.model.trim() ? c.model.trim() : undefined,
     modelRoles: Object.keys(c.modelRoles).length > 0 ? c.modelRoles : undefined,
-    name: c.name.trim() || undefined,
+    // A resumed session keeps the name it has (the form shows it instead of the field)
+    name: (!c.session && !c.localSessionId && c.name.trim()) || undefined,
+    cwdOverride: startFolder(c),
     ...resumeInput(c),
   };
+}
+
+/** The launcher's folder; a past session resumes where it ran (main reads its folder) */
+export function startFolder(
+  c: Pick<SpawnForm, "folder" | "useWorktree" | "session" | "localSessionId">,
+): string | undefined {
+  if (!c.folder || c.useWorktree) return undefined;
+  const pastSession = c.session && c.session !== "last" && !c.localSessionId;
+  return pastSession ? undefined : c.folder;
 }
 
 /** The Exegol session a resume continues: a past session picked by id, or Claude's own session
@@ -75,10 +86,12 @@ export function useSpawnAgent({
   projectId,
   targetPaneId,
   onClose,
+  onSpawned,
 }: {
   projectId: string;
   targetPaneId?: string;
   onClose: () => void;
+  onSpawned?: (agentId: string) => void;
 }) {
   const [spawning, setSpawning] = useState(false);
   const addAgent = useAgentStore((s) => s.addAgent);
@@ -105,6 +118,7 @@ export function useSpawnAgent({
         switchSection("agents");
         const paneId = placeInWorkspace(agent.id, targetPaneId);
         if (paneId) focusNewPane(paneId);
+        onSpawned?.(agent.id);
         onClose();
       } catch (err) {
         console.error("[SpawnAgentModal] Spawn failed:", err);
@@ -112,7 +126,7 @@ export function useSpawnAgent({
         setSpawning(false);
       }
     },
-    [projectId, addAgent, createTerminal, setFocusedAgent, onClose, targetPaneId],
+    [projectId, addAgent, createTerminal, setFocusedAgent, onClose, onSpawned, targetPaneId],
   );
 
   return { spawning, spawn };

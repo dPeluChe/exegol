@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { existsSync, realpathSync } from "node:fs";
-import { isAbsolute, join } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 import { promisify } from "node:util";
 
 // No electron or logger imports: scripts/clean-build.ts uses this too.
@@ -32,6 +32,21 @@ const IN_PROGRESS = [
   "REVERT_HEAD",
   "BISECT_LOG",
 ];
+
+/**
+ * A path's identity for comparing two spellings of one folder: its realpath, else the resolved
+ * path. On Windows git prints long names (C:/Users/runneradmin) where the caller may hold an 8.3
+ * one (RUNNER~1) or another case: the native realpath expands it, the key is lowercased
+ */
+export function pathKey(p: string, platform: NodeJS.Platform = process.platform): string {
+  const win = platform === "win32";
+  try {
+    const real = win ? realpathSync.native(p) : realpathSync(p);
+    return win ? real.toLowerCase() : real;
+  } catch {
+    return win ? resolve(p).toLowerCase() : resolve(p);
+  }
+}
 
 export type GitRunner = (args: string[], cwd: string, timeoutMs?: number) => Promise<string>;
 
@@ -83,7 +98,7 @@ export async function checkoutBlocker(
 ): Promise<"git check failed" | "submodules" | "operation in progress" | null> {
   // Without its own .git, git would answer for an enclosing repo (the main checkout)
   const top = (await git(["rev-parse", "--show-toplevel"], dir)).trim();
-  if (realpathSync(top) !== realpathSync(dir)) return "git check failed";
+  if (pathKey(top) !== pathKey(dir)) return "git check failed";
   if (existsSync(join(dir, ".gitmodules"))) return "submodules";
   const markers = (await git(["rev-parse", ...IN_PROGRESS.flatMap((m) => ["--git-path", m])], dir))
     .split("\n")
@@ -153,19 +168,11 @@ export function parseWorktreeList(text: string): RegisteredWorktree[] {
   });
 }
 
-const real = (p: string) => {
-  try {
-    return realpathSync(p);
-  } catch {
-    return p;
-  }
-};
-
 /** Locked, or unknown because git failed: either way it stays */
 export async function isLockedOrUnknown(repo: string, dir: string, git = runGit): Promise<boolean> {
   try {
     const list = parseWorktreeList(await git(["worktree", "list", "--porcelain"], repo));
-    const entry = list.find((w) => real(w.path) === real(dir));
+    const entry = list.find((w) => pathKey(w.path) === pathKey(dir));
     return !entry || entry.locked;
   } catch {
     return true;

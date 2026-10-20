@@ -1,4 +1,10 @@
-import type { ModelListItem, StorageCategory, StorageReport, StorageRoot } from "@exegol/shared";
+import type {
+  LocalBenchRun,
+  ModelListItem,
+  StorageCategory,
+  StorageReport,
+  StorageRoot,
+} from "@exegol/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
 import { toastError } from "../stores/toasts";
@@ -23,6 +29,15 @@ export function useModels() {
   return useQuery({
     queryKey: MODELS_KEY,
     queryFn: () => trpcInvoke<ModelListItem[]>("models.list"),
+  });
+}
+
+/** Newest local bench run per language (results.json, written by the dev bench with --save) */
+export function useBenchResults() {
+  return useQuery({
+    queryKey: ["models", "benchResults"],
+    queryFn: () => trpcInvoke<LocalBenchRun[]>("models.benchResults"),
+    staleTime: 60_000,
   });
 }
 
@@ -70,6 +85,7 @@ type StorageAction =
   | { action: "openFolder"; category: StorageCategory }
   | { action: "openOther"; root: StorageRoot; name: string }
   | { action: "clearScreenshots" }
+  | { action: "clearRecordings" }
   | { action: "clearOldLogs" }
   | { action: "clearBrowserCache"; projectId: string };
 

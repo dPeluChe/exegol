@@ -1,6 +1,7 @@
 import { DEFAULT_SPEECH_MODEL_KEY } from "@exegol/shared";
 import { z } from "zod";
 import { getJsonSetting, setJsonSetting } from "../../db/queries/settings";
+import { readLatestBenchRuns } from "../../models/bench-results";
 import { DEFAULT_MODEL_ID, findModel } from "../../models/catalog";
 import { cancelModel, deleteModel, downloadModel, listModels } from "../../models/manager";
 import { publicProcedure, router } from "../trpc";
@@ -24,6 +25,9 @@ export const modelsRouter = router({
   list: publicProcedure.query(({ ctx }) =>
     listModels(getJsonSetting(ctx.db, DEFAULT_SPEECH_MODEL_KEY, DEFAULT_MODEL_ID)),
   ),
+
+  /** The newest local bench run per language, from results.json only (no audio, no text) */
+  benchResults: publicProcedure.query(() => readLatestBenchRuns()),
 
   /** Returns at once; progress arrives on `models:progress` */
   download: publicProcedure.input(licensedModel).mutation(({ input }) => {

@@ -5,25 +5,25 @@ import {
   type DictationStatus,
   type DictationStopReason,
   dictationSettingsOf,
-  type ScreenDialog,
   type Settings,
 } from "@exegol/shared";
 import type { QueryClient } from "@tanstack/react-query";
 import { DICTATION_STATUS_KEY, fetchDictationStatus } from "../../hooks/use-trpc-dictation";
 import { findAgentPane, useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
-import { useDictationStore } from "../../stores/dictation";
+import { recordedMs, useDictationStore } from "../../stores/dictation";
 import { useToastStore } from "../../stores/toasts";
 import { getActivePaneId, useWorkspaceStore } from "../../stores/workspace";
 import { pasteToAgent, submitToAgent } from "../agent-input";
-import { isClaudeQuestion } from "../claude-question";
+import { agentAsksQuestion } from "../agent-question";
 import { focusedField } from "../focused-field";
 import { paneRoot } from "../pane-focus";
 import { trpcInvoke, trpcMutate } from "../trpc-client";
+import { autoInsertState, countdownMs, resumedVad } from "./auto-insert";
 import { type Capture, startCapture } from "./capture";
 import { insertIntoEditorIn } from "./editors";
+import { isFlat, peakOf, resolveInput } from "./inputs";
 import {
-  answersPrompt,
   confirmTarget,
   type DictationTarget,
   type FocusSnapshot,
@@ -32,7 +32,7 @@ import {
   sanitizeDictation,
   takesDictation,
 } from "./target";
-import { rms, shouldAutoStop, updateVad, VAD_START, type VadState } from "./vad";
+import { rms, updateVad, VAD_START, type VadState } from "./vad";
 
 /** A press held at least this long is hold-to-talk (release stops); shorter toggles */
 const HOLD_MS = 350;
@@ -47,9 +47,15 @@ interface Run {
   /** Chunks captured before the session id came back */
   early: Float32Array[];
   vad: VadState;
+  /** Loudest sample sent: a dictation that stays flat heard nothing from the mic */
+  peak: number;
   cancelled: boolean;
+  /** Paused: chunks are dropped here, before IPC, and the VAD does not count them */
+  paused: boolean;
   /** Stopped while the mic was opening: stops once it listens, for this reason */
   stopWhenReady: DictationStopReason | null;
+  /** A click on the countdown: this dictation no longer inserts on its own */
+  autoInsertOff: boolean;
 }
 
 let run: Run | null = null;
@@ -62,7 +68,9 @@ export function bindDictationQueries(client: QueryClient | null): void {
   queryClient = client;
 }
 
-export const currentAnalyser = (): AnalyserNode | null => run?.capture?.analyser ?? null;
+/** Null while paused: the waveform goes flat */
+export const currentAnalyser = (): AnalyserNode | null =>
+  run?.paused ? null : (run?.capture?.analyser ?? null);
 
 const store = () => useDictationStore.getState();
 const toast = useToastStore.getState;
@@ -122,6 +130,10 @@ function reset(): void {
     error: null,
     anchorPaneId: null,
     downloadRequested: false,
+    pausedAt: null,
+    inputName: null,
+    inputNotice: null,
+    autoInsertCountdown: null,
   });
 }
 
@@ -132,11 +144,83 @@ function fail(message: string): void {
 
 function onChunk(samples: Float32Array): void {
   const r = run;
-  if (!r || r.cancelled) return;
+  if (!r || r.cancelled || r.paused) return;
   r.vad = updateVad(r.vad, rms(samples), (samples.length / DICTATION_SAMPLE_RATE) * 1000);
+  r.peak = peakOf(samples, r.peak);
   if (r.sessionId) window.api.dictation.sendAudio(r.sessionId, samples);
   else r.early.push(samples);
-  if (shouldAutoStop(r.vad, r.settings.autoStopSilenceSec)) void stopDictation("silence");
+  const auto = autoInsertState(r.vad, {
+    enabled: r.settings.autoInsert,
+    delaySec: r.settings.autoInsertSilenceSec,
+    paused: r.paused,
+    dismissed: r.autoInsertOff,
+  });
+  if (auto.kind === "fire") {
+    void stopDictation("silence");
+    return;
+  }
+  const ms = countdownMs(auto);
+  const shown = store().autoInsertCountdown;
+  if (ms === null) {
+    if (shown) store().set({ autoInsertCountdown: null });
+  } else if (!shown) {
+    store().set({ autoInsertCountdown: { endsAt: Date.now() + ms, ms } });
+  }
+}
+
+/** A click on the countdown: this dictation goes on until the user inserts or cancels */
+export function cancelAutoInsert(): void {
+  if (run) run.autoInsertOff = true;
+  store().set({ autoInsertCountdown: null });
+}
+
+/** The saved mic, found again when the OS gave it a new id: the setting follows the new id */
+async function pickInput(settings: DictationSettings): Promise<string | null> {
+  if (!settings.inputDeviceId) return null;
+  const devices = await navigator.mediaDevices.enumerateDevices().catch(() => []);
+  const { id, relinked } = resolveInput(devices, {
+    id: settings.inputDeviceId,
+    label: settings.inputDeviceLabel,
+    groupId: settings.inputDeviceGroupId,
+  });
+  if (relinked && id) {
+    const groupId = devices.find((d) => d.deviceId === id)?.groupId || null;
+    const dictation = { ...settings, inputDeviceId: id, inputDeviceGroupId: groupId };
+    trpcMutate("settings.update", { dictation })
+      .then(() => queryClient?.invalidateQueries({ queryKey: ["settings"] }))
+      .catch(() => {});
+  }
+  return id;
+}
+
+/** The open mic was unplugged mid-dictation: the system default takes over in the same session
+ *  (pause, text so far and target kept). Main must arm getUserMedia again for the reopen */
+async function inputLost(r: Run): Promise<void> {
+  const capture = r.capture;
+  if (run !== r || !capture || r.cancelled) return;
+  const name = store().inputName || r.settings.inputDeviceLabel || "The microphone";
+  try {
+    await trpcMutate("dictation.requestMic");
+    if (run !== r || r.capture !== capture) return;
+    const label = await capture.switchToDefault();
+    if (run !== r) return;
+    store().set({
+      inputName: label || null,
+      inputNotice: `${name} disconnected, using system default`,
+    });
+  } catch (err) {
+    if (run === r) fail(`Microphone disconnected: ${errorText(err)}`);
+  }
+}
+
+/** The mic gave no signal or the model found no words: say which input, not just nothing */
+function heardNothing(inputName: string | null): void {
+  toast().addToast({
+    type: "warning",
+    title: `Heard nothing from ${inputName || "the microphone"}`,
+    body: "Check the input in Settings > Dictation",
+    action: { label: "Open Settings", run: () => void window.api.settings.open("dictation") },
+  });
 }
 
 async function loadStatus(): Promise<DictationStatus> {
@@ -171,6 +255,10 @@ export async function startDictation(): Promise<void> {
     targetProjectId: target.projectId,
     partial: "",
     error: null,
+    pausedAt: null,
+    inputName: null,
+    inputNotice: null,
+    autoInsertCountdown: null,
   });
   const current: Run = {
     settings: dictationSettingsOf(undefined),
@@ -180,8 +268,11 @@ export async function startDictation(): Promise<void> {
     sessionId: null,
     early: [],
     vad: VAD_START,
+    peak: 0,
     cancelled: false,
+    paused: false,
     stopWhenReady: null,
+    autoInsertOff: false,
   };
   run = current;
   // Esc (or a new dictation) during an await below: this start must not touch what follows
@@ -198,7 +289,7 @@ export async function startDictation(): Promise<void> {
     if (!status.engineAvailable) return reset();
     if (!current.settings.enabled) throw new Error("Dictation is off in Settings > Dictation");
     if (!status.model.ready) return endWith({ phase: "no-model" });
-    trpcMutate("dictation.warm").catch(() => {});
+    trpcMutate("dictation.warm", { projectId: target.projectId }).catch(() => {});
     if (target.kind === "browser") {
       await window.api.dictation.markBrowser({
         paneId: target.paneId,
@@ -211,7 +302,9 @@ export async function startDictation(): Promise<void> {
     if (mic === "denied" || mic === "restricted") return endWith({ phase: "mic-denied" });
     if (gone()) return;
     try {
-      current.capture = await startCapture(onChunk);
+      const deviceId = await pickInput(current.settings);
+      if (gone()) return;
+      current.capture = await startCapture(onChunk, deviceId, () => void inputLost(current));
     } catch (err) {
       const denied = err instanceof DOMException && err.name === "NotAllowedError";
       return endWith(
@@ -224,7 +317,18 @@ export async function startDictation(): Promise<void> {
       current.capture.stop();
       return;
     }
-    const started = await trpcMutate<{ sessionId: string }>("dictation.start");
+    const { input, label } = current.capture;
+    store().set({
+      inputName: label || null,
+      inputNotice:
+        input === "fallback"
+          ? `${current.settings.inputDeviceLabel || "The selected input"} not found, using system default`
+          : null,
+    });
+    const started = await trpcMutate<{ sessionId: string }>("dictation.start", {
+      input,
+      projectId: target.projectId,
+    });
     patchStatus({ micEverGranted: true });
     if (gone()) {
       void trpcMutate("dictation.cancel", { sessionId: started.sessionId, source: "superseded" });
@@ -251,19 +355,31 @@ export async function stopDictation(by: DictationStopReason): Promise<void> {
     return;
   }
   const sessionId = r.sessionId;
-  const durationMs = Date.now() - store().startedAt;
+  const durationMs = recordedMs(store());
+  // Transcribing from here: a second Enter or chord meanwhile is swallowed, one insert only
+  store().set({ phase: "transcribing", autoInsertCountdown: null });
+  // The last words are still in the worklet or in flight: they reach main before the stop does
+  await r.capture?.drain();
+  if (run !== r) return;
   r.capture?.stop();
   r.capture = null;
   r.cancelled = true;
+  const inputName = store().inputName;
+  if (isFlat(r.peak)) {
+    void trpcMutate("dictation.cancel", { sessionId, source: "flat" });
+    reset();
+    heardNothing(inputName);
+    return;
+  }
   if (!r.vad.heard) {
     void trpcMutate("dictation.cancel", { sessionId, source: "nothing-heard" });
     reset();
     toast().addToast({ type: "info", title: "Nothing was heard", body: "Dictation stopped" });
     return;
   }
-  store().set({ phase: "transcribing" });
   const target = finalTarget(r);
   try {
+    // Main returns it cleaned (sanitized, repeats collapsed, spoken punctuation)
     const { text } = await trpcMutate<{ text: string }>("dictation.stop", {
       sessionId,
       durationMs,
@@ -274,12 +390,12 @@ export async function stopDictation(by: DictationStopReason): Promise<void> {
     // Esc while transcribing: cancelled for real, nothing is inserted
     if (run !== r) return;
     reset();
-    const clean = sanitizeDictation(text);
-    if (!clean) {
-      toast().addToast({ type: "info", title: "No words recognized" });
+    if (!text) {
+      heardNothing(inputName);
       return;
     }
-    await insertDictation(clean, target, r.settings.pressEnter, r.field);
+    // An auto insert never sends: the user did not choose the moment
+    await insertDictation(text, target, by !== "silence" && r.settings.pressEnter, r.field);
   } catch (err) {
     if (run === r) fail(errorText(err));
   }
@@ -311,20 +427,9 @@ async function copyInstead(text: string, title: string, body: string): Promise<v
 /** Why the text must not be typed into the agent: it ended, or a dictation would answer its
  *  question. Null when it can take it */
 async function terminalRefusal(agentId: string): Promise<string | null> {
-  const { agents, attentionItems } = useAgentStore.getState();
-  const agent = agents[agentId];
+  const agent = useAgentStore.getState().agents[agentId];
   if (!agent || !takesDictation(agent)) return "The agent is not running";
-  if (agent.cliType === "shell") return null;
-  const dialog = await trpcInvoke<ScreenDialog | null>("agents.screenDialog", {
-    id: agentId,
-  }).catch(() => null);
-  const asks = answersPrompt({
-    status: agent.status,
-    dialogOnScreen: !!dialog,
-    // Claude's hooks say when it asks; other CLIs' prompts show up as a screen dialog
-    awaitingAnswer: isClaudeQuestion(attentionItems[agentId], agent),
-  });
-  return asks ? "The agent is waiting on a question" : null;
+  return (await agentAsksQuestion(agentId)) ? "The agent is waiting on a question" : null;
 }
 
 export async function insertDictation(
@@ -413,6 +518,22 @@ export function chordUp(): void {
   if (!holdCandidate) return;
   holdCandidate = false;
   if (Date.now() - pressedAt >= HOLD_MS && run) void stopDictation("chord");
+}
+
+/** Pause or resume a listening dictation: same session, target and text. The mic stays open so
+ *  resuming is instant (reopening it would need main to arm getUserMedia again) */
+export function togglePauseDictation(): void {
+  const r = run;
+  const { phase, pausedAt, startedAt } = store();
+  if (!r?.sessionId || phase !== "listening") return;
+  const now = Date.now();
+  r.paused = !r.paused;
+  if (r.paused) store().set({ pausedAt: now, autoInsertCountdown: null });
+  else {
+    r.vad = resumedVad(r.vad);
+    store().set({ pausedAt: null, startedAt: startedAt + (now - (pausedAt ?? now)) });
+  }
+  void trpcMutate("dictation.pause", { sessionId: r.sessionId, paused: r.paused });
 }
 
 /** Status bar mic: a plain toggle */

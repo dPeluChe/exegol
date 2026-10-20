@@ -22,6 +22,8 @@ export function parsePsMetrics(stdout: string): Map<number, ProcessMetrics> {
 
 /** One `ps` for every pid; throws when ps fails (exit 1 when none of them runs) */
 export async function readProcessMetrics(pids: number[]): Promise<Map<number, ProcessMetrics>> {
+  // No ps on Windows: per-process CPU there needs two samples; not measured yet
+  if (process.platform === "win32") return new Map();
   const { stdout } = await execFileAsync("ps", ["-o", "pid=,pcpu=,rss=", "-p", pids.join(",")], {
     timeout: 3_000,
   });

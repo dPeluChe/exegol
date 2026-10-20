@@ -43,11 +43,22 @@ export function hydrateTrackedWorktree(
   });
 }
 
+/** Stopped to be resumed later (idle sweep): its worktree stays as it is, unsaved and in place */
+const keepOnExit = new Set<string>();
+
+export function keepWorktreeOnExit(agentId: string): void {
+  keepOnExit.add(agentId);
+}
+
 export async function cleanupWorktree(
   db: Database.Database,
   agentId: string,
   worktrees: Map<string, WorktreeRecord>,
 ): Promise<void> {
+  if (keepOnExit.delete(agentId)) {
+    worktrees.delete(agentId);
+    return;
+  }
   hydrateTrackedWorktree(db, agentId, worktrees);
   const wt = worktrees.get(agentId);
   const rust = coreRust;

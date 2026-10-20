@@ -21,6 +21,7 @@ vi.mock("../terminal/pty-host", () => ({
 
 import { createAgentLink, listLinksFrom } from "../db/queries/agent-links";
 import { getMessageDelivery, markStaleQueuedUndeliverable } from "../db/queries/messages";
+import { noteTurnStarted, SUBMIT_CONFIRM_MS, SUBMIT_RETRIES } from "./agent-message-injection";
 import {
   cancelQueuedMessage,
   checkAgentMessages,
@@ -675,5 +676,50 @@ describe("long messages are delivered as a pointer", () => {
 
     vi.advanceTimersByTime(600);
     expect(ptyMock.writes[1]?.data).toBe("\r");
+  });
+});
+
+describe("submit confirmation", () => {
+  let db: Database.Database;
+
+  beforeEach(() => {
+    db = setupDb();
+    ptyMock.writes.length = 0;
+    ptyMock.alive.clear();
+    resetQueues(db, ["s1", "s2", "s3"]);
+    vi.useFakeTimers();
+    insertAgent(db, "s1", "running");
+    insertAgent(db, "s2", "waiting_input");
+    ptyMock.alive.add("s2");
+  });
+
+  const enters = () => ptyMock.writes.filter((w) => w.data === "\r").length;
+
+  it("sends Enter again while no turn starts, at most SUBMIT_RETRIES times", () => {
+    noteTurnStarted("s2");
+    sendAgentMessage(db, { fromAgentId: "s1", toAgentId: "s2", text: "retry me" });
+    vi.advanceTimersByTime(600);
+    expect(enters()).toBe(1);
+    vi.advanceTimersByTime(SUBMIT_CONFIRM_MS);
+    expect(enters()).toBe(2);
+    vi.advanceTimersByTime(SUBMIT_CONFIRM_MS * 3);
+    expect(enters()).toBe(1 + SUBMIT_RETRIES);
+  });
+
+  it("stops once the turn starts", () => {
+    noteTurnStarted("s2");
+    sendAgentMessage(db, { fromAgentId: "s1", toAgentId: "s2", text: "turn starts" });
+    vi.advanceTimersByTime(600);
+    noteTurnStarted("s2");
+    vi.advanceTimersByTime(SUBMIT_CONFIRM_MS * 3);
+    expect(enters()).toBe(1);
+  });
+
+  it("never retries for an agent that has not reported a turn start", () => {
+    insertAgent(db, "s3", "waiting_input");
+    ptyMock.alive.add("s3");
+    sendAgentMessage(db, { fromAgentId: "s1", toAgentId: "s3", text: "no hooks" });
+    vi.advanceTimersByTime(600 + SUBMIT_CONFIRM_MS * 3);
+    expect(enters()).toBe(1);
   });
 });

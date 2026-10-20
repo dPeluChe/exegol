@@ -7,7 +7,7 @@ import { inspectCommand } from "../security/command-guard";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-interface DetectedScript {
+export interface DetectedScript {
   name: string;
   command: string;
   source: string;
@@ -352,7 +352,7 @@ async function detectProjectScripts(projectPath: string): Promise<DetectedScript
 
 // ─── Run targets (T197: per-folder launcher) ───────────────────────────────
 
-interface RunTarget {
+export interface RunTarget {
   /** Folder relative to the project ("" for the project root) */
   rel: string;
   path: string;

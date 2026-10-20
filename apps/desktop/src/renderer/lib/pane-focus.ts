@@ -82,3 +82,29 @@ export function cyclePane(direction: "next" | "prev"): void {
   );
   if (target) focusActivePane(target);
 }
+
+let lastMirror: string | null = null;
+
+/** A Watching mirror took the focus: Cmd+1 hands it back the next time */
+export function rememberMirrorFocus(agentId: string): void {
+  lastMirror = agentId;
+}
+
+/** The mirror Cmd+1 lands on: the last one used while still on screen, else the first */
+export function mirrorToFocus(last: string | null, shown: string[]): string | null {
+  return last && shown.includes(last) ? last : (shown[0] ?? null);
+}
+
+/** Cmd+1: the Dashboard takes the keyboard as a project does, on a Watching mirror */
+export function focusDashboard(): void {
+  requestAnimationFrame(() =>
+    requestAnimationFrame(() => {
+      const cards = document.querySelectorAll<HTMLElement>("[data-mirror-agent-id]");
+      const shown = [...cards].map((el) => el.dataset.mirrorAgentId ?? "");
+      const target = mirrorToFocus(lastMirror, shown);
+      (document.activeElement as HTMLElement | null)?.blur();
+      if (!target) return;
+      window.dispatchEvent(new CustomEvent("exegol:focus-mirror", { detail: { agentId: target } }));
+    }),
+  );
+}

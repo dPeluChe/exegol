@@ -159,6 +159,13 @@ export declare function listOplogSnapshots(repoPath: string, limit: number): Arr
 /** List all worktrees for a repository. */
 export declare function listWorktrees(repoPath: string): Array<WorktreeInfo>
 
+/**
+ * macOS Location Services for this app: "not-determined" | "restricted" | "denied" |
+ * "granted", or "unsupported" off macOS. `request` shows the macOS prompt while undecided.
+ * Main thread only. Chromium never asks macOS itself, so a page's geolocation would hang
+ */
+export declare function locationAuthorization(request: boolean): string
+
 /** Returns the version of the native module. */
 export declare function nativeVersion(): string
 

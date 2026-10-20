@@ -1,7 +1,7 @@
 import { ExternalLink, FolderSearch, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { type FileContent, useWriteFile } from "../../hooks/use-trpc";
-import { editKeys } from "../../lib/keymap";
+import { editKeys, fileManagerLabel } from "../../lib/keymap";
 import { trpcMutate } from "../../lib/trpc-client";
 import type { FilesView } from "../../stores/workspace";
 import { ConfirmDialog } from "../common/ConfirmDialog";
@@ -102,11 +102,13 @@ export function FilePreview({
   onReveal = () => reveal(path),
   view,
   onViewChange,
+  toolbar = true,
 }: {
   path: string;
   file: FileContent | undefined;
   error: unknown;
-  onClose: () => void;
+  /** Absent when the host owns closing and Esc (the floating file window) */
+  onClose?: () => void;
   /** A text search hit: scroll to this line */
   revealLine?: number;
   /** The explorer asks before switching files or closing with unsaved edits */
@@ -119,6 +121,8 @@ export function FilePreview({
   /** A files pane: its saved Code/Preview mode and editor spot */
   view?: FilesView;
   onViewChange?: (patch: Partial<FilesView>) => void;
+  /** False when the host draws its own header (the floating file window) */
+  toolbar?: boolean;
 }) {
   const pdfUrl = usePdfUrl(file);
   const { draft, dirty, edit, save, saveError, saving, conflict, setConflict } = useFileDraft(
@@ -132,20 +136,22 @@ export function FilePreview({
     <div
       className="flex min-w-0 flex-1 flex-col"
       onKeyDown={(e) => {
-        if (e.key === "Escape") onClose();
+        if (e.key === "Escape") onClose?.();
       }}
     >
-      <FilePreviewToolbar
-        path={path}
-        dirty={dirty}
-        saving={saving}
-        saveError={saveError}
-        onClose={onClose}
-        // A non-UTF-8 file would be rewritten as UTF-8, even from a draft made before it changed
-        onSave={() => (file?.notUtf8 ? undefined : save())}
-        onOpenExternal={onOpenExternal}
-        onReveal={onReveal}
-      />
+      {toolbar && (
+        <FilePreviewToolbar
+          path={path}
+          dirty={dirty}
+          saving={saving}
+          saveError={saveError}
+          onClose={onClose}
+          // A non-UTF-8 file would be rewritten as UTF-8, even from a draft made before it changed
+          onSave={() => (file?.notUtf8 ? undefined : save())}
+          onOpenExternal={onOpenExternal}
+          onReveal={onReveal}
+        />
+      )}
       <div className="min-h-0 flex-1 overflow-auto">
         <FileBody
           path={path}
@@ -174,7 +180,7 @@ export function FilePreview({
   );
 }
 
-const action =
+export const action =
   "flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-[10px] text-text-muted hover:bg-white/10 hover:text-text-primary";
 
 function FilePreviewToolbar({
@@ -191,7 +197,7 @@ function FilePreviewToolbar({
   dirty: boolean;
   saving: boolean;
   saveError: string | null;
-  onClose: () => void;
+  onClose?: () => void;
   onSave: () => void;
   onOpenExternal: () => void;
   onReveal: () => void;
@@ -231,9 +237,14 @@ function FilePreviewToolbar({
         <ExternalLink className="h-3 w-3" />
         Open
       </button>
-      <button type="button" onClick={onReveal} className={action} title="Reveal in Finder">
+      <button
+        type="button"
+        onClick={onReveal}
+        className={action}
+        title={`Reveal in ${fileManagerLabel()}`}
+      >
         <FolderSearch className="h-3 w-3" />
-        Finder
+        {fileManagerLabel()}
       </button>
     </div>
   );

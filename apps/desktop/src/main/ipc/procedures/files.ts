@@ -22,6 +22,7 @@ import {
   resolvePreviewFile,
 } from "../../files-preview/preview-paths";
 import { mimeFor } from "../../lib/mime";
+import { isRunnableFile } from "../../lib/runnable-ext";
 import { isProtectedRoot, realpathSafe } from "../../security/path-guard";
 import { publicProcedure, router } from "../trpc";
 import { allowedBases, assertPathInsideProject } from "./project-paths";
@@ -74,27 +75,6 @@ const VIEWED_AS_MEDIA = new Set([
   ".bmp",
   ".ico",
   ".pdf",
-]);
-/** Opening these runs them; the viewer reveals them in Finder instead */
-const RUNNABLE_EXT = new Set([
-  ".app",
-  ".command",
-  ".sh",
-  ".bash",
-  ".zsh",
-  ".tool",
-  ".terminal",
-  ".workflow",
-  ".action",
-  ".scpt",
-  ".applescript",
-  ".pkg",
-  ".mpkg",
-  ".dmg",
-  ".jar",
-  ".py",
-  ".rb",
-  ".pl",
 ]);
 // Base64 over IPC costs ~3x the file in memory: previews stay modest
 const MAX_PREVIEW_BYTES = 15 * 1024 * 1024;
@@ -173,13 +153,10 @@ export async function readForViewer(
 
 /** Open with the app macOS uses for it (Preview for a PDF, etc.). A cloned repo carries no
  *  quarantine flag, so "open" on a script or an app would RUN it: those, and anything
- *  executable, are shown in Finder instead. `recheck` runs right before acting */
+ *  executable, are shown in the file manager instead. `recheck` runs right before acting */
 export async function openWithSystemApp(path: string, recheck: () => void = () => {}) {
   const info = await stat(path);
-  const runnable =
-    info.isDirectory() ||
-    (info.mode & 0o111) !== 0 ||
-    RUNNABLE_EXT.has(extname(path).toLowerCase());
+  const runnable = info.isDirectory() || (info.mode & 0o111) !== 0 || isRunnableFile(path);
   recheck();
   if (runnable) {
     shell.showItemInFolder(path);

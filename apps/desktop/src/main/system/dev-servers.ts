@@ -1,8 +1,9 @@
 import { execFile } from "node:child_process";
 import { userInfo } from "node:os";
 import { promisify } from "node:util";
-import { type DevServer, LIVE_STATUSES } from "@exegol/shared";
+import type { DevServer } from "@exegol/shared";
 import type Database from "libsql";
+import { listLiveAgentPids } from "../db/queries/agents";
 import { logger } from "../lib/logger";
 import { isProcessAlive } from "../terminal/pty-sidecar-discovery";
 import { getProcessCwds, isInside, listTcpListeners } from "./ports";
@@ -67,22 +68,6 @@ async function readProcTable(): Promise<ProcTable> {
   return table;
 }
 
-function liveAgents(db: Database.Database) {
-  const statuses = [...LIVE_STATUSES];
-  return db
-    .prepare(
-      `SELECT id, project_id, cli_type, alias, pid FROM agents
-       WHERE pid IS NOT NULL AND status IN (${statuses.map(() => "?").join(",")})`,
-    )
-    .all(...statuses) as {
-    id: string;
-    project_id: string;
-    cli_type: string;
-    alias: string | null;
-    pid: number;
-  }[];
-}
-
 /**
  * Every TCP port the user's own processes listen on, with where each one came
  * from: the project folder it runs in and the Exegol terminal that started it.
@@ -90,7 +75,7 @@ function liveAgents(db: Database.Database) {
  * with no terminal, which is what "hung" looks like.
  */
 export async function listDevServers(db: Database.Database): Promise<DevServer[]> {
-  const listeners = await listTcpListeners(String(userInfo().uid));
+  const listeners = await listTcpListeners(String(userInfo().uid)).catch(() => []);
   if (listeners.length === 0) return [];
 
   const portsOf = new Map<number, Set<number>>();
@@ -124,7 +109,7 @@ export async function listDevServers(db: Database.Database): Promise<DevServer[]
     name: string;
     path: string;
   }[];
-  const agents = liveAgents(db);
+  const agents = listLiveAgentPids(db);
   const agentByPid = new Map(agents.map((a) => [a.pid, a]));
   const cwds = await getProcessCwds(pids);
 
@@ -190,7 +175,7 @@ export async function killDevServer(
   const ownChain = new Set<number>();
   for (let p: number | undefined = process.pid; p && p > 1; p = parentOf.get(p)) ownChain.add(p);
   if (ownChain.has(pid)) throw new Error("That process runs Exegol itself");
-  if (liveAgents(db).some((a) => a.pid === pid)) {
+  if (listLiveAgentPids(db).some((a) => a.pid === pid)) {
     throw new Error("That is an agent's own process: stop the agent instead");
   }
 

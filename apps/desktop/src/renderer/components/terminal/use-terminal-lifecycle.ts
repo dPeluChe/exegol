@@ -1,6 +1,10 @@
 import { ENDED_STATUSES } from "@exegol/shared";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useScrollback } from "../../hooks/use-trpc";
+
+// Sessions that already showed output in this window: a remount (project or tab switch) skips the
+// start overlay instead of flashing it until hasContent answers
+const sessionsWithData = new Set<string>();
 
 /**
  * Track first-data arrival on a freshly mounted terminal pane. The PTY may
@@ -23,21 +27,25 @@ export function useTerminalLifecycle({
   const { data: scrollbackContent, isLoading: scrollbackLoading } = useScrollback(
     rawIsStopped ? agentId : null,
   );
-  const [hasData, setHasData] = useState(false);
+  const [hasData, setHasDataState] = useState(() => sessionsWithData.has(agentId));
+  const setHasData = useCallback(() => {
+    sessionsWithData.add(agentId);
+    setHasDataState(true);
+  }, [agentId]);
   const [startTimedOut, setStartTimedOut] = useState(false);
   const startTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (rawIsStopped || hasData) return;
     const unsub = window.api.terminal.onData(agentId, () => {
-      setHasData(true);
+      setHasData();
       unsub();
     });
     window.api.terminal.hasContent(agentId).then((has) => {
-      if (has) setHasData(true);
+      if (has) setHasData();
     });
     return unsub;
-  }, [agentId, rawIsStopped, hasData]);
+  }, [agentId, rawIsStopped, hasData, setHasData]);
 
   useEffect(() => {
     if (hasData || rawIsStopped || reconnecting) {

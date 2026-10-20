@@ -15,8 +15,7 @@ import type { BugDiagnostics } from "@exegol/shared";
 import type Database from "libsql";
 import { flushLogSync, LOG_DIR } from "../lib/logger";
 import { EXEGOL_REPO_SLUG, EXEGOL_REPO_URL } from "../lib/repo";
-import { SIDECAR_LOG } from "../terminal/pty-sidecar-discovery";
-import { SIDECAR_VERSION } from "../terminal/pty-sidecar-protocol";
+import { SIDECAR_LOG_PATH, SIDECAR_VERSION } from "../terminal/pty-sidecar-protocol";
 import { consoleTail } from "./console-capture";
 import { runDoctorChecks } from "./doctor";
 
@@ -157,8 +156,10 @@ function agentCounts(db: Database.Database): string[] {
 export async function collectDiagnostics(
   db: Database.Database,
   app: { getVersion: () => string; isPackaged: boolean },
+  gpu: () => Promise<string> = async () => "",
 ): Promise<BugDiagnostics> {
   const version = app.getVersion();
+  const gpuLine = await gpu().catch(() => "");
   const doctor = await runDoctorChecks(db).catch(() => null);
   flushLogSync();
   const current = compactLog(tailFile(join(LOG_DIR, "exegol.log"), 300));
@@ -167,7 +168,7 @@ export async function collectDiagnostics(
     .filter(Boolean)
     .map((t) => compactLog(t))
     .join("\n");
-  const sidecar = compactLog(tailFile(SIDECAR_LOG, 80));
+  const sidecar = compactLog(tailFile(SIDECAR_LOG_PATH, 80));
   const devConsole = redact(compactLog(consoleTail()));
   const lastError = [...current.split("\n"), ...previous.split("\n")]
     .reverse()
@@ -184,6 +185,7 @@ export async function collectDiagnostics(
     `- Electron ${process.versions.electron}, Chrome ${process.versions.chrome}, Node ${process.versions.node}`,
     `- ${osType()} ${release()} (${process.platform}-${process.arch})`,
     `- Sidecar protocol ${SIDECAR_VERSION}`,
+    ...(gpuLine ? [`- ${gpuLine}`] : []),
     "",
     "### Doctor",
     "",

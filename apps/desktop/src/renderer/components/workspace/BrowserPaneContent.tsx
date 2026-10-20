@@ -1,3 +1,4 @@
+import { stepZoom, type ZoomAction } from "@exegol/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { Globe, RotateCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -9,17 +10,22 @@ import { isHttpUrl, toHttpUrl } from "../../lib/browser-viewports";
 import { claimPaneFocus } from "../../lib/pane-focus";
 import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
+import { useToastStore } from "../../stores/toasts";
 import type { Pane } from "../../stores/workspace";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { ConfirmDialog } from "../common/ConfirmDialog";
+import { useTabTargets } from "../terminal/use-send-to";
 import { AgentBrowserBanner } from "./AgentBrowserBanner";
 import { AskAgentBar, AskAgentButton } from "./AskAgentBar";
 import { BrowserAddressBar } from "./BrowserAddressBar";
 import { BrowserQaRecordingBar } from "./BrowserQaRecordingBar";
 import { BrowserReplayResultBar } from "./BrowserReplayResultBar";
 import { DeviceFrame, PageView } from "./BrowserViewport";
+import type { ScreenshotTarget } from "./BrowserZoomControls";
 import { DesignIssueBubble } from "./DesignIssueBubble";
-import { useBrowserQa } from "./use-browser-qa";
+import { PageDialogBar } from "./PageDialogBar";
+import { PagePermissionBar } from "./PagePermissionBar";
+import { useBrowserQa, webviewIdOf } from "./use-browser-qa";
 import { useDevServerPorts } from "./use-dev-server-ports";
 import { useRegisterBrowserPane } from "./use-register-browser-pane";
 import { type LoadError, useWebviewControls, useWebviewNavState } from "./use-webview";
@@ -88,6 +94,78 @@ function usePaneUrl(pane: Pane, autoPort: number | undefined) {
   };
 }
 
+type WebviewRef = React.RefObject<HTMLElement | null>;
+
+/** The pane's saved zoom, applied on every page load (a navigation resets the webview's own) */
+function usePaneZoom(webviewRef: WebviewRef, pane: Pane, paneId: string) {
+  const updatePane = useWorkspaceStore((s) => s.updatePane);
+  const zoom = pane.zoom ?? 1;
+  useEffect(() => {
+    const wv = webviewRef.current as unknown as {
+      setZoomFactor?: (factor: number) => void;
+      addEventListener: (e: string, fn: () => void) => void;
+      removeEventListener: (e: string, fn: () => void) => void;
+    } | null;
+    if (!wv) return;
+    const apply = () => {
+      try {
+        wv.setZoomFactor?.(zoom);
+      } catch {
+        /* not attached yet: dom-ready applies it */
+      }
+    };
+    apply();
+    wv.addEventListener("dom-ready", apply);
+    return () => wv.removeEventListener("dom-ready", apply);
+  }, [webviewRef, zoom]);
+  const zoomBy = useCallback(
+    (action: ZoomAction) => {
+      const next = stepZoom(zoom, action);
+      updatePane(pane.id, { zoom: next === 1 ? undefined : next });
+    },
+    [zoom, pane.id, updatePane],
+  );
+  // Cmd+= / Cmd+- / Cmd+0 with this pane focused (use-hotkeys, or main for a focused page)
+  useEffect(() => {
+    const onZoom = (e: Event) => {
+      const { detail } = e as CustomEvent<{ paneId: string; action: ZoomAction }>;
+      if (detail.paneId === paneId) zoomBy(detail.action);
+    };
+    window.addEventListener("exegol:zoom-pane", onZoom);
+    return () => window.removeEventListener("exegol:zoom-pane", onZoom);
+  }, [paneId, zoomBy]);
+  return { zoom, zoomBy };
+}
+
+const SHOT_TOASTS = {
+  saved: { type: "success", title: "Screenshot saved" },
+  copied: { type: "success", title: "Screenshot copied" },
+  failed: { type: "error", title: "Could not capture the page" },
+} as const;
+
+/** Camera button and the pane menu's Save Screenshot: main captures, asks where, writes */
+function usePaneScreenshot(webviewRef: WebviewRef, paneId: string) {
+  const save = useCallback(
+    async (target: ScreenshotTarget, fullPage: boolean) => {
+      const id = webviewIdOf(webviewRef);
+      if (id === undefined) return;
+      const result = await window.api.browser
+        .saveScreenshot(id, target, fullPage)
+        .catch(() => "failed" as const);
+      if (result !== "canceled") useToastStore.getState().addToast(SHOT_TOASTS[result]);
+    },
+    [webviewRef],
+  );
+  useEffect(() => {
+    const onShot = (e: Event) => {
+      if ((e as CustomEvent<{ paneId: string }>).detail.paneId === paneId) void save("file", false);
+    };
+    window.addEventListener("exegol:screenshot-pane", onShot);
+    return () => window.removeEventListener("exegol:screenshot-pane", onShot);
+  }, [paneId, save]);
+  return save;
+}
+
 function useRunningProjectAgents(projectId: string | null) {
   const allAgents = useAgentStore((s) => s.agents);
   return useMemo(
@@ -98,7 +176,7 @@ function useRunningProjectAgents(projectId: string | null) {
 
 export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
   const { projectId, project } = useProjectContext();
-  const { uniquePorts, preferredPort, autoPort } = useDevServerPorts(
+  const { pagePorts, helperPorts, preferredPort, autoPort } = useDevServerPorts(
     project?.path ?? null,
     projectId,
   );
@@ -122,7 +200,7 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
     window.addEventListener("exegol:reload-pane", onReload);
     return () => window.removeEventListener("exegol:reload-pane", onReload);
   }, [paneId, handleReload]);
-  // A URL clicked in a terminal of this tab: the link preview pane goes there
+  // A URL clicked in a terminal of this tab: the tab's browser pane goes there
   useEffect(() => {
     const onNavigate = (e: Event) => {
       const { detail } = e as CustomEvent<{ paneId: string; url: string }>;
@@ -131,6 +209,8 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
     window.addEventListener("exegol:navigate-pane", onNavigate);
     return () => window.removeEventListener("exegol:navigate-pane", onNavigate);
   }, [paneId, goTo]);
+  const { zoom, zoomBy } = usePaneZoom(webviewRef, pane, paneId);
+  const saveScreenshot = usePaneScreenshot(webviewRef, paneId);
   const [pendingStop, setPendingStop] = useState<PortInfo | null>(null);
   const updatePane = useWorkspaceStore((s) => s.updatePane);
   // A size saved by a dev build before sizes were objects ("mobile") is ignored
@@ -139,6 +219,7 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
   const deadPort = loadError ? Number(currentUrl.match(/:(\d+)/)?.[1]) || null : null;
   const [issueMessage, setIssueMessage] = useState("");
   const runningAgents = useRunningProjectAgents(projectId);
+  const issueTargets = useTabTargets(projectId ?? undefined, paneId);
 
   const qa = useBrowserQa({
     webviewRef,
@@ -183,7 +264,8 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
         designMode={qa.designMode}
         qaMode={qa.qaMode}
         qaActionCount={qa.qaActionCount}
-        uniquePorts={uniquePorts}
+        uniquePorts={pagePorts}
+        helperPorts={helperPorts}
         projectId={projectId}
         preferredPort={preferredPort}
         setUrlInputValue={setDraft}
@@ -200,6 +282,9 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
         onStopPort={setPendingStop}
         viewport={viewport}
         onViewport={(viewport) => updatePane(pane.id, { viewport })}
+        zoom={zoom}
+        onZoom={zoomBy}
+        onScreenshot={(target, fullPage) => void saveScreenshot(target, fullPage)}
         onSetPreferredPort={(port) => {
           if (projectId) setPreferred.mutate({ projectId, port });
         }}
@@ -213,6 +298,8 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
         }
       />
       <AgentBrowserBanner paneId={paneId} />
+      <PageDialogBar paneId={paneId} />
+      <PagePermissionBar paneId={paneId} />
       {showAsk && (
         <AskAgentBar
           paneId={paneId}
@@ -236,7 +323,7 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
           <LoadErrorOverlay
             currentUrl={currentUrl}
             loadError={loadError}
-            hasPorts={uniquePorts.length > 0}
+            hasPorts={pagePorts.length > 0}
             onRetry={handleReload}
           />
         )}
@@ -253,7 +340,7 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
             element={qa.capturedElement}
             message={issueMessage}
             onMessageChange={setIssueMessage}
-            agents={runningAgents}
+            targets={issueTargets}
             onClear={() => {
               qa.setCapturedElement(null);
               setIssueMessage("");

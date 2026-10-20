@@ -39,12 +39,20 @@ Every jump puts the cursor in the pane it lands on, ready to type.
 | `Cmd+Shift+T` | `Ctrl+Shift+Alt+T` | Reopen the last closed tab or pane and resume its sessions |
 | `Cmd+D` / `Cmd+Shift+D` | `Ctrl+Shift+D` / `Ctrl+Shift+Alt+D` | New pane to the right / below |
 | `Cmd+Y` | `Ctrl+Shift+Y` | Terminal beside the focused pane, in the folder it works in (in the pane itself when it is empty) |
-| `T` | same | In an empty pane's launcher (no field focused): terminal in the selected Run in folder |
+| `1-9` | same | In an empty pane's launcher (no field focused): open that agent's launch form, in grid order |
+| `T` `F` `G` `B` `O` `E` | same | In an empty pane's launcher (no field focused), in its folder: Terminal, Files, Git, Browser, Finder (the file manager), editor |
+| `/` or `Cmd+F` | `/` or `Ctrl+F` | In an empty pane's launcher: change its folder (type to filter, arrows, Enter, Esc) |
+| `Option+1`..`Option+9` | `Alt+1`..`Alt+9` | In an empty pane's launcher (no field focused): run the folder's commands in order (pinned first), shown as ⌥1.. keycaps. Read from the key position, so the layout's Option or AltGr characters do not matter; never Ctrl+digit (macOS uses it for Spaces) |
+| `Enter` / `Esc` | same | In a pane's launch form: launch (Shift+Enter for a new line; `Cmd+Enter` on macOS, `Ctrl+Enter` elsewhere, from any field) / back to the launcher (Cancel) |
+| `R` `N` `T` `F` `B` `1-9` | same | In an ended session's pane (no field focused): Resume (Restart, or Reopen for a terminal), new session of the same CLI there, Terminal, Files, Browser, switch to another agent in the same place |
 | `Cmd+L` | `Ctrl+Shift+L` | Browser pane (or floating browser): select its address bar |
-| `Cmd+R` | `Ctrl+Shift+R` | Browser pane (or floating browser): reload its page. Elsewhere on macOS Cmd+R reloads the window |
+| `Cmd+R` | `Ctrl+Shift+R` | Browser pane (or floating browser): reload its page. Elsewhere it reloads the window |
+| `Cmd+=` / `Cmd+-` / `Cmd+0` | `Ctrl+Shift+=` / `Ctrl+Shift+-` / `Ctrl+Shift+0` | Browser pane: zoom its page in / out / back to 100%. Elsewhere Cmd+= / Cmd+- zoom Exegol and Cmd+0 is a project |
 | `Cmd+Enter` | `Ctrl+Enter` | Launch from the spawn dialogs, send a diff comment |
 
 ## Window
+
+On Linux and Windows the app chords also work while a page in a browser pane has the focus (New Tab, Close Pane, Address Bar, Reload, Reset Zoom, Quit), as the macOS menu does.
 
 | macOS | Linux / Windows | Action |
 |-------|-----------------|--------|
@@ -52,9 +60,11 @@ Every jump puts the cursor in the pane it lands on, ready to type.
 | `Cmd+/` | `Ctrl+Shift+/` | Shortcuts overlay |
 | `Esc`, `Cmd+W` | `Esc`, `Ctrl+Shift+W` | Close the Settings or a floating window (a focused terminal keeps Esc) |
 | `Esc` | same | Leave the Projects view, back to the project or Dashboard it was opened from |
-| `Cmd+Shift+0` | none | Reset zoom (`Cmd+0` is a project slot) |
+| `Cmd+Shift+0` | `Ctrl+Shift+Alt+0` | Reset Exegol's zoom (`Cmd+0` is a project slot) |
+| `Cmd+Q` | `Ctrl+Shift+Q` | Quit Exegol |
 | `Cmd+Shift+E` | `Ctrl+Shift+E` | Bring Exegol to the front from any app (global, configurable in Settings) |
 | `Cmd+Shift+Space` | `Ctrl+Shift+Space` | Dictation into the focused pane: press to start and again (or Enter) to insert, or hold while you talk; Esc cancels (configurable in Settings > Dictation; works from a browser page too) |
+| `Cmd+P` | `Ctrl+Shift+P` | While a dictation records: pause and resume it (same session and text); works from a browser page and the Settings window too |
 
 ## Inside a terminal
 
@@ -66,10 +76,9 @@ Every jump puts the cursor in the pane it lands on, ready to type.
 | `Cmd+←` / `Cmd+→` | `Home` / `End` | Start / end of the line |
 | `Cmd+Backspace`, `Option+Backspace` | `Ctrl+Backspace`, `Alt+Backspace` | Delete the previous word |
 | `Cmd+↓` | `Ctrl+Shift+↓` | Jump to the newest output |
-| click | same | A URL in the output opens in the tab's preview pane; a file path opens over the terminal (PDFs and documents in their app) |
+| click | same | A URL in the output opens in the tab's preview pane; a file path opens in a floating file window over the workspace (PDFs and documents in their app); Esc or `Cmd+W` closes that window first |
 | `Cmd+click` | `Ctrl+click` | A URL opens in the system browser; a file path opens in the IDE at its line |
 | `Cmd+Shift+click` | `Ctrl+Shift+click` | Show a file path from the output in Finder |
-| `Esc` | same | Close the Files peek before the CLI sees the key |
 
 Right-click a terminal pane for Clear Terminal, split, float and layout actions. Select text to
 get **Send to**, which pastes it into another live agent without submitting.

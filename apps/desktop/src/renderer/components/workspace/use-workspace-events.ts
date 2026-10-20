@@ -96,7 +96,8 @@ export function useAgentNavigationEvents() {
 export function useRefitOnAgentsShown(isAgents: boolean) {
   const prevIsAgents = useRef(isAgents);
   useEffect(() => {
-    if (isAgents && !prevIsAgents.current) {
+    // Hiding too: panes left under the Dashboard or another section give up WebGL
+    if (isAgents !== prevIsAgents.current) {
       dispatchRefitTerminals();
     }
     prevIsAgents.current = isAgents;

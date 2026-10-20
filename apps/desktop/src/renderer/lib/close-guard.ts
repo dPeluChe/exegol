@@ -57,6 +57,9 @@ function describePane(
     };
   }
   if (pane.type === "git") return { name: "Git", effect: "closes the changes view" };
+  if (pane.type === "simulator") {
+    return { name: "Simulator", effect: "closes the view, the device keeps running" };
+  }
   return null;
 }
 

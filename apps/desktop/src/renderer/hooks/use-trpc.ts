@@ -174,10 +174,11 @@ export function useProjectIde(projectId: string) {
 
 // ─── Settings ────────────────────────────────────────────────────────────────
 
-export function useSettings() {
+export function useSettings<T = Settings>(select?: (settings: Settings) => T) {
   return useQuery({
     queryKey: ["settings"],
     queryFn: () => trpcInvoke<Settings>("settings.get"),
+    select,
   });
 }
 

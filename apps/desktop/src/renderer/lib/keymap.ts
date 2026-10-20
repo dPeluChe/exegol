@@ -1,3 +1,5 @@
+import { fileManagerName } from "@exegol/shared";
+
 /**
  * The app's modifier per platform. macOS: Cmd. Linux and Windows: Ctrl+Shift, because a focused
  * terminal owns Ctrl+letter (Ctrl+D is EOF, Ctrl+W deletes a word) and the Super key belongs to
@@ -8,11 +10,10 @@ export const PLATFORM =
   typeof window === "undefined" ? "darwin" : (window.api?.app?.getPlatform?.() ?? "darwin");
 export const IS_MAC = PLATFORM === "darwin";
 
-/** What the OS calls its file manager, for "Open in ..." labels */
+/** What the OS calls its file manager, for "Reveal in ..." labels (Linux: "Files"; the launcher
+ *  has main's detected one in `ProjectDetect.fileManager`) */
 export function fileManagerLabel(platform = PLATFORM): string {
-  if (platform === "darwin") return "Finder";
-  if (platform === "win32") return "Explorer";
-  return "File manager";
+  return fileManagerName(platform);
 }
 
 interface ChordEvent {
@@ -69,6 +70,18 @@ export function editKeys(keys: string, mac = IS_MAC): string {
 /** The click modifier of `editKeys("Cmd+click")`: Cmd on macOS, plain Ctrl elsewhere */
 export function hasClickModifier(e: { metaKey: boolean; ctrlKey: boolean }, mac = IS_MAC): boolean {
   return mac ? e.metaKey : e.ctrlKey;
+}
+
+/** Off macOS, the keys of the macOS menu's zoom and quit, which no menu bar handles there:
+ *  Cmd+= / Cmd+- zoom Exegol (a focused browser pane takes them first), Cmd+Shift+0 resets,
+ *  Cmd+Q quits. macOS: null, the menu's own accelerators */
+export function windowKey(e: ChordEvent, mac = IS_MAC): "in" | "out" | "reset" | "quit" | null {
+  const chord = !mac && appChord(e, mac);
+  if (!chord) return null;
+  if (chord.alt) return e.code === "Digit0" || e.code === "Numpad0" ? "reset" : null;
+  if (e.code === "Equal" || e.code === "NumpadAdd") return "in";
+  if (e.code === "Minus" || e.code === "NumpadSubtract") return "out";
+  return chordKey(e) === "q" ? "quit" : null;
 }
 
 /** A short badge for an app chord plus one key: "⌘2", or "^⇧2" off macOS */

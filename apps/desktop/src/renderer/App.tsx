@@ -13,6 +13,7 @@ import { Sidebar } from "./components/layout/Sidebar";
 import { SidebarRail } from "./components/layout/SidebarRail";
 import { StatusBar } from "./components/layout/StatusBar";
 import { TitleBar } from "./components/layout/TitleBar";
+import { TerminalFileWindow } from "./components/terminal/TerminalFileWindow";
 import { PaneSwitcher } from "./components/workspace/PaneSwitcher";
 import { WorkspaceView } from "./components/workspace/WorkspaceView";
 import { ProjectProvider } from "./contexts/ProjectContext";
@@ -24,12 +25,15 @@ import { useDictation } from "./hooks/use-dictation";
 import { useFleetSync } from "./hooks/use-fleet-sync";
 import { useFloatingPaneSync } from "./hooks/use-floating-pane-sync";
 import { useHotkeys } from "./hooks/use-hotkeys";
+import { useIdleSuspend } from "./hooks/use-idle-suspend";
 import { usePanelessAgentSweep } from "./hooks/use-paneless-agent-sweep";
+import { usePreloadTerminalFont } from "./hooks/use-preload-terminal-font";
 import { useAutoResumeLost, useRelaunchMissedResume } from "./hooks/use-resume-agent";
 import { useSettingsSync } from "./hooks/use-settings-sync";
 import { useTheme } from "./hooks/use-theme";
 import { useToastEvents } from "./hooks/use-toast-events";
 import { useUpdateStatusSync } from "./hooks/use-update-status";
+import { useWatchFollow } from "./hooks/use-watch-follow";
 import { useAppStore } from "./stores/app";
 
 // Lazy: rarely-used surfaces are not needed on first paint.
@@ -66,6 +70,7 @@ export default function App() {
   useFloatingPaneSync();
   usePanelessAgentSweep();
   useSettingsSync();
+  usePreloadTerminalFont();
   useUpdateStatusSync();
   useAutoResumeLost();
   useRelaunchMissedResume();
@@ -73,6 +78,8 @@ export default function App() {
   useCliSelfUpdates();
   useFleetSync();
   useActiveViewSync();
+  useIdleSuspend();
+  useWatchFollow();
 
   const activeProjectId = useAppStore((s) => s.activeProjectId);
   // Projects opens over the workspace (as the Dashboard does): its panes stay mounted and sized
@@ -129,6 +136,7 @@ export default function App() {
         <StatusBar />
         <ToastStack />
         <PaneSwitcher />
+        <TerminalFileWindow />
         <DictationOverlay />
         <Suspense fallback={null}>
           <CommandPalette />

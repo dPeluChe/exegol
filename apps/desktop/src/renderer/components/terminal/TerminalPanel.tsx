@@ -7,11 +7,11 @@ import { useAgent, useStopAgent } from "../../hooks/use-trpc";
 import { useSessionRecovery } from "../../lib/session-recovery";
 import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
-import { closeTerminalPeek } from "../../stores/terminal-links";
 import { getProjectState, layoutHasPane, useWorkspaceStore } from "../../stores/workspace";
 import { EmptyState, LoadingSpinner } from "../common";
 import { ChatView } from "./ChatView";
-import { FilesPeek, PeekFileOverlay, TerminalLinkPeek } from "./FilesPeek";
+import { EndedSessionLauncher } from "./EndedSessionLauncher";
+import { FilesPeek, PeekFileOverlay } from "./FilesPeek";
 import { TerminalFloatingButtons } from "./TerminalFloatingButtons";
 import { TerminalInstance, type TerminalInstanceHandle } from "./TerminalInstance";
 import { type ScrollbackAgent, TerminalScrollback } from "./TerminalScrollback";
@@ -40,11 +40,8 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
   const { scrollAtTop, scrollAtBottom, hasNewOutput, handleScrollPosition } =
     useTerminalScrollState();
   const terminalRef = useRef<TerminalInstanceHandle>(null);
-  const { sendGroups, showSendTo, setShowSendTo, handleSendTo, onSelectionChange } = useSendTo(
-    agentId,
-    storeAgent?.projectId ?? activeProjectId ?? undefined,
-    terminalRef,
-  );
+  const { sendSections, showSendTo, setShowSendTo, onSelectionChange, onTuiCopy, getSelection } =
+    useSendTo(agentId, storeAgent?.projectId ?? activeProjectId ?? undefined, terminalRef, paneId);
   const { viewMode, setViewMode, liveSnapshot, toggleLiveView } = useLiveViewMode(terminalRef);
   const stopAgent = useStopAgent();
   const resumeAgent = useResumeAgent();
@@ -86,10 +83,10 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
       scrollAtTop={scrollAtTop}
       scrollAtBottom={scrollAtBottom}
       hasNewOutput={hasNewOutput}
-      sendGroups={sendGroups}
+      sendSections={sendSections}
+      getSelection={getSelection}
       showSendTo={showSendTo}
       setShowSendTo={setShowSendTo}
-      onSendTo={handleSendTo}
     />
   );
 
@@ -125,13 +122,13 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
 
   // Live terminal — show loading overlay until first data arrives
   return (
-    // Capture phase: with Files or a peeked file open, Esc closes it before the CLI sees it;
-    // with both closed Esc reaches the terminal as always (a dialog handles its own)
+    // Capture phase: with Files or a file picked there open, Esc closes it before the CLI sees
+    // it; with both closed Esc reaches the terminal as always (a dialog handles its own)
     <div
       className="relative flex h-full flex-col"
       onKeyDownCapture={(e) => {
         if (e.key !== "Escape" || document.querySelector('[role="dialog"]')) return;
-        if (closeTerminalPeek(agentId) || filesPeek.escape()) {
+        if (filesPeek.escape()) {
           e.preventDefault();
           e.stopPropagation();
         }
@@ -146,23 +143,22 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
           onOpenTerminal={handleOpenShellHere}
         />
       )}
-      {hasData && (
-        <TerminalToolbar
-          paneId={paneId}
-          agent={storeAgent ?? null}
-          accessMode={agent?.accessMode}
-          isolationMode={isolationMode}
-          branchName={gitInfo.branchName}
-          dirtyCount={gitInfo.dirtyCount}
-          viewMode={viewMode}
-          onToggleView={toggleLiveView}
-          preview={preview}
-          repoUrl={gitInfo.repoUrl}
-          onOpenRepo={openBesideInBrowser}
-          filesOpen={filesPeek.filesOpen}
-          onToggleFiles={filesPeek.toggleFiles}
-        />
-      )}
+      {/* Drawn from the first mount (under the start overlay): adding it on first data refitted a new session two rows shorter */}
+      <TerminalToolbar
+        paneId={paneId}
+        agent={storeAgent ?? null}
+        accessMode={agent?.accessMode}
+        isolationMode={isolationMode}
+        branchName={gitInfo.branchName}
+        dirtyCount={gitInfo.dirtyCount}
+        viewMode={viewMode}
+        onToggleView={toggleLiveView}
+        preview={preview}
+        repoUrl={gitInfo.repoUrl}
+        onOpenRepo={openBesideInBrowser}
+        filesOpen={filesPeek.filesOpen}
+        onToggleFiles={filesPeek.toggleFiles}
+      />
       {/* min-h-0: a flex item never shrinks below its content by default, so the
           terminal's own rows set the box height and each fit stepped it down a row */}
       <div className="flex min-h-0 flex-1">
@@ -179,6 +175,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
                 onReady={onReady}
                 onScrollPosition={handleScrollPosition}
                 onSelectionChange={onSelectionChange}
+                onTuiCopy={onTuiCopy}
               />
               {floatingButtons}
             </>
@@ -190,7 +187,6 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
               onDirtyChange={filesPeek.setFileDirty}
             />
           )}
-          <TerminalLinkPeek agentId={agentId} />
         </div>
         {filesPeek.filesOpen && filesPeek.peekProject && (
           <FilesPeek
@@ -248,7 +244,7 @@ function usePersistSerializedOnStop(
 }
 
 /** Stopped with no saved history (or still loading it): a restart that killed the sidecar before
- *  history was saved landed here with no way back, so offer Resume/Re-launch */
+ *  history was saved landed here with no way back, so the ended launcher still shows */
 function SessionEndedState({
   agent,
   paneId,
@@ -265,30 +261,31 @@ function SessionEndedState({
     return <LoadingSpinner label="Loading session history..." className="h-full" />;
   }
   const crashed = agent?.status === "crashed";
+  const note = crashed
+    ? "It was interrupted (app or system restart) before its history was saved"
+    : "No history available";
+  if (!agent) {
+    return (
+      <EmptyState
+        icon={<AlertCircle className="h-6 w-6 text-text-muted" />}
+        title={crashed ? "Session lost" : "Session ended"}
+        description={note}
+        className="h-full"
+      />
+    );
+  }
   return (
-    <EmptyState
-      icon={<AlertCircle className="h-6 w-6 text-text-muted" />}
-      title={crashed ? "Session lost" : "Session ended"}
-      description={
-        crashed
-          ? "It was interrupted (app or system restart) before its history was saved"
-          : "No history available"
-      }
-      action={
-        agent
-          ? {
-              label: pending
-                ? "Starting..."
-                : resumableCliTypes.has(agent.cliType)
-                  ? "Resume"
-                  : "Re-launch",
-              onClick: () => {
-                if (!pending) resume(agent, paneId).catch(() => {});
-              },
-            }
-          : undefined
-      }
-      className="h-full"
-    />
+    <div className="@container-[size] flex h-full flex-col items-center justify-center-safe overflow-y-auto">
+      <EndedSessionLauncher
+        agent={agent}
+        paneId={paneId}
+        canResume={resumableCliTypes.has(agent.cliType)}
+        pending={pending}
+        onResume={() => {
+          if (!pending) resume(agent, paneId).catch(() => {});
+        }}
+        note={note}
+      />
+    </div>
   );
 }

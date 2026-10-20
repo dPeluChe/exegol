@@ -10,16 +10,19 @@ import { isAgentQuiet, updateAgentStatus } from "../db/queries";
 import { getAgentCwd, setAgentFinalOutput } from "../db/queries/agents";
 import { releasePaths } from "../db/queries/path-claims";
 import { broadcast } from "../lib/event-bus";
+import { createLogLimiter, suppressedNote } from "../lib/log-limiter";
 import { logger } from "../lib/logger";
 import { removeAgentMcpConfig, removePerAgentMcpConfig } from "../mcp/exegol-mcp-config";
 import { revokeAgentMcpToken } from "../mcp/exegol-server";
 import { getNotificationBus } from "../notifications/bus";
+import { forgetTerminalLogs } from "../terminal/mount-log";
 import { getPtyHost } from "../terminal/pty-host";
 import {
   forgetTerminalViewers,
   hasVisibleViewer,
   noteOutputDropped,
 } from "../terminal/pty-visibility";
+import { noteTurnStarted } from "./agent-message-injection";
 import {
   clearAgentLinks,
   clearAgentMessageQueue,
@@ -30,7 +33,10 @@ import {
 import type { OutputProcessor } from "./agent-output-processor";
 import { handleParallelAgentExit } from "./agent-parallel-orchestration";
 import { detectCliSelfUpdate } from "./cli-self-update";
+import { noteHookCwd } from "./hook-cwd";
+import { handleLostSession } from "./lost-session-exit";
 import { detachOutputPipeline } from "./output-pipeline";
+import { noteSessionActivity } from "./session-activity";
 import {
   type AgentContext,
   broadcastAgentStatus,
@@ -41,6 +47,11 @@ import {
 } from "./spawn-env";
 import { stripAnsi, stripOscSequences } from "./status-parser";
 import { endTurn, forgetTurns, startTurn } from "./turn-snapshots";
+
+/** The parser re-reports the same status on every redraw (agy: each keystroke): a change always
+ *  logs, a repeat once per 10 s with its count */
+const loggedStatus = new Map<string, string>();
+const statusLogLimit = createLogLimiter(10_000);
 
 /** Shells and full-screen TUIs: their escape sequences and status-like text read as "failed"/"waiting_input" */
 const SKIP_PARSING = new Set(["shell", "crush", "opencode", "kiro"]);
@@ -96,6 +107,7 @@ function applyAgentSignals(
     }
     const derived = deriveStatusFromSignal(sig.event);
     trackTurn(db, agent, maps, sig.event);
+    if (sig.event === "turn_started") noteTurnStarted(agent.id);
 
     if (derived.status) signalStatus = derived.status;
     if (derived.turnStarted) turnStarted = derived.turnStarted;
@@ -232,10 +244,11 @@ function storeHookSessionId(db: Database.Database, agentId: string, sessionId: s
 export function dispatchAgentFileEvent(
   db: Database.Database,
   maps: SessionMaps,
-  event: { type: string; agentId: string; sessionId?: string },
+  event: { type: string; agentId: string; sessionId?: string; cwd?: string },
 ): void {
-  // Before the OSC short-circuit: OSC carries no session id, hooks do
+  // Before the OSC short-circuit: OSC carries no session id or folder, hooks do
   if (event.sessionId) storeHookSessionId(db, event.agentId, event.sessionId);
+  noteHookCwd(event.agentId, event.cwd);
   if (oscDeliveredAgents.has(event.agentId)) return;
   const sigType = FILE_EVENT_SIGNALS[event.type];
   if (!sigType) return;
@@ -279,13 +292,14 @@ export function createSpawnCallbacks(
 ) {
   maps.contexts.set(agent.id, agent);
   return {
-    onData: (data: string) => {
+    onData: (data: string, seq?: number) => {
       // T178: the renderer only needs bytes it can draw. Everything below this
       // line runs regardless — the model, the parser and the delivery clock
       // must never depend on whether a pane happens to be on screen.
-      if (hasVisibleViewer(agent.id)) broadcast("terminal:data", agent.id, data);
+      if (hasVisibleViewer(agent.id)) broadcast("terminal:data", agent.id, data, seq);
       else noteOutputDropped(agent.id);
       noteAgentOutput(agent.id);
+      noteSessionActivity(agent.id, "output");
       maps.dataCallbacks.get(agent.id)?.(data);
       maps.titleTrackers.get(agent.id)?.(data);
 
@@ -371,9 +385,14 @@ export function createSpawnCallbacks(
       }
       if (scrapedStatus || result.currentStep) {
         if (scrapedStatus) {
-          logger.info(
-            `[AgentCallback] Status change: ${agent.id} (${agent.cliType}) → ${scrapedStatus}`,
-          );
+          const changed = loggedStatus.get(agent.id) !== scrapedStatus;
+          const skipped = statusLogLimit.take(agent.id, Date.now(), changed);
+          if (skipped !== null) {
+            loggedStatus.set(agent.id, scrapedStatus);
+            logger.info(
+              `[AgentCallback] Status change: ${agent.id} (${agent.cliType}) → ${scrapedStatus}${suppressedNote(skipped)}`,
+            );
+          }
           updateAgentStatus(db, agent.id, scrapedStatus as AgentStatus, result.currentStep);
           broadcastAgentStatus({
             agentId: agent.id,
@@ -406,6 +425,8 @@ export function createSpawnCallbacks(
 
       detachOutputPipeline(maps, agent.id);
       maps.sessionIdsCaptured.delete(agent.id);
+      loggedStatus.delete(agent.id);
+      statusLogLimit.forget(agent.id);
       maps.dataCallbacks.delete(agent.id);
       maps.contexts.delete(agent.id);
 
@@ -474,6 +495,7 @@ export function createSpawnCallbacks(
       }
       forgetBroadcastStatus(agent.id);
       forgetTerminalViewers(agent.id);
+      forgetTerminalLogs(agent.id);
       forgetTurns(agent.id);
 
       // T65: if this agent was part of a parallel run, check if the run is done.
@@ -507,5 +529,8 @@ export function createSpawnCallbacks(
     onError: (message: string) => {
       logger.error(`[AgentManager] PTY error for ${agent.id}: ${message}`);
     },
+
+    onLost: (reason: string, persist: boolean) =>
+      handleLostSession(db, agent, maps, reason, persist),
   };
 }

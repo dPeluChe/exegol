@@ -26,6 +26,8 @@ export interface TerminalInstanceProps {
   onScrollPosition?: (atTop: boolean, atBottom: boolean, wrote?: boolean) => void;
   /** Text selected or cleared: "Send to" only shows when there is something to send */
   onSelectionChange?: (hasSelection: boolean) => void;
+  /** The TUI copied text the user just selected in it (OSC 52): Send to offers it */
+  onTuiCopy?: (text: string) => void;
 }
 
 /** TUI CLIs that break with WebGL renderer (alternate screen buffer issues) */

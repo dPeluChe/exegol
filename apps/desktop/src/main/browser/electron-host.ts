@@ -35,6 +35,14 @@ import {
 } from "./control";
 import { projectsToMigrate, selectCookiesToCopy, toSetDetails } from "./cookie-migration";
 import { type BrowserLogEntry, LogRing, toLogLevel } from "./log-ring";
+import { forgetPaneDialogs } from "./page-dialogs";
+import {
+  installPageEvents,
+  markAgentInput,
+  takeOverPageDialogs,
+  trackPageEvents,
+} from "./page-events";
+import { installPagePermissions } from "./page-permissions";
 import { blocksAgentRequest, logUrl } from "./request-guard";
 import {
   type BrowserHost,
@@ -42,6 +50,7 @@ import {
   setBrowserHost,
   setNeedsUserNotifier,
 } from "./tool-guards";
+import { forwardPaneZoomKeys } from "./zoom-keys";
 
 const PANE_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 /** Our own isolated world in the page: refs live there, out of the page's reach */
@@ -191,6 +200,7 @@ function trackWebview(wc: WebContents): void {
   const id = wc.id;
   ringOf(id);
   guardWebview(wc);
+  trackPageEvents(wc);
   wc.on("console-message", (...args: unknown[]) => {
     const d = args[0] as {
       level?: string;
@@ -229,6 +239,7 @@ function trackWebview(wc: WebContents): void {
       if (r.wcId !== id) continue;
       registered.delete(paneId);
       dictationPages.delete(paneId);
+      forgetPaneDialogs(paneId);
       forgetPane(paneId);
     }
   });
@@ -277,6 +288,7 @@ function registerPane(
   // agent another project's page by claiming its id
   if (!isHostedWebview(wc, sender) || !inProjectPartition(wc, projectId)) return false;
   hookSession(wc.session, projectId);
+  takeOverPageDialogs(wc);
   registered.set(paneId, { paneId, projectId, wcId: wc.id });
   registrationWaiters.get(paneId)?.();
   return true;
@@ -391,6 +403,7 @@ function handleFor(r: Registered, wc: WebContents): BrowserPaneHandle {
     },
     sendKey: (keyCode, modifiers) => {
       const mods = modifiers as ("shift" | "control" | "alt" | "meta")[];
+      markAgentInput(wc.id);
       wc.sendInputEvent({ type: "keyDown", keyCode, modifiers: mods });
       if (keyCode.length === 1 && !mods.some((m) => m === "control" || m === "meta")) {
         wc.sendInputEvent({ type: "char", keyCode, modifiers: mods });
@@ -538,7 +551,10 @@ export function installAgentBrowser(db: Database.Database): void {
     if (contents.getType() === "webview") {
       // A Files preview: its own session and guard, never an agent browser pane
       if (isPreviewSession(contents.session)) guardPreviewContents(contents);
-      else trackWebview(contents);
+      else {
+        trackWebview(contents);
+        forwardPaneZoomKeys(contents, (wcId) => paneOfWebContents(wcId)?.paneId);
+      }
       return;
     }
     contents.on("will-attach-webview", (event, webPreferences, params) => {
@@ -561,6 +577,8 @@ export function installAgentBrowser(db: Database.Database): void {
     });
   });
 
+  installPageEvents((wcId) => paneOfWebContents(wcId)?.paneId);
+  installPagePermissions(db, paneOfWebContents);
   ipcMain.handle("browser:register-pane", (event, input) =>
     registerPane(db, event.sender, input ?? {}),
   );

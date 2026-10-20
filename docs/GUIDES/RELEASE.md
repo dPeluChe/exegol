@@ -2,7 +2,7 @@
 
 ## Current State
 
-- **Build config**: `apps/desktop/electron-builder.ts` (macOS DMG/ZIP, Windows NSIS, Linux AppImage)
+- **Build config**: `apps/desktop/electron-builder.ts` (macOS DMG/ZIP, Windows NSIS, Linux AppImage/.deb/.rpm; Windows and Linux built in CI, steps 5b and 5c)
 - **Auto-updater**: `apps/desktop/src/main/system/auto-updater.ts` (electron-updater, GitHub Releases, feed `dPeluChe/exegol`)
 - **Icons**: `apps/desktop/src/resources/build/icons/` (icns, ico, png)
 - **Version**: `apps/desktop/package.json` and the matching heading in `docs/CHANGELOG.md`.
@@ -137,6 +137,29 @@ The app also sweeps per-agent files once a day, at startup and then daily while 
 skips when the orphaned ids outnumber twice the known ones (a reset or swapped database). Agent
 history (terminal scrollback) is never removed.
 
+### 3b. Local test build
+
+To hand a build to someone for testing (never for a release):
+
+```bash
+bun run package:local              # needs build:rust + rebuild:native like step 3
+bun run package:local -- --dry-run # print version and output path only
+```
+
+- Version `<next patch>-test.<short sha>`, plus `.dirty` with uncommitted changes (0.5.20 at
+  171da0d gives `0.5.21-test.171da0d`). `package.json` is not edited: the script passes it as
+  `EXEGOL_LOCAL_VERSION` and `electron-builder.ts` sets `extraMetadata.version`.
+- Output `apps/desktop/dist/local/Exegol-TEST-<version>.dmg`; the folder is deleted first, so it
+  only ever holds the last test build. `clean:build` never touches it. The script prints the DMG's
+  absolute path.
+- macOS arm64 DMG only, signed with the same identity, never notarized (`APPLE_KEYCHAIN_PROFILE`
+  is dropped for the build). Fine on the machine that built it; a copied DMG needs Open Anyway.
+- The app shows "TEST <sha>" in the title bar, the version and commit at the bottom of the
+  Settings nav and in About Exegol. Releases show none of it (`testBuildOf`).
+- Updates: a test build stays on the stable feed with downgrades off (`updateChannel` in
+  `auto-updater.ts`). Semver orders `0.5.20 < 0.5.21-test.x < 0.5.21`, so the release it was
+  built from is never offered and the next real release is.
+
 ### 4. Install and first launch (unsigned build)
 
 Open the DMG and drag Exegol to Applications. The app is not signed or notarized, so Gatekeeper blocks a double-click on first launch: right-click Exegol in Applications and choose Open, then confirm. A DMG downloaded from GitHub also carries the quarantine flag; clear it with `xattr -dr com.apple.quarantine /Applications/Exegol.app` if Open is not offered.
@@ -178,13 +201,40 @@ Until a build is notarized, a user can still open it: System Settings → Privac
 
 Native modules are built per platform, so Linux packages come from CI, not from the Mac:
 `.github/workflows/linux.yml` runs on Ubuntu 22.04 (older glibc, wider distro reach) when a
-release is published, builds core-rust and node-pty for Linux, packages an AppImage and a `.deb`,
-and attaches them plus `latest-linux.yml` (auto-update for the AppImage) to that release. Rerun it
-by hand from Actions → Linux build (optionally with a tag).
+release is published, builds core-rust and node-pty for Linux, packages an AppImage, a `.deb` and an
+`.rpm`, and attaches them plus `latest-linux.yml` (auto-update for all three) to that release. Rerun it
+by hand from Actions → Linux build (optionally with a tag). With `test` checked it builds the selected
+branch instead and keeps the packages as a run artifact (7 days), attaching nothing:
+`gh workflow run linux.yml --ref <branch> -f test=true`.
 
 Install: `chmod +x Exegol-<v>-x86_64.AppImage && ./Exegol-<v>-x86_64.AppImage`, or
-`sudo apt install ./exegol_<v>_amd64.deb`. Runtime needs: a desktop keyring (gnome-keyring or
+`sudo apt install ./exegol_<v>_amd64.deb`, or `sudo dnf install ./exegol-<v>.x86_64.rpm`. Runtime needs: a desktop keyring (gnome-keyring or
 kwallet) for encrypted API keys, and `lsof` for ports (the Doctor warns about both).
+
+Updates: both update themselves from `latest-linux.yml`. The AppImage replaces its own file
+(it must be writable). The `.deb` carries `resources/package-type` = `deb`, so electron-updater
+uses its DebUpdater: it downloads the new `.deb` and installs it with `pkexec` (asks for the admin
+password) when the app quits or on Restart. The `.rpm` (`package-type` = `rpm`) goes through the
+RpmUpdater the same way (dnf, zypper or rpm, through `pkexec`).
+
+### 5c. Windows (NSIS installer)
+
+Same model as Linux: `.github/workflows/windows.yml` runs on `windows-latest` when a release is
+published, builds core-rust (`core-rust.win32-x64-msvc.node`; node-pty uses its N-API prebuilds), packages the
+NSIS installer and attaches `Exegol-<v>-x64.exe`, its `.exe.blockmap` and `latest.yml` to that release.
+Rerun it by hand from Actions → Windows build (optionally with a tag). With `test` checked it builds
+the selected branch, keeps the installer as a run artifact (7 days) and attaches nothing:
+`gh workflow run windows.yml --ref <branch> -f test=true`. The unit tests run on Windows in
+`ci.yml` (`windows-tests`) on every PR and push to main, not here.
+
+Unsigned: no code-signing certificate yet, so SmartScreen shows "Windows protected your PC" on the
+first run of the downloaded installer; More info → Run anyway. The installer is per user (no admin),
+lets the user pick the folder and keeps app data on uninstall.
+
+Updates: the NSIS updater reads `latest.yml` from the same feed as macOS
+(`releases/latest/download/`), downloads the new `.exe` (differential through the `.blockmap` when the
+old one is there too) and runs it on quit or Restart. With no `publisherName` in the config, the
+updater does not check a signature.
 
 ### 6. Publish to GitHub Releases
 
@@ -205,7 +255,7 @@ gh release create v0.5.1 \
 ### 7. Auto-Update Flow
 
 Once a release is published:
-1. Running Exegol instances check `https://github.com/{owner}/{repo}/releases/latest/download/latest-mac.yml`
+1. Running Exegol instances check `https://github.com/{owner}/{repo}/releases/latest/download/latest-mac.yml` (`latest.yml` on Windows, `latest-linux.yml` on Linux)
 2. If version in manifest > current version → auto-download in background
 3. User sees "Update ready — Restart to install" banner
 4. On restart (or app quit) → update installs automatically
@@ -220,7 +270,7 @@ x.y.z-canary.YYYYMMDDHHmmss — canary builds (auto-detected by updater)
 
 ## CI checks
 
-Pull requests and pushes to main run lint, TypeScript checks, tests, and builds through `.github/workflows/ci.yml`. See [Pipeline evidence and CI](PIPELINE_EVIDENCE_AND_CI.md) for commands and scope.
+Pull requests and pushes to main run lint, TypeScript checks, tests, and builds through `.github/workflows/ci.yml` on macOS, plus the unit tests on Windows (`windows-tests`, in parallel). See [Pipeline evidence and CI](PIPELINE_EVIDENCE_AND_CI.md) for commands and scope.
 
 ## Future: automated releases (T45)
 

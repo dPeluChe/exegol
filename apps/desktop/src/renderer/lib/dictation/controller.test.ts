@@ -6,7 +6,7 @@ const trpcMutate = vi.fn(async (path: string, _input?: unknown): Promise<unknown
   return {};
 });
 vi.mock("../trpc-client", () => ({
-  trpcInvoke: vi.fn(async () => ({ dictation: { enabled: true, autoStopSilenceSec: 0 } })),
+  trpcInvoke: vi.fn(async () => ({ dictation: { enabled: true, autoInsert: false } })),
   trpcMutate: (path: string, input?: unknown) => trpcMutate(path, input),
 }));
 vi.mock("../../hooks/use-trpc-dictation", () => ({
@@ -17,11 +17,12 @@ vi.mock("../../hooks/use-trpc-dictation", () => ({
 let feed: (samples: Float32Array) => void = () => {};
 let openMic: () => void = () => {};
 const stopCapture = vi.fn();
+const drain = vi.fn(async () => {});
 vi.mock("./capture", () => ({
   startCapture: (onChunk: (samples: Float32Array) => void) => {
     feed = onChunk;
     return new Promise((resolve) => {
-      openMic = () => resolve({ stop: stopCapture, analyser: null });
+      openMic = () => resolve({ stop: stopCapture, drain, analyser: null });
     });
   },
 }));
@@ -51,6 +52,8 @@ beforeEach(() => {
   vi.stubGlobal("navigator", { clipboard: { writeText } });
   useToastStore.setState({ toasts: [] });
   stopCapture.mockClear();
+  drain.mockReset();
+  drain.mockImplementation(async () => {});
   writeText.mockClear();
 });
 
@@ -91,6 +94,7 @@ describe("recording while Exegol is in the background", () => {
     chordUp();
     expect(phase()).toBe("listening");
     chordDown();
+    await settle();
     // Nothing heard: stopping ends the recording at once
     expect(phase()).toBe("idle");
     expect(stopCapture).toHaveBeenCalled();
@@ -138,10 +142,174 @@ describe("diagnostics: what ended a dictation reaches main's log (never the text
     expect(callOf("dictation.stop")).toMatchObject({ sessionId: "s1", by: "chord" });
   });
 
-  it("a stop with nothing heard is logged as a cancel", async () => {
+  it("a stop with sound but no speech is logged as a cancel", async () => {
     trpcMutate.mockClear();
     await startRecording();
+    feed(new Float32Array(1600).fill(0.004));
     chordDown();
+    await settle();
     expect(callOf("dictation.cancel")).toEqual({ sessionId: "s1", source: "nothing-heard" });
+  });
+});
+
+describe("heard nothing: says which input and links to Settings", () => {
+  const lastToast = () => useToastStore.getState().toasts[0];
+
+  it("a flat input (no signal at all) cancels as flat", async () => {
+    trpcMutate.mockClear();
+    await startRecording();
+    useDictationStore.getState().set({ inputName: "USB Mic" });
+    feed(new Float32Array(1600));
+    chordDown();
+    await settle();
+    expect(trpcMutate.mock.calls.find(([p]) => p === "dictation.cancel")?.[1]).toEqual({
+      sessionId: "s1",
+      source: "flat",
+    });
+    expect(lastToast()?.title).toBe("Heard nothing from USB Mic");
+    expect(lastToast()?.action?.label).toBe("Open Settings");
+  });
+
+  it("speech the model found no words in says the same", async () => {
+    await startRecording();
+    feed(speech());
+    trpcMutate.mockImplementationOnce(async () => ({ text: "" }));
+    chordDown();
+    await settle();
+    expect(lastToast()?.title).toBe("Heard nothing from the microphone");
+  });
+});
+
+describe("a stop waits for the whole transcript", () => {
+  function deferred<T>() {
+    let resolve: (value: T) => void = () => {};
+    const promise = new Promise<T>((r) => {
+      resolve = r;
+    });
+    return { promise, resolve };
+  }
+
+  it("audio still in the worklet reaches main before the stop", async () => {
+    const order: string[] = [];
+    vi.stubGlobal("window", {
+      api: { dictation: { sendAudio: vi.fn(() => order.push("audio")) } },
+    });
+    trpcMutate.mockClear();
+    await startRecording();
+    feed(speech());
+    drain.mockImplementationOnce(async () => {
+      feed(speech());
+    });
+    trpcMutate.mockImplementationOnce(async (path: string) => {
+      order.push(path);
+      return { text: "" };
+    });
+    chordDown();
+    await settle();
+    expect(order).toEqual(["audio", "audio", "dictation.stop"]);
+  });
+
+  it("Enter or the chord again while transcribing: one stop, one insert of the full text", async () => {
+    trpcMutate.mockClear();
+    await startRecording();
+    feed(speech());
+    const flushed = deferred<void>();
+    drain.mockImplementationOnce(() => flushed.promise);
+    const stopped = deferred<{ text: string }>();
+    trpcMutate.mockImplementationOnce(() => stopped.promise);
+    chordDown();
+    expect(phase()).toBe("transcribing");
+    chordDown();
+    flushed.resolve();
+    await settle();
+    chordDown();
+    chordUp();
+    await settle();
+    expect(phase()).toBe("transcribing");
+    expect(writeText).not.toHaveBeenCalled();
+    stopped.resolve({ text: "first phrase and the last words" });
+    await settle();
+    await settle();
+    expect(trpcMutate.mock.calls.filter(([p]) => p === "dictation.stop")).toHaveLength(1);
+    expect(writeText).toHaveBeenCalledTimes(1);
+    expect(writeText).toHaveBeenCalledWith("first phrase and the last words");
+    expect(phase()).toBe("idle");
+  });
+
+  it("Esc while transcribing inserts nothing", async () => {
+    await startRecording();
+    feed(speech());
+    const stopped = deferred<{ text: string }>();
+    trpcMutate.mockImplementationOnce(() => stopped.promise);
+    chordDown();
+    await settle();
+    expect(phase()).toBe("transcribing");
+    dismissDictation("esc");
+    stopped.resolve({ text: "never inserted" });
+    await settle();
+    expect(writeText).not.toHaveBeenCalled();
+    expect(phase()).toBe("idle");
+  });
+
+  it("Esc during the flush stops before main is asked", async () => {
+    trpcMutate.mockClear();
+    await startRecording();
+    feed(speech());
+    const flushed = deferred<void>();
+    drain.mockImplementationOnce(() => flushed.promise);
+    chordDown();
+    dismissDictation("esc");
+    flushed.resolve();
+    await settle();
+    expect(trpcMutate.mock.calls.some(([p]) => p === "dictation.stop")).toBe(false);
+    expect(phase()).toBe("idle");
+  });
+});
+
+describe("auto insert after silence", () => {
+  const silence = () => new Float32Array(16_000);
+
+  it("inserts once through the normal stop, after the full transcript, never Enter", async () => {
+    const { trpcInvoke } = await import("../trpc-client");
+    vi.mocked(trpcInvoke).mockResolvedValueOnce({
+      dictation: { enabled: true, autoInsert: true, autoInsertSilenceSec: 5, pressEnter: true },
+    });
+    trpcMutate.mockClear();
+    await startRecording();
+    feed(speech());
+    for (let i = 0; i < 3; i++) feed(silence());
+    const countdown = useDictationStore.getState().autoInsertCountdown;
+    expect(countdown?.ms).toBe(3000);
+    trpcMutate.mockImplementationOnce(async () => ({ text: "all of it" }));
+    feed(silence());
+    // Set once as it starts, not on every chunk
+    expect(useDictationStore.getState().autoInsertCountdown).toBe(countdown);
+    feed(silence());
+    await settle();
+    await settle();
+    const stops = trpcMutate.mock.calls.filter(([p]) => p === "dictation.stop");
+    expect(stops).toHaveLength(1);
+    expect(stops[0]?.[1]).toMatchObject({ by: "silence" });
+    expect(writeText).toHaveBeenCalledTimes(1);
+    expect(writeText).toHaveBeenCalledWith("all of it");
+    expect(phase()).toBe("idle");
+  });
+
+  it("a click on the countdown keeps the dictation going", async () => {
+    const { trpcInvoke } = await import("../trpc-client");
+    vi.mocked(trpcInvoke).mockResolvedValueOnce({
+      dictation: { enabled: true, autoInsert: true, autoInsertSilenceSec: 5 },
+    });
+    const { cancelAutoInsert } = await import("./controller");
+    trpcMutate.mockClear();
+    await startRecording();
+    feed(speech());
+    for (let i = 0; i < 3; i++) feed(silence());
+    cancelAutoInsert();
+    expect(useDictationStore.getState().autoInsertCountdown).toBeNull();
+    for (let i = 0; i < 5; i++) feed(silence());
+    await settle();
+    expect(phase()).toBe("listening");
+    expect(trpcMutate.mock.calls.some(([p]) => p === "dictation.stop")).toBe(false);
   });
 });

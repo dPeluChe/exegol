@@ -4,6 +4,8 @@ import type { Configuration } from "electron-builder";
 
 // One folder per version (dist/0.5.1/...) so builds don't pile up side by side
 const version = readVersion();
+// Set by scripts/package-local.ts: a `-test.<sha>` version, its own folder and DMG name, no notarizing
+const localVersion = process.env.EXEGOL_LOCAL_VERSION;
 
 function readVersion(): string {
   const pkg: unknown = JSON.parse(readFileSync(resolve("package.json"), "utf8"));
@@ -23,14 +25,18 @@ const EXE_NAME = "Exegol-${version}-${arch}.exe";
 const APPIMAGE_NAME = "Exegol-${version}-${arch}.AppImage";
 // biome-ignore lint/suspicious/noTemplateCurlyInString: electron-builder template vars
 const DEB_NAME = "exegol_${version}_${arch}.deb";
+// biome-ignore lint/suspicious/noTemplateCurlyInString: electron-builder template vars
+const RPM_NAME = "exegol-${version}.${arch}.rpm";
 
 const config: Configuration = {
   appId: "com.exegol.desktop",
   productName: "Exegol",
   copyright: "Copyright 2026 Exegol",
 
+  ...(localVersion && { extraMetadata: { version: localVersion } }),
+
   directories: {
-    output: `dist/${version}`,
+    output: localVersion ? "dist/local" : `dist/${version}`,
     buildResources: "src/resources/build",
   },
 
@@ -94,7 +100,7 @@ const config: Configuration = {
     gatekeeperAssess: false,
     // Notarized when a notarytool keychain profile is given (APPLE_KEYCHAIN_PROFILE=<profile>,
     // see docs/GUIDES/RELEASE.md). Without it macOS refuses the downloaded DMG ("could not verify")
-    notarize: !!process.env.APPLE_KEYCHAIN_PROFILE,
+    notarize: !localVersion && !!process.env.APPLE_KEYCHAIN_PROFILE,
     entitlements: "src/resources/build/entitlements.mac.plist",
     entitlementsInherit: "src/resources/build/entitlements.mac.inherit.plist",
     darkModeSupport: true,
@@ -102,12 +108,18 @@ const config: Configuration = {
       NSAppleEventsUsageDescription:
         "Exegol needs automation access to open IDEs, manage terminals and, if you turn it on, pause your music while you dictate.",
       NSMicrophoneUsageDescription:
-        "Exegol uses the microphone only while you dictate. Speech is transcribed on this Mac and never leaves it.",
+        "Exegol uses the microphone while you dictate (transcribed on this Mac, it never leaves it), and for a page in a browser pane only when it asks and you allow it.",
+      NSCameraUsageDescription:
+        "Exegol uses the camera only when a page in a browser pane asks for it and you allow it.",
+      NSLocationUsageDescription:
+        "Exegol uses your location only when a page in a browser pane asks for it and you allow it.",
+      NSLocationWhenInUseUsageDescription:
+        "Exegol uses your location only when a page in a browser pane asks for it and you allow it.",
     },
   },
 
   dmg: {
-    artifactName: DMG_NAME,
+    artifactName: localVersion ? `Exegol-TEST-${localVersion}.dmg` : DMG_NAME,
     background: "src/resources/build/dmg-background.png",
     window: { width: 540, height: 380 },
     contents: [
@@ -132,7 +144,8 @@ const config: Configuration = {
 
   // ─── Linux ──────────────────────────────────────────────────────────
   // Built on Linux by .github/workflows/linux.yml (native modules cannot be cross-built from a Mac).
-  // AppImage runs on most distros and self-updates; the .deb installs natively on Debian/Ubuntu
+  // AppImage runs on most distros and self-updates; the .deb (Debian/Ubuntu) and the .rpm
+  // (Fedora/openSUSE) install natively and update through electron-updater's own deb/rpm updaters
   linux: {
     // Without it the binary, the .desktop file and the icon took the scoped package name
     // ("@exegoldesktop"); `exegol` itself is the CLI opener on PATH
@@ -142,6 +155,7 @@ const config: Configuration = {
     target: [
       { target: "AppImage", arch: ["x64"] },
       { target: "deb", arch: ["x64"] },
+      { target: "rpm", arch: ["x64"] },
     ],
     category: "Development",
     artifactName: APPIMAGE_NAME,
@@ -160,6 +174,24 @@ const config: Configuration = {
     ],
     // safeStorage keeps API keys in the desktop keyring (libsecret); without it they fall back
     depends: ["libsecret-1-0", "libnotify4", "libxss1", "libnss3"],
+  },
+  rpm: {
+    artifactName: RPM_NAME,
+    fpm: [
+      `${resolve("src/resources/linux/com.exegol.desktop.metainfo.xml")}=/usr/share/metainfo/com.exegol.desktop.metainfo.xml`,
+    ],
+    // electron-builder's rpm defaults plus libsecret (the keyring for API keys); depends replaces them
+    depends: [
+      "gtk3",
+      "libnotify",
+      "nss",
+      "libXScrnSaver",
+      "(libXtst or libXtst6)",
+      "xdg-utils",
+      "at-spi2-core",
+      "(libuuid or libuuid1)",
+      "libsecret",
+    ],
   },
 
   // ─── Auto-update publish config (GitHub Releases) ──────────────────

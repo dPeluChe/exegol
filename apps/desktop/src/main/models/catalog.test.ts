@@ -1,4 +1,4 @@
-import type { SpeechModelEntry } from "@exegol/shared";
+import { DICTATION_LANGUAGE_IDS, type SpeechModelEntry } from "@exegol/shared";
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { DEFAULT_MODEL_ID, MODEL_CATALOG } from "./catalog";
@@ -7,6 +7,16 @@ const relativeFile = z
   .string()
   .min(1)
   .refine((p) => !p.startsWith("/") && !p.split("/").includes(".."), "must stay inside rootDir");
+
+const benchmarkSchema = z.object({
+  language: z.enum(DICTATION_LANGUAGE_IDS),
+  werPercent: z.number().positive().max(100),
+  speedX: z.number().positive().optional(),
+  dataset: z.string().min(1),
+  source: z.string().min(1),
+  url: z.string().url().startsWith("https://"),
+  note: z.string().optional(),
+});
 
 const entrySchema = z.object({
   id: z.string().regex(/^[a-z0-9][a-z0-9.-]*$/),
@@ -29,6 +39,7 @@ const entrySchema = z.object({
   commercialUse: z.boolean().optional(),
   notes: z.string().optional(),
   featured: z.number().int().positive().optional(),
+  benchmarks: z.array(benchmarkSchema).optional(),
 });
 
 function validateCatalog(entries: readonly SpeechModelEntry[]): string[] {
@@ -105,5 +116,34 @@ describe("speech model catalog", () => {
       "default model is non-commercial",
     );
     expect(MODEL_CATALOG.find((m) => m.id === "moonshine-v2-base-es")?.commercialUse).toBe(false);
+  });
+
+  it("lists Canary 180M flash for Spanish, English, German and French, commercial use allowed", () => {
+    const canary = MODEL_CATALOG.find((m) => m.id === "canary-180m-flash-int8");
+    expect(canary?.languages).toEqual(["de", "en", "es", "fr"]);
+    expect(canary?.license).toBe("CC-BY-4.0");
+    expect(canary?.commercialUse).toBe(true);
+    expect(canary?.files).toEqual(["encoder.int8.onnx", "decoder.int8.onnx", "tokens.txt"]);
+  });
+
+  it("keeps public benchmarks well formed, one per source and language", () => {
+    for (const entry of MODEL_CATALOG) {
+      const keys = (entry.benchmarks ?? []).map((b) => `${b.source}:${b.language}`);
+      expect(new Set(keys).size).toBe(keys.length);
+    }
+    const parakeet = MODEL_CATALOG.find((m) => m.id === DEFAULT_MODEL_ID);
+    expect(parakeet?.benchmarks?.some((b) => b.language === "es" && b.dataset === "FLEURS")).toBe(
+      true,
+    );
+    const base = MODEL_CATALOG[0];
+    if (!base) throw new Error("empty catalog");
+    const bad = {
+      language: "es" as const,
+      werPercent: -1,
+      dataset: "",
+      source: "x",
+      url: "http://x",
+    };
+    expect(validateCatalog([{ ...base, benchmarks: [bad] }]).join()).toContain("benchmarks");
   });
 });

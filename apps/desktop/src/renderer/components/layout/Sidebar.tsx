@@ -137,7 +137,7 @@ function ViewToolbar({ view }: { view: SidebarView }) {
             aria-label={projectsOrder === "auto" ? "Auto order" : "Ordered by hand"}
             title={
               projectsOrder === "auto"
-                ? "Auto order: Cmd+n first, then live, then A-Z. Click to order by hand"
+                ? `Auto order: ${chordBadge("n")} first, then live, then A-Z. Click to order by hand`
                 : "Ordered by hand (drag). Click for auto order"
             }
           >

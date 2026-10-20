@@ -205,6 +205,12 @@ const READERS: Record<string, () => Promise<PlanUsage | null>> = {
   codex: codexPlanUsage,
 };
 
+/** The readings already in memory (asked for by the status bar widget): no request, no file read */
+export function cachedPlanUsage(): PlanUsage[] {
+  const codex = codexLast?.usage && { ...codexLast.usage, ...refreshWindows(codexLast.usage) };
+  return [claudeReading(), codex].filter((u): u is PlanUsage => !!u);
+}
+
 /** The plan windows of these CLIs, the ones with a readable source */
 export async function planUsage(cliTypes: string[]): Promise<PlanUsage[]> {
   const results = await Promise.all(cliTypes.map((t) => READERS[t]?.().catch(() => null) ?? null));

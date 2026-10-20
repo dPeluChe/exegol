@@ -1,11 +1,18 @@
 import { z } from "zod";
 import {
   DEFAULT_DICTATION_SETTINGS,
+  DICTATION_AUTO_INSERT_SECONDS,
+  DICTATION_LANGUAGE_IDS,
   DICTATION_OVERLAY_POSITIONS,
+  DICTATION_RECORDING_RETENTION_DAYS,
+  DICTATION_TERM_MAX,
+  DICTATION_VOCABULARY_MAX,
+  type DictationAutoInsertSeconds,
+  type DictationRecordingRetentionDays,
   parseChord,
 } from "../types/dictation";
 import { IDE_IDS } from "../types/ide";
-import { DEFAULT_SETTINGS } from "../types/settings";
+import { DEFAULT_SETTINGS, IDLE_SUSPEND_DAYS, type IdleSuspendDays } from "../types/settings";
 
 export const ideTypeSchema = z.enum(IDE_IDS);
 
@@ -27,10 +34,42 @@ export const dictationSettingsSchema = z.object({
   pauseMediaDirect: z.boolean(),
   idleUnloadMinutes: z.number().int().min(1).max(240),
   maxSeconds: z.number().int().min(10).max(600),
-  autoStopSilenceSec: z.number().int().min(0).max(60),
+  // Legacy, read only by dictationSettingsOf: an old row still parses
+  autoStopSilenceSec: z.number().int().min(0).max(60).optional(),
+  autoInsert: z.boolean().default(false),
+  autoInsertSilenceSec: z
+    .number()
+    .refine((s): s is DictationAutoInsertSeconds =>
+      (DICTATION_AUTO_INSERT_SECONDS as readonly number[]).includes(s),
+    )
+    .default(DEFAULT_DICTATION_SETTINGS.autoInsertSilenceSec),
   retentionDays: z.number().int().min(1).max(3650),
   retentionMax: z.number().int().min(10).max(10_000),
   overlayPosition: z.enum(DICTATION_OVERLAY_POSITIONS).default("pane"),
+  language: z.enum(DICTATION_LANGUAGE_IDS).default("en"),
+  keepRecordings: z.boolean().default(false),
+  recordingsRetentionDays: z
+    .number()
+    .refine((d): d is DictationRecordingRetentionDays =>
+      (DICTATION_RECORDING_RETENTION_DAYS as readonly number[]).includes(d),
+    )
+    .default(DEFAULT_DICTATION_SETTINGS.recordingsRetentionDays),
+  inputDeviceId: z.string().max(256).nullable().default(null),
+  inputDeviceLabel: z.string().max(256).nullable().default(null),
+  inputDeviceGroupId: z.string().max(256).nullable().default(null),
+  vocabulary: z
+    .array(z.string().max(DICTATION_TERM_MAX))
+    .max(DICTATION_VOCABULARY_MAX)
+    .default([...DEFAULT_DICTATION_SETTINGS.vocabulary]),
+  projectVocabulary: z
+    .record(
+      z.string().max(64),
+      z.array(z.string().max(DICTATION_TERM_MAX)).max(DICTATION_VOCABULARY_MAX),
+    )
+    .refine((r) => Object.keys(r).length <= 500, "too many projects")
+    .default({}),
+  vocabularyBoost: z.number().min(0.5).max(10).default(DEFAULT_DICTATION_SETTINGS.vocabularyBoost),
+  spokenPunctuation: z.boolean().default(true),
 });
 
 export const settingsSchema = z.object({
@@ -41,9 +80,15 @@ export const settingsSchema = z.object({
   globalHotkey: z.string().default("CommandOrControl+Shift+E"),
   terminalFontSize: z.number().int().min(8).max(32).default(14),
   terminalFontFamily: z.string().default("Menlo, Monaco, monospace"),
+  sendToRunTerminal: z.boolean().default(false),
+  sendToSubmitAgent: z.boolean().default(false),
   notificationsEnabled: z.boolean().default(true),
   toastsEnabled: z.boolean().default(true),
   saveWorktreeWork: z.boolean().default(true),
+  idleSuspendDays: z
+    .number()
+    .refine((d): d is IdleSuspendDays => (IDLE_SUSPEND_DAYS as readonly number[]).includes(d))
+    .default(DEFAULT_SETTINGS.idleSuspendDays),
   mutedNotificationChannels: z.array(z.string()).default([]),
   ollamaUrl: z.string().default(DEFAULT_SETTINGS.ollamaUrl),
   ollamaModel: z.string().default(DEFAULT_SETTINGS.ollamaModel),

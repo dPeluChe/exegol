@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it, vi } from "vitest";
 
-const root = realpathSync(mkdtempSync(join(tmpdir(), "exegol-links-")));
+const root = realpathSync.native(mkdtempSync(join(tmpdir(), "exegol-links-")));
 const project = join(root, "project");
 const outside = join(root, "outside");
 const otherProject = join(root, "other");

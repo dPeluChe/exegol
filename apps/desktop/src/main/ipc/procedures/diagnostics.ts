@@ -2,11 +2,12 @@ import { app, clipboard, shell } from "electron";
 import { z } from "zod";
 import { LOG_DIR } from "../../lib/logger";
 import { collectDiagnostics, fileBugReport } from "../../system/diagnostics";
+import { gpuSummary } from "../../system/gpu-watch";
 import { publicProcedure, router } from "../trpc";
 
 /** T196: the title bar's bug button — redacted diagnostics, logs folder, GitHub issue. */
 export const diagnosticsRouter = router({
-  collect: publicProcedure.query(({ ctx }) => collectDiagnostics(ctx.db, app)),
+  collect: publicProcedure.query(({ ctx }) => collectDiagnostics(ctx.db, app, gpuSummary)),
 
   openLogs: publicProcedure.mutation(async () => {
     const error = await shell.openPath(LOG_DIR);

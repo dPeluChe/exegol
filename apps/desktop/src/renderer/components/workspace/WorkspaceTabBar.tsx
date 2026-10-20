@@ -5,6 +5,7 @@ import { useProjectContext } from "../../contexts/ProjectContext";
 import { closeWithConfirm } from "../../lib/close-target";
 import { movePane } from "../../lib/move-pane";
 import { focusNewPane } from "../../lib/pane-focus";
+import { addTabAndFocus } from "../../lib/split-terminal";
 import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentBrowserStore } from "../../stores/agent-browser";
 import { useAgentStore } from "../../stores/agents";
@@ -261,7 +262,7 @@ export function WorkspaceTabBar() {
           {/* Add tab button */}
           <button
             type="button"
-            onClick={() => addTab()}
+            onClick={() => addTabAndFocus()}
             className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-text-muted transition-colors hover:bg-white/5"
             title="New tab"
           >

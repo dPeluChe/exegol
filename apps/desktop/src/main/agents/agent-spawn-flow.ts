@@ -22,11 +22,22 @@ import { inspectCommand } from "../security/command-guard";
 import {
   getFishInitCommand,
   getShellIntegrationBashRcfile,
+  getShellIntegrationPwshProfile,
   getShellIntegrationZdotdir,
   shellSupportsMarker,
 } from "../terminal/shell-wrappers";
 import type { WorktreeRecord } from "./agent-worktree-ops";
 import type { AgentProviderRegistry } from "./registry";
+import {
+  oneShotArgs,
+  pwshInteractiveArgs,
+  quoteArg,
+  quotePath,
+  runAndExit,
+  type ShellKind,
+  shellKind,
+  submitKey,
+} from "./shell-dialect";
 import { buildShellCommand, buildSpawnContext } from "./spawn-context";
 import {
   _getFullPath,
@@ -37,6 +48,7 @@ import {
 } from "./spawn-env";
 import { findReusableWorktree, findWorktreeHolding, requestedBranchFor } from "./spawn-target";
 import { createManagedWorktree, getWorktreeName, removeManagedWorktree } from "./worktrees";
+import { HOOKS_FILE_ENV } from "./wrappers";
 
 interface PtyInvocation {
   shell: string;
@@ -44,6 +56,8 @@ interface PtyInvocation {
   env: Record<string, string>;
   /** Command to inject after shell starts (interactive CLIs only). null otherwise. */
   stdinCommand: string | null;
+  /** Enter after stdinCommand: CR for a Windows shell under ConPTY */
+  submit: string;
   enableMarker: boolean;
   isPlainShell: boolean;
   /** Launched with the generic resume flag without knowing a session exists (see missed-resume) */
@@ -88,7 +102,7 @@ export function setupAgentCwd(
 
   if (config.cwdOverride) {
     cwd = config.cwdOverride;
-    logger.info("[AgentManager] Using cwdOverride:", { cwd });
+    logger.info("[AgentManager] Using a start folder override");
     // A folder of the checkout itself (the launcher's "run in") is not a pipeline worktree
     const inCheckout = cwd === project.path || cwd.startsWith(`${project.path}/`);
     // Joined like a reuse: the owner's exit cleanup keeps the worktree while this one lives
@@ -265,12 +279,14 @@ export function buildPtyInvocation(
 ): PtyInvocation {
   const isPlainShell = agent.cliType === "shell";
   const userShell = loginShell();
+  const kind = shellKind(userShell, process.platform);
 
   let shell: string;
   let args: string[];
   let env: Record<string, string>;
   let stdinCommand: string | null = null;
   let blindResume = false;
+  let claudeHooksFile: string | null = null;
 
   // oh-my-zsh's interactive update prompt blocks shell init (no ready marker,
   // frozen pane) — suppress it in every PTY we spawn.
@@ -281,7 +297,7 @@ export function buildPtyInvocation(
 
   if (isPlainShell) {
     shell = userShell;
-    args = ["-il"];
+    args = interactiveArgs(kind, ["-il"]);
     env = {
       ...childEnv(),
       ...shellInitGuards,
@@ -296,6 +312,7 @@ export function buildPtyInvocation(
       cliConfig,
       contextPrefix,
       config.accessMode,
+      kind,
     );
 
     if (config.resumeSession) {
@@ -379,7 +396,8 @@ export function buildPtyInvocation(
         enforceClaims: !config.useWorktree,
       });
       if (hooksPath) {
-        fullCommand = `${fullCommand} --settings ${hooksPath}`;
+        fullCommand = `${fullCommand} --settings ${quotePath(kind, hooksPath)}`;
+        claudeHooksFile = hooksPath;
       }
     }
 
@@ -389,7 +407,7 @@ export function buildPtyInvocation(
     // `npm install` stop the agent with nothing on screen, and `exec hook && cli`
     // (stdin-prompt CLIs) replaced the shell with the hook, so the CLI never ran
     const beforeAgent = loadLifecycleConfig(projectPath)?.beforeAgent;
-    const hookPrefix = beforeAgent ? beforeAgentPrefix(beforeAgent, userShell) : "";
+    const hookPrefix = beforeAgent ? beforeAgentPrefix(beforeAgent, userShell, kind) : "";
 
     // Spawn-boundary guard: refuse obviously destructive commands. Scans the
     // final string handed to the shell (prompt + resume + lifecycle included).
@@ -413,14 +431,15 @@ export function buildPtyInvocation(
       const perAgentConfig = writePerAgentMcpConfig(agent.id, shimPath, mcpToken, accessMode);
       if (perAgentConfig && agent.cliType === "claude-code") {
         // No --strict-mcp-config: the user's own servers still load.
-        fullCommand = `${fullCommand} --mcp-config ${perAgentConfig}`;
+        fullCommand = `${fullCommand} --mcp-config ${quotePath(kind, perAgentConfig)}`;
       } else {
         writeAgentMcpConfigFor(agent.cliType, cwd, shimPath, mcpToken, accessMode);
         if (agent.cliType === "codex") {
           // codex sanitizes MCP-server env, so the token normally rides the
           // shared cwd file. `-c` sets it per SESSION and wins over the file in
           // the shim's resolve chain, keeping siblings distinct.
-          fullCommand = `${fullCommand} -c 'mcp_servers.exegol.env.ELECTRON_RUN_AS_NODE="1"' -c 'mcp_servers.exegol.env.EXEGOL_MCP_TOKEN="${mcpToken}"'`;
+          const set = (kv: string) => `-c ${quoteArg(kind, `mcp_servers.exegol.env.${kv}`)}`;
+          fullCommand = `${fullCommand} ${set('ELECTRON_RUN_AS_NODE="1"')} ${set(`EXEGOL_MCP_TOKEN="${mcpToken}"`)}`;
         }
       }
     } catch (err) {
@@ -451,16 +470,18 @@ export function buildPtyInvocation(
     });
 
     shell = userShell;
-    if (isInteractiveCli) {
-      args = ["-i"];
+    // null for cmd.exe: it always gets the command typed
+    const oneShot = oneShotArgs(kind, `${hookPrefix}${fullCommand}`);
+    if (isInteractiveCli || !oneShot) {
+      args = interactiveArgs(kind, ["-i"]);
       // `exec` replaces the shell with the CLI, so the PTY dies WITH the agent.
       // Without it the shell survives the CLI's exit: Exegol never sees onExit,
       // the pane keeps a live shell prompt, and the session ends with no
       // "Ended" card and no Resume — opencode/gemini/kiro all behaved this way
       // (verify 2026-08-12: "en opencode ctrl-C cierra directo, sin resume").
-      stdinCommand = `${hookPrefix}exec ${fullCommand}`;
+      stdinCommand = `${hookPrefix}${runAndExit(kind, fullCommand)}`;
     } else {
-      args = ["-ic", `${hookPrefix}${fullCommand}`];
+      args = oneShot;
     }
     env = {
       ...childEnv(),
@@ -472,6 +493,8 @@ export function buildPtyInvocation(
       EXEGOL_AGENT_ID: agent.id,
       EXEGOL_ACCESS_MODE: config.accessMode ?? "write",
     } as Record<string, string>;
+    // The global settings.json hooks then step aside: this file drops the same events
+    if (claudeHooksFile) env[HOOKS_FILE_ENV] = claudeHooksFile;
     if (mcpToken) env.EXEGOL_MCP_TOKEN = mcpToken;
   }
 
@@ -479,7 +502,8 @@ export function buildPtyInvocation(
   // Marker gating also covers interactive-CLI spawns: PtyHost queues the
   // stdinCommand until the shell-ready marker (or its timeout) fires, so we
   // don't race a blind delay against shell startup.
-  const enableMarker = (isPlainShell || stdinCommand !== null) && shellSupportsMarker(userShell);
+  const enableMarker =
+    (isPlainShell || stdinCommand !== null) && (kind === "pwsh" || shellSupportsMarker(userShell));
   if (enableMarker) {
     if (shellName === "zsh") {
       // T112: route via the OSC 7 + OSC 133 shell-integration dir so plain
@@ -501,7 +525,22 @@ export function buildPtyInvocation(
     }
   }
 
-  return { shell, args, env, stdinCommand, enableMarker, isPlainShell, blindResume };
+  return {
+    shell,
+    args,
+    env,
+    stdinCommand,
+    submit: submitKey(kind),
+    enableMarker,
+    isPlainShell,
+    blindResume,
+  };
+}
+
+/** An interactive shell: the POSIX flags given, PowerShell with Exegol's integration, bare cmd */
+function interactiveArgs(kind: ShellKind, posix: string[]): string[] {
+  if (kind === "pwsh") return pwshInteractiveArgs(getShellIntegrationPwshProfile());
+  return kind === "cmd" ? [] : posix;
 }
 
 const HOOK_FAILED_MSG =
@@ -512,7 +551,14 @@ const HOOK_FAILED_MSG =
  * fish has no `$?` (a parse error there, so no agent ever started) and only
  * recent fish has `{ }`: it gets `begin; end; or` and `$status`.
  */
-export function beforeAgentPrefix(hook: string, userShell: string): string {
+export function beforeAgentPrefix(hook: string, userShell: string, kind?: ShellKind): string {
+  // One line on Windows: the prefix is typed, and a raw newline there submits
+  if (kind === "pwsh") {
+    return `${hook}; if (-not $?) { Write-Host "\`n[Exegol] beforeAgent failed (exit $LASTEXITCODE); starting the agent anyway\`n" -ForegroundColor Yellow }; `;
+  }
+  if (kind === "cmd") {
+    return `((${hook}) || echo [Exegol] beforeAgent failed, starting the agent anyway) & `;
+  }
   if (userShell.endsWith("/fish")) {
     return `begin; ${hook}\nend; or printf '${HOOK_FAILED_MSG}' $status; `;
   }

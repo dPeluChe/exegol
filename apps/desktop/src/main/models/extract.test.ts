@@ -13,7 +13,14 @@ import { dirname, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { recognizerSpec, specPaths } from "../dictation/model-config";
 import { MODEL_CATALOG } from "./catalog";
-import { extractTarBz2, keepsPath, pruneJunk, pruneToRequired, unsafeEntryReason } from "./extract";
+import {
+  extractTarBz2,
+  keepsPath,
+  pruneJunk,
+  pruneToRequired,
+  tarCommand,
+  unsafeEntryReason,
+} from "./extract";
 
 interface Entry {
   name: string;
@@ -90,6 +97,15 @@ describe("unsafeEntryReason", () => {
   });
 });
 
+describe("tarCommand", () => {
+  it("is tar off Windows, the System32 bsdtar on Windows whatever PATH holds", () => {
+    expect(tarCommand("darwin", {})).toBe("tar");
+    expect(tarCommand("linux", { SystemRoot: "C:\\Windows" })).toBe("tar");
+    expect(tarCommand("win32", { SystemRoot: "D:\\WIN" })).toBe("D:\\WIN\\System32\\tar.exe");
+    expect(tarCommand("win32", {})).toBe("C:\\Windows\\System32\\tar.exe");
+  });
+});
+
 describe("keepsPath", () => {
   const required = ["tokens.txt", "tokenizer/vocab.json"];
 
@@ -136,7 +152,7 @@ describe("pruneToRequired", () => {
         mkdirSync(dirname(join(dir, file)), { recursive: true });
         writeFileSync(join(dir, file), "x");
       }
-      const paths = specPaths(recognizerSpec(entry, dir, 1)?.config);
+      const paths = specPaths(recognizerSpec(entry, dir, 1, "en")?.config);
       expect(paths.length, entry.id).toBeGreaterThan(0);
       for (const path of paths) {
         const rel = path.slice(dir.length + 1);

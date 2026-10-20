@@ -51,16 +51,19 @@ interface Window {
       invoke: (path: string, input: unknown) => Promise<unknown>;
     };
     terminal: {
-      onData: (id: string, callback: (data: string) => void) => () => void;
+      onData: (id: string, callback: (data: string, seq?: number) => void) => () => void;
       write: (id: string, data: string) => void;
       resize: (id: string, cols: number, rows: number) => void;
-      getSnapshot: (id: string) => Promise<string | null>;
+      getSnapshot: (id: string) => Promise<import("@exegol/shared").LiveSnapshot | null>;
+      mountLog: (id: string, stats: import("@exegol/shared").MountStats) => void;
       hasContent: (id: string) => Promise<boolean>;
       /** T178: report whether this view can draw the agent. A repaint, when one
        *  is needed, arrives on terminal:data so it stays ordered. */
       setVisible: (id: string, visible: boolean, viewId: string, fresh?: boolean) => Promise<void>;
       redraw: (id: string) => void;
       clear: (id: string) => void;
+      gpuRepainted?: (views: number) => void;
+      gpuStats?: (stats: { views: number; webgl: number; capped: boolean }) => void;
       getSize: (id: string) => Promise<{ cols: number; rows: number } | null>;
       onResized: (id: string, callback: (cols: number, rows: number) => void) => () => void;
       saveClipboardImage: () => Promise<string | null>;
@@ -68,10 +71,18 @@ interface Window {
     app: {
       getVersion: () => Promise<string>;
       getPlatform: () => string;
+      zoom: (action: "in" | "out" | "reset") => void;
+      quit: () => void;
     };
     onMenuAction: (
       callback: (
-        action: "new-tab" | "close-pane" | "reload" | "focus-location" | "open-dashboard",
+        action:
+          | "new-tab"
+          | "close-pane"
+          | "reload"
+          | "focus-location"
+          | "open-dashboard"
+          | "report-bug",
       ) => void,
     ) => () => void;
     onPaneSwitcherKey: (
@@ -86,6 +97,7 @@ interface Window {
       minimize: () => void;
       maximize: () => void;
       close: () => void;
+      appMenu: (x: number, y: number) => void;
     };
     pathForFile?: (file: File) => string;
     onAgentStatus: (callback: (event: AgentStatusEvent) => void) => () => void;
@@ -95,6 +107,10 @@ interface Window {
     onCliSelfUpdated: (
       callback: (event: import("./stores/cli-self-updates").CliSelfUpdate) => void,
     ) => () => void;
+    onIdleSuspended: (
+      callback: (event: import("./hooks/use-idle-suspend").IdleSuspendEvent) => void,
+    ) => () => void;
+    onSessionsLost: (callback: () => void) => () => void;
     onResumeMissed: (
       callback: (event: { agentId: string; projectId: string; cliType: string }) => void,
     ) => () => void;
@@ -116,6 +132,7 @@ interface Window {
         projectId: string;
         text: string;
       }) => Promise<boolean>;
+      testMic: () => Promise<import("@exegol/shared").MicStatus>;
       onPartial: (
         callback: (event: import("@exegol/shared").DictationPartialEvent) => void,
       ) => () => void;
@@ -125,7 +142,7 @@ interface Window {
       onKey: (
         callback: (
           event:
-            | { kind: "down" | "up" | "escape" | "enter" }
+            | { kind: "down" | "up" | "escape" | "enter" | "pause" }
             | { kind: "limit"; sessionId: string; maxSeconds: number },
         ) => void,
       ) => () => void;
@@ -141,6 +158,8 @@ interface Window {
       ) => () => void;
       onState: (callback: (event: import("@exegol/shared").SimStreamEvent) => void) => () => void;
     };
+    onGpuProcessGone?: (callback: (event: { domOnly: boolean }) => void) => () => void;
+    gpuDomOnly?: () => Promise<boolean>;
     onSidecarHealth: (
       callback: (event: import("@exegol/shared").SidecarHealth) => void,
     ) => () => void;
@@ -166,6 +185,14 @@ interface Window {
       /** `webContentsId`: the pane's own webview; without it the window's first one */
       executeJs: (code: string, webContentsId?: number) => Promise<unknown>;
       captureScreenshot: (webContentsId?: number) => Promise<string | null>;
+      saveScreenshot: (
+        webContentsId: number,
+        target: "file" | "clipboard",
+        fullPage: boolean,
+      ) => Promise<"saved" | "copied" | "canceled" | "failed">;
+      onZoomKey: (
+        callback: (key: { paneId: string; action: import("@exegol/shared").ZoomAction }) => void,
+      ) => () => void;
       registerPane: (paneId: string, projectId: string, webContentsId: number) => Promise<boolean>;
       control: (paneId: string, action: "take-over" | "hand-back") => Promise<boolean>;
       agentStates: () => Promise<import("@exegol/shared").AgentBrowserPaneState[]>;
@@ -181,6 +208,31 @@ interface Window {
         }) => void,
       ) => () => void;
       openResult: (result: { requestId: string; paneId?: string; error?: string }) => Promise<void>;
+      onPageDialog: (
+        callback: (dialog: {
+          id: string;
+          paneId: string;
+          type: "alert" | "confirm" | "prompt";
+          host: string;
+          message: string;
+          defaultPrompt: string;
+          offerBlock: boolean;
+        }) => void,
+      ) => () => void;
+      onPageDialogClosed: (callback: (closed: { id: string }) => void) => () => void;
+      answerPageDialog: (answer: { id: string; ok: boolean; text?: string }) => Promise<boolean>;
+      blockPageDialogs: (id: string) => Promise<boolean>;
+      onPermissionRequest: (
+        callback: (request: { id: string; paneId: string; host: string; what: string }) => void,
+      ) => () => void;
+      onPermissionClosed: (callback: (closed: { id: string }) => void) => () => void;
+      onPermissionNotice: (
+        callback: (notice: { paneId: string; kind: "location-off" }) => void,
+      ) => () => void;
+      answerPermission: (
+        id: string,
+        answer: import("@exegol/shared").PermissionAnswer,
+      ) => Promise<boolean>;
     };
     onPreviewLink: (
       callback: (link: { from: string; url: string; host: string; dropped: boolean }) => void,

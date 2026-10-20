@@ -23,10 +23,14 @@ export interface Pane {
   files?: FilesView;
   /** Browser pane: the size the page is shown at (device toolbar); absent fits the pane */
   viewport?: PageSize;
+  /** Browser pane: the page's zoom factor (Cmd+= / Cmd+-); absent is 100% */
+  zoom?: number;
   /** Browser pane: the tab's one pane that URLs clicked in its terminals open in */
   linkPreview?: boolean;
   /** Simulator pane: the device it shows (macOS) */
   simUdid?: string;
+  /** Empty pane: the launcher's folder (relative to the project, "" the root) */
+  launcherFolder?: string;
   /** Set when recovery validation fails (agent deleted, file missing, etc.) */
   invalidReason?: string;
 }

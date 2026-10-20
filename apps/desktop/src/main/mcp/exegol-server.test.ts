@@ -1,7 +1,7 @@
 import { mkdirSync, mkdtempSync, realpathSync, symlinkSync } from "node:fs";
 import type { Socket } from "node:net";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, resolve } from "node:path";
 import Database from "libsql";
 import { beforeEach, describe, expect, it } from "vitest";
 import { runMigrations } from "../db/migrations";
@@ -272,8 +272,8 @@ describe("check_path guard", () => {
 
   it("blocks a write to a path another live agent holds", async () => {
     db.prepare(
-      "INSERT INTO path_claims (id, agent_id, project_id, path) VALUES ('c1','reader','p1','/repo/src/auth.ts')",
-    ).run();
+      "INSERT INTO path_claims (id, agent_id, project_id, path) VALUES ('c1','reader','p1',?)",
+    ).run(resolve("/repo/src/auth.ts"));
     const res = await checkPath(registerAgentMcpToken("writer", "p1"), "/repo/src/auth.ts");
     expect(res.allowed).toBe(false);
     expect(res.heldBy).toBe("reader");
@@ -281,24 +281,24 @@ describe("check_path guard", () => {
 
   it("allows an agent to write what it claimed itself", async () => {
     db.prepare(
-      "INSERT INTO path_claims (id, agent_id, project_id, path) VALUES ('c1','writer','p1','/repo/src/auth.ts')",
-    ).run();
+      "INSERT INTO path_claims (id, agent_id, project_id, path) VALUES ('c1','writer','p1',?)",
+    ).run(resolve("/repo/src/auth.ts"));
     const res = await checkPath(registerAgentMcpToken("writer", "p1"), "/repo/src/auth.ts");
     expect(res.allowed).toBe(true);
   });
 
   it("blocks a file inside a claimed directory", async () => {
     db.prepare(
-      "INSERT INTO path_claims (id, agent_id, project_id, path) VALUES ('c1','reader','p1','/repo/convex')",
-    ).run();
+      "INSERT INTO path_claims (id, agent_id, project_id, path) VALUES ('c1','reader','p1',?)",
+    ).run(resolve("/repo/convex"));
     const res = await checkPath(registerAgentMcpToken("writer", "p1"), "/repo/convex/ai.ts");
     expect(res.allowed).toBe(false);
   });
 
   it("fails OPEN when the caller cannot be identified", async () => {
     db.prepare(
-      "INSERT INTO path_claims (id, agent_id, project_id, path) VALUES ('c1','reader','p1','/repo/src/auth.ts')",
-    ).run();
+      "INSERT INTO path_claims (id, agent_id, project_id, path) VALUES ('c1','reader','p1',?)",
+    ).run(resolve("/repo/src/auth.ts"));
     // Blocking an unidentifiable caller would stop an agent working across an
     // app restart — far worse than a missed collision.
     expect((await checkPath(undefined, "/repo/src/auth.ts")).allowed).toBe(true);
@@ -332,8 +332,8 @@ describe("check_path guard", () => {
   it("allows when the claim holder is no longer live", async () => {
     db.prepare("UPDATE agents SET status = 'completed' WHERE id = 'reader'").run();
     db.prepare(
-      "INSERT INTO path_claims (id, agent_id, project_id, path) VALUES ('c1','reader','p1','/repo/src/auth.ts')",
-    ).run();
+      "INSERT INTO path_claims (id, agent_id, project_id, path) VALUES ('c1','reader','p1',?)",
+    ).run(resolve("/repo/src/auth.ts"));
     const res = await checkPath(registerAgentMcpToken("writer", "p1"), "/repo/src/auth.ts");
     expect(res.allowed).toBe(true);
   });

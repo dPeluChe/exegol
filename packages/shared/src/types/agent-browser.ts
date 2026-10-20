@@ -165,3 +165,21 @@ export interface McpStatusEvent {
   /** Live agents only; shells are not listed */
   agents: Record<string, McpAgentState>;
 }
+
+/** A site permission saved from a browser pane's bar */
+export type SiteDecision = "allow" | "block";
+
+/** once: until the page leaves the origin; always / block: saved for the project and origin */
+export const PERMISSION_ANSWERS = ["once", "always", "block", "deny"] as const;
+export type PermissionAnswer = (typeof PERMISSION_ANSWERS)[number];
+
+export interface SavedSitePermission {
+  origin: string;
+  permission: string;
+  decision: SiteDecision;
+  updatedAt: number;
+}
+
+export interface SitePermissionRow extends SavedSitePermission {
+  label: string;
+}

@@ -85,9 +85,15 @@ contextBridge.exposeInMainWorld("api", {
     },
   },
   terminal: {
-    onData: (id: string, callback: (data: string) => void) => {
-      const handler = (_event: Electron.IpcRendererEvent, termId: string, data: string): void => {
-        if (termId === id) callback(data);
+    /** `seq`: the session's output seq after this chunk (absent when main has none) */
+    onData: (id: string, callback: (data: string, seq?: number) => void) => {
+      const handler = (
+        _event: Electron.IpcRendererEvent,
+        termId: string,
+        data: string,
+        seq?: number,
+      ): void => {
+        if (termId === id) callback(data, seq);
       };
       safe.on("terminal:data", handler as never);
       return () => {
@@ -97,8 +103,11 @@ contextBridge.exposeInMainWorld("api", {
     write: (id: string, data: string) => safe.send("terminal:write", id, data),
     resize: (id: string, cols: number, rows: number) =>
       safe.send("terminal:resize", id, cols, rows),
-    /** Get ring buffer snapshot for late-mounting terminals */
-    getSnapshot: (id: string): Promise<string | null> => safe.invoke("terminal:get-snapshot", id),
+    /** The session's screen for a mounting view, with the seq of the last output it holds */
+    getSnapshot: (id: string): Promise<import("@exegol/shared").LiveSnapshot | null> =>
+      safe.invoke("terminal:get-snapshot", id),
+    mountLog: (id: string, stats: import("@exegol/shared").MountStats) =>
+      safe.send("terminal:mount-log", id, stats),
     /** Whether the session ever produced output, without serializing it */
     hasContent: (id: string): Promise<boolean> => safe.invoke("terminal:has-content", id),
     /** T178: report whether this view can draw the agent. A repaint, when one is
@@ -109,6 +118,11 @@ contextBridge.exposeInMainWorld("api", {
     redraw: (id: string) => safe.send("terminal:redraw", id),
     /** Forget the session's history in main and the sidecar (Clear Terminal) */
     clear: (id: string) => safe.send("terminal:clear", id),
+    /** How many terminal views repainted after a GPU process crash (main logs the count) */
+    gpuRepainted: (views: number) => safe.send("terminal:gpu-repainted", views),
+    /** Mounted views and live WebGL contexts in this window, logged with a GPU crash */
+    gpuStats: (stats: { views: number; webgl: number; capped: boolean }) =>
+      safe.send("terminal:gpu-stats", stats),
     /** The PTY's current grid (T194 mirrors), null when the session is gone */
     getSize: (id: string): Promise<{ cols: number; rows: number } | null> =>
       safe.invoke("terminal:get-size", id),
@@ -132,16 +146,26 @@ contextBridge.exposeInMainWorld("api", {
   app: {
     getVersion: () => safe.invoke("app:version"),
     getPlatform: () => process.platform,
+    /** Linux/Windows keys for what the macOS menu does: zoom this window's UI, quit */
+    zoom: (action: "in" | "out" | "reset") => safe.send("app:zoom", action),
+    quit: () => safe.send("app:quit"),
   },
   // Menu-driven actions (macOS app menu routes accelerators via IPC so the
   // renderer can close panes/tabs instead of the whole window on Cmd+W).
   onMenuAction: (
     callback: (
-      action: "new-tab" | "close-pane" | "reload" | "focus-location" | "open-dashboard",
+      action:
+        | "new-tab"
+        | "close-pane"
+        | "reload"
+        | "focus-location"
+        | "open-dashboard"
+        | "report-bug",
     ) => void,
   ) => {
     const onNewTab = () => callback("new-tab");
     const onOpenDashboard = () => callback("open-dashboard");
+    const onReportBug = () => callback("report-bug");
     const onClosePane = () => callback("close-pane");
     const onReload = () => callback("reload");
     const onFocusLocation = () => callback("focus-location");
@@ -150,12 +174,14 @@ contextBridge.exposeInMainWorld("api", {
     safe.on("menu:reload", onReload as never);
     safe.on("menu:focus-location", onFocusLocation as never);
     safe.on("menu:open-dashboard", onOpenDashboard as never);
+    safe.on("menu:report-bug", onReportBug as never);
     return () => {
       safe.off("menu:new-tab", onNewTab as never);
       safe.off("menu:close-pane", onClosePane as never);
       safe.off("menu:reload", onReload as never);
       safe.off("menu:focus-location", onFocusLocation as never);
       safe.off("menu:open-dashboard", onOpenDashboard as never);
+      safe.off("menu:report-bug", onReportBug as never);
     };
   },
   /** Ctrl+Tab and the Ctrl release from a focused browser pane's page (main forwards them) */
@@ -207,6 +233,22 @@ contextBridge.exposeInMainWorld("api", {
       safe.off("agent:cli-self-updated", handler as never);
     };
   },
+  /** The idle sweep suspended or closed sessions (T205) */
+  onIdleSuspended: (callback: (event: unknown) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
+    safe.on("agent:idle-suspended", handler as never);
+    return () => {
+      safe.off("agent:idle-suspended", handler as never);
+    };
+  },
+  /** The sidecar stopped under the running app: its sessions wait in the lost list (T202) */
+  onSessionsLost: (callback: () => void) => {
+    const handler = () => callback();
+    safe.on("agent:sessions-lost", handler as never);
+    return () => {
+      safe.off("agent:sessions-lost", handler as never);
+    };
+  },
   /** A "continue last" found no session and exited: the renderer relaunches it fresh */
   onResumeMissed: (callback: (event: unknown) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
@@ -245,6 +287,8 @@ contextBridge.exposeInMainWorld("api", {
       safe.invoke("dictation:mark-browser", input) as Promise<boolean>,
     insertInBrowser: (input: { paneId: string; projectId: string; text: string }) =>
       safe.invoke("dictation:insert-browser", input) as Promise<boolean>,
+    /** Settings > Dictation > Input's Test: lets this window open the mic once, for a few seconds */
+    testMic: () => safe.invoke("dictation:test-mic") as Promise<string>,
     onPartial: (callback: (event: unknown) => void) => listen("dictation:partial", callback),
     onEngine: (callback: (event: unknown) => void) => listen("dictation:engine", callback),
     onKey: (callback: (event: unknown) => void) => listen("dictation:key", callback),
@@ -280,6 +324,10 @@ contextBridge.exposeInMainWorld("api", {
   },
   /** Terminals not answering (the PTY sidecar's health watch) and back */
   onSidecarHealth: (callback: (event: unknown) => void) => listen("sidecar:health", callback),
+  /** The GPU process crashed: WebGL terminals must rebuild and repaint */
+  onGpuProcessGone: (callback: (event: unknown) => void) => listen("gpu:process-gone", callback),
+  /** Three GPU crashes in 10 min: terminals stay on the DOM renderer this session */
+  gpuDomOnly: (): Promise<boolean> => safe.invoke("gpu:dom-only"),
   onPipelineStatus: (callback: (event: unknown) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
     safe.on("pipeline:status-changed", handler as never);
@@ -295,6 +343,8 @@ contextBridge.exposeInMainWorld("api", {
     minimize: () => safe.send("window:minimize"),
     maximize: () => safe.send("window:maximize"),
     close: () => safe.send("window:close"),
+    /** Linux/Windows: the app menu at the button's corner (window coordinates) */
+    appMenu: (x: number, y: number) => safe.send("window:app-menu", x, y),
   },
   // T47: Notification navigation
   onNotificationNavigate: (callback: (data: { agentId: string }) => void) => {
@@ -335,6 +385,11 @@ contextBridge.exposeInMainWorld("api", {
       safe.invoke("browser:execute-js", { code, webContentsId }),
     captureScreenshot: (webContentsId?: number) =>
       safe.invoke("browser:capture-screenshot", { webContentsId }),
+    /** Save the page as an image (Save dialog) or copy it */
+    saveScreenshot: (webContentsId: number, target: "file" | "clipboard", fullPage: boolean) =>
+      safe.invoke("browser:save-screenshot", { webContentsId, target, fullPage }),
+    /** Cmd+= / Cmd+- / Cmd+0 pressed in a pane's page (main forwards them) */
+    onZoomKey: (callback: (key: unknown) => void) => listen("browser:zoom-key", callback),
     /** Agent browser: this pane's webview may be driven by its project's agents */
     registerPane: (paneId: string, projectId: string, webContentsId: number) =>
       safe.invoke("browser:register-pane", { paneId, projectId, webContentsId }),
@@ -357,6 +412,23 @@ contextBridge.exposeInMainWorld("api", {
     },
     openResult: (result: { requestId: string; paneId?: string; error?: string }) =>
       safe.invoke("browser:open-result", result),
+    /** alert / confirm / prompt of a pane's page, answered in the pane */
+    onPageDialog: (callback: (dialog: unknown) => void) => listen("browser:page-dialog", callback),
+    onPageDialogClosed: (callback: (closed: unknown) => void) =>
+      listen("browser:page-dialog-closed", callback),
+    answerPageDialog: (answer: { id: string; ok: boolean; text?: string }) =>
+      safe.invoke("browser:page-dialog-answer", answer),
+    /** Until the page navigates, its dialogs are cancelled without showing */
+    blockPageDialogs: (id: string) => safe.invoke("browser:page-dialog-block", { id }),
+    /** A pane's page asks for location, camera, notifications...: the pane's bar answers */
+    onPermissionRequest: (callback: (request: unknown) => void) =>
+      listen("browser:permission-request", callback),
+    onPermissionClosed: (callback: (closed: unknown) => void) =>
+      listen("browser:permission-closed", callback),
+    onPermissionNotice: (callback: (notice: unknown) => void) =>
+      listen("browser:permission-notice", callback),
+    answerPermission: (id: string, answer: import("@exegol/shared").PermissionAnswer) =>
+      safe.invoke("browser:permission-answer", { id, answer }),
   },
   /** An http(s) link clicked in a Files HTML preview (main refused the navigation) */
   onPreviewLink: (callback: (link: unknown) => void) => listen("files-preview:link", callback),

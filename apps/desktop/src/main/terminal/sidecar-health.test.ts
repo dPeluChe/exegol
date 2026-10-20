@@ -3,10 +3,11 @@ import {
   CallTracker,
   describeProcess,
   LATE_TIMER_MS,
+  type LoopSample,
+  loopVerdict,
   PING_BACKOFF_MS,
   pingDelay,
   pingResult,
-  RateLimiter,
   STALL_AFTER_MS,
   STILL_STALLED_LOG_MS,
   StallWatch,
@@ -157,22 +158,43 @@ describe("StallWatch", () => {
   });
 });
 
-describe("RateLimiter", () => {
-  it("allows one per key per interval, and again after reset", () => {
-    const r = new RateLimiter(1_000);
-    expect(r.allow("session.write", 0)).toBe(true);
-    expect(r.allow("session.write", 999)).toBe(false);
-    expect(r.allow("session.resize", 999)).toBe(true);
-    expect(r.allow("session.write", 1_000)).toBe(true);
-    r.reset();
-    expect(r.allow("session.write", 1_001)).toBe(true);
-  });
-});
-
 describe("describeProcess", () => {
   it("formats CPU and RSS in MB", () => {
     expect(describeProcess({ cpu: 98.66, memory: 512 * 1024 * 1024 })).toBe(
       "98.7% CPU, 512 MB RSS",
     );
+  });
+});
+
+describe("loopVerdict", () => {
+  // An hour asleep: macOS's monotonic clock counts it too, the process burned no CPU
+  const hourAsleep: LoopSample = {
+    lagMs: 3_600_000,
+    wallMs: 3_605_000,
+    monoMs: 3_605_000,
+    cpuMs: 400,
+    slept: false,
+  };
+
+  it("passes a short delay", () => {
+    expect(loopVerdict({ ...hourAsleep, lagMs: 800 })).toBe("ok");
+  });
+
+  it("calls a powerMonitor suspend or resume in the window sleep", () => {
+    expect(loopVerdict({ ...hourAsleep, cpuMs: 3_600_000, slept: true })).toBe("sleep");
+  });
+
+  it("calls wall time running ahead of monotonic time sleep", () => {
+    expect(loopVerdict({ ...hourAsleep, monoMs: 5_000, cpuMs: 3_600_000 })).toBe("sleep");
+  });
+
+  it("calls a long gap with no CPU sleep (dark wake with no power event)", () => {
+    expect(loopVerdict(hourAsleep)).toBe("sleep");
+  });
+
+  it("keeps real stalls: busy main, or too short to tell", () => {
+    const busy = { lagMs: 45_000, wallMs: 50_000, monoMs: 50_000, cpuMs: 44_000, slept: false };
+    expect(loopVerdict(busy)).toBe("stall");
+    expect(loopVerdict({ ...busy, lagMs: 4_000, cpuMs: 10 })).toBe("stall");
   });
 });

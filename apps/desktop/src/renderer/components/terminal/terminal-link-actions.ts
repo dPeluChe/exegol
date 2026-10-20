@@ -1,9 +1,18 @@
+import { nanoid } from "nanoid";
 import { isHttpUrl } from "../../lib/browser-viewports";
+import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
+import { underRoot } from "../../lib/file-window";
 import { openInBrowser } from "../../lib/open-in-browser";
 import { runIdeResult } from "../../lib/open-in-ide";
+import { focusNewPane } from "../../lib/pane-focus";
+import { parentDir } from "../../lib/split-terminal";
 import { trpcMutate } from "../../lib/trpc-client";
 import { findAgentPane, focusPane, useAgentStore } from "../../stores/agents";
-import { peekTerminalFile } from "../../stores/terminal-links";
+import {
+  closeTerminalPeek,
+  peekTerminalFile,
+  type TerminalLinkPeek,
+} from "../../stores/terminal-links";
 import { toastError } from "../../stores/toasts";
 import {
   collectPaneIds,
@@ -11,7 +20,7 @@ import {
   getProjectState,
   useWorkspaceStore,
 } from "../../stores/workspace";
-import { type LinkClick, type LinkMatch, linkAction } from "./terminal-links";
+import { type LinkClick, type LinkMatch, linkAction, linkBrowserPane } from "./terminal-links";
 
 /** A PiP window has no workspace to open a pane or a peek in */
 const inFloatingWindow = () => new URLSearchParams(window.location.search).has("floatingPane");
@@ -40,15 +49,14 @@ function workspaceTarget(agentId: string) {
   return where;
 }
 
-/** One link preview pane per tab: reused and navigated, else split beside the terminal */
+/** The tab's browser pane (its link preview one first) is reused and navigated, else a preview
+ *  pane splits beside the terminal */
 function showInPreviewPane(tabId: string, paneId: string, projectId: string, url: string): void {
   const ws = useWorkspaceStore.getState();
   const pw = ws.projectWorkspaces[projectId];
   const tab = pw?.tabs.find((t) => t.id === tabId);
   if (!pw || !tab) return;
-  const preview = collectPaneIds(tab.layout).find(
-    (id) => pw.panes[id]?.type === "browser" && pw.panes[id]?.linkPreview,
-  );
+  const preview = linkBrowserPane(collectPaneIds(tab.layout), pw.panes, ws.floatingPanes);
   if (!preview) {
     ws.splitPane(tabId, paneId, "horizontal", "browser", { url, linkPreview: true });
     return;
@@ -84,16 +92,42 @@ export function openTerminalFile(agentId: string, match: LinkMatch, click: LinkC
   const action = linkAction("file", click, match.text);
   const target = action === "peek" ? workspaceTarget(agentId) : null;
   if (target) {
-    peekTerminalFile(agentId, { text: match.text, cwd, line: match.line });
+    peekTerminalFile({ agentId, text: match.text, cwd, line: match.line });
     return;
   }
-  trpcMutate<{ terminalCommand?: string }>("terminalLinks.open", {
-    agentId,
-    cwd,
-    text: match.text,
-    how: action === "reveal" || action === "ide" ? action : "external",
-    line: match.line,
-  })
+  openLinkFile(
+    { agentId, cwd, text: match.text, line: match.line },
+    action === "reveal" || action === "ide" ? action : "external",
+  );
+}
+
+/** Main resolves the link and opens it; an IDE without a GUI comes back as a terminal command */
+function openLinkFile(peek: TerminalLinkPeek, how: "ide" | "reveal" | "external"): void {
+  const { agentId, cwd, text, line } = peek;
+  trpcMutate<{ terminalCommand?: string }>("terminalLinks.open", { agentId, cwd, text, how, line })
     .then((result) => runIdeResult(useAgentStore.getState().agents[agentId]?.projectId, result))
     .catch(toastError("Could not open the file"));
+}
+
+/** The window's file as a real Files pane beside its terminal; the tree roots at the project, or
+ *  at the file's folder for a worktree file */
+export function openPeekInFilesPane(peek: TerminalLinkPeek, path: string, projectPath?: string) {
+  const where = workspaceTarget(peek.agentId);
+  if (!where) return;
+  const ws = useWorkspaceStore.getState();
+  const id = nanoid(8);
+  ws.splitPane(where.tabId, where.paneId, "horizontal", "files", { id });
+  const inProject = !!projectPath && underRoot(path, projectPath);
+  ws.updatePane(id, { filePath: inProject ? undefined : parentDir(path), openFile: path });
+  closeTerminalPeek();
+  dispatchRefitTerminals();
+  focusNewPane(id);
+}
+
+export function openPeekInIde(peek: TerminalLinkPeek): void {
+  openLinkFile(peek, "ide");
+}
+
+export function openPeekWith(peek: TerminalLinkPeek, how: "reveal" | "external"): void {
+  openLinkFile(peek, how);
 }

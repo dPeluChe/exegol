@@ -1,5 +1,8 @@
 /** Local voice dictation (T201 phase 2): settings, status, history and the shortcut chord */
 
+import { applySpokenPunctuation } from "./dictation-punctuation";
+import { collapseRepeats } from "./dictation-repeats";
+
 /** Mic audio is resampled to this before it leaves the renderer; every model takes it */
 export const DICTATION_SAMPLE_RATE = 16_000;
 
@@ -11,6 +14,63 @@ export function rms(samples: Float32Array): number {
   let sum = 0;
   for (const s of samples) sum += s * s;
   return Math.sqrt(sum / samples.length);
+}
+
+/** Dictated text is data: no escape sequences or control characters reach a terminal (one
+ *  could end a bracketed paste and run the rest) */
+export function sanitizeDictation(text: string): string {
+  // biome-ignore lint/suspicious/noControlCharactersInRegex: stripping them is the point
+  return text.replace(/[\u0000-\u0009\u000b-\u001f\u007f-\u009f]/g, "").trim();
+}
+
+/** What a dictation inserts: sanitized, runs of a repeated word collapsed (`collapsed` runs, for
+ *  the log), then spoken punctuation when it is on */
+export function cleanDictation(
+  text: string,
+  opts: { spokenPunctuation: boolean },
+): { text: string; collapsed: number } {
+  const { text: clean, collapsed } = collapseRepeats(sanitizeDictation(text));
+  return { text: opts.spokenPunctuation ? applySpokenPunctuation(clean) : clean, collapsed };
+}
+
+export const DICTATION_VOCABULARY_MAX = 200;
+export const DICTATION_TERM_MAX = 64;
+/** hotwordsScore in sherpa-onnx: added per matched token while decoding. Past 3 short phrases
+ *  fill with terms even with the engine's guards: docs/TASK_COMPLETED/2610.md */
+export const DICTATION_VOCABULARY_BOOSTS = [
+  { value: 1, label: "Light" },
+  { value: 2, label: "Normal" },
+  { value: 3, label: "Strong" },
+] as const;
+
+/** One term per line. Commas, slashes and colons are the engines' separators: they become spaces */
+export function parseVocabulary(text: string | readonly string[]): string[] {
+  const lines = typeof text === "string" ? text.split("\n") : text;
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const line of lines) {
+    const term = line
+      // biome-ignore lint/suspicious/noControlCharactersInRegex: terms go into engine files
+      .replace(/[\u0000-\u001f\u007f-\u009f,/:]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim()
+      .slice(0, DICTATION_TERM_MAX)
+      .trim();
+    if (!term || seen.has(term)) continue;
+    seen.add(term);
+    out.push(term);
+    if (out.length >= DICTATION_VOCABULARY_MAX) break;
+  }
+  return out;
+}
+
+/** The global list plus the project's own terms, capped together */
+export function dictationVocabulary(
+  settings: Pick<DictationSettings, "vocabulary" | "projectVocabulary">,
+  projectId: string | null,
+): string[] {
+  const own = projectId ? (settings.projectVocabulary[projectId] ?? []) : [];
+  return parseVocabulary([...settings.vocabulary, ...own]);
 }
 
 /** Where a dictation went: a pane kind, a text field of the app, or the clipboard */
@@ -29,6 +89,18 @@ export type DictationTargetKind = (typeof DICTATION_TARGET_KINDS)[number];
 export const DICTATION_OVERLAY_POSITIONS = ["pane", "titlebar"] as const;
 export type DictationOverlayPosition = (typeof DICTATION_OVERLAY_POSITIONS)[number];
 
+/** The spoken language, for models that need one (Canary); multilingual models detect it.
+ *  A new language is one entry here */
+export const DICTATION_LANGUAGES = [
+  { id: "en", label: "English" },
+  { id: "es", label: "Spanish" },
+] as const;
+export type DictationLanguage = (typeof DICTATION_LANGUAGES)[number]["id"];
+export const DICTATION_LANGUAGE_IDS = DICTATION_LANGUAGES.map((l) => l.id) as [
+  DictationLanguage,
+  ...DictationLanguage[],
+];
+
 /** What ended a dictation, for the log line (never the text): a bug report tells a mis-click from
  *  a key that never arrived */
 export const DICTATION_STOP_REASONS = [
@@ -41,16 +113,40 @@ export const DICTATION_STOP_REASONS = [
 ] as const;
 export type DictationStopReason = (typeof DICTATION_STOP_REASONS)[number];
 
-/** `esc-forwarded`: Esc main forwarded from a page or another Exegol window */
+/** `esc-forwarded`: Esc main forwarded from a page or another Exegol window; `flat`: the mic
+ *  gave no signal for the whole dictation (muted, dead or the wrong input) */
 export const DICTATION_CANCEL_SOURCES = [
   "esc",
   "esc-forwarded",
   "button",
   "nothing-heard",
+  "flat",
   "superseded",
   "disabled",
 ] as const;
 export type DictationCancelSource = (typeof DICTATION_CANCEL_SOURCES)[number];
+
+/** Which mic a dictation opened, for the log: the selected one fell back when it was missing */
+export const DICTATION_INPUTS = ["default", "selected", "fallback"] as const;
+export type DictationInput = (typeof DICTATION_INPUTS)[number];
+
+/** Pause or resume a running dictation: Cmd+P on macOS, Ctrl+Shift+P elsewhere (the app chord:
+ *  plain Ctrl+P is the terminal's) */
+export function isDictationPauseKey(
+  e: { metaKey: boolean; ctrlKey: boolean; shiftKey: boolean; altKey: boolean; code?: string },
+  mac: boolean,
+): boolean {
+  if (e.code !== "KeyP" || e.altKey) return false;
+  return mac ? e.metaKey && !e.ctrlKey && !e.shiftKey : e.ctrlKey && e.shiftKey && !e.metaKey;
+}
+
+/** Seconds of silence after speech before a dictation inserts on its own (Settings > Dictation) */
+export const DICTATION_AUTO_INSERT_SECONDS = [5, 7, 10] as const;
+export type DictationAutoInsertSeconds = (typeof DICTATION_AUTO_INSERT_SECONDS)[number];
+
+/** Days a kept recording (audio + its text, Settings > Dictation) stays on disk */
+export const DICTATION_RECORDING_RETENTION_DAYS = [5, 10, 15, 30] as const;
+export type DictationRecordingRetentionDays = (typeof DICTATION_RECORDING_RETENTION_DAYS)[number];
 
 export interface DictationSettings {
   enabled: boolean;
@@ -66,14 +162,62 @@ export interface DictationSettings {
   /** The loaded model is freed after this long without a dictation */
   idleUnloadMinutes: number;
   maxSeconds: number;
-  /** Stop on its own after this much silence once speech was heard; 0 = off */
-  autoStopSilenceSec: number;
+  /** Insert on its own after `autoInsertSilenceSec` of silence once speech was heard; never Enter */
+  autoInsert: boolean;
+  autoInsertSilenceSec: DictationAutoInsertSeconds;
   retentionDays: number;
   retentionMax: number;
   overlayPosition: DictationOverlayPosition;
+  language: DictationLanguage;
+  /** Save each dictation's audio and text under ~/.exegol/dictation-audio, to compare models */
+  keepRecordings: boolean;
+  recordingsRetentionDays: DictationRecordingRetentionDays;
+  /** The mic to open (a getUserMedia deviceId); null = the system default */
+  inputDeviceId: string | null;
+  /** Its label when it was picked, for the "not found" notice once it is gone */
+  inputDeviceLabel: string | null;
+  /** Its groupId (the physical device): finds it again when the OS hands it a new deviceId */
+  inputDeviceGroupId: string | null;
+  /** Terms to bias recognition toward (models that support it), and each project's additions */
+  vocabulary: string[];
+  projectVocabulary: Record<string, string[]>;
+  vocabularyBoost: number;
+  /** "coma", "new line"... become punctuation (Spanish and English) */
+  spokenPunctuation: boolean;
 }
 
 export const DEFAULT_DICTATION_SHORTCUT = "Cmd+Shift+Space";
+
+/** Dev terms Parakeet misspells in Spanish speech ("Work 3", "tipecheck"); editable */
+export const DEFAULT_DICTATION_VOCABULARY: readonly string[] = [
+  "worktree",
+  "pull request",
+  "commit",
+  "merge",
+  "rebase",
+  "branch",
+  "linter",
+  "typecheck",
+  "Biome",
+  "TypeScript",
+  "React",
+  "Electron",
+  "sidecar",
+  "ring buffer",
+  "Claude",
+  "Codex",
+  "Exegol",
+  "endpoint",
+  "deploy",
+  "Docker",
+  "bun",
+  "npm",
+  "frontend",
+  "backend",
+  "refactor",
+  "bug",
+  "PR",
+];
 
 export const DEFAULT_DICTATION_SETTINGS: DictationSettings = {
   enabled: true,
@@ -83,17 +227,39 @@ export const DEFAULT_DICTATION_SETTINGS: DictationSettings = {
   pauseMediaDirect: false,
   idleUnloadMinutes: 10,
   maxSeconds: 300,
-  autoStopSilenceSec: 0,
+  autoInsert: false,
+  autoInsertSilenceSec: 7,
   retentionDays: 30,
   retentionMax: 500,
   overlayPosition: "pane",
+  language: "en",
+  keepRecordings: false,
+  recordingsRetentionDays: 10,
+  inputDeviceId: null,
+  inputDeviceLabel: null,
+  inputDeviceGroupId: null,
+  vocabulary: [...DEFAULT_DICTATION_VOCABULARY],
+  projectVocabulary: {},
+  vocabularyBoost: 2,
+  spokenPunctuation: true,
 };
 
-/** The saved settings over the defaults: a row written before a field existed lacks it */
+/** The saved settings over the defaults: a row written before a field existed lacks it.
+ *  `autoStopSilenceSec` is the old "Stop on its own after a pause of" (2-10 s), read only here */
 export function dictationSettingsOf(
-  saved: Partial<DictationSettings> | undefined,
+  saved: (Partial<DictationSettings> & { autoStopSilenceSec?: number }) | undefined,
 ): DictationSettings {
-  return { ...DEFAULT_DICTATION_SETTINGS, ...saved };
+  const { autoStopSilenceSec = 0, ...rest } = saved ?? {};
+  const settings: DictationSettings = { ...DEFAULT_DICTATION_SETTINGS, ...rest };
+  if (rest.autoInsert === undefined && autoStopSilenceSec > 0) {
+    settings.autoInsert = true;
+    settings.autoInsertSilenceSec =
+      DICTATION_AUTO_INSERT_SECONDS.find((s) => s >= autoStopSilenceSec) ?? 10;
+  }
+  // A boost off the scale (the old Light 1.5 and Strong 5): back to the default
+  if (!DICTATION_VOCABULARY_BOOSTS.some((b) => b.value === settings.vocabularyBoost))
+    settings.vocabularyBoost = DEFAULT_DICTATION_SETTINGS.vocabularyBoost;
+  return settings;
 }
 
 /** Electron's getMediaAccessStatus values, plus "unknown" where the OS does not say */
@@ -113,6 +279,8 @@ export interface DictationStatus {
     kind: "offline" | "streaming";
     ready: boolean;
     sizeBytes: number;
+    /** Its recognizer takes the vocabulary (Settings > Dictation) */
+    vocabulary: boolean;
   };
   engine: DictationEngineState;
   /** The speech engine (a native addon) loads on this system; checked once in its process */
@@ -129,6 +297,18 @@ export interface DictationHistoryItem {
   createdAt: number;
   projectId: string | null;
   targetKind: DictationTargetKind;
+}
+
+/** Kept recordings on disk: a recording is its .wav and .json, counted once */
+export interface DictationRecordingsSummary {
+  count: number;
+  bytes: number;
+  projects: {
+    projectId: string | null;
+    projectName: string | null;
+    count: number;
+    bytes: number;
+  }[];
 }
 
 /** Pushed on `dictation:partial` while a streaming model listens */

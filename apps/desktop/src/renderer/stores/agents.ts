@@ -22,6 +22,11 @@ import { useAppStore } from "./app";
 import { useWatchStore } from "./watch";
 import { collectPaneIds, useWorkspaceStore } from "./workspace";
 
+/** A shell that ended closes its pane; a crashed one (the sidecar took it) keeps it, so it
+ *  reopens there in its last folder */
+export const shellClosesOn = (status: string) =>
+  status === "completed" || status === "failed" || status === "stopped";
+
 /** A session that counts as an open agent: live, and not a plain shell */
 export const isLiveAgent = (a: Pick<AgentState, "cliType" | "status">) =>
   a.cliType !== "shell" && LIVE_STATUSES.has(a.status);
@@ -94,9 +99,14 @@ export function startAgentStatusPush(queryClient: QueryClient): void {
     if (existing) {
       const isFinalStatus = ["completed", "failed", "stopped", "crashed"].includes(event.status);
 
-      if (isFinalStatus && existing.cliType === "shell") {
+      if (shellClosesOn(event.status) && existing.cliType === "shell") {
         store.removeAgent(event.agentId);
         useWorkspaceStore.getState().releaseAgent(event.agentId);
+        return;
+      }
+      if (event.status === "crashed" && existing.cliType === "shell") {
+        // Kept for its pane (auto-resume reopens it); a shell never asks for attention
+        store.updateAgent(event.agentId, { status: "crashed", currentStep: event.currentStep });
         return;
       }
 

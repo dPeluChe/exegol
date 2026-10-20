@@ -269,4 +269,32 @@ export const wave3Migrations: Migration[] = [
     id: "w3_025_agent_model_roles",
     sql: "ALTER TABLE agents ADD COLUMN model_roles TEXT;",
   },
+  {
+    // T205: last input or output (ms), written at most every 5 min, for the idle sweep
+    id: "w3_026_agent_last_activity_at",
+    sql: "ALTER TABLE agents ADD COLUMN last_activity_at INTEGER;",
+  },
+  {
+    // T202: a shell's last OSC 7 folder, where its resume reopens
+    id: "w3_027_agent_last_cwd",
+    sql: "ALTER TABLE agents ADD COLUMN last_cwd TEXT;",
+  },
+  {
+    // T202: the session a resume continued, so a Watching pin follows the chain to the live one
+    id: "w3_028_agent_resumed_from",
+    sql: `ALTER TABLE agents ADD COLUMN resumed_from TEXT;
+    CREATE INDEX IF NOT EXISTS idx_agents_resumed_from ON agents(resumed_from);`,
+  },
+  {
+    // Browser panes: the user's "Always allow" / "Block" per project, origin and permission
+    id: "w3_029_browser_permissions",
+    sql: `CREATE TABLE IF NOT EXISTS browser_permissions (
+      project_id TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+      origin TEXT NOT NULL,
+      permission TEXT NOT NULL,
+      decision TEXT NOT NULL CHECK (decision IN ('allow', 'block')),
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (project_id, origin, permission)
+    );`,
+  },
 ];

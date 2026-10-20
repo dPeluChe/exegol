@@ -2,6 +2,7 @@ import { MODEL_ID_PATTERN, MODEL_SUGGESTIONS } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
+import { defaultModelLabel } from "../../lib/launch-form";
 import { trpcInvoke } from "../../lib/trpc-client";
 import { INPUT_CLASS } from "./SpawnOptions";
 
@@ -16,7 +17,7 @@ export function ModelSelect({
   value,
   onChange,
   suggestions,
-  defaultLabel = "Default (the CLI's own setting)",
+  defaultLabel,
   accepts,
   invalid,
 }: {
@@ -34,6 +35,16 @@ export function ModelSelect({
     queryKey: ["cliModels", providerId],
     queryFn: () => trpcInvoke<string[]>("agents.listModels", { cliType: providerId }),
     staleTime: 10 * 60 * 1000,
+  });
+  // The main model's Default says which model that is, when the CLI's settings tell
+  const { data: cliDefault = null } = useQuery({
+    queryKey: ["cliDefaultModel", providerId],
+    queryFn: () =>
+      trpcInvoke<{ model: string; source: string } | null>("agents.defaultModel", {
+        cliType: providerId,
+      }),
+    enabled: defaultLabel === undefined,
+    staleTime: 30_000,
   });
   const keep = (m: string) => !accepts || accepts(m);
   const suggested = (suggestions ?? MODEL_SUGGESTIONS[providerId] ?? []).filter(keep);
@@ -55,7 +66,7 @@ export function ModelSelect({
         }}
         className={cn(INPUT_CLASS, "cursor-pointer truncate")}
       >
-        <option value="">{defaultLabel}</option>
+        <option value="">{defaultLabel ?? defaultModelLabel(cliDefault)}</option>
         {suggested.length > 0 && (
           <optgroup label="Suggested">
             {suggested.map((m) => (

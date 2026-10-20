@@ -1,7 +1,21 @@
 /** Local speech-to-text models (Settings > Models) and Exegol's disk use (Settings > Storage) */
 
+import type { DictationLanguage } from "./dictation";
+
 export type SpeechEngine = "sherpa-onnx";
 export type SpeechModelKind = "offline" | "streaming";
+
+/** A published score for a model, copied from the source as it reads there (never estimated) */
+export interface PublicBenchmark {
+  language: DictationLanguage;
+  werPercent: number;
+  /** Times faster than real time on CPU; absent when the source gives none */
+  speedX?: number;
+  dataset: string;
+  source: string;
+  url: string;
+  note?: string;
+}
 
 export interface SpeechModelEntry {
   id: string;
@@ -33,6 +47,7 @@ export interface SpeechModelEntry {
   /** Files the engine needs, relative to rootDir: all present means ready */
   files: string[];
   notes?: string;
+  benchmarks?: PublicBenchmark[];
 }
 
 export type ModelStatus =
@@ -54,12 +69,40 @@ export interface ModelProgressEvent {
   status: ModelStatus;
 }
 
+/** One model in a local bench run (`dictation-bench.ts --save`). `correctedClips` had a human
+ *  `reference`; the rest were scored against the saved text, and `selfScoredClips` of those were
+ *  dictated with this same model, which biases its WER toward 0 */
+export interface LocalBenchModel {
+  modelId: string;
+  werPercent: number;
+  cerPercent: number;
+  rtf: number;
+  decodeSeconds: number;
+  clips: number;
+  correctedClips: number;
+  selfScoredClips: number;
+  /** "corrected" only when every clip had a human reference */
+  reference: "corrected" | "saved-text";
+}
+
+export interface LocalBenchRun {
+  runAt: string;
+  clips: number;
+  audioSeconds: number;
+  language: string;
+  vocabulary?: { terms: number; hash: string };
+  models: LocalBenchModel[];
+}
+
+export const BENCH_RESULTS_MAX_RUNS = 20;
+
 export const DEFAULT_SPEECH_MODEL_KEY = "speechDefaultModel";
 
 export const STORAGE_CATEGORIES = [
   "models",
   "scrollback",
   "screenshots",
+  "recordings",
   "logs",
   "database",
   "worktrees",

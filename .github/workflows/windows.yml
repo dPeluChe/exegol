@@ -1,0 +1,78 @@
+name: Windows build
+# Native modules (core-rust napi, node-pty) are built per platform, so the Windows installer is
+# made on a Windows runner and attached to the GitHub release the Mac build created. Unsigned.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to attach the installer to (empty: the latest release)"
+        required: false
+      test:
+        description: "Build the selected branch and keep the installer as a run artifact, attach nothing"
+        type: boolean
+        default: false
+permissions:
+  contents: write
+concurrency:
+  group: windows-${{ github.event.release.tag_name || inputs.tag || 'latest' }}
+  cancel-in-progress: true
+defaults:
+  run:
+    # The steps and the package.json scripts are POSIX; Git Bash ships on the Windows images
+    shell: bash
+jobs:
+  package:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Resolve the release tag
+        id: tag
+        run: |
+          TAG="${{ github.event.release.tag_name || inputs.tag }}"
+          if [ -z "$TAG" ]; then TAG=$(gh release view --repo "${{ github.repository }}" --json tagName -q .tagName); fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+      # Keep the repo's LF endings (the runner's git defaults to CRLF)
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          ref: ${{ inputs.test && github.ref || steps.tag.outputs.tag }}
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '22'
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: '1.2.23'
+      - run: bun install --frozen-lockfile
+      # Rust (MSVC) is preinstalled on GitHub's Windows images; this builds core-rust.win32-x64-msvc.node
+      - run: bun run build:rust
+      # No node-pty rebuild: it ships N-API prebuilds for win32-x64 that load in Electron, and
+      # node-gyp could not find the image's Visual Studio
+      - name: Package
+        working-directory: apps/desktop
+        run: |
+          npx electron-vite build
+          npx electron-builder --config electron-builder.ts --win --publish never -c.npmRebuild=false
+      - name: Keep the test installer
+        if: ${{ inputs.test }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: windows-installer
+          path: |
+            apps/desktop/dist/*/*.exe
+            apps/desktop/dist/*/*.exe.blockmap
+            apps/desktop/dist/*/latest.yml
+          retention-days: 7
+      - name: Attach to the release
+        if: ${{ !inputs.test }}
+        run: |
+          VERSION="${{ steps.tag.outputs.tag }}"
+          DIR="apps/desktop/dist/${VERSION#v}"
+          ls -la "$DIR"
+          shopt -s nullglob
+          FILES=("$DIR"/*.exe "$DIR"/*.exe.blockmap "$DIR"/latest.yml)
+          if [ ${#FILES[@]} -eq 0 ]; then echo "No Windows installer was built"; exit 1; fi
+          gh release upload "${{ steps.tag.outputs.tag }}" --repo "${{ github.repository }}" --clobber "${FILES[@]}"

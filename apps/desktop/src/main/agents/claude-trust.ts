@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { readFile, rename, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join, normalize } from "node:path";
+import path, { dirname, join } from "node:path";
 import { lock } from "proper-lockfile";
 import { logger } from "../lib/logger";
 
@@ -13,8 +13,12 @@ export function claudeConfigFile(env: NodeJS.ProcessEnv = process.env): string {
   return join(env.CLAUDE_CONFIG_DIR || homedir(), ".claude.json");
 }
 
-/** Claude keys projects by the NFC-normalized absolute path */
-const trustKey = (path: string) => normalize(path.normalize("NFC"));
+/** Claude keys projects by the NFC-normalized absolute path, with forward slashes on Windows
+ *  (C:/Users/me/repo) */
+export const trustKey = (folder: string, pathApi: typeof path = path) => {
+  const key = pathApi.normalize(folder.normalize("NFC"));
+  return pathApi.sep === "\\" ? key.replace(/\\/g, "/") : key;
+};
 
 interface ClaudeConfig {
   projects?: Record<string, { hasTrustDialogAccepted?: boolean } & Record<string, unknown>>;
@@ -28,10 +32,11 @@ export function inheritedTrust(
   config: ClaudeConfig,
   folder: string,
   projectRoot: string,
+  pathApi: typeof path = path,
 ): ClaudeConfig | null {
   const projects = config.projects ?? {};
-  if (!projects[trustKey(projectRoot)]?.hasTrustDialogAccepted) return null;
-  const key = trustKey(folder);
+  if (!projects[trustKey(projectRoot, pathApi)]?.hasTrustDialogAccepted) return null;
+  const key = trustKey(folder, pathApi);
   if (projects[key]?.hasTrustDialogAccepted) return null;
   return {
     ...config,

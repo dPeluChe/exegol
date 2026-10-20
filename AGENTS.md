@@ -9,6 +9,7 @@ architecture; read it before changing a subsystem. People: [CONTRIBUTING.md](CON
 ```bash
 bun install && bun run rebuild:native   # setup (Rust + node-pty for Electron)
 bun run dev                              # run the app
+bun run package:local                    # test DMG for the user: never hand out a dist/<version> build
 bun run lint                             # pinned Biome 2.4.7, fails on warnings
 bun run typecheck
 bun run test && bun run test:shared
@@ -31,7 +32,7 @@ React health: CI runs react-doctor@0.9.14 on the PR's changes; errors fail; fix 
 ## Hard rules
 
 - Changing a file the PTY sidecar bundles (`terminal/pty-sidecar-*.ts`, `ring-buffer.ts`,
-  `lib/ndjson.ts`; the list is in the `SIDECAR_VERSION` comment) → bump `SIDECAR_VERSION`.
+  `lib/frame-reader.ts`; the list is in the `SIDECAR_VERSION` comment) → bump `SIDECAR_VERSION`.
 - New tRPC procedure or IPC channel → add it to `apps/desktop/src/preload/capabilities.json`.
 - Migrations only in your own `db/migration-sets/<group>.ts`; never edit shipped ones.
 - Paths, ids and commands from the renderer are untrusted: validate them in main

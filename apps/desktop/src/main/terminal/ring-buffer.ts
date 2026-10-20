@@ -1,33 +1,42 @@
 // Circular byte buffer for PTY scrollback in the sidecar.
 // Stores raw ANSI output. Oldest data silently overwritten when full.
 
+import { ModeTracker } from "./terminal-modes";
+
 const DEFAULT_CAPACITY = 8 * 1024 * 1024; // 8MB per session
 
-const ALT_ON = "\x1b[?1049h";
-const ALT_OFF = "\x1b[?1049l";
-/** Longest sequence we scan for, minus one — enough overlap that a toggle split
- *  across two writes is still seen. */
-const CARRY = ALT_ON.length - 1;
-const ESC = 0x1b;
-const ALT_ON_BYTES = Buffer.from(ALT_ON, "latin1");
-const ALT_OFF_BYTES = Buffer.from(ALT_OFF, "latin1");
+/** A capped snapshot starts at a line break or ESC this close to its cut, never mid-sequence */
+const ALIGN_BYTES = 4096;
+/** A reset, or erase screen + scrollback: nothing written before it is visible after */
+const CLEAR_POINTS = [Buffer.from("\x1bc", "latin1"), Buffer.from("\x1b[2J\x1b[3J", "latin1")];
+
+/** Pure: how many leading bytes are UTF-8 continuation bytes (a character cut by the wrap) */
+export function continuationBytes(buf: Buffer): number {
+  let n = 0;
+  while (n < 3 && n < buf.length && ((buf[n] as number) & 0xc0) === 0x80) n++;
+  return n;
+}
+
+/** Pure: where a capped tail starts: the last clear, else the first line start or ESC near the
+ *  cut, whichever comes first, else the first whole character */
+export function tailStart(tail: Buffer): number {
+  let clear = -1;
+  for (const point of CLEAR_POINTS) clear = Math.max(clear, tail.lastIndexOf(point));
+  if (clear !== -1) return clear;
+  const window = tail.subarray(0, ALIGN_BYTES);
+  const nl = window.indexOf(0x0a);
+  const esc = window.indexOf(0x1b);
+  const starts = [nl === -1 ? -1 : nl + 1, esc].filter((i) => i !== -1);
+  return starts.length > 0 ? Math.min(...starts) : continuationBytes(tail);
+}
 
 export class RingBuffer {
   private buf: Buffer;
   private head = 0; // Next write position
   private filled = false; // True once buffer has wrapped at least once
-  /**
-   * Sticky, because the ring is not: a full-screen TUI enables the alternate
-   * screen once at startup, and after 8 MB of output that sequence has been
-   * evicted. Replaying the ring then rebuilds the PRIMARY screen — the shell
-   * prompt from before the CLI launched — while the app draws into an alternate
-   * screen the terminal never entered. That is opencode reattaching to a dead
-   * shell prompt (2026-08-13).
-   */
-  private altScreen = false;
-  /** Tail of the previous write, so a toggle split across two chunks is seen. */
-  private readonly carry = Buffer.alloc(CARRY);
-  private carryLen = 0;
+  /** Sticky, because the ring is not: a TUI sets its modes once at startup and the ring evicts
+   *  them (opencode reattached to a dead shell prompt, 2026-08-13) */
+  private readonly modes = new ModeTracker();
 
   constructor(capacity = DEFAULT_CAPACITY) {
     this.buf = Buffer.allocUnsafe(capacity);
@@ -35,30 +44,13 @@ export class RingBuffer {
 
   /** True when the session last switched INTO the alternate screen. */
   get isAltScreen(): boolean {
-    return this.altScreen;
-  }
-
-  private trackScreenMode(data: Buffer): void {
-    // ESC first: a memchr reject costs one native pass and skips the rest for
-    // the overwhelming majority of chunks, which carry no mode switch at all.
-    if (data.indexOf(ESC) !== -1) {
-      const on = data.lastIndexOf(ALT_ON_BYTES);
-      const off = data.lastIndexOf(ALT_OFF_BYTES);
-      if (on !== -1 || off !== -1) this.altScreen = on > off;
-    } else if (this.carryLen > 0) {
-      // The switch may straddle the boundary; only the join can show it.
-      const seam = Buffer.concat([this.carry.subarray(0, this.carryLen), data.subarray(0, CARRY)]);
-      const on = seam.lastIndexOf(ALT_ON_BYTES);
-      const off = seam.lastIndexOf(ALT_OFF_BYTES);
-      if (on !== -1 || off !== -1) this.altScreen = on > off;
-    }
-    this.carryLen = data.copy(this.carry, 0, Math.max(0, data.length - CARRY));
+    return this.modes.altScreen;
   }
 
   write(data: Buffer): void {
     const len = data.length;
     if (len === 0) return;
-    this.trackScreenMode(data);
+    this.modes.write(data);
 
     if (len >= this.buf.length) {
       // Data larger than buffer — keep only the tail
@@ -82,32 +74,52 @@ export class RingBuffer {
     this.head = newHead;
   }
 
-  /**
-   * Contents in write order (oldest → newest), prefixed with the
-   * alternate-screen switch when the session is in it. That switch is written
-   * once at startup and is usually long evicted, so without the prefix a
-   * reattaching terminal rebuilds the PRIMARY screen while the app keeps
-   * drawing to the alternate one.
-   */
-  snapshot(): Buffer {
-    return this.altScreen ? Buffer.concat([ALT_ON_BYTES, ...this.parts()]) : this.rawSnapshot();
+  /** Contents oldest first behind the current modes (a reload from disk lost the start). A
+   *  capped one keeps the tail from a clean start. One copy */
+  snapshot(maxBytes?: number): Buffer {
+    const prefix = Buffer.from(this.modes.prefix(), "latin1");
+    let parts = this.parts();
+    const capped = maxBytes !== undefined && byteSum(parts) > maxBytes;
+    if (capped) parts = tailParts(parts, maxBytes);
+    const out = Buffer.concat([prefix, ...parts]);
+    const body = out.subarray(prefix.length);
+    const start = capped ? tailStart(body) : this.filled ? continuationBytes(body) : 0;
+    if (start === 0) return out;
+    // Slide the prefix up to the start instead of copying the body again
+    out.copy(out, start, 0, prefix.length);
+    return out.subarray(start);
   }
 
-  /**
-   * Contents WITHOUT the alternate-screen prefix. Persistence must use this:
-   * eviction writes the snapshot to disk and reload feeds it back through
-   * `write()`, so a prefixed snapshot would be stored as real content and
-   * prefixed again on the next read — one forged escape accreted per cycle.
-   */
+  /** Without the mode prefix: eviction persists this and reloads it through write(), so a
+   *  prefixed copy would accrete one forged escape per cycle */
   rawSnapshot(): Buffer {
-    const parts = this.parts();
-    return parts.length === 1 ? Buffer.from(parts[0] as Buffer) : Buffer.concat(parts);
+    const whole = Buffer.concat(this.parts());
+    return this.filled ? whole.subarray(continuationBytes(whole)) : whole;
   }
 
-  /** Contents in write order, without copying — callers concat once. */
+  /** Contents in write order, without copying: callers concat once. */
   private parts(): Buffer[] {
     if (!this.filled) return [this.buf.subarray(0, this.head)];
     return [this.buf.subarray(this.head), this.buf.subarray(0, this.head)];
+  }
+
+  /** Memory pressure: keep the newest `bytes` in a smaller allocation. Returns the bytes freed */
+  shrinkTo(bytes: number): number {
+    const before = this.buf.length;
+    if (bytes >= before) return 0;
+    const tail = tailParts(this.parts(), bytes);
+    let skip = continuationBytes(Buffer.concat(tail.map((p) => p.subarray(0, 3))));
+    const next = Buffer.allocUnsafe(bytes);
+    let kept = 0;
+    for (const p of tail) {
+      const from = Math.min(skip, p.length);
+      skip -= from;
+      kept += p.copy(next, kept, from);
+    }
+    this.buf = next;
+    this.head = kept % bytes;
+    this.filled = kept === bytes;
+    return before - bytes;
   }
 
   get byteLength(): number {
@@ -121,7 +133,6 @@ export class RingBuffer {
 
   /** Keeps the screen mode: a cleared TUI is still on the alternate screen, and its replay must say so. */
   clear(): void {
-    this.carryLen = 0;
     this.head = 0;
     this.filled = false;
   }
@@ -149,4 +160,21 @@ export class RingBuffer {
       this.filled = false;
     }
   }
+}
+
+function byteSum(parts: Buffer[]): number {
+  return parts.reduce((n, p) => n + p.length, 0);
+}
+
+/** The last `max` bytes across `parts`, as views */
+function tailParts(parts: Buffer[], max: number): Buffer[] {
+  const out: Buffer[] = [];
+  let need = max;
+  for (let i = parts.length - 1; i >= 0 && need > 0; i--) {
+    const p = parts[i] as Buffer;
+    const take = Math.min(need, p.length);
+    out.unshift(p.subarray(p.length - take));
+    need -= take;
+  }
+  return out;
 }

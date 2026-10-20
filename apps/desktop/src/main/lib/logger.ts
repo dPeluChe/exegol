@@ -22,19 +22,28 @@ const MAX_ROTATED = 5;
 
 let fd: number | null = null;
 
-// Rotate on startup: exegol.log → exegol.1.log → … → exegol.5.log, so
-// previous sessions survive restarts (needed to diagnose crash/recovery).
-try {
-  rmSync(join(LOG_DIR, `exegol.${MAX_ROTATED}.log`), { force: true });
-  for (let i = MAX_ROTATED - 1; i >= 1; i--) {
-    const from = join(LOG_DIR, `exegol.${i}.log`);
-    if (existsSync(from)) renameSync(from, join(LOG_DIR, `exegol.${i + 1}.log`));
+/** Lines logged before startLogFile: kept for the file, bounded */
+const MAX_EARLY_LINES = 2000;
+
+/**
+ * Rotate exegol.log → exegol.1.log → … → exegol.5.log, so previous sessions survive restarts.
+ * Called once the single-instance lock is held: a second launch rotated the running app's log away
+ */
+export function startLogFile(): void {
+  if (fd !== null) return;
+  try {
+    rmSync(join(LOG_DIR, `exegol.${MAX_ROTATED}.log`), { force: true });
+    for (let i = MAX_ROTATED - 1; i >= 1; i--) {
+      const from = join(LOG_DIR, `exegol.${i}.log`);
+      if (existsSync(from)) renameSync(from, join(LOG_DIR, `exegol.${i + 1}.log`));
+    }
+    if (existsSync(logFile)) renameSync(logFile, join(LOG_DIR, "exegol.1.log"));
+    fd = openSync(logFile, "a");
+    writeSync(fd, `--- Session started ${new Date().toISOString()} ---\n`);
+  } catch {
+    /* ignore */
   }
-  if (existsSync(logFile)) renameSync(logFile, join(LOG_DIR, "exegol.1.log"));
-  fd = openSync(logFile, "a");
-  writeSync(fd, `--- Session started ${new Date().toISOString()} ---\n`);
-} catch {
-  /* ignore */
+  flushLogSync();
 }
 
 // appendFileSync per line blocked the main thread on every log call: lines now
@@ -79,7 +88,7 @@ function formatArg(a: unknown): string {
 }
 
 function writeToFile(level: string, args: unknown[]): void {
-  if (fd === null) return;
+  if (fd === null && pending.length >= MAX_EARLY_LINES) return;
   try {
     const ts = new Date().toISOString();
     const msg = args.map(formatArg).join(" ");

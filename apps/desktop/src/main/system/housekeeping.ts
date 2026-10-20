@@ -1,12 +1,16 @@
 import { lstat, readdir, unlink } from "node:fs/promises";
 import { join } from "node:path";
+import { dictationSettingsOf } from "@exegol/shared";
 import type Database from "libsql";
 import { MODEL_SETTINGS_DIR } from "../agents/launch-model";
 import { WORKTREE_ROOTS } from "../agents/worktrees";
 import { HOOKS_DIR } from "../agents/wrappers";
-import { getJsonSetting, setJsonSetting } from "../db/queries/settings";
+import { listLiveAgentFolders } from "../db/queries/agents";
+import { getAppSettings, getJsonSetting, setJsonSetting } from "../db/queries/settings";
+import { sweepRecordings } from "../dictation/recordings";
 import { logger } from "../lib/logger";
 import { MCP_CONFIG_DIR } from "../mcp/exegol-mcp-config";
+import { MCP_TOKENS_DIR, tokenKeyFor } from "../mcp/exegol-mcp-token-file";
 import { sweepOrphanWorktrees, type WorktreeSweepResult } from "./worktree-housekeeping";
 
 const AGENT_ID = /^[A-Za-z0-9_-]{21}$/;
@@ -19,6 +23,10 @@ export interface AgentFileTarget {
   label: string;
   dir: string;
   suffixes: readonly string[];
+  /** The file name minus its suffix; an agent id by default */
+  id?: RegExp;
+  /** Ids to keep instead of the DB's agent ids; such a target skips the reset-DB guard */
+  keep?: () => ReadonlySet<string>;
 }
 
 export interface HousekeepingResult {
@@ -41,7 +49,7 @@ export function agentFileTargets(): AgentFileTarget[] {
 }
 
 interface Candidate {
-  label: string;
+  target: AgentFileTarget;
   path: string;
   id: string;
   bytes: number;
@@ -55,13 +63,13 @@ async function listCandidates(target: AgentFileTarget, cutoff: number): Promise<
   for (const entry of entries) {
     if (!entry.isFile()) continue;
     const suffix = target.suffixes.find((s) => entry.name.endsWith(s));
-    if (!suffix) continue;
-    const id = entry.name.slice(0, -suffix.length);
-    if (!AGENT_ID.test(id)) continue;
+    if (suffix === undefined) continue;
+    const id = entry.name.slice(0, entry.name.length - suffix.length);
+    if (!(target.id ?? AGENT_ID).test(id)) continue;
     const path = join(target.dir, entry.name);
     const info = await lstat(path).catch(() => null);
     if (!info?.isFile() || info.mtimeMs > cutoff) continue;
-    out.push({ label: target.label, path, id, bytes: info.size });
+    out.push({ target, path, id, bytes: info.size });
   }
   return out;
 }
@@ -80,10 +88,16 @@ export async function sweepOrphanAgentFiles(
   const result: HousekeepingResult = { at: now, files: 0, bytes: 0 };
   const candidates = lists.flat();
   if (candidates.length === 0) return result;
-  const ids = knownIds();
-  const orphans = candidates.filter((c) => !ids.has(c.id));
+  const sets = new Map<() => ReadonlySet<string>, ReadonlySet<string>>();
+  const read = (source: () => ReadonlySet<string>) => {
+    const set = sets.get(source) ?? source();
+    sets.set(source, set);
+    return set;
+  };
+  const orphans = candidates.filter((c) => !read(c.target.keep ?? knownIds).has(c.id));
+  const guarded = new Set(orphans.filter((c) => !c.target.keep).map((c) => c.id));
   // More orphaned ids than twice the known ones: a reset or swapped DB, not leftovers
-  if (new Set(orphans.map((c) => c.id)).size > 2 * ids.size) {
+  if (guarded.size > 0 && guarded.size > 2 * read(knownIds).size) {
     logger.warn("[Housekeeping] skipped: the agents table looks reset");
     return { ...result, skipped: "db-looks-reset" };
   }
@@ -94,8 +108,8 @@ export async function sweepOrphanAgentFiles(
     } catch {
       continue;
     }
-    const sum = perLabel.get(c.label) ?? { files: 0, bytes: 0 };
-    perLabel.set(c.label, { files: sum.files + 1, bytes: sum.bytes + c.bytes });
+    const sum = perLabel.get(c.target.label) ?? { files: 0, bytes: 0 };
+    perLabel.set(c.target.label, { files: sum.files + 1, bytes: sum.bytes + c.bytes });
     result.files++;
     result.bytes += c.bytes;
   }
@@ -107,17 +121,36 @@ export async function sweepOrphanAgentFiles(
   return result;
 }
 
+/** Per-directory MCP token files no live agent's folder maps to: the last exit removes its
+ *  own, this catches a crash or a kill. Keyed by spawn folder, as `writeTokenFile` is called */
+export function mcpTokenTarget(liveFolders: () => readonly string[]): AgentFileTarget {
+  return {
+    label: "mcp-token",
+    dir: MCP_TOKENS_DIR,
+    suffixes: [""],
+    id: /^[0-9a-f]{32}$/,
+    keep: () => new Set(liveFolders().map(tokenKeyFor)),
+  };
+}
+
 function agentIds(db: Database.Database): ReadonlySet<string> {
   const rows = db.prepare("SELECT id FROM agents").all() as { id: string }[];
   return new Set(rows.map((r) => r.id));
 }
 
-/** At most once a day: a couple of minutes after startup, then daily while the app stays open */
+/** At most once a day: a couple of minutes after startup, then daily while the app stays open.
+ *  Dictation recordings are swept on every run, the start one included */
 export function scheduleHousekeeping(db: Database.Database): void {
   const run = async () => {
+    await sweepRecordings(
+      dictationSettingsOf(getAppSettings(db).dictation).recordingsRetentionDays,
+    );
     const last = getJsonSetting<HousekeepingResult | null>(db, HOUSEKEEPING_KEY, null);
     if (last && Date.now() - last.at < DAY_MS) return;
-    const result = await sweepOrphanAgentFiles(agentFileTargets(), () => agentIds(db));
+    const result = await sweepOrphanAgentFiles(
+      [...agentFileTargets(), mcpTokenTarget(() => listLiveAgentFolders(db))],
+      () => agentIds(db),
+    );
     const worktrees = await sweepOrphanWorktrees(db, Object.values(WORKTREE_ROOTS));
     if (worktrees.removed + worktrees.droppedRows + worktrees.kept > 0) {
       logger.info(

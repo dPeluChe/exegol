@@ -2,7 +2,10 @@ import type { RecognizerSpec } from "./model-config";
 
 /** Main → engine process */
 export type EngineRequest =
-  | { type: "load"; modelId: string; spec: RecognizerSpec }
+  /** A different `key` (`recognizerKey`) rebuilds the recognizer */
+  | { type: "load"; modelId: string; key: string; spec: RecognizerSpec }
+  /** New per-stream terms for the loaded recognizer (same key, no reload) */
+  | { type: "hotwords"; hotwords: string | null }
   | { type: "begin"; sessionId: string; maxSamples: number }
   | { type: "audio"; sessionId: string; samples: Float32Array }
   | { type: "finish"; sessionId: string }
@@ -23,5 +26,7 @@ export type EngineReply =
       phraseMs: number;
       /** The phrases came back empty or one failed: everything was decoded again */
       fullPass: boolean;
+      /** Phrases decoded without the vocabulary: too little speech, or the biased text repeated */
+      unbiased: number;
     }
   | { type: "failed"; sessionId: string; error: string };

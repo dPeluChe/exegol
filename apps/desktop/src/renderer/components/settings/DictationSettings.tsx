@@ -1,6 +1,8 @@
 import {
   chordFromEvent,
   DEFAULT_DICTATION_SHORTCUT,
+  DICTATION_AUTO_INSERT_SECONDS,
+  DICTATION_LANGUAGES,
   type DictationSettings as DictationPrefs,
   dictationSettingsOf,
   formatChord,
@@ -9,22 +11,21 @@ import {
 } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { Mic } from "lucide-react";
-import { type ReactNode, useState } from "react";
+import { useState } from "react";
 import { useDictationStatus, useMediaConsent, useMicAction } from "../../hooks/use-trpc-dictation";
-import { IS_MAC, PLATFORM } from "../../lib/keymap";
+import { appKeys, IS_MAC, PLATFORM } from "../../lib/keymap";
 import { SEMANTIC_BADGE } from "../../lib/semantic-colors";
 import { shortcutClash } from "../../lib/shortcuts";
 import { DictationHistory } from "./DictationHistory";
-import { SMALL_BUTTON, SwitchRow } from "./settings-ui";
+import { DictationInput } from "./DictationInput";
+import { DictationRecordings } from "./DictationRecordings";
+import { DictationVocabulary } from "./DictationVocabulary";
+import { SECTION_HEADING, SelectRow, SMALL_BUTTON, SwitchRow } from "./settings-ui";
 
 interface Props {
   settings: Settings;
   onChange: (updates: Partial<Settings>) => void;
 }
-
-const SECTION = "mb-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted";
-const SELECT =
-  "rounded-md border border-border bg-bg-tertiary px-2 py-1 text-[11px] text-text-primary";
 
 const PAUSE_MEDIA_HINT = IS_MAC
   ? "What is playing (Spotify, Music, a browser tab) pauses while you talk and resumes after, unless you played, paused or skipped it meanwhile"
@@ -52,7 +53,7 @@ export function DictationSettings({ settings, onChange }: Props) {
         <p className="mt-2 text-xs leading-relaxed text-text-muted">
           Speak and the text goes into the focused pane: a terminal (pasted, not sent), a browser
           page's focused field or the code editor. Speech is transcribed on this machine with the
-          model chosen in Models: audio never leaves it and is never saved.
+          model chosen in Models: audio never leaves it and is saved only if you keep recordings.
         </p>
       </div>
 
@@ -64,17 +65,34 @@ export function DictationSettings({ settings, onChange }: Props) {
       />
 
       <div>
-        <h3 className={SECTION}>Shortcut</h3>
+        <h3 className={SECTION_HEADING}>Shortcut</h3>
         <ShortcutRow value={prefs.shortcut} onChange={(shortcut) => set({ shortcut })} />
         <p className="mt-1 text-[10px] text-text-muted">
-          Press it to start and again to insert, or hold it while you talk. Esc cancels.
+          Press it to start and again to insert, or hold it while you talk. Esc cancels,{" "}
+          {appKeys("Cmd+P")} pauses and resumes.
         </p>
       </div>
 
       <MicSection />
 
+      <DictationInput prefs={prefs} set={set} />
+
       <div>
-        <h3 className={SECTION}>Recording</h3>
+        <h3 className={SECTION_HEADING}>Language</h3>
+        <SelectRow
+          label="Language you speak"
+          value={prefs.language}
+          options={DICTATION_LANGUAGES.map((l) => [l.id, l.label])}
+          onChange={(language) => set({ language })}
+        />
+        <p className="mt-1 text-[10px] text-text-muted">
+          Some models (Canary) need it and translate speech in another language into this one.
+          Multilingual models (Parakeet, Whisper...) detect the language on their own.
+        </p>
+      </div>
+
+      <div>
+        <h3 className={SECTION_HEADING}>Recording</h3>
         <div className="space-y-2">
           <SwitchRow
             label="Press Enter after dictation"
@@ -102,12 +120,20 @@ export function DictationSettings({ settings, onChange }: Props) {
             options={[60, 120, 300, 600].map((s) => [s, `${s / 60} min`])}
             onChange={(maxSeconds) => set({ maxSeconds })}
           />
-          <SelectRow
-            label="Stop on its own after a pause of"
-            value={prefs.autoStopSilenceSec}
-            options={[0, 2, 3, 5, 10].map((s) => [s, s === 0 ? "Never" : `${s} s`])}
-            onChange={(autoStopSilenceSec) => set({ autoStopSilenceSec })}
+          <SwitchRow
+            label="Auto insert after silence"
+            description="After you speak, a pause inserts the text (never Enter); talk to reset the countdown, click it to keep dictating"
+            value={prefs.autoInsert}
+            onToggle={() => set({ autoInsert: !prefs.autoInsert })}
           />
+          {prefs.autoInsert && (
+            <SelectRow
+              label="Insert after a silence of"
+              value={prefs.autoInsertSilenceSec}
+              options={DICTATION_AUTO_INSERT_SECONDS.map((s) => [s, `${s} s`])}
+              onChange={(autoInsertSilenceSec) => set({ autoInsertSilenceSec })}
+            />
+          )}
           <SelectRow
             label="Free the model's memory after"
             value={prefs.idleUnloadMinutes}
@@ -118,7 +144,7 @@ export function DictationSettings({ settings, onChange }: Props) {
       </div>
 
       <div>
-        <h3 className={SECTION}>Overlay</h3>
+        <h3 className={SECTION_HEADING}>Overlay</h3>
         <SelectRow
           label="Overlay position"
           value={prefs.overlayPosition}
@@ -134,8 +160,12 @@ export function DictationSettings({ settings, onChange }: Props) {
         </p>
       </div>
 
+      <DictationVocabulary prefs={prefs} set={set} />
+
+      <DictationRecordings prefs={prefs} set={set} />
+
       <div>
-        <h3 className={SECTION}>History</h3>
+        <h3 className={SECTION_HEADING}>History</h3>
         <div className="mb-3 space-y-2">
           <SelectRow
             label="Keep dictations for"
@@ -242,7 +272,7 @@ function MicSection() {
   const label = MIC_LABEL[status.mic] ?? MIC_LABEL.unknown;
   return (
     <div>
-      <h3 className={SECTION}>Microphone and model</h3>
+      <h3 className={SECTION_HEADING}>Microphone and model</h3>
       <div className="space-y-2 rounded-xl border border-border bg-bg-secondary px-4 py-3">
         <div className="flex items-center gap-2 text-xs">
           <span className="flex-1 text-text-secondary">Microphone access</span>
@@ -304,39 +334,5 @@ function MicSection() {
         </div>
       </div>
     </div>
-  );
-}
-
-function SelectRow<T extends string | number>({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: ReactNode;
-  value: T;
-  options: [T, string][];
-  onChange: (value: T) => void;
-}) {
-  const known = options.some(([v]) => v === value);
-  return (
-    <label className="flex items-center gap-3 rounded-xl border border-border bg-bg-secondary px-4 py-2.5 text-xs">
-      <span className="flex-1 text-text-secondary">{label}</span>
-      <select
-        className={SELECT}
-        value={value}
-        onChange={(e) => {
-          const picked = options.find(([v]) => String(v) === e.target.value);
-          if (picked) onChange(picked[0]);
-        }}
-      >
-        {!known && <option value={value}>{value}</option>}
-        {options.map(([v, text]) => (
-          <option key={v} value={v}>
-            {text}
-          </option>
-        ))}
-      </select>
-    </label>
   );
 }

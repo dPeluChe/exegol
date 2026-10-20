@@ -7,6 +7,7 @@ import {
 } from "@exegol/shared";
 import type Database from "libsql";
 import { pickAgentCodename } from "../../agents/agent-names";
+import { lastActiveOf } from "../../agents/auto-resume";
 import { providerSessionId } from "../../agents/provider-session-id";
 import { resolveTaskLabel } from "../../agents/task-label";
 import { logger } from "../../lib/logger";
@@ -90,6 +91,87 @@ export function listPrWatchedAgents(db: Database.Database): PrWatchedAgent[] {
     .all(...statuses) as unknown as PrWatchedAgent[];
 }
 
+export function setAgentLastActivity(db: Database.Database, id: string, at: number): void {
+  db.prepare("UPDATE agents SET last_activity_at = ? WHERE id = ?").run(at, id);
+}
+
+/** Shells are terminal tabs with nothing to keep: closing one deletes its row */
+export function deleteShellRow(db: Database.Database, id: string): void {
+  db.prepare("DELETE FROM agents WHERE id = ? AND cli_type = 'shell'").run(id);
+}
+
+export function setAgentResumedFrom(db: Database.Database, id: string, from: string): void {
+  db.prepare("UPDATE agents SET resumed_from = ? WHERE id = ?").run(from, id);
+}
+
+/** The grid a session last ran at (a pane's fit), if it was ever sized */
+export function agentPtySize(
+  db: Database.Database,
+  id: string,
+): { cols: number; rows: number } | null {
+  const row = db.prepare("SELECT pty_cols, pty_rows FROM agents WHERE id = ?").get(id) as
+    | { pty_cols: number | null; pty_rows: number | null }
+    | undefined;
+  return row?.pty_cols && row.pty_rows ? { cols: row.pty_cols, rows: row.pty_rows } : null;
+}
+
+/** The newest row that resumed `id` */
+export function resumedInto(db: Database.Database, id: string): string | undefined {
+  const row = db
+    .prepare(
+      "SELECT id FROM agents WHERE resumed_from = ? ORDER BY started_at DESC, rowid DESC LIMIT 1",
+    )
+    .get(id) as { id: string } | undefined;
+  return row?.id;
+}
+
+export interface WatchedInfo {
+  id: string;
+  alias: string | null;
+  cliType: string;
+  projectId: string;
+  projectName: string | null;
+  status: string;
+  statusChangedAt: number | null;
+  taskDescription: string;
+  branchName: string | null;
+}
+
+/** What a session was, archived or not, for a Watching card whose session is gone */
+export function watchedInfo(db: Database.Database, id: string): WatchedInfo | null {
+  const r = db
+    .prepare(
+      `SELECT a.id, a.alias, a.cli_type, a.project_id, p.name AS project_name, a.status,
+              a.status_changed_at, a.task_description, w.branch_name
+       FROM agents a LEFT JOIN projects p ON p.id = a.project_id
+       LEFT JOIN worktrees w ON w.id = a.worktree_id WHERE a.id = ?`,
+    )
+    .get(id) as Record<string, unknown> | undefined;
+  if (!r) return null;
+  return {
+    id: r.id as string,
+    alias: (r.alias as string | null) ?? null,
+    cliType: r.cli_type as string,
+    projectId: r.project_id as string,
+    projectName: (r.project_name as string | null) ?? null,
+    status: r.status as string,
+    statusChangedAt: (r.status_changed_at as number | null) ?? null,
+    taskDescription: (r.task_description as string) ?? "",
+    branchName: (r.branch_name as string | null) ?? null,
+  };
+}
+
+export function setAgentLastCwd(db: Database.Database, id: string, cwd: string): void {
+  db.prepare("UPDATE agents SET last_cwd = ? WHERE id = ?").run(cwd, id);
+}
+
+export function getAgentLastCwd(db: Database.Database, id: string): string | null {
+  const row = db.prepare("SELECT last_cwd FROM agents WHERE id = ?").get(id) as
+    | { last_cwd: string | null }
+    | undefined;
+  return row?.last_cwd ?? null;
+}
+
 export function setAgentSuspended(db: Database.Database, id: string, at: number | null): void {
   db.prepare("UPDATE agents SET suspended_at = ? WHERE id = ?").run(at, id);
 }
@@ -157,11 +239,25 @@ export function getAgent(db: Database.Database, id: string): Agent | null {
   return row ? mapAgentRow(row as Record<string, unknown>) : null;
 }
 
-/** The folder an agent works in: its worktree, else the project root */
+export function listAgentsByIds(db: Database.Database, ids: string[]): Agent[] {
+  if (ids.length === 0) return [];
+  const rows = db
+    .prepare(`SELECT * FROM agents WHERE id IN (${ids.map(() => "?").join(",")})`)
+    .all(...ids);
+  return (rows as Record<string, unknown>[]).map(mapAgentRow);
+}
+
+/** An agent's folder in SQL over `agents a`, `worktrees w`, `projects p`: the start folder the
+ *  launcher gave it (a shell's last_cwd is its OSC 7 folder, not where it started), its worktree,
+ *  else the project root */
+export const AGENT_FOLDER_SQL =
+  "COALESCE(CASE WHEN a.cli_type <> 'shell' THEN a.last_cwd END, w.path, p.path)";
+
+/** The folder an agent works in: its start folder, its worktree, else the project root */
 export function getAgentCwd(db: Database.Database, id: string): string | null {
   const row = db
     .prepare(
-      `SELECT COALESCE(w.path, p.path) AS cwd
+      `SELECT ${AGENT_FOLDER_SQL} AS cwd
        FROM agents a
        LEFT JOIN worktrees w ON w.id = a.worktree_id
        JOIN projects p ON p.id = a.project_id
@@ -295,16 +391,33 @@ export function listRecentSessions(db: Database.Database, limit = 10): RecentSes
 export function recoverStaleAgents(
   db: Database.Database,
   skipIds?: Set<string>,
-): { crashed: number; alive: number; crashedIds: string[] } {
+  reasonFor: (id: string) => string = () => "no live session",
+): {
+  crashed: number;
+  alive: number;
+  crashedIds: string[];
+  reasons: string[];
+  /** Read before the sweep moves status_changed_at (auto-resume's 3-day rule) */
+  lastActive: Map<string, number>;
+} {
   const stale = db
     .prepare(
-      `SELECT id, cli_type, status, pid FROM agents WHERE status IN ('running', 'spawning', 'waiting_input')
+      `SELECT id, cli_type, status, pid, last_activity_at, status_changed_at, started_at FROM agents WHERE status IN ('running', 'spawning', 'waiting_input')
        OR (launched_in_shell = 1 AND status = 'idle')`,
     )
-    .all() as Array<{ id: string; cli_type: string; status: string; pid: number | null }>;
+    .all() as Array<
+    {
+      id: string;
+      cli_type: string;
+      status: string;
+      pid: number | null;
+    } & Parameters<typeof lastActiveOf>[0]
+  >;
 
   let crashed = 0;
   const crashedIds: string[] = [];
+  const reasons: string[] = [];
+  const lastActive = new Map<string, number>();
   const alive = skipIds?.size ?? 0;
   const now = Math.floor(Date.now() / 1000);
 
@@ -314,21 +427,24 @@ export function recoverStaleAgents(
 
   for (const agent of stale) {
     if (skipIds?.has(agent.id)) {
-      logger.info(`[Recovery] Skip ${agent.id} (${agent.cli_type}) — alive via sidecar`);
+      logger.info(`[Recovery] ${agent.id} (${agent.cli_type}): reattached, alive via sidecar`);
       continue;
     }
 
+    const reason = reasonFor(agent.id);
+    reasons.push(reason);
     logger.info(
-      `[Recovery] Mark crashed: ${agent.id} (${agent.cli_type}, status=${agent.status}, pid=${agent.pid ?? "null"})`,
+      `[Recovery] ${agent.id} (${agent.cli_type}, status=${agent.status}, pid=${agent.pid ?? "null"}): crashed, ${reason}`,
     );
     db.prepare(
       "UPDATE agents SET status = 'crashed', stopped_at = ?, current_step = 'Session interrupted — app exited unexpectedly', pid = NULL WHERE id = ?",
     ).run(now, agent.id);
     crashed++;
     crashedIds.push(agent.id);
+    lastActive.set(agent.id, lastActiveOf(agent));
   }
 
-  return { crashed, alive, crashedIds };
+  return { crashed, alive, crashedIds, reasons, lastActive };
 }
 
 /** T176: hide an ended session from the dashboard. Live agents are refused —
@@ -505,9 +621,41 @@ export function countLiveAgentsInWorktree(
   return row.n;
 }
 
+/** Distinct folders live agents work in (`AGENT_FOLDER_SQL`) */
+export function listLiveAgentFolders(db: Database.Database): string[] {
+  const rows = db
+    .prepare(
+      `SELECT DISTINCT ${AGENT_FOLDER_SQL} AS cwd
+       FROM agents a
+       LEFT JOIN worktrees w ON w.id = a.worktree_id
+       JOIN projects p ON p.id = a.project_id
+       WHERE a.status IN (${liveIn()})`,
+    )
+    .all(...LIVE_STATUSES) as { cwd: string | null }[];
+  return rows.flatMap((r) => (r.cwd ? [r.cwd] : []));
+}
+
 export function listLiveAgentIds(db: Database.Database, projectId: string): string[] {
   const rows = db
     .prepare(`SELECT id FROM agents WHERE project_id = ? AND status IN (${liveIn()})`)
     .all(projectId, ...LIVE_STATUSES) as { id: string }[];
   return rows.map((r) => r.id);
+}
+
+export interface LiveAgentPid {
+  id: string;
+  project_id: string;
+  cli_type: string;
+  alias: string | null;
+  pid: number;
+}
+
+/** Every live session with a process, across projects (dev server owners, locale check) */
+export function listLiveAgentPids(db: Database.Database): LiveAgentPid[] {
+  return db
+    .prepare(
+      `SELECT id, project_id, cli_type, alias, pid FROM agents
+       WHERE pid IS NOT NULL AND status IN (${liveIn()})`,
+    )
+    .all(...LIVE_STATUSES) as LiveAgentPid[];
 }

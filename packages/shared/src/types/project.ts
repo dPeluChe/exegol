@@ -26,3 +26,24 @@ export type ProjectCreate = Omit<
   Project,
   "id" | "createdAt" | "lastOpenedAt" | "groupId" | "sortOrder"
 >;
+
+/** What a launcher folder is: its own repo, Node scripts, an Xcode or Swift package, Expo */
+export type FolderKind = "git" | "node" | "xcode" | "swift" | "expo-prebuilt" | "expo-managed";
+
+/** A folder the launcher works in (`resources.projectDetect`); rel "" is the project root */
+export type LauncherFolder = {
+  rel: string;
+  path: string;
+  git: boolean;
+  kinds: FolderKind[];
+  scripts: { name: string; command: string; source: string; framework?: string }[];
+};
+
+/** Everything the launcher shows for a project, from one detection module */
+export type ProjectDetect = {
+  folders: LauncherFolder[];
+  /** The project's IDE, else Settings' default, only when installed */
+  editor: { id: string; label: string } | null;
+  /** Finder, Explorer or File manager */
+  fileManager: string;
+};

@@ -3,6 +3,7 @@ import { useEffect, useRef } from "react";
 import { recoveryQuery } from "../lib/session-recovery";
 import { trpcMutate } from "../lib/trpc-client";
 import { useAgentStore } from "../stores/agents";
+import { useWatchStore } from "../stores/watch";
 import { useWorkspaceStore } from "../stores/workspace";
 
 const LIVE_STATUSES = new Set(["running", "spawning", "waiting_input", "paused"]);
@@ -39,9 +40,11 @@ export function usePanelessAgentSweep(): void {
       const recovery = await queryClient.ensureQueryData(recoveryQuery).catch(() => null);
       if (!recovery?.done) return;
       const paned = collectPanedAgentIds();
+      const watched = new Set(useWatchStore.getState().watched);
       const { agents, attentionItems, dismissAttention } = useAgentStore.getState();
       for (const agent of Object.values(agents)) {
-        if (paned.has(agent.id)) continue;
+        // A pin in Watching is the session's view too
+        if (paned.has(agent.id) || watched.has(agent.id)) continue;
         if (LIVE_STATUSES.has(agent.status)) {
           // Only reap agents that PREDATE this app run: pipeline/scheduler/queue
           // agents spawned headless this session are paneless by design.

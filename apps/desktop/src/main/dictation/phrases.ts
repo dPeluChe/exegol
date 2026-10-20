@@ -1,4 +1,4 @@
-import { DICTATION_SAMPLE_RATE, rms, SPEECH_RMS } from "@exegol/shared";
+import { collapseRepeats, DICTATION_SAMPLE_RATE, rms, SPEECH_RMS } from "@exegol/shared";
 
 /** A pause this long after speech ends a phrase */
 export const PHRASE_PAUSE_MS = 500;
@@ -52,13 +52,20 @@ function quietestPoint(frames: Segmenter["frames"], start: number, end: number):
   return best ? Math.min(end, best.at + FRAME_SAMPLES / 2) : end;
 }
 
+export interface Cut {
+  from: number;
+  to: number;
+  /** Speech heard in it (energy), for the vocabulary decision */
+  speechMs: number;
+}
+
 /** Feeds one chunk; `cut` is the end of a finished phrase ([state.start, cut) is ready to decode).
  *  A pause cuts only a phrase of `minPhraseMs` or more; the 25 s cap always cuts */
 export function segment(
   state: Segmenter,
   chunk: Float32Array,
   minPhraseMs = 0,
-): { state: Segmenter; cut: { from: number; to: number } | null } {
+): { state: Segmenter; cut: Cut | null } {
   const chunkMs = msOf(chunk.length);
   const end = state.end + chunk.length;
   const frames = addFrames(state, chunk, end);
@@ -72,7 +79,7 @@ export function segment(
   if (paused) {
     return {
       state: { start: end, end, speechMs: 0, silenceMs: 0, frames },
-      cut: { from: state.start, to: end },
+      cut: { from: state.start, to: end, speechMs },
     };
   }
   if (msOf(end - state.start) >= PHRASE_MAX_MS) {
@@ -80,7 +87,7 @@ export function segment(
     const rest = msOf(end - to);
     return {
       state: { start: to, end, speechMs: speech ? rest : 0, silenceMs: speech ? 0 : rest, frames },
-      cut: { from: state.start, to },
+      cut: { from: state.start, to, speechMs },
     };
   }
   // A long silence before any speech: drop it from the next phrase
@@ -94,6 +101,28 @@ export function segment(
 /** The audio after the last cut is worth decoding at stop */
 export const tailHasSpeech = (state: Segmenter): boolean =>
   state.end > state.start && state.speechMs >= PHRASE_MIN_SPEECH_MS;
+
+/** Hotwords on a phrase that is mostly silence or a filler ("ok", "eh") fill it with a term
+ *  ("Claude Claude Claude..."): measured on real recordings, docs/TASK_COMPLETED/2610.md */
+export const VOCAB_MIN_SPEECH_MS = 1000;
+
+export const biasPhrase = (speechMs: number): boolean => speechMs >= VOCAB_MIN_SPEECH_MS;
+
+/** A biased decode that repeats itself is decoded again without the vocabulary */
+export const degenerateDecode = (text: string): boolean => collapseRepeats(text).collapsed > 0;
+
+/** The app's per-phrase decode (engine and bench): the vocabulary only with enough speech, and
+ *  again without it when the biased text repeats itself */
+export async function decodeWithVocabulary(
+  run: (hotwords: string | null) => Promise<string>,
+  hotwords: string | null,
+  speechMs: number,
+): Promise<{ text: string; unbiased: boolean }> {
+  if (!hotwords) return { text: await run(null), unbiased: false };
+  const text = biasPhrase(speechMs) ? await run(hotwords) : null;
+  if (text !== null && !degenerateDecode(text)) return { text, unbiased: false };
+  return { text: await run(null), unbiased: true };
+}
 
 export function joinPhrases(texts: readonly string[]): string {
   return texts

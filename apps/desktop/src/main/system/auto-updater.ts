@@ -2,6 +2,7 @@
 // Uses electron-updater with generic provider.
 // Silent on network errors, auto-downloads, installs on quit.
 
+import { testBuildOf } from "@exegol/shared";
 import { app, BrowserWindow } from "electron";
 import { autoUpdater } from "electron-updater";
 import { prerelease } from "semver";
@@ -13,8 +14,13 @@ import { allowQuit } from "./work-guard";
 const UPDATE_CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000; // 4 hours
 let checkTimer: ReturnType<typeof setInterval> | null = null;
 
-// Detect channel from version string (e.g., "0.2.0-canary.20260320" → canary)
-const IS_PRERELEASE = prerelease(app.getVersion()) !== null;
+/** "0.2.0-canary.20260320" → canary. A local test build (`-test.<sha>`) follows stable with no
+ *  downgrade: semver puts it below the next release, so only that one is offered */
+export function updateChannel(version: string): "stable" | "canary" {
+  return prerelease(version) !== null && !testBuildOf(version) ? "canary" : "stable";
+}
+
+const IS_PRERELEASE = updateChannel(app.getVersion()) === "canary";
 
 const STABLE_FEED = `${EXEGOL_REPO_URL}/releases/latest/download`;
 const CANARY_FEED = `${EXEGOL_REPO_URL}/releases/download/desktop-canary`;

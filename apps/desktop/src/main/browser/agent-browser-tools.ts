@@ -9,10 +9,17 @@ import {
 } from "../mcp/exegol-protocol";
 import { forgetAgentControl } from "./control";
 import {
+  pageDialogBlockedResult,
+  pendingOnPane,
+  takeDialogNotes,
+  withDialogNotes,
+} from "./page-dialogs";
+import {
   type BrowserToolContext,
   logAction,
   requireHost,
   resolvePane,
+  touch,
   userHasControl,
 } from "./tool-guards";
 import {
@@ -56,6 +63,11 @@ export async function callBrowserTool(
   const pane = resolvePane(requireHost().livePanes(ctx.projectId), ctx, args.pane);
   const blocked = userHasControl(pane);
   if (blocked) return blocked;
+  // The page is blocked on a dialog the pane shows: any page script would hang until answered
+  const dialog = pendingOnPane(pane.paneId);
+  if (dialog) return pageDialogBlockedResult(pane.paneId, dialog);
+  // Acting before the first page script: a dialog it raises is handled, not left hanging
+  touch(db, ctx, pane);
   let result: unknown;
   try {
     switch (tool) {
@@ -101,6 +113,12 @@ export async function callBrowserTool(
         break;
     }
   } catch (err) {
+    const raised = pendingOnPane(pane.paneId);
+    if (raised)
+      return withDialogNotes(
+        pageDialogBlockedResult(pane.paneId, raised),
+        takeDialogNotes(pane.paneId),
+      );
     logAction(db, ctx, {
       tool,
       paneId: pane.paneId,
@@ -114,5 +132,5 @@ export async function callBrowserTool(
     const status = (result as { status?: string } | null)?.status ?? "ok";
     logAction(db, ctx, { tool, paneId: pane.paneId, host: hostOf(pane.getUrl()), outcome: status });
   }
-  return result;
+  return withDialogNotes(result, takeDialogNotes(pane.paneId));
 }

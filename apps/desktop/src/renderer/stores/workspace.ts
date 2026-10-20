@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { projectSwitchStarted } from "../lib/project-switch-log";
 import { useAppStore } from "./app";
 import { createCustomLayoutsSlice } from "./workspace/custom-layouts-slice";
 import { createFloatingPanesSlice } from "./workspace/floating-panes-slice";
@@ -71,6 +72,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
 useAppStore.subscribe((state) => {
   const ws = useWorkspaceStore.getState();
   if (state.activeProjectId !== ws._activeProjectId) {
+    projectSwitchStarted(state.activeProjectId);
     useWorkspaceStore.setState(switchProject(ws, state.activeProjectId));
   }
 });

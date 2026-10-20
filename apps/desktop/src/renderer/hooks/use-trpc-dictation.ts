@@ -1,4 +1,8 @@
-import type { DictationHistoryItem, DictationStatus } from "@exegol/shared";
+import type {
+  DictationHistoryItem,
+  DictationRecordingsSummary,
+  DictationStatus,
+} from "@exegol/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
 import { toastError, useToastStore } from "../stores/toasts";
@@ -7,6 +11,7 @@ import { useMountEffect } from "./use-mount-effect";
 /** One source for mic, model and engine status: the controller writes here after each start */
 export const DICTATION_STATUS_KEY = ["dictation", "status"];
 const HISTORY_KEY = ["dictation", "history"];
+const RECORDINGS_KEY = ["dictation", "recordings"];
 
 export const fetchDictationStatus = () => trpcInvoke<DictationStatus>("dictation.status");
 
@@ -49,6 +54,29 @@ export function useDictationHistoryAction() {
         return;
       }
       void queryClient.invalidateQueries({ queryKey: HISTORY_KEY });
+    },
+  });
+}
+
+/** Count and size of kept recordings; polled while shown since a save lands after `dictation:done` */
+export function useDictationRecordings() {
+  return useQuery({
+    queryKey: RECORDINGS_KEY,
+    queryFn: () => trpcInvoke<DictationRecordingsSummary>("dictation.recordings"),
+    refetchInterval: 10_000,
+  });
+}
+
+export function useRecordingsAction() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (action: "openRecordings" | "clearRecordings") => trpcMutate(`dictation.${action}`),
+    onError: toastError("Dictation recordings"),
+    onSuccess: (_data, action) => {
+      if (action === "clearRecordings") {
+        void queryClient.invalidateQueries({ queryKey: RECORDINGS_KEY });
+        void queryClient.invalidateQueries({ queryKey: ["storage", "report"] });
+      }
     },
   });
 }

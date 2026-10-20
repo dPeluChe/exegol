@@ -1,6 +1,6 @@
 {
   "name": "@exegol/desktop",
-  "version": "0.5.20",
+  "version": "0.5.25",
   "description": "Desktop app for orchestrating AI coding agents",
   "author": "Antonio <antonio@dpeluche.dev>",
   "homepage": "https://github.com/dPeluChe/exegol",
@@ -16,6 +16,7 @@
     "package:mac": "electron-vite build && electron-builder --config electron-builder.ts --mac --publish never",
     "package:win": "electron-vite build && electron-builder --config electron-builder.ts --win --publish never",
     "package:linux": "electron-vite build && electron-builder --config electron-builder.ts --linux --publish never",
+    "package:local": "bun scripts/package-local.ts",
     "postpackage": "bun run clean:build -- --apply --repo-only",
     "postpackage:mac": "bun run clean:build -- --apply --repo-only",
     "postpackage:win": "bun run clean:build -- --apply --repo-only",
@@ -31,6 +32,7 @@
     "@radix-ui/react-dialog": "1.1.15",
     "@tanstack/react-virtual": "^3.13.24",
     "@trpc/server": "^11.0.0",
+    "semver": "^7.7.4",
     "@xterm/addon-serialize": "^0.14.0",
     "@xterm/headless": "^6.0.0",
     "croner": "^9.0.0",

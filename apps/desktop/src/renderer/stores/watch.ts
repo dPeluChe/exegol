@@ -30,6 +30,22 @@ interface WatchStore {
    */
   cardFont: Record<string, number>;
   setCardFont: (agentId: string, font: number | null) => void;
+  /** Pins whose session has no live continuation: what it was (lib/watch-follow.ts), in memory */
+  gone: Record<string, GoneSession>;
+  setGone: (gone: Record<string, GoneSession>) => void;
+}
+
+/** A pinned session with no live continuation, as main still knows it */
+export interface GoneSession {
+  id: string;
+  alias: string | null;
+  cliType: string;
+  projectId: string;
+  projectName: string | null;
+  status: string;
+  statusChangedAt: number | null;
+  taskDescription: string;
+  branchName: string | null;
 }
 
 const pushOpen = (open: string[], id: string) => [...open, id].slice(-MAX_OPEN_MIRRORS);
@@ -86,10 +102,13 @@ export const useWatchStore = create<WatchStore>()(
         })),
       replaceAgent: (oldId, newId) =>
         set((s) => {
+          if (oldId === newId || !s.watched.includes(oldId)) return s;
           const { [oldId]: font, ...cardFont } = s.cardFont;
+          // Two pins already on one chain (a double resume): one card, in the first spot
+          const dedupe = (list: string[]) => list.filter((id, i) => list.indexOf(id) === i);
           return {
-            watched: swap(s.watched, oldId, newId),
-            open: swap(s.open, oldId, newId),
+            watched: dedupe(swap(s.watched, oldId, newId)),
+            open: dedupe(swap(s.open, oldId, newId)),
             cardFont: font === undefined ? cardFont : { ...cardFont, [newId]: font },
           };
         }),
@@ -102,6 +121,8 @@ export const useWatchStore = create<WatchStore>()(
           return { cardFont: { ...rest, [agentId]: clamped } };
         }),
       setColumns: (columns) => set({ columns }),
+      gone: {},
+      setGone: (gone) => set({ gone }),
       moveWatched: (agentId, beforeId) =>
         set((s) => {
           if (agentId === beforeId || !s.watched.includes(agentId)) return s;
@@ -115,6 +136,13 @@ export const useWatchStore = create<WatchStore>()(
       name: "exegol-watch",
       version: 1,
       migrate: migrateWatchStore,
+      partialize: ({ watched, open, columns, cardFont }) => ({ watched, open, columns, cardFont }),
     },
   ),
 );
+
+/** A−/A+ on a card: the first step starts sizing the session from the default font */
+export function stepCardFont(agentId: string, delta: number): void {
+  const s = useWatchStore.getState();
+  s.setCardFont(agentId, (s.cardFont[agentId] ?? DEFAULT_CARD_FONT) + delta);
+}

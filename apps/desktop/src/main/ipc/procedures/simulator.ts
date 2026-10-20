@@ -45,6 +45,14 @@ const point = z.object({ x: coord, y: coord });
 const simKeys = Object.keys(SIM_KEYCODES) as [SimKey, ...SimKey[]];
 const PANE_ID = /^[\w-]{1,64}$/;
 
+const IS_MAC = process.platform === "darwin";
+
+/** simctl and AXe exist only on macOS: every call but `support` is refused elsewhere */
+const macProcedure = publicProcedure.use(({ next }) => {
+  if (!IS_MAC) throw new Error("The Simulator pane needs macOS with Xcode");
+  return next();
+});
+
 const stamp = () => new Date().toISOString().slice(0, 19).replaceAll(":", ".").replace("T", " at ");
 
 /** T203: the Simulator pane. Main-side calls live in `main/simulator/` so agent tools reuse them */
@@ -56,48 +64,46 @@ export const simulatorRouter = router({
     }),
   ),
 
-  devices: publicProcedure.query(async () => ((await simctlAvailable()) ? listDevices() : [])),
+  devices: macProcedure.query(async () => ((await simctlAvailable()) ? listDevices() : [])),
 
-  boot: publicProcedure.input(device).mutation(async ({ input }) => {
+  boot: macProcedure.input(device).mutation(async ({ input }) => {
     await bootDevice(input.udid);
     return { ok: true };
   }),
 
-  shutdown: publicProcedure.input(device).mutation(async ({ input }) => {
+  shutdown: macProcedure.input(device).mutation(async ({ input }) => {
     await shutdownDevice(input.udid);
     return { ok: true };
   }),
 
   /** Points (AXe's coordinates); null until the device answers */
-  screenSize: publicProcedure.input(device).query(({ input }) => screenSize(input.udid)),
+  screenSize: macProcedure.input(device).query(({ input }) => screenSize(input.udid)),
 
-  tap: publicProcedure.input(device.extend({ x: coord, y: coord })).mutation(async ({ input }) => {
+  tap: macProcedure.input(device.extend({ x: coord, y: coord })).mutation(async ({ input }) => {
     await tap(input.udid, input.x, input.y);
     return { ok: true };
   }),
 
-  swipe: publicProcedure
+  swipe: macProcedure
     .input(device.extend({ from: point, to: point, durationS: z.number().min(0.05).max(5) }))
     .mutation(async ({ input }) => {
       await swipe(input.udid, input.from, input.to, input.durationS);
       return { ok: true };
     }),
 
-  type: publicProcedure
+  type: macProcedure
     .input(device.extend({ text: z.string().regex(SIM_TYPE_TEXT) }))
     .mutation(async ({ input }) => {
       await typeText(input.udid, input.text);
       return { ok: true };
     }),
 
-  key: publicProcedure
-    .input(device.extend({ key: z.enum(simKeys) }))
-    .mutation(async ({ input }) => {
-      await pressKey(input.udid, input.key);
-      return { ok: true };
-    }),
+  key: macProcedure.input(device.extend({ key: z.enum(simKeys) })).mutation(async ({ input }) => {
+    await pressKey(input.udid, input.key);
+    return { ok: true };
+  }),
 
-  button: publicProcedure
+  button: macProcedure
     .input(device.extend({ button: z.enum(SIM_BUTTONS) }))
     .mutation(async ({ input }) => {
       await pressButton(input.udid, input.button);
@@ -105,7 +111,7 @@ export const simulatorRouter = router({
     }),
 
   /** Full-resolution PNG from simctl: to the clipboard, or a file the user picks */
-  screenshot: publicProcedure
+  screenshot: macProcedure
     .input(device.extend({ to: z.enum(["clipboard", "file"]) }))
     .mutation(async ({ input }) => {
       const name = ((await findDevice(input.udid))?.name ?? "Simulator").replace(/[/:]/g, "-");
@@ -132,7 +138,7 @@ export const simulatorRouter = router({
       return { ok: true };
     }),
 
-  openApp: publicProcedure.input(device).mutation(async ({ input }) => {
+  openApp: macProcedure.input(device).mutation(async ({ input }) => {
     await openSimulatorApp(input.udid);
     return { ok: true };
   }),
@@ -171,7 +177,7 @@ function watchSender(sender: WebContents): void {
 /** Live view: frames go back on `simulator:frame` to the window that asked, never a port */
 export function registerSimulatorIpc(): void {
   ipcMain.handle("simulator:stream-start", (event, input: StreamInput) => {
-    if (!validPane(input?.paneId) || !udid.safeParse(input?.udid).success) return false;
+    if (!IS_MAC || !validPane(input?.paneId) || !udid.safeParse(input?.udid).success) return false;
     watchSender(event.sender);
     startStream(event.sender, input.paneId, input.udid as string);
     return true;

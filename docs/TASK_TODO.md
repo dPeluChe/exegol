@@ -27,8 +27,8 @@
    ~~T200.4 queue + steer~~ (`feat/queue-steer`), ~~T200.5 undo turn~~ (`feat/undo-turn`), ~~T142 PR
    loop phase 1 (T200.7)~~ (`feat/pr-watch`, `TASK_COMPLETED/2610.md`).
 6. **Daily bugs**: opencode dies across app quit (Verify live below), ~~git pane renames / MM
-   files / silent failures~~ (`fix/git-pane-audit`), T138 split modes, ~~T185.11 scheduler
-   timeout~~ (`fix/scheduler-timeout`), T193.2 execPath.
+   files / silent failures~~ (`fix/git-pane-audit`), ~~T138 split modes~~ (`fix/headless-modes-parser`), ~~T185.11 scheduler
+   timeout~~ (`fix/scheduler-timeout`), ~~T193.2 execPath~~ (`fix/execpath-moved`).
 
 Next round (after 0.5.16): **worktree hygiene** (T142 "Worktree hygiene" item: remove worktrees
 whose PR merged or whose agent closed clean and pushed, size warning in Storage and the status
@@ -121,6 +121,13 @@ Checked by the user on the 0.5.15 build: status bar widgets, Ctrl+Tab switcher, 
   AppImage shows up in the app menu after its first launch and reopens from there; Settings >
   install CLI on the AppImage survives a restart; the .deb has its icon in the KDE menu and
   Discover shows a description, homepage and category
+- **AppImage launch form + Wayland hotkey** (branch `fix/linux-appimage-wayland`, built on macOS):
+  on the real AppImage, start an agent, quit Exegol, `ps`: the sidecar runs under its own
+  `.AppImage` process with its own `/tmp/.mount_*`; reopen: the agent's terminal is still alive;
+  Exegol MCP tools answer in Claude and codex and an Edit runs the claim guard after a restart
+  (`~/.exegol/mcp/<id>.json` and `~/.exegol/hooks/<id>.json` name the `.AppImage`, no mount);
+  a second launch rewrites nothing (`[ExecPath] moved` absent). On KDE/GNOME Wayland the global
+  hotkey shows the portal's confirmation and then brings the window up
 - Terminal repaint after a hidden tab: leave a working Claude pane in another tab for a minute,
   come back: no overlapped lines (console shows "Output overflowed while hidden" when it
   resynced)
@@ -176,16 +183,29 @@ Checked by the user on the 0.5.15 build: status bar widgets, Ctrl+Tab switcher, 
 
 ### Platform and health tracks
 - **Terminal links: Windows file paths not linkified** (2026-10-06, `feat/terminal-links`):
-  `FILE_LINK_RE` and `resolveLinkPath` only know POSIX paths, so `C:\repo\src\app.ts` and
-  backslash-relative paths printed on Windows are plain text. Before a Windows build: match
-  drive letters and `\`, resolve them in main with `path.win32`
+  `FILE_LINK_RE` only knows POSIX paths, so `C:\repo\src\app.ts` and backslash-relative paths
+  printed on Windows are plain text. Before a Windows build: match drive letters and `\` in the
+  renderer (main's `resolveLinkPath` already resolves them, `~\` included)
+- **Windows runtime, unverified** (2026-10-20, `feat/windows-runtime`): written and unit-tested on
+  macOS only. On Windows 11 check: pwsh and powershell.exe 5.1 plain terminals (profile.ps1
+  marker, OSC 7 folder, no console window flash); a prompt with quotes, `$` and newlines reaching
+  Claude through `-Command` (5.1's legacy native-arg passing drops embedded `"`; npm `.cmd` shims
+  re-parse newlines); typed interactive CLIs submitted with CR and the pane ending with the CLI;
+  cmd.exe fallback (`& exit` exit code, `%` in prompts); sidecar named pipe, detached sidecar
+  surviving an app restart, replacement on a version bump (pipe released before the successor
+  listens); MCP pipe for shim and claim guard; Claude hooks under Git Bash (`C:/` paths, `-x` on
+  notify.sh, `$HOME/.exegol/events` = Exegol's folder); `code.cmd` via cmd.exe; Restart terminals
+  and pane close through `Get-CimInstance`. Still off there: ports and dev servers, process
+  metrics, shell promotion; renderer writes ending in `\n` (`spawn-shell`, CLI updates, launcher
+  folder commands) may not submit in PowerShell
 - **Windows install commands, unverified**: `CLI_SETUP` has a `win` command per CLI taken from
   each vendor's docs (2026-10-01), but Exegol ships no Windows build, so none has been run.
   Before a Windows build: run each on Windows 11 (PowerShell vs cmd: `runCommandInNewTab`
   types into the user's shell), confirm `commandOnPath` finds them (PATHEXT), and that Amp
   (WSL only) shows its guide
 - **Linux leftovers** (from the 2026-09-29 audit, after the first Linux build): ports
-  read with `lsof` only (use `ss -ltnp` + `/proc/<pid>/cwd` when missing); the tray is invisible
+  read with `lsof` only (use `ss -ltnp` when missing; cwds already come from
+  `/proc/<pid>/cwd`, and idle auto-suspend skips agents without lsof); the tray is invisible
   on stock GNOME (make sure no feature depends on it); rpm target for Fedora; the path guard
   covers the macOS keychain folder but not `~/.local/share/keyrings`
 - **React health score (react-doctor), keep raising it**: 54 → 70 so far (#204 Bugs, #205
@@ -205,6 +225,89 @@ Checked by the user on the 0.5.15 build: status bar widgets, Ctrl+Tab switcher, 
 ---
 
 ## Active Backlog
+
+### T208: Database pane (SQLite and Postgres first) `added: 2026-10-13`
+**Priority**: P2 | **Effort**: L | **Source**: user idea 2026-10-13. Survey of the user's projects
+(2026-10-13): 51 SQLite files, 25 Postgres URLs in `.env*` (plus pgvector/timescale images), 5
+`sqlite:` URLs, Redis in 5 compose files, MySQL in 1. Nothing detects or opens them today.
+
+1. Detection (T204 module): SQLite files (`*.db`, `*.sqlite`, `*.sqlite3`, header check
+   `SQLite format 3`), `DATABASE_URL`-style keys in `.env*` (scheme only until the user connects),
+   Prisma/Drizzle configs, compose services (postgres, mysql, redis images, T207); the launcher
+   offers "Open database"
+2. Pane type `db`: connection header (kind, host/file, read-only badge), schema tree (tables,
+   views, columns, indexes, row counts), table view with paging (virtualized grid, keyset or
+   LIMIT/OFFSET, filters and sort), a SQL editor (Monaco, SQL highlighting, run selection,
+   history per connection), results as grid or JSON, export CSV/JSON, copy row as JSON
+3. Engines: SQLite through the libsql already shipped (open with `mode=ro`, `PRAGMA query_only`);
+   Postgres with `pg` (pure JS). Both run in an Electron `utilityProcess` per connection (a slow
+   query never blocks main), with a statement timeout and a row cap per page
+4. Safety: read-only by default (Postgres `default_transaction_read_only`, SQLite `query_only`);
+   writes need an explicit "Allow writes" per connection with a confirm showing the statement;
+   passwords and URLs with credentials in the keystore, never in files or logs; SSL modes; a
+   project's `.env` URL is read only when the user picks it, and `localhost` vs remote is shown
+5. Later: MySQL (`mysql2`), Redis key browser, Exegol's own DB (read-only, debug), an MCP
+   `db_query` tool for agents (read-only connections the user opened, results marked untrusted,
+   row cap), ER view from foreign keys
+6. Never log query text, rows, connection strings or credentials; logs keep kind, host class
+   (local/remote), duration and row counts
+7. Why not embed a third-party viewer (pgweb, sqlite-web, DBeaver): a second runtime per engine,
+   another web server on a port, no shared keystore or read-only policy; "Open in TablePlus /
+   DBeaver" stays as an extra button when one is installed (`ide/detect` pattern)
+
+### T207: Docker containers of the project `added: 2026-10-12`
+**Priority**: P2 | **Effort**: M | **Source**: user idea 2026-10-12. Viable with the `docker` CLI
+alone (Docker Desktop, OrbStack and Colima all ship it); no daemon running = the feature hides.
+
+1. Detection (in the T204 detection module): `Dockerfile`, `compose.yaml` / `docker-compose.yml`
+   per folder; the launcher's folder row offers "compose up" / "down" (run in a visible terminal)
+2. Which containers belong to the project: `docker ps --format json` and the compose labels
+   (`com.docker.compose.project.working_dir`, `.config_files`) matched to the project path
+3. Watch: one `docker events --format json` stream while the app runs (started only if the daemon
+   answers, restarted with backoff), no polling; state pushed to the renderer
+4. UI: status bar widget (containers up per project), a Containers list in the Project tab: state,
+   health, uptime, published ports (open in a browser pane, like the dev server chips), logs in a
+   terminal pane (`docker compose logs -f <svc>`), restart / stop with a confirm
+5. Dev servers list: a port held by Docker's proxy shows its container instead of "com.docker"
+6. Later: a read-only MCP tool for agents (containers and ports of their project)
+7. Never log container env, logs or command lines; only names, ids, states and ports
+
+### T206: API client pane (Postman-like) `added: 2026-10-12`
+**Priority**: P2 | **Effort**: L | **Source**: user idea 2026-10-12. Test local or remote services
+without leaving the project.
+
+1. New pane type `api`: method, URL, query, headers, body (JSON, form, raw), auth (bearer, basic,
+   API key); sent from main (Node fetch: no CORS, localhost and remote alike); response with
+   status, time, size, headers and a pretty body (Monaco, JSON folding), Copy as curl
+2. Requests saved as plain `.http` files in the repo (`.exegol/api/` or any folder, the VS Code
+   REST Client / JetBrains format): reviewable in git, agents can write and run them too
+3. Environments and variables (`{{baseUrl}}`, `{{token}}`): values in the project settings,
+   secrets in the keystore (never in the `.http` files); per-project history of the last runs
+4. Import: OpenAPI 3 / Swagger 2 from a file or URL (also probing a running dev server's
+   `/openapi.json`, `/swagger.json`, `/docs-json`) into a tree of endpoints with prefilled bodies
+   from the schema; paste a curl command
+5. Agents (later): an MCP `api_request` tool under the agent browser's URL policy (localhost +
+   project allowlist, write access only), results marked as untrusted content
+6. Never log bodies, headers or variable values; the bug report sees only method + host
+
+### T204: Launcher rebuilt around the folder, one detection module `added: 2026-10-12`
+**Priority**: P1 | **Effort**: L | **Source**: user review of the empty-pane launcher and the Launch
+Agent modal (2026-10-12). One PR, reviewed in detail.
+
+Items 1-7 (folder-first launcher, keys, editor button, in-pane form, agent switcher, sessions per
+folder, `project-detect.ts`) shipped 2026-10-13 and item 8 (ended pane) before it
+(`TASK_COMPLETED/2610.md`). Left:
+
+1. Verify live: open a pane at the root of a workspace project with a pinned command in a
+   subfolder (opens at the root), launch Claude in a subfolder by keyboard only (/, folder, Enter,
+   1, Enter), switch the agent inside the form, Continue last in that folder
+2. Simulator: the S key and button in the launcher, and the ended pane's Simulator conversion, once
+   T203's pane exists (`launcherActions` already takes `simulator`)
+3. Detection module, the rest: installed CLIs and their duplicate copies
+   (`agents/cli-install-method.ts`, `doctor.cliInstalls`) and the iOS/macOS targets from T203 into
+   `system/project-detect.ts`; Settings and Doctor read it too
+4. Worktree from a subfolder: today a subfolder offers Here only (a worktree is cut at the root).
+   Cut the worktree and start the agent in the same relative folder inside it
 
 ### T203: Xcode and iOS Simulator inside Exegol `added: 2026-10-09`
 **Priority**: P1 | **Effort**: L | **Source**: user request 2026-10-09 (iOS/macOS projects). Agents
@@ -241,25 +344,17 @@ error, prefer `--id`) 0.9 s, navigated; `axe type` filled Safari's address field
 
 ### T202: Sidecar flow control and lighter reattach `added: 2026-10-09`
 **Priority**: P1 | **Effort**: M | **Source**: the 2026-10-09 log audit after every terminal ignored
-the keyboard during a `spark pull all` (only a reboot fixed it). Needs a `SIDECAR_VERSION` bump:
-installing it ends every live terminal (sessions return crashed, history kept, resumable), so ship
-it when the user has cleaned up to the sessions they need and says go.
+the keyboard during a `spark pull all` (only a reboot fixed it). Items 1-5 and 7 shipped on
+`feat/t202-sidecar-flow` (SIDECAR_VERSION 1.7.0, `TASK_COMPLETED/2610.md`).
 
-1. Pause per session: `OutputGate` in `pty-sidecar-entry.ts` pauses ALL PTYs once main's socket
-   queue passes 16 KB, so one flooding terminal freezes every session's echo. Pause only the
-   session(s) whose output fills the queue
-2. Sequence numbers on output frames so the #346 Retry socket swap is exact (today a few ms of
-   output at the swap can repeat or drop)
-3. Lighter reattach: 9 of 20 Claude rings were full 8 MB (104 MB as JSON, 5.5 s for 35 sessions,
-   shells queued behind them). Cap the hidden-session snapshot (about 1 MB of tail, or from the
-   last screen clear) and reattach hidden panes lazily
-4. Sidecar logs to `sidecar.log` (empty today): gate pauses over 1 s, its own exit cause and
-   signal, the pid file state at discovery
-5. Ring buffer start on a character boundary: after the 8 MB ring wraps (and on an oversize
-   write) the replay can begin mid UTF-8 sequence, one U+FFFD at the top of a reattach (align the
-   start like `utf8Tail`; found in the #356 encoding review)
+3. Reattach hidden panes lazily (the capped 1 MB tail shipped; deferring the whole reattach of a
+   pane off screen did not: status, attention and MCP re-arm hang off it)
 6. Verify live: a heavy command in one terminal, the others keep typing; the health watch (#346)
-   stays quiet
+   stays quiet. After installing: `~/.exegol/sidecar-replaced-*.json`, the `[Recovery]` line per
+   agent and the `[Resume]` outcomes in the log, gate and trim lines in `logs/sidecar.log`
+8. Only if a second restart reason appears next to CLI updates: one "session outdated" chip with
+   its reason instead of `CliUpdateControl`, and rename `stores/cli-restarts` to a session restart
+   queue
 
 ### T201: Local voice dictation `added: 2026-10-07`
 **Priority**: P1 | **Effort**: L | **Source**: user request 2026-10-07. Speech to text that runs
@@ -274,8 +369,8 @@ on the machine (no audio leaves it), typed into the focused pane.
      `$ORIGIN` (the .so files sit beside it in `app.asar.unpacked`, so no `LD_LIBRARY_PATH`),
      checked on the npm tarball only
 3. Later:
-   - The global `~/.claude/settings.json` hooks from `agents/wrappers.ts` fire for every Claude
-     session on the machine, not only Exegol's: scope them or drop them for the per-agent file
+   - ~~Global Claude/Codex hooks scoped to Exegol sessions~~: shipped on `fix/scope-global-hooks`
+     (`TASK_COMPLETED/2610.md`). Not checked live
    - Whisper through whisper-server (whisper.cpp, Metal) for faster Whisper on Apple Silicon
    - Apple SpeechAnalyzer on macOS 26+ as a no-download engine
    - Silero VAD (sherpa-onnx, verified download) for the phrase cuts; the energy VAD cuts them now
@@ -449,6 +544,13 @@ exchange-bus MVP only, no headless council executions. Absorbs:
 
 ---
 
+### T209: Agent messages, ideas from ttt `added: 2026-10-16`
+**Priority**: P3 | **Effort**: S-M | **Source**: review of tasarren/ttt (2026-10-16); the submit retry landed in `feat/msg-submit-confirm`
+
+- **Coalesce a burst to one target**: two or more agents messaging the same one get one notice per boundary ("3 waiting from X, Y; call messages_check") instead of one turn per message. `deliverPendingAgentMessages`, `formatInjection`
+- **`replace_key` and `ttl` on `agent_send`**: a newer status ping supersedes the queued one, stale ones expire. `exegol-protocol.ts`, `exegol-tools.ts`, a `w3_` migration
+- **Read another agent's screen** as an MCP tool (borders and spinners stripped, grep), gated by access mode. Main already holds every ring
+
 ### T165 — Messaging stack hardening (simplify follow-ups) `added: 2026-08-12`
 **Priority**: P2 | **Effort**: M | **Source**: 4-agent /simplify over T157–T162 (2026-08-12) — correctness landed in PR #102; these are the larger/architectural residuals
 
@@ -496,27 +598,15 @@ exchange-bus MVP only, no headless council executions. Absorbs:
    - (T184 leftover) `pty-host.ts` reattach hands the sidecar's raw snapshot to the renderer; the
      other replays go through the serializer (`getLiveSnapshot`). Sending the serialized snapshot
      there too would make the sidecar's `stripTerminalQueries` unnecessary (no bump to drop it)
-   - (T185.14 rest, review #9) Sidecar memory pressure: ring eviction only touches idle sessions
-     (33 active rings = 264 MiB > 256 MiB target). Byte counting and the client backlog cap
-     shipped 2026-10-01 (`TASK_COMPLETED/2610.md`). Bumps SIDECAR_VERSION.
    - (T184.2 rest) Queries while the app runs but no view draws the session: the sidecar answers
      DA1 only while no client is connected (app closed). With the app open, a hidden pane's xterm
      may not answer, and OSC 10/11/12 colour queries are never answered from the sidecar (T183.1
      terminal fidelity answers them in the renderer only). Needs main to tell the sidecar which
      sessions have a live view.
-   - (P2) Renderer-acked, per-session flow control: `OutputGate` pauses every PTY when one socket
-     backs up (terax `pty/output.rs`, klaudio 10d1e70).
-   - Snapshot only the ring tail (~1 MB) on reattach: needs a sidecar change + SIDECAR_VERSION
-     bump, which restarts every live PTY once; schedule with the user. Measured 2026-10-08
-     (`perf/reattach-repaint`, local harness: real `SidecarClient` + `PtyHost` over a unix socket,
-     27 sessions = 18 x 8 MB coloured TUI rings + 9 x 1 MB shells, pool of 3): the ~2 s per ring
-     was main's NDJSON framing (quadratic on 8 KB macOS socket reads, ~3 s per 12 MB frame), now
-     linear: from 56.9 s to 4.6 s total. What is left per 8 MB ring: fetch ~150 ms (sidecar serve +
-     JSON.parse) and xterm parse ~135 ms (1 MB shell: ~20 ms). A 1 MB tail would cut each heavy
-     session to ~40 ms: from ~4.6 s to ~1.2 s for 27 sessions, and the longest main-thread block
-     (~250 ms, the 12 MB JSON.parse + one xterm write) to ~40 ms. Also: `lib/ndjson` (bundled) has
-     the same quadratic concat; fix it with that bump (main, MCP included, already uses `lib/frame-reader`; its header
-     comment still names the MCP users)
+   - (P2) Renderer-acked flow control: the sidecar now pauses per session on main's socket
+     (T202), but nothing waits for the renderer's xterm (terax `pty/output.rs`, klaudio 10d1e70).
+   - Panes on screen still replay their full ring (up to 8 MB, ~150 ms fetch + ~135 ms parse
+     each, measured 2026-10-08); hidden ones replay a 1 MB tail since T202.
 10. **Polls**: GitPane / SmartGitAction / TerminalPanel poll git status + `gh pr view` every 15s;
     refetch on turn-end / commit / push events instead. The PR poll part is shared with T142.
     > Merged from the "Queue after 0.5.7" performance follow-ups (0.5.3 audit) on 2026-10-04.
@@ -533,7 +623,7 @@ exchange-bus MVP only, no headless council executions. Absorbs:
     dimension. Persist model id, dimension and chunker version per index generation. Before T153.
 13. **Indexer ignores `.gitignore`** (#6): `walkDir` (`project-indexer.ts`) only applies its own
     exclude list. Symlinks are no longer followed (fe7e264). Use git-aware enumeration.
-14. Sidecar memory pressure (rest): merged into 8.
+14. Sidecar memory pressure (rest): shipped with T202 (active rings shrink to 2 MB).
 15. **Memory salience reinforces a negation** (#7, P1 for T158/T164): `classifyObservation`
     (`salience.ts:51,61`) reinforces "Always run migrations…" with "Never run migrations…" (word
     similarity > 0.8). Auto-dedup only exact normalized matches; supersession needs an explicit
@@ -628,9 +718,6 @@ Notarization (since 0.5.4) and GitHub releases are done. The build is still arm6
 **Priority**: P1 unless noted | **Source**: 2026-09-22 pre-build audit. Fixed items are in `TASK_COMPLETED/2609.md`.
 
 **Distribution**
-2. `process.execPath` is written into hooks, `.mcp.json` and CLI configs: launching from the DMG
-   volume or a translocated path breaks them once the app moves. Install to /Applications first;
-   long term, rewrite those paths at startup when execPath changed.
 3. arm64 only: merged into T195.2.
 4. node-pty `prebuilds/darwin-arm64/spawn-helper` has no exec bit; works only because
    `rebuild:native` builds `build/Release/spawn-helper`. chmod in an afterPack hook.
@@ -1382,10 +1469,6 @@ Core shipped in v0.4.3 (types, spawn injection, modal selector, badge, pipeline 
 ### T137 — Hunk Assignment + Absorb (GitPane) `added: 2026-07-04`
 **Priority**: P2 | **Effort**: M-L | **Source**: GitButler `but-hunk-assignment` + `absorb.rs`
 - Stable hunk UUIDs surviving edits → attribute uncommitted hunks to agents/branches; "absorb" redistributes agent fixups to the right commits.
-
-### T138 — ModeTracker Headless `added: 2026-07-04`
-**Priority**: P2 | **Effort**: S | **Source**: superset `terminal-mode-tracker.ts` (VSCode XtermSerializer lineage)
-- A `HeadlessEmulator` exists (`main/terminal/headless-emulator.ts`) but reads modes with a per-write regex: a bracketed-paste sequence split across two writes leaves the mode off, and multi-mode `;` sequences fail (review 2026-09-05 #8). Track modes through the xterm parser, serialize only after the parser drained. Acceptance: splitting any supported sequence at any position gives the same final state.
 
 ### T139 — Skills Security Scan (pre-import) `added: 2026-07-04`
 **Priority**: P2 | **Effort**: S-M | **Source**: mission-control Skills Hub scanner
