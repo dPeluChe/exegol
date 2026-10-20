@@ -2,7 +2,7 @@ import { paneZoomKey, type ZoomAction } from "@exegol/shared";
 import { useEffect } from "react";
 import { focusAddressBar } from "../lib/address-bar";
 import { closeActivePane, reopenClosed } from "../lib/close-target";
-import { appChord, chordKey, IS_MAC } from "../lib/keymap";
+import { appChord, chordKey, IS_MAC, windowKey } from "../lib/keymap";
 import { goToShortcut } from "../lib/live-tabs";
 import { cyclePane, focusActivePane, focusDashboard, paneRoot } from "../lib/pane-focus";
 import { addTabAndFocus, splitActivePane, terminalForActivePane } from "../lib/split-terminal";
@@ -60,13 +60,23 @@ export function useHotkeys() {
         return;
       }
 
+      // Off macOS (no menu bar): Exegol's zoom and Quit (lib/keymap windowKey)
+      const winKey = windowKey(e);
+      if (winKey) {
+        e.preventDefault();
+        if (winKey === "quit") window.api.app.quit();
+        else window.api.app.zoom(winKey);
+        return;
+      }
+
       // Cmd+L / Cmd+R on a focused browser pane: its address bar / its page (macOS gets them
-      // through the app menu, which also fires while the page itself has the focus)
+      // through the app menu, which also fires while the page itself has the focus). Off macOS
+      // Cmd+R with no browser pane reloads the window, as the macOS menu does
       if (key === "l" && focusBrowserAddress()) {
         e.preventDefault();
         return;
       }
-      if (key === "r" && focusedBrowserPaneId()) {
+      if (key === "r" && (!IS_MAC || focusedBrowserPaneId())) {
         e.preventDefault();
         reloadFocusedBrowserOrWindow();
         return;

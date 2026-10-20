@@ -118,6 +118,27 @@ const MAC_SHORTCUTS: Shortcut[] = [
     category: "navigation",
   },
   {
+    id: "app-zoom",
+    label: "Zoom In / Out",
+    description: "Zoom all of Exegol (a focused browser pane zooms its page instead)",
+    keys: "Cmd+= / Cmd+-",
+    category: "navigation",
+  },
+  {
+    id: "app-zoom-reset",
+    label: "Actual Size",
+    description: "Put Exegol's zoom back to 100%",
+    keys: "Cmd+Shift+0",
+    category: "navigation",
+  },
+  {
+    id: "quit",
+    label: "Quit",
+    description: "Quit Exegol",
+    keys: "Cmd+Q",
+    category: "navigation",
+  },
+  {
     id: "new-agent",
     label: "New Agent",
     description: "Open the launch dialog",

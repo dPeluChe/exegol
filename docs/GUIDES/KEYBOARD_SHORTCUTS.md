@@ -46,11 +46,13 @@ Every jump puts the cursor in the pane it lands on, ready to type.
 | `Enter` / `Esc` | same | In a pane's launch form: launch (Shift+Enter for a new line; `Cmd+Enter` on macOS, `Ctrl+Enter` elsewhere, from any field) / back to the launcher (Cancel) |
 | `R` `N` `T` `F` `B` `1-9` | same | In an ended session's pane (no field focused): Resume (Restart, or Reopen for a terminal), new session of the same CLI there, Terminal, Files, Browser, switch to another agent in the same place |
 | `Cmd+L` | `Ctrl+Shift+L` | Browser pane (or floating browser): select its address bar |
-| `Cmd+R` | `Ctrl+Shift+R` | Browser pane (or floating browser): reload its page. Elsewhere on macOS Cmd+R reloads the window |
+| `Cmd+R` | `Ctrl+Shift+R` | Browser pane (or floating browser): reload its page. Elsewhere it reloads the window |
 | `Cmd+=` / `Cmd+-` / `Cmd+0` | `Ctrl+Shift+=` / `Ctrl+Shift+-` / `Ctrl+Shift+0` | Browser pane: zoom its page in / out / back to 100%. Elsewhere Cmd+= / Cmd+- zoom Exegol and Cmd+0 is a project |
 | `Cmd+Enter` | `Ctrl+Enter` | Launch from the spawn dialogs, send a diff comment |
 
 ## Window
+
+On Linux and Windows the app chords also work while a page in a browser pane has the focus (New Tab, Close Pane, Address Bar, Reload, Reset Zoom, Quit), as the macOS menu does.
 
 | macOS | Linux / Windows | Action |
 |-------|-----------------|--------|
@@ -58,7 +60,8 @@ Every jump puts the cursor in the pane it lands on, ready to type.
 | `Cmd+/` | `Ctrl+Shift+/` | Shortcuts overlay |
 | `Esc`, `Cmd+W` | `Esc`, `Ctrl+Shift+W` | Close the Settings or a floating window (a focused terminal keeps Esc) |
 | `Esc` | same | Leave the Projects view, back to the project or Dashboard it was opened from |
-| `Cmd+Shift+0` | none | Reset zoom (`Cmd+0` is a project slot) |
+| `Cmd+Shift+0` | `Ctrl+Shift+Alt+0` | Reset Exegol's zoom (`Cmd+0` is a project slot) |
+| `Cmd+Q` | `Ctrl+Shift+Q` | Quit Exegol |
 | `Cmd+Shift+E` | `Ctrl+Shift+E` | Bring Exegol to the front from any app (global, configurable in Settings) |
 | `Cmd+Shift+Space` | `Ctrl+Shift+Space` | Dictation into the focused pane: press to start and again (or Enter) to insert, or hold while you talk; Esc cancels (configurable in Settings > Dictation; works from a browser page too) |
 | `Cmd+P` | `Ctrl+Shift+P` | While a dictation records: pause and resume it (same session and text); works from a browser page and the Settings window too |

@@ -1,4 +1,4 @@
-import { testBuildOf } from "@exegol/shared";
+import { testBuildOf, type ZoomAction } from "@exegol/shared";
 import {
   app,
   type BaseWindow,
@@ -7,11 +7,13 @@ import {
   Menu,
   type MenuItemConstructorOptions,
   shell,
+  type WebContents,
 } from "electron";
 import { showMainWindowWith } from "../bootstrap/window";
 import { LOG_DIR } from "../lib/logger";
 import { EXEGOL_REPO_URL } from "../lib/repo";
 import { installCli, uninstallCli } from "../system/cli-installer";
+import type { AppKeyAction } from "./app-keys";
 import { openSettingsWindow } from "./settings";
 
 /**
@@ -151,39 +153,60 @@ function helpItems(): MenuItemConstructorOptions[] {
   ];
 }
 
+/** Labels only: use-hotkeys and webview-keys handle these keys */
+const keys = (accelerator: string) => ({ accelerator, registerAccelerator: false });
+
 /** Linux and Windows: the macOS menu bar's entries, from the title bar's menu button. No Edit
- *  menu (the button holds the focus) and no accelerators: the renderer handles the keys */
+ *  menu (the button holds the focus) */
 export function popupAppMenu(win: BrowserWindow, x: number, y: number): void {
   const template: MenuItemConstructorOptions[] = [
     {
       label: "File",
       submenu: [
-        { label: "New Tab", click: () => win.webContents.send("menu:new-tab") },
-        { label: "Close Pane", click: () => win.webContents.send("menu:close-pane") },
-        { label: "Open Location", click: () => win.webContents.send("menu:focus-location") },
+        {
+          label: "New Tab",
+          ...keys("Ctrl+Shift+T"),
+          click: () => win.webContents.send("menu:new-tab"),
+        },
+        {
+          label: "Close Pane",
+          ...keys("Ctrl+Shift+W"),
+          click: () => win.webContents.send("menu:close-pane"),
+        },
+        {
+          label: "Open Location",
+          ...keys("Ctrl+Shift+L"),
+          click: () => win.webContents.send("menu:focus-location"),
+        },
         { type: "separator" },
-        { label: "Settings…", click: () => openSettingsWindow() },
+        { label: "Settings…", ...keys("Ctrl+Shift+,"), click: () => openSettingsWindow() },
         { type: "separator" },
         ...cliItems(),
         { type: "separator" },
-        { label: `Quit ${app.name}`, click: () => app.quit() },
+        { label: `Quit ${app.name}`, ...keys("Ctrl+Shift+Q"), click: () => app.quit() },
       ],
     },
     {
       label: "View",
       submenu: [
-        { label: "Reload", click: () => handleReloadAccelerator(win) },
+        { label: "Reload", ...keys("Ctrl+Shift+R"), click: () => handleReloadAccelerator(win) },
         { label: "Force Reload", click: () => win.webContents.reloadIgnoringCache() },
         { label: "Toggle Developer Tools", click: () => win.webContents.toggleDevTools() },
         { type: "separator" },
-        { label: "Actual Size", click: () => win.webContents.setZoomLevel(0) },
+        {
+          label: "Actual Size",
+          ...keys("Ctrl+Shift+Alt+0"),
+          click: () => zoomWindow(win.webContents, "reset"),
+        },
         {
           label: "Zoom In",
-          click: () => win.webContents.setZoomLevel(win.webContents.getZoomLevel() + 0.5),
+          ...keys("Ctrl+Shift+="),
+          click: () => zoomWindow(win.webContents, "in"),
         },
         {
           label: "Zoom Out",
-          click: () => win.webContents.setZoomLevel(win.webContents.getZoomLevel() - 0.5),
+          ...keys("Ctrl+Shift+-"),
+          click: () => zoomWindow(win.webContents, "out"),
         },
         { type: "separator" },
         { label: "Toggle Full Screen", click: () => win.setFullScreen(!win.isFullScreen()) },
@@ -202,6 +225,21 @@ export function popupAppMenu(win: BrowserWindow, x: number, y: number): void {
     { label: "Help", submenu: [...helpItems(), { role: "about" }] },
   ];
   Menu.buildFromTemplate(template).popup({ window: win, x: Math.round(x), y: Math.round(y) });
+}
+
+/** Zoom the Exegol UI of a window, as the macOS menu's zoom roles do */
+export function zoomWindow(contents: WebContents, action: ZoomAction): void {
+  if (action === "reset") contents.setZoomLevel(0);
+  else contents.setZoomLevel(contents.getZoomLevel() + (action === "in" ? 0.5 : -0.5));
+}
+
+/** Off macOS: an app chord pressed in a webview page, run as its macOS menu item would */
+export function runAppKey(action: AppKeyAction, win: BrowserWindow): void {
+  if (action === "close-pane") handleCloseAccelerator(win);
+  else if (action === "reload") handleReloadAccelerator(win);
+  else if (action === "reset-zoom") zoomWindow(win.webContents, "reset");
+  else if (action === "quit") app.quit();
+  else win.webContents.send(`menu:${action}`);
 }
 
 /** T155.6: symlink resources/bin/exegol onto PATH and report the result. */
