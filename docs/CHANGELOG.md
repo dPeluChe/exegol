@@ -21,6 +21,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Linux Wayland: the global hotkey asks the desktop to bind it (GlobalShortcuts portal) instead of silently doing nothing, and the log says when the desktop has no portal or refused it
 - Linux without `lsof`: idle auto-suspend no longer takes a missing lsof for "no dev server running" and skips agents instead; process folders come from `/proc` without it
 - Linux and Windows: Ctrl+Shift+= / Ctrl+Shift+- zoom Exegol, Ctrl+Shift+Alt+0 resets the zoom and Ctrl+Shift+Q quits; the menu button lists the keys
+- Windows: file claims between agents now block a write inside a claimed folder, orphaned worktrees are recognized for cleanup and their work saved, Claude trust is inherited by worktree folders, speech models unpack with the system tar, and the project indexer skips nested `node_modules`
 
 ### Fixed
 - Linux and Windows: New Tab, Close Pane, Open Location and Reload keys (Ctrl+Shift+T, W, L, R) now work while a page in a browser pane has the focus, and Ctrl+Shift+R reloads the window when no browser pane is focused, as Cmd+R does on macOS

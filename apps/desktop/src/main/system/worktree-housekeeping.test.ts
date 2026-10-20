@@ -10,7 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import Database from "libsql";
 import { afterEach, describe, expect, it } from "vitest";
 import { runMigrations } from "../db/migrations";
@@ -157,7 +157,7 @@ describe("sweepOrphanWorktrees", () => {
     row("sub", sub);
     const merging = worktree("merging");
     const mergeHead = git(merging, "rev-parse", "--git-path", "MERGE_HEAD").trim();
-    writeFileSync(mergeHead.startsWith("/") ? mergeHead : join(merging, mergeHead), "x");
+    writeFileSync(isAbsolute(mergeHead) ? mergeHead : join(merging, mergeHead), "x");
     row("merging", merging);
     expect(await sweep()).toMatchObject({ removed: 0, kept: 2 });
     expect(existsSync(sub) && existsSync(merging)).toBe(true);

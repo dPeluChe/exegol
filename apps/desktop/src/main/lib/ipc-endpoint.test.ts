@@ -1,13 +1,15 @@
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { ipcEndpoint, isNamedPipe } from "./ipc-endpoint";
 
 describe("ipcEndpoint", () => {
+  // join: the host's separator, as the real call on that platform gets
   it("keeps the socket file in ~/.exegol off Windows", () => {
     expect(ipcEndpoint("pty-sidecar", "darwin", "/Users/me/.exegol")).toBe(
-      "/Users/me/.exegol/pty-sidecar.sock",
+      join("/Users/me/.exegol", "pty-sidecar.sock"),
     );
     expect(ipcEndpoint("mcp-server", "linux", "/home/me/.exegol")).toBe(
-      "/home/me/.exegol/mcp-server.sock",
+      join("/home/me/.exegol", "mcp-server.sock"),
     );
   });
 

@@ -1,4 +1,7 @@
-import { basename, delimiter, dirname, resolve } from "node:path";
+import { posix } from "node:path";
+
+// POSIX shells only (the hint is an rc-file line): POSIX paths whatever the host
+const { basename, delimiter, dirname, resolve } = posix;
 
 /** The installed CLI's folder is not on PATH (~/.local/bin on some distros): the line to add
  *  and where, else null. `pathEnv` is the login shell's PATH */

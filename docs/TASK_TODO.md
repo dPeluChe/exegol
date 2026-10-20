@@ -183,9 +183,9 @@ Checked by the user on the 0.5.15 build: status bar widgets, Ctrl+Tab switcher, 
 
 ### Platform and health tracks
 - **Terminal links: Windows file paths not linkified** (2026-10-06, `feat/terminal-links`):
-  `FILE_LINK_RE` and `resolveLinkPath` only know POSIX paths, so `C:\repo\src\app.ts` and
-  backslash-relative paths printed on Windows are plain text. Before a Windows build: match
-  drive letters and `\`, resolve them in main with `path.win32`
+  `FILE_LINK_RE` only knows POSIX paths, so `C:\repo\src\app.ts` and backslash-relative paths
+  printed on Windows are plain text. Before a Windows build: match drive letters and `\` in the
+  renderer (main's `resolveLinkPath` already resolves them, `~\` included)
 - **Windows runtime, unverified** (2026-10-20, `feat/windows-runtime`): written and unit-tested on
   macOS only. On Windows 11 check: pwsh and powershell.exe 5.1 plain terminals (profile.ps1
   marker, OSC 7 folder, no console window flash); a prompt with quotes, `$` and newlines reaching

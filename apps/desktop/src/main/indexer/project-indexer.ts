@@ -11,7 +11,7 @@
 
 import type { Dirent } from "node:fs";
 import { readdir, readFile, stat } from "node:fs/promises";
-import { join, relative } from "node:path";
+import { join, relative, sep } from "node:path";
 import type Database from "libsql";
 import { nanoid } from "nanoid";
 import { logger } from "../lib/logger";
@@ -44,7 +44,8 @@ export async function walkDir(rootPath: string, excludePatterns: string[]): Prom
     }
     for (const entry of entries) {
       const fullPath = join(dir, entry.name);
-      const relPath = relative(rootPath, fullPath);
+      // Forward slashes on every OS: shouldExclude matches "/node_modules/", the index stores them
+      const relPath = relative(rootPath, fullPath).split(sep).join("/");
 
       if (shouldExclude(relPath, excludePatterns)) continue;
 

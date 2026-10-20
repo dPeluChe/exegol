@@ -15,7 +15,8 @@ function script(name: string, body: string): string {
 }
 
 describe("scriptTargetExists", () => {
-  it("rejects a launcher script whose app is gone", () => {
+  // Reads POSIX launcher scripts (/Applications/X.app, /opt/x/bin); Windows launchers are .cmd
+  it.skipIf(process.platform === "win32")("rejects a launcher script whose app is gone", () => {
     const path = script(
       "idea",
       `#!/bin/bash\nopen -na "${dir}/IntelliJ IDEA.app/Contents/MacOS/idea" --args "$@"\n`,

@@ -49,8 +49,12 @@ describe("quoteArg", () => {
   const prompt = `it's "done" for $HOME and \`x\`\nnext line`;
 
   // The POSIX form is the one Exegol always wrote: a real sh must read it back unchanged
-  it("posix: single quotes a real sh reads back exactly", () => {
+  it("posix: single quotes", () => {
     expect(quoteArg("posix", "it's")).toBe("'it'\\''s'");
+  });
+
+  // Windows runners have no /bin/sh
+  it.skipIf(process.platform === "win32")("posix: a real sh reads it back exactly", () => {
     const echoed = execFileSync("/bin/sh", ["-c", `printf '%s' ${quoteArg("posix", prompt)}`]);
     expect(echoed.toString()).toBe(prompt);
   });

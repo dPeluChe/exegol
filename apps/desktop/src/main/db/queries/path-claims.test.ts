@@ -1,7 +1,7 @@
 import Database from "libsql";
 import { beforeEach, describe, expect, it } from "vitest";
 import { runMigrations } from "../migrations";
-import { claimPaths, listProjectClaims, releasePaths } from "./path-claims";
+import { claimPaths, listProjectClaims, pathsOverlap, releasePaths } from "./path-claims";
 
 function setupDb(): Database.Database {
   const db = new Database(":memory:");
@@ -82,5 +82,23 @@ describe("path claims", () => {
     expect(listProjectClaims(db, "p1")).toHaveLength(2);
     expect(releasePaths(db, "a1")).toEqual({ released: 2 });
     expect(listProjectClaims(db, "p1")).toHaveLength(0);
+  });
+});
+
+describe("pathsOverlap", () => {
+  it("POSIX: exact, a directory over its tree, never a sibling prefix or another case", () => {
+    expect(pathsOverlap("/repo/src", "/repo/src", "darwin")).toBe(true);
+    expect(pathsOverlap("/repo/src/a.ts", "/repo/src", "darwin")).toBe(true);
+    expect(pathsOverlap("/repo/src", "/repo/src/a.ts", "linux")).toBe(true);
+    expect(pathsOverlap("/repo/src2/a.ts", "/repo/src", "darwin")).toBe(false);
+    expect(pathsOverlap("/repo/SRC/a.ts", "/repo/src", "linux")).toBe(false);
+  });
+
+  it("Windows: either separator, any case, the \\\\?\\ prefix, still no sibling prefix", () => {
+    expect(pathsOverlap("C:\\repo\\convex\\ai.ts", "C:\\repo\\convex", "win32")).toBe(true);
+    expect(pathsOverlap("c:/Repo/Convex/ai.ts", "C:\\repo\\convex", "win32")).toBe(true);
+    expect(pathsOverlap("\\\\?\\C:\\repo\\a.ts", "C:\\repo\\A.ts", "win32")).toBe(true);
+    expect(pathsOverlap("C:\\repo\\convex2\\ai.ts", "C:\\repo\\convex", "win32")).toBe(false);
+    expect(pathsOverlap("D:\\repo\\convex", "C:\\repo\\convex", "win32")).toBe(false);
   });
 });

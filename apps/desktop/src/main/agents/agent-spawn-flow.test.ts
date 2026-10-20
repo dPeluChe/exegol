@@ -398,7 +398,10 @@ describe("buildPtyInvocation", () => {
     expect(fish).toContain("begin; npm install\nend; or printf");
     expect(fish).toContain("$status");
     expect(fish).not.toContain("$?");
-    // sh form, run for real: failing and succeeding hooks both reach the CLI
+  });
+
+  // Windows runs agents through PowerShell or cmd, never this sh form
+  it.skipIf(process.platform === "win32")("the sh form reaches the CLI when run for real", () => {
     const run = (hook: string) =>
       execFileSync("/bin/sh", [
         "-c",

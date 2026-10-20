@@ -42,9 +42,21 @@ function mapRow(row: Record<string, unknown>): PathClaim {
   };
 }
 
+/** Windows paths compare with either separator, any case, with or without the \\?\ prefix */
+const winKey = (p: string) =>
+  p
+    .replace(/\//g, "\\")
+    .replace(/^\\\\\?\\/, "")
+    .toLowerCase();
+
 /** Same file, or one contains the other — a directory claim covers its tree. */
-function pathsOverlap(a: string, b: string): boolean {
-  return a === b || a.startsWith(`${b}/`) || b.startsWith(`${a}/`);
+export function pathsOverlap(
+  a: string,
+  b: string,
+  platform: NodeJS.Platform = process.platform,
+): boolean {
+  const [x, y, sep] = platform === "win32" ? [winKey(a), winKey(b), "\\"] : [a, b, "/"];
+  return x === y || x.startsWith(`${y}${sep}`) || y.startsWith(`${x}${sep}`);
 }
 
 /**

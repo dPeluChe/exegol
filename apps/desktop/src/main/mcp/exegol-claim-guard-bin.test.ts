@@ -1,3 +1,4 @@
+import { isAbsolute, join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { targetPath } from "./exegol-claim-guard-bin";
 
@@ -22,8 +23,8 @@ describe("targetPath", () => {
 
   it("resolves a relative path against the working directory", () => {
     const out = targetPath({ tool_input: { file_path: "src/a.ts" } });
-    expect(out?.startsWith("/")).toBe(true);
-    expect(out?.endsWith("/src/a.ts")).toBe(true);
+    expect(isAbsolute(out ?? "")).toBe(true);
+    expect(out).toBe(join(process.cwd(), "src", "a.ts"));
   });
 
   it("returns null for calls that touch no file, so they are never blocked", () => {
