@@ -9,6 +9,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.25] — 2026-10-20 — Linux tray reopens the window, Send to from Claude Code, CLI updates beside the session
+
 ### Added
 - Help > Report a Bug… and Open Logs Folder (macOS menu), also in the tray menu, so the logs can be found and sent without hunting for the bug button
 - Send to after selecting text inside Claude Code (or another CLI that selects with the mouse and says "copied"): the Send to button appears with what it copied, also in the right-click menu, for 20 seconds
