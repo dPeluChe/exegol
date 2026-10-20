@@ -4,7 +4,6 @@ import { Notification } from "electron";
 import type Database from "libsql";
 import { getAppSettings } from "../../db/queries/settings";
 import { logger } from "../../lib/logger";
-import { getMainWindow } from "../../windows/main-window-ref";
 import type { NotificationChannel } from "../bus";
 
 // ─── Settings cache (avoid a DB hit on every event) ──────────────────────
@@ -71,15 +70,13 @@ export const desktopChannel: NotificationChannel = {
         silent: false,
       });
 
+      // Lazy: bootstrap/ pulls BrowserWindow in; a closed window is opened again
       notification.on("click", () => {
-        const win = getMainWindow();
-        if (!win) return;
-        if (win.isMinimized()) win.restore();
-        win.show();
-        win.focus();
-        if (event.agentId) {
-          win.webContents.send("notification:navigate", { agentId: event.agentId });
-        }
+        void import("../../bootstrap/window").then((m) => {
+          if (event.agentId)
+            m.showMainWindowWith("notification:navigate", { agentId: event.agentId });
+          else m.showMainWindow();
+        });
       });
 
       notification.show();

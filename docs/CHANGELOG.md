@@ -10,9 +10,11 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Help > Report a Bug… and Open Logs Folder (macOS menu), also in the tray menu, so the logs can be found and sent without hunting for the bug button
 - Send to after selecting text inside Claude Code (or another CLI that selects with the mouse and says "copied"): the Send to button appears with what it copied, also in the right-click menu, for 20 seconds
 
 ### Fixed
+- Linux and Windows: after closing the window, clicking the tray icon (or its Show Exegol, Open Dashboard, an agent, or a notification) opens it again; before, nothing happened and the icon stayed with no way back but quitting
 - A full-screen CLI (Claude Code, opencode) no longer comes back without its mouse scrolling, paste mode or full screen after a reload or a project switch when the program turned those on in one combined sequence or the sequence arrived in two pieces
 - A new or resumed agent's terminal no longer loses two rows a second after it opens: the toolbar is there from the start instead of appearing with the first output
 - A CLI's Update from a session's toolbar runs in a terminal beside that session, not in a new tab; for a CLI you typed in a terminal and closed, it runs right there and Continue then starts the new version

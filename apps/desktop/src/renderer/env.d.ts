@@ -74,7 +74,13 @@ interface Window {
     };
     onMenuAction: (
       callback: (
-        action: "new-tab" | "close-pane" | "reload" | "focus-location" | "open-dashboard",
+        action:
+          | "new-tab"
+          | "close-pane"
+          | "reload"
+          | "focus-location"
+          | "open-dashboard"
+          | "report-bug",
       ) => void,
     ) => () => void;
     onPaneSwitcherKey: (

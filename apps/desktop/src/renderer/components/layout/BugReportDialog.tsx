@@ -4,6 +4,7 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Bug, ClipboardCopy, ExternalLink, FolderOpen, Terminal, X } from "lucide-react";
 import { useState } from "react";
+import { useMountEffect } from "../../hooks/use-mount-effect";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 
 /**
@@ -13,6 +14,12 @@ import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
  */
 export function BugReportButton() {
   const [open, setOpen] = useState(false);
+  // Help > Report a Bug… and the tray reach the dialog through the menu IPC
+  useMountEffect(() => {
+    const show = () => setOpen(true);
+    window.addEventListener("exegol:report-bug", show);
+    return () => window.removeEventListener("exegol:report-bug", show);
+  });
   return (
     <Dialog.Root open={open} onOpenChange={setOpen}>
       <Dialog.Trigger asChild>

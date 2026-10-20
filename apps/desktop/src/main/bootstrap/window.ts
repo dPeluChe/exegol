@@ -2,6 +2,7 @@ import { join } from "node:path";
 import { is } from "@electron-toolkit/utils";
 import { app, BrowserWindow } from "electron";
 import windowStateKeeper from "electron-window-state";
+import { logger } from "../lib/logger";
 import { registerMainWindow } from "../windows/floating";
 import { getMainWindow, setMainWindowRef } from "../windows/main-window-ref";
 import { registerMainWindowForSettings } from "../windows/settings";
@@ -96,10 +97,22 @@ export function createWindow(): void {
 
 export function showMainWindow(): void {
   if (!mainWindow) {
+    logger.info("[Window] main window was closed: opening it again");
     createWindow();
     return;
   }
   if (mainWindow.isMinimized()) mainWindow.restore();
   if (mainWindow.isVisible()) mainWindow.focus();
   else mainWindow.show();
+}
+
+/** Shows the main window, opening it again if it was closed (on Linux and Windows the tray and
+ *  notifications are the only way back), and sends it the message once its page has loaded */
+export function showMainWindowWith(channel: string, payload?: unknown): void {
+  showMainWindow();
+  const win = mainWindow;
+  if (!win) return;
+  const send = () => win.webContents.send(channel, payload);
+  if (win.webContents.isLoading()) win.webContents.once("did-finish-load", send);
+  else send();
 }

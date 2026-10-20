@@ -8,6 +8,8 @@ import {
   type MenuItemConstructorOptions,
   shell,
 } from "electron";
+import { showMainWindowWith } from "../bootstrap/window";
+import { LOG_DIR } from "../lib/logger";
 import { EXEGOL_REPO_URL } from "../lib/repo";
 import { installCli, uninstallCli } from "../system/cli-installer";
 import { openSettingsWindow } from "./settings";
@@ -137,6 +139,15 @@ export function installAppMenu(): void {
     {
       role: "help",
       submenu: [
+        {
+          label: "Report a Bug…",
+          click: () => showMainWindowWith("menu:report-bug"),
+        },
+        {
+          label: "Open Logs Folder",
+          click: () => void shell.openPath(LOG_DIR),
+        },
+        { type: "separator" },
         {
           label: "Learn More",
           click: () => shell.openExternal(EXEGOL_REPO_URL),

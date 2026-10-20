@@ -402,6 +402,7 @@
     "menu:reload",
     "menu:focus-location",
     "menu:open-dashboard",
+    "menu:report-bug",
     "pane-switcher:key",
     "agent:status-changed",
     "agent:follow-ups",
