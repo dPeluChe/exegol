@@ -47,15 +47,15 @@ jobs:
         with:
           bun-version: '1.2.23'
       - run: bun install --frozen-lockfile
-      # Rust (MSVC) and Visual Studio are preinstalled on GitHub's Windows images;
-      # this builds core-rust.win32-x64-msvc.node, then node-pty for Electron
+      # Rust (MSVC) is preinstalled on GitHub's Windows images; this builds core-rust.win32-x64-msvc.node
       - run: bun run build:rust
-      - run: bun run rebuild:native
+      # No node-pty rebuild: it ships N-API prebuilds for win32-x64 that load in Electron, and
+      # node-gyp could not find the image's Visual Studio
       - name: Package
         working-directory: apps/desktop
         run: |
           npx electron-vite build
-          npx electron-builder --config electron-builder.ts --win --publish never
+          npx electron-builder --config electron-builder.ts --win --publish never -c.npmRebuild=false
       - name: Keep the test installer
         if: ${{ inputs.test }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
