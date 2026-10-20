@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { readFile, readlink } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { AsyncLruCache } from "../lib/lru-cache";
@@ -33,22 +33,50 @@ interface TcpListener {
   process: string;
 }
 
-/** The cwd of each pid, from one lsof call (it used to be one lsof per pid) */
+/** The cwd of each pid: /proc on Linux, else (or for what /proc did not give) one lsof call */
 export function getProcessCwds(pids: number[]): Promise<Map<number, string>> {
   return cwdScans.getOrCompute([...pids].sort().join(","), () => scanProcessCwds(pids));
 }
 
+/** lsof's output from a failed run: it exits 1 when a pid is gone or nothing matches, and
+ *  still printed the rest. Not run at all (missing, timed out) throws: no answer is not "none" */
+export function lsofStdout(err: unknown): string {
+  const e = err as { code?: unknown; killed?: boolean; stdout?: string };
+  if (typeof e.code !== "number" || e.killed) throw new Error("lsof unavailable");
+  return e.stdout ?? "";
+}
+
+/** Linux: each pid's cwd from /proc, no lsof needed; pids it cannot read are left out */
+export async function readProcCwds(
+  pids: number[],
+  read: (path: string) => Promise<string> = (path) => readlink(path),
+): Promise<Map<number, string>> {
+  const found = await Promise.all(
+    pids.map((pid) =>
+      read(`/proc/${pid}/cwd`).then(
+        (cwd) => [pid, cwd] as const,
+        () => null,
+      ),
+    ),
+  );
+  return new Map(found.filter((f) => f !== null));
+}
+
 async function scanProcessCwds(pids: number[]): Promise<Map<number, string>> {
-  const cwds = new Map<number, string>();
-  if (pids.length === 0) return cwds;
+  const cwds = process.platform === "linux" ? await readProcCwds(pids) : new Map<number, string>();
+  const rest = pids.filter((pid) => !cwds.has(pid));
+  if (rest.length === 0) return cwds;
   let stdout = "";
   try {
-    ({ stdout } = await execFileAsync("lsof", ["-a", "-d", "cwd", "-p", pids.join(","), "-Fpn"], {
+    ({ stdout } = await execFileAsync("lsof", ["-a", "-d", "cwd", "-p", rest.join(","), "-Fpn"], {
       timeout: 5000,
     }));
   } catch (err) {
-    // lsof exits 1 when one of the pids is gone; the rest still printed
-    stdout = (err as { stdout?: string }).stdout ?? "";
+    try {
+      stdout = lsofStdout(err);
+    } catch {
+      return cwds;
+    }
   }
   let pid = 0;
   for (const line of stdout.split("\n")) {
@@ -82,7 +110,8 @@ export function parseLsofListenLine(line: string): TcpListener | null {
 
 /**
  * TCP listeners, one entry per pid:port; `uid` limits them to that user's processes.
- * `fresh` skips the 3s cache (a kill check must see the process listening now).
+ * `fresh` skips the 3s cache (a kill check must see the process listening now). Rejects when
+ * lsof could not run, so a caller can tell "no listeners" from "no answer".
  */
 export function listTcpListeners(uid?: string, fresh = false): Promise<TcpListener[]> {
   return fresh
@@ -99,8 +128,7 @@ async function scanTcpListeners(uid?: string): Promise<TcpListener[]> {
       { timeout: 5000 },
     ));
   } catch (err) {
-    // lsof exits 1 when nothing matches
-    stdout = (err as { stdout?: string }).stdout ?? "";
+    stdout = lsofStdout(err);
   }
   const seen = new Set<string>();
   const entries: TcpListener[] = [];
@@ -115,7 +143,7 @@ async function scanTcpListeners(uid?: string): Promise<TcpListener[]> {
 
 /** Listening TCP ports whose process runs inside projectPath */
 async function detectListeningPorts(projectPath: string): Promise<DetectedPort[]> {
-  const listeners = await listTcpListeners();
+  const listeners = await listTcpListeners().catch(() => []);
   const cwds = await getProcessCwds([...new Set(listeners.map((l) => l.pid))]);
   return listeners
     .filter((l) => isInside(cwds.get(l.pid), projectPath))

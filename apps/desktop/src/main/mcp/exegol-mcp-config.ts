@@ -18,6 +18,7 @@ import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
 import { excludeFromGit } from "../lib/git-exclude";
 import { logger } from "../lib/logger";
+import { nodeLaunch } from "../system/node-launch";
 import {
   removeTokenFile,
   SESSION_TOKEN_ENV,
@@ -50,8 +51,7 @@ export function writePerAgentMcpConfig(
     const body: McpJsonFile = {
       mcpServers: {
         [EXEGOL_SERVER_KEY]: {
-          command: process.execPath,
-          args: [shimPath],
+          ...nodeLaunch(shimPath),
           env: {
             ELECTRON_RUN_AS_NODE: "1",
             // Outside any repo, so the token stays inline
@@ -156,11 +156,12 @@ const CODEX_MARK_END = "# <<< exegol managed <<<";
 function ensureCodexGlobalConfig(shimPath: string): void {
   const configPath = join(homedir(), ".codex", "config.toml");
   mkdirSync(dirname(configPath), { recursive: true, mode: 0o700 });
+  const { command, args } = nodeLaunch(shimPath);
   const block = [
     CODEX_MARK_START,
     `[mcp_servers.${EXEGOL_SERVER_KEY}]`,
-    `command = ${JSON.stringify(process.execPath)}`,
-    `args = [${JSON.stringify(shimPath)}]`,
+    `command = ${JSON.stringify(command)}`,
+    `args = [${args.map((a) => JSON.stringify(a)).join(", ")}]`,
     `env = { "ELECTRON_RUN_AS_NODE" = "1" }`,
     CODEX_MARK_END,
   ].join("\n");
@@ -199,7 +200,7 @@ interface ProjectConfig {
   entry: (shimPath: string) => Record<string, unknown>;
 }
 
-const stdioEntry = (shimPath: string) => ({ command: process.execPath, args: [shimPath] });
+const stdioEntry = (shimPath: string) => ({ ...nodeLaunch(shimPath) });
 
 /** T163: the project file each CLI reads, all with the `.mcp.json`-style entry but opencode */
 const PROJECT_CONFIGS: Record<ProjectFlavor, ProjectConfig> = {
@@ -209,7 +210,10 @@ const PROJECT_CONFIGS: Record<ProjectFlavor, ProjectConfig> = {
     relPath: "opencode.json",
     section: "mcp",
     envKey: "environment",
-    entry: (shimPath) => ({ type: "local", command: [process.execPath, shimPath], enabled: true }),
+    entry: (shimPath) => {
+      const { command, args } = nodeLaunch(shimPath);
+      return { type: "local", command: [command, ...args], enabled: true };
+    },
   },
   gemini: {
     relPath: ".gemini/settings.json",

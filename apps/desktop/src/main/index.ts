@@ -8,7 +8,7 @@ import { getProviderRegistry } from "./agents/registry";
 import { warmShellPath } from "./agents/spawn-env";
 import { ensureAgentWrappers, sweepStaleAgentEvents } from "./agents/wrappers";
 import { installDeepLinkHandling } from "./bootstrap/deep-link";
-import { registerGlobalHotkey } from "./bootstrap/global-hotkey";
+import { enableShortcutsPortal, registerGlobalHotkey } from "./bootstrap/global-hotkey";
 import { registerIpcHandlers } from "./bootstrap/ipc-handlers";
 import { cleanupStaleData, runStartupRecovery } from "./bootstrap/recovery";
 import { installSignalHandlers, runTeardown } from "./bootstrap/shutdown";
@@ -63,6 +63,7 @@ app.setName("Exegol");
 // After a GPU crash (moving the window across displays) Chromium may block WebGL for the
 // origin until restart, leaving every terminal on the slower DOM renderer
 app.disableDomainBlockingFor3DAPIs();
+enableShortcutsPortal();
 
 const primaryInstance = installDeepLinkHandling();
 if (primaryInstance) startLogFile();

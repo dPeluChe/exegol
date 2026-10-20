@@ -287,16 +287,31 @@ export async function runDoctorChecks(db: Database.Database): Promise<DoctorRepo
     category: "config",
   });
 
-  // Ports and dev servers are read with lsof, which minimal Linux installs lack
-  if (process.platform === "linux" && !(await checkCommandAvailable("lsof"))) {
-    checks.push({
-      id: "lsof",
-      label: "lsof",
-      status: "warn",
-      detail:
-        "Not installed: the browser port chips and dev server list stay empty (apt install lsof)",
-      category: "system",
-    });
+  // Minimal Linux installs lack these: lsof reads ports and dev servers, playerctl pauses media
+  if (process.platform === "linux") {
+    const [lsof, playerctl] = await Promise.all([
+      checkCommandAvailable("lsof"),
+      checkCommandAvailable("playerctl"),
+    ]);
+    if (!lsof) {
+      checks.push({
+        id: "lsof",
+        label: "lsof",
+        status: "warn",
+        detail:
+          "Not installed: the browser port chips and dev server list stay empty and idle auto-suspend skips agents (apt install lsof)",
+        category: "system",
+      });
+    }
+    if (!playerctl) {
+      checks.push({
+        id: "playerctl",
+        label: "playerctl",
+        status: "warn",
+        detail: "Not installed: Pause music while dictating does nothing (apt install playerctl)",
+        category: "system",
+      });
+    }
   }
 
   checks.push(checkStaleWorktrees(db));

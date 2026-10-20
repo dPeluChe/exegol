@@ -9,6 +9,7 @@ import { listProjects } from "../db/queries/projects";
 import { logger } from "../lib/logger";
 import { relocateMcpConfigs } from "../mcp/exegol-mcp-config";
 import {
+  type AppLaunchRecord,
   bundleRoot,
   isTransientLocation,
   planRelocation,
@@ -20,10 +21,12 @@ import { relocateCliLink } from "./cli-installer";
 /** Where the last packaged launch ran from */
 const RECORD = join(homedir(), ".exegol", "app-location.json");
 
-function lastExecPath(): string | null {
+function lastLaunch(): AppLaunchRecord | null {
   try {
-    const parsed = JSON.parse(readFileSync(RECORD, "utf-8")) as { execPath?: unknown };
-    return typeof parsed.execPath === "string" ? parsed.execPath : null;
+    const parsed = JSON.parse(readFileSync(RECORD, "utf-8")) as Record<string, unknown>;
+    if (typeof parsed.execPath !== "string") return null;
+    const appImage = typeof parsed.appImage === "string" ? parsed.appImage : undefined;
+    return { execPath: parsed.execPath, appImage };
   } catch {
     return null;
   }
@@ -60,14 +63,15 @@ export function relocateAppPaths(db: Database.Database): void {
     );
   }
   try {
-    const move = planRelocation(lastExecPath(), execPath);
+    const now: AppLaunchRecord = { execPath, appImage: process.env.APPIMAGE || undefined };
+    const move = planRelocation(lastLaunch(), now);
     if (move) {
       const swap = <T>(value: T): T => swapRoot(value, move);
       const folders = [...listProjects(db).map((p) => p.path), ...listLiveAgentFolders(db)];
       const n = relocateMcpConfigs(folders, swap) + relocateHooks(swap) + relocateCliLink(swap);
       logger.info(`[ExecPath] moved ${move.from} -> ${move.to}: rewrote ${n} file(s)`);
     }
-    writeFileSync(RECORD, `${JSON.stringify({ execPath })}\n`, "utf-8");
+    writeFileSync(RECORD, `${JSON.stringify(now)}\n`, "utf-8");
   } catch (err) {
     logger.warn("[ExecPath] relocation failed:", err);
   }
