@@ -25,6 +25,7 @@ const EXE_NAME = "Exegol-${version}-${arch}.exe";
 const APPIMAGE_NAME = "Exegol-${version}-${arch}.AppImage";
 // biome-ignore lint/suspicious/noTemplateCurlyInString: electron-builder template vars
 const DEB_NAME = "exegol_${version}_${arch}.deb";
+// biome-ignore lint/suspicious/noTemplateCurlyInString: electron-builder template vars
 const RPM_NAME = "exegol-${version}.${arch}.rpm";
 
 const config: Configuration = {
