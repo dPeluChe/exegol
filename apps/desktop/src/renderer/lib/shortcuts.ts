@@ -19,6 +19,8 @@ interface Shortcut {
   keys: string;
   /** Linux/Windows keys when the Cmd → Ctrl+Shift rule does not say it best */
   otherKeys?: string;
+  /** Linux/Windows description when `appKeys` on the macOS one would be wrong */
+  otherDescription?: string;
   category: ShortcutCategory;
 }
 
@@ -191,6 +193,8 @@ const MAC_SHORTCUTS: Shortcut[] = [
     id: "browser-reload",
     label: "Browser: Reload Page",
     description: "Reload the focused browser pane's page; elsewhere Cmd+R reloads the window",
+    // Off macOS the menu's Reload has no accelerator: the chord only reaches browser panes
+    otherDescription: "Reload the focused browser pane's page",
     keys: "Cmd+R",
     category: "terminal",
   },
@@ -275,6 +279,7 @@ export function shortcutClash(keys: string): string | null {
 export const SHORTCUTS: Shortcut[] = MAC_SHORTCUTS.map((s) => ({
   ...s,
   keys: IS_MAC ? s.keys : (s.otherKeys ?? appKeys(s.keys)),
+  description: IS_MAC ? s.description : (s.otherDescription ?? appKeys(s.description)),
 }));
 
 /** The list with the dictation chord the user set (Settings > Dictation), without it when off */

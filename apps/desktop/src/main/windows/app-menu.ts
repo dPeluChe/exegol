@@ -1,3 +1,5 @@
+import { homedir } from "node:os";
+import { dirname } from "node:path";
 import { testBuildOf, type ZoomAction } from "@exegol/shared";
 import {
   app,
@@ -9,10 +11,12 @@ import {
   shell,
   type WebContents,
 } from "electron";
+import { _getFullPath } from "../agents/spawn-env";
 import { showMainWindowWith } from "../bootstrap/window";
 import { LOG_DIR } from "../lib/logger";
 import { EXEGOL_REPO_URL } from "../lib/repo";
 import { installCli, uninstallCli } from "../system/cli-installer";
+import { cliPathHint } from "../system/cli-path-hint";
 import type { AppKeyAction } from "./app-keys";
 import { openSettingsWindow } from "./settings";
 
@@ -246,10 +250,14 @@ export function runAppKey(action: AppKeyAction, win: BrowserWindow): void {
 function handleInstallCli(): void {
   try {
     const target = installCli();
+    const hint = cliPathHint(target, _getFullPath(), homedir(), process.env.SHELL);
+    const pathNote = hint
+      ? `\n\n${dirname(target)} is not on your PATH. Add this line to ${hint.file}, then open a new terminal:\n${hint.line}`
+      : "";
     void dialog.showMessageBox({
       type: "info",
       message: "exegol CLI installed",
-      detail: `Symlinked at ${target}. Run \`exegol .\` in any project to open it here.`,
+      detail: `Installed at ${target}. Run \`exegol .\` in any project to open it here.${pathNote}`,
     });
   } catch (err) {
     dialog.showErrorBox(

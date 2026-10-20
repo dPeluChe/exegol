@@ -76,5 +76,9 @@ export function installDeepLinkHandling(): boolean {
     handleDeepLinkUrl(url);
   });
   registerDeepLinkProtocol();
+  // Linux/Windows cold start: the URL is in this first instance's own argv, never in
+  // second-instance; it waits as pending until the window loads
+  const coldUrl = findDeepLinkArg(process.argv);
+  if (coldUrl) handleDeepLinkUrl(coldUrl);
   return true;
 }

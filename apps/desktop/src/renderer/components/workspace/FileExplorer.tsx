@@ -21,6 +21,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useFittedMenu } from "../../hooks/use-fitted-menu";
 import { type DirectoryEntry, useDirectoryListing, useFileContent } from "../../hooks/use-trpc";
 import { setFileDragData } from "../../lib/file-drag";
+import { fileManagerLabel } from "../../lib/keymap";
 import { trpcMutate } from "../../lib/trpc-client";
 import type { FilesView, FilesViewPatch } from "../../stores/workspace";
 import { ConfirmDialog } from "../common/ConfirmDialog";
@@ -128,7 +129,7 @@ function FileContextMenu({
             () => trpcMutate("files.openExternal", { path: menu.targetPath }),
           ],
           [
-            "Reveal in Finder",
+            `Reveal in ${fileManagerLabel()}`,
             FolderSearch,
             () => trpcMutate("files.reveal", { path: menu.targetPath }),
           ],

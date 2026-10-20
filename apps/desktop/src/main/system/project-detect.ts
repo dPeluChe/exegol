@@ -1,7 +1,15 @@
 import { readdir, readFile } from "node:fs/promises";
 import { basename, join, sep } from "node:path";
-import { type FolderKind, ideLabel, type LauncherFolder, type ProjectDetect } from "@exegol/shared";
+import {
+  type FolderKind,
+  fileManagerName,
+  ideLabel,
+  type LauncherFolder,
+  linuxFileManagerName,
+  type ProjectDetect,
+} from "@exegol/shared";
 import { detectIdes } from "../ide/detect";
+import { execFileAsync } from "../lib/exec-file";
 import { detectRunTargets, invalidateScriptsCache, type RunTarget } from "./scripts";
 
 interface PackageJson {
@@ -32,10 +40,17 @@ export function folderKinds(
   return kinds;
 }
 
-export function fileManagerName(platform: NodeJS.Platform = process.platform): string {
-  if (platform === "darwin") return "Finder";
-  if (platform === "win32") return "Explorer";
-  return "File manager";
+let linuxFileManager: Promise<string> | null = null;
+
+/** Linux: the default app for folders (`xdg-mime`), asked once per launch */
+function detectFileManager(): Promise<string> {
+  if (process.platform !== "linux") return Promise.resolve(fileManagerName(process.platform));
+  linuxFileManager ??= execFileAsync("xdg-mime", ["query", "default", "inode/directory"], {
+    timeout: 2000,
+  })
+    .then(({ stdout }) => fileManagerName("linux", linuxFileManagerName(stdout)))
+    .catch(() => fileManagerName("linux"));
+  return linuxFileManager;
 }
 
 /** The project's IDE, else Settings' default; null when neither is installed (or set) */
@@ -89,9 +104,10 @@ export async function detectProject(input: DetectInput, fresh = false): Promise<
     invalidateScriptsCache(input.projectPath);
     invalidateKinds(input.projectPath);
   }
-  const [targets, ides] = await Promise.all([
+  const [targets, ides, fileManager] = await Promise.all([
     detectRunTargets(input.projectPath),
     detectIdes(fresh),
+    detectFileManager(),
   ]);
   const folders: LauncherFolder[] = await Promise.all(
     targets.map(async (t) => ({ ...t, kinds: await kindsOf(t) })),
@@ -99,6 +115,6 @@ export async function detectProject(input: DetectInput, fresh = false): Promise<
   return {
     folders,
     editor: pickEditor(input.ide, new Set<string>(ides.keys()), input.customIdePath),
-    fileManager: fileManagerName(),
+    fileManager,
   };
 }

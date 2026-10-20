@@ -117,7 +117,7 @@ describe("hasClickModifier", () => {
 describe("fileManagerLabel", () => {
   it("names the file manager per platform", () => {
     expect(fileManagerLabel("darwin")).toBe("Finder");
-    expect(fileManagerLabel("win32")).toBe("Explorer");
-    expect(fileManagerLabel("linux")).toBe("File manager");
+    expect(fileManagerLabel("win32")).toBe("File Explorer");
+    expect(fileManagerLabel("linux")).toBe("Files");
   });
 });

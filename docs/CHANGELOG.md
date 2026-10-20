@@ -18,6 +18,12 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ### Fixed
 - Linux and Windows: New Tab, Close Pane, Open Location and Reload keys (Ctrl+Shift+T, W, L, R) now work while a page in a browser pane has the focus, and Ctrl+Shift+R reloads the window when no browser pane is focused, as Cmd+R does on macOS
 
+### Fixed
+- Linux and Windows: `exegol .` opens the folder when Exegol was not running (it only opened the app)
+- Linux and Windows: "Reveal in File Explorer" (Windows) and the detected file manager (Linux, "Files" by default) instead of "Reveal in Finder"; Settings > Shortcuts descriptions show Ctrl+Shift keys there
+- Files "Open" reveals Windows (.exe, .bat, .ps1, .js, .lnk, .msi, .scr...) and Linux (.desktop, .deb, .rpm, .AppImage, .run, .fish...) launchers instead of running them
+- Install 'exegol' CLI says when its folder (such as ~/.local/bin) is not on your PATH, with the line to add
+
 ## [0.5.25] — 2026-10-20 — Linux tray reopens the window, Send to from Claude Code, CLI updates beside the session
 
 ### Added
