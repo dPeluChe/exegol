@@ -1,5 +1,27 @@
 import { describe, expect, it } from "vitest";
-import { parseLsofListenLine } from "./ports";
+import { lsofStdout, parseLsofListenLine, readProcCwds } from "./ports";
+
+describe("lsofStdout", () => {
+  it("keeps what a run that exited 1 printed", () => {
+    expect(lsofStdout({ code: 1, stdout: "p1\nn/x\n" })).toBe("p1\nn/x\n");
+    expect(lsofStdout({ code: 1 })).toBe("");
+  });
+
+  it("throws when lsof did not run, so no answer is not read as none", () => {
+    expect(() => lsofStdout({ code: "ENOENT" })).toThrow("lsof unavailable");
+    expect(() => lsofStdout({ code: null, killed: true })).toThrow("lsof unavailable");
+  });
+});
+
+describe("readProcCwds", () => {
+  it("reads /proc/<pid>/cwd and leaves out the pids it cannot read", async () => {
+    const read = async (path: string) => {
+      if (path === "/proc/10/cwd") return "/repo";
+      throw new Error("EACCES");
+    };
+    expect(await readProcCwds([10, 11], read)).toEqual(new Map([[10, "/repo"]]));
+  });
+});
 
 describe("parseLsofListenLine", () => {
   it("reads the port from a real row, whose last column is (LISTEN)", () => {

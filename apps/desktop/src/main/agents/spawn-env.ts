@@ -19,6 +19,7 @@ import { logger } from "../lib/logger";
 import { resolveClaimGuardPath } from "../mcp/exegol-mcp-config";
 import { getNotificationBus } from "../notifications/bus";
 import { getApiKey } from "../security/keystore";
+import { nodeLaunch, nodeShellCommand } from "../system/node-launch";
 import { refreshTray } from "../system/tray";
 import {
   deliverPendingAgentMessages,
@@ -260,7 +261,7 @@ export function buildClaudeCodeHooksFile(
                   hooks: [
                     {
                       type: "command",
-                      command: `ELECTRON_RUN_AS_NODE=1 "${process.execPath}" "${guardPath}"`,
+                      command: nodeShellCommand(nodeLaunch(guardPath)),
                       timeout: 5,
                     },
                   ],

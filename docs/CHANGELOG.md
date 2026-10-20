@@ -13,6 +13,12 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Linux: an `.rpm` package for Fedora and openSUSE (`sudo dnf install ./exegol-<v>.x86_64.rpm`), updating itself like the `.deb`
 - Windows: an installer (`Exegol-<v>-x64.exe`) attached to each release, updating itself like the Mac app. Not signed yet: on first run SmartScreen asks, More info → Run anyway
 - Linux and Windows: a menu button at the left of the title bar opens the menus the macOS menu bar has (File, View, Window, Help with Report a Bug… and Open Logs Folder)
+- Linux: Doctor warns when `playerctl` is missing (Pause music while dictating needs it)
+
+### Fixed
+- Linux AppImage: agent terminals, Exegol MCP tools and the claim guard keep working after Exegol quits and reopens; they pointed into the AppImage's temporary mount, gone once the app closed
+- Linux Wayland: the global hotkey asks the desktop to bind it (GlobalShortcuts portal) instead of silently doing nothing, and the log says when the desktop has no portal or refused it
+- Linux without `lsof`: idle auto-suspend no longer takes a missing lsof for "no dev server running" and skips agents instead; process folders come from `/proc` without it
 - Linux and Windows: Ctrl+Shift+= / Ctrl+Shift+- zoom Exegol, Ctrl+Shift+Alt+0 resets the zoom and Ctrl+Shift+Q quits; the menu button lists the keys
 
 ### Fixed

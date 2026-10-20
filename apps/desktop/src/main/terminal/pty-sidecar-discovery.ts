@@ -7,6 +7,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 import { logger } from "../lib/logger";
 import { withTimeout } from "../lib/timeout";
+import { nodeLaunch } from "../system/node-launch";
 import { SidecarClient } from "./pty-sidecar-client";
 import {
   type PidFile,
@@ -110,7 +111,8 @@ function openSidecarLog(): number | "ignore" {
 function spawnSidecar(token: string): void {
   const sidecarPath = resolveSidecarPath();
   const log = openSidecarLog();
-  const child = cpSpawn(process.execPath, [sidecarPath], {
+  const { command, args } = nodeLaunch(sidecarPath);
+  const child = cpSpawn(command, args, {
     env: { ...process.env, ELECTRON_RUN_AS_NODE: "1", EXEGOL_SIDECAR_TOKEN: token },
     stdio: ["ignore", log, log],
     detached: true,

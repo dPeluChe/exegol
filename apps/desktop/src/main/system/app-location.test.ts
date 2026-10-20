@@ -32,12 +32,28 @@ describe("isTransientLocation", () => {
 
 describe("planRelocation", () => {
   it("only when a recorded launch ran from another root", () => {
-    expect(planRelocation(null, APPS)).toBeNull();
-    expect(planRelocation(APPS, APPS)).toBeNull();
-    expect(planRelocation(DMG, APPS)).toEqual({
+    expect(planRelocation(null, { execPath: APPS })).toBeNull();
+    expect(planRelocation({ execPath: APPS }, { execPath: APPS })).toBeNull();
+    expect(planRelocation({ execPath: DMG }, { execPath: APPS })).toEqual({
       from: "/Volumes/Exegol 0.5.24/Exegol.app",
       to: "/Applications/Exegol.app",
     });
+  });
+
+  it("an AppImage is its file, whatever mount it ran from", () => {
+    const a = { execPath: "/tmp/.mount_ExegoAb12/exegol", appImage: "/home/me/Exegol-1.AppImage" };
+    const b = { execPath: "/tmp/.mount_ExegoZz99/exegol", appImage: a.appImage };
+    expect(planRelocation(a, b)).toBeNull();
+    expect(planRelocation(a, { ...b, appImage: "/home/me/Apps/Exegol-2.AppImage" })).toEqual({
+      from: "/home/me/Exegol-1.AppImage",
+      to: "/home/me/Apps/Exegol-2.AppImage",
+    });
+  });
+
+  it("never across an AppImage and an installed copy, nor from an old mount record", () => {
+    const appImage = { execPath: "/tmp/.mount_ExegoZz99/exegol", appImage: "/home/me/E.AppImage" };
+    expect(planRelocation({ execPath: "/tmp/.mount_ExegoAb12/exegol" }, appImage)).toBeNull();
+    expect(planRelocation(appImage, { execPath: "/opt/Exegol/exegol" })).toBeNull();
   });
 });
 
@@ -64,6 +80,15 @@ describe("swapRoot", () => {
     expect(swapRoot(cmd, move)).toBe(
       'ELECTRON_RUN_AS_NODE=1 "/Applications/Exegol.app/Contents/MacOS/Exegol" "/Applications/Exegol.app/g.js"',
     );
+  });
+
+  it("a moved AppImage file, whole or quoted, but not a longer name", () => {
+    const file = { from: "/home/me/E-1.AppImage", to: "/home/me/E-2.AppImage" };
+    expect(swapRoot("/home/me/E-1.AppImage", file)).toBe("/home/me/E-2.AppImage");
+    expect(swapRoot(`ELECTRON_RUN_AS_NODE=1 "/home/me/E-1.AppImage" -e 'x'`, file)).toBe(
+      `ELECTRON_RUN_AS_NODE=1 "/home/me/E-2.AppImage" -e 'x'`,
+    );
+    expect(swapRoot("/home/me/E-1.AppImage.bak", file)).toBe("/home/me/E-1.AppImage.bak");
   });
 });
 

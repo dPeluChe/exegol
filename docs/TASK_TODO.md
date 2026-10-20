@@ -121,6 +121,13 @@ Checked by the user on the 0.5.15 build: status bar widgets, Ctrl+Tab switcher, 
   AppImage shows up in the app menu after its first launch and reopens from there; Settings >
   install CLI on the AppImage survives a restart; the .deb has its icon in the KDE menu and
   Discover shows a description, homepage and category
+- **AppImage launch form + Wayland hotkey** (branch `fix/linux-appimage-wayland`, built on macOS):
+  on the real AppImage, start an agent, quit Exegol, `ps`: the sidecar runs under its own
+  `.AppImage` process with its own `/tmp/.mount_*`; reopen: the agent's terminal is still alive;
+  Exegol MCP tools answer in Claude and codex and an Edit runs the claim guard after a restart
+  (`~/.exegol/mcp/<id>.json` and `~/.exegol/hooks/<id>.json` name the `.AppImage`, no mount);
+  a second launch rewrites nothing (`[ExecPath] moved` absent). On KDE/GNOME Wayland the global
+  hotkey shows the portal's confirmation and then brings the window up
 - Terminal repaint after a hidden tab: leave a working Claude pane in another tab for a minute,
   come back: no overlapped lines (console shows "Output overflowed while hidden" when it
   resynced)
@@ -185,7 +192,8 @@ Checked by the user on the 0.5.15 build: status bar widgets, Ctrl+Tab switcher, 
   types into the user's shell), confirm `commandOnPath` finds them (PATHEXT), and that Amp
   (WSL only) shows its guide
 - **Linux leftovers** (from the 2026-09-29 audit, after the first Linux build): ports
-  read with `lsof` only (use `ss -ltnp` + `/proc/<pid>/cwd` when missing); the tray is invisible
+  read with `lsof` only (use `ss -ltnp` when missing; cwds already come from
+  `/proc/<pid>/cwd`, and idle auto-suspend skips agents without lsof); the tray is invisible
   on stock GNOME (make sure no feature depends on it); rpm target for Fedora; the path guard
   covers the macOS keychain folder but not `~/.local/share/keyrings`
 - **React health score (react-doctor), keep raising it**: 54 → 70 so far (#204 Bugs, #205

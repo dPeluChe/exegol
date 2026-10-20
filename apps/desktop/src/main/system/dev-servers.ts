@@ -75,7 +75,7 @@ async function readProcTable(): Promise<ProcTable> {
  * with no terminal, which is what "hung" looks like.
  */
 export async function listDevServers(db: Database.Database): Promise<DevServer[]> {
-  const listeners = await listTcpListeners(String(userInfo().uid));
+  const listeners = await listTcpListeners(String(userInfo().uid)).catch(() => []);
   if (listeners.length === 0) return [];
 
   const portsOf = new Map<number, Set<number>>();
