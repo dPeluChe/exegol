@@ -151,11 +151,18 @@ contextBridge.exposeInMainWorld("api", {
   // renderer can close panes/tabs instead of the whole window on Cmd+W).
   onMenuAction: (
     callback: (
-      action: "new-tab" | "close-pane" | "reload" | "focus-location" | "open-dashboard",
+      action:
+        | "new-tab"
+        | "close-pane"
+        | "reload"
+        | "focus-location"
+        | "open-dashboard"
+        | "report-bug",
     ) => void,
   ) => {
     const onNewTab = () => callback("new-tab");
     const onOpenDashboard = () => callback("open-dashboard");
+    const onReportBug = () => callback("report-bug");
     const onClosePane = () => callback("close-pane");
     const onReload = () => callback("reload");
     const onFocusLocation = () => callback("focus-location");
@@ -164,12 +171,14 @@ contextBridge.exposeInMainWorld("api", {
     safe.on("menu:reload", onReload as never);
     safe.on("menu:focus-location", onFocusLocation as never);
     safe.on("menu:open-dashboard", onOpenDashboard as never);
+    safe.on("menu:report-bug", onReportBug as never);
     return () => {
       safe.off("menu:new-tab", onNewTab as never);
       safe.off("menu:close-pane", onClosePane as never);
       safe.off("menu:reload", onReload as never);
       safe.off("menu:focus-location", onFocusLocation as never);
       safe.off("menu:open-dashboard", onOpenDashboard as never);
+      safe.off("menu:report-bug", onReportBug as never);
     };
   },
   /** Ctrl+Tab and the Ctrl release from a focused browser pane's page (main forwards them) */

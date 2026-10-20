@@ -1,9 +1,9 @@
 import { join } from "node:path";
-import { app, Menu, nativeImage, Tray } from "electron";
+import { app, Menu, nativeImage, shell, Tray } from "electron";
 import { isAgentAwaitingApproval } from "../agents/agent-messaging";
 import { getProviderRegistry } from "../agents/registry";
 import { getDb } from "../db/client";
-import { logger } from "../lib/logger";
+import { LOG_DIR, logger } from "../lib/logger";
 import { getMainWindow } from "../windows/main-window-ref";
 import { cachedPlanUsage } from "./plan-usage";
 import {
@@ -42,13 +42,15 @@ const STATE_MARK: Record<TrayAgentState, string> = {
   idle: "○",
 };
 
+// Lazy: bootstrap/ pulls BrowserWindow into every module that imports the tray
 function sendToMainWindow(channel: string, payload?: unknown): void {
+  void import("../bootstrap/window").then((m) => m.showMainWindowWith(channel, payload));
+}
+
+function toggleMainWindow(): void {
   const win = getMainWindow();
-  if (!win) return;
-  if (win.isMinimized()) win.restore();
-  win.show();
-  win.focus();
-  win.webContents.send(channel, payload);
+  if (win?.isVisible()) win.hide();
+  else void import("../bootstrap/window").then((m) => m.showMainWindow());
 }
 
 function openAgent(agentId: string): void {
@@ -120,16 +122,7 @@ function buildContextMenu(projects: TrayProject[]): Menu {
   return Menu.buildFromTemplate([
     {
       label: isVisible ? "Hide Exegol" : "Show Exegol",
-      click: () => {
-        const w = getMainWindow();
-        if (!w) return;
-        if (w.isVisible()) {
-          w.hide();
-        } else {
-          w.show();
-          w.focus();
-        }
-      },
+      click: toggleMainWindow,
     },
     {
       label: "Open Dashboard",
@@ -138,6 +131,15 @@ function buildContextMenu(projects: TrayProject[]): Menu {
     ...agentItems,
     { type: "separator" },
     ...limitsItems(),
+    {
+      label: "Report a Bug…",
+      click: () => sendToMainWindow("menu:report-bug"),
+    },
+    {
+      label: "Open Logs Folder",
+      click: () => void shell.openPath(LOG_DIR),
+    },
+    { type: "separator" },
     {
       label: "Settings…",
       // Lazy: windows/ would pull BrowserWindow into every module that imports the tray
@@ -192,13 +194,7 @@ export function initTray(): void {
     if (process.platform === "darwin") {
       tray?.popUpContextMenu(buildContextMenu(getTrayProjects()));
     } else {
-      const win = getMainWindow();
-      if (win?.isVisible()) {
-        win.hide();
-      } else {
-        win?.show();
-        win?.focus();
-      }
+      toggleMainWindow();
     }
   });
   tray.on("right-click", () => {

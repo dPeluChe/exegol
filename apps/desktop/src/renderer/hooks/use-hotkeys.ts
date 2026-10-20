@@ -228,6 +228,8 @@ export function useHotkeys() {
         focusBrowserAddress();
       } else if (action === "open-dashboard") {
         useAppStore.getState().openDashboard();
+      } else if (action === "report-bug") {
+        window.dispatchEvent(new CustomEvent("exegol:report-bug"));
       }
     });
 
