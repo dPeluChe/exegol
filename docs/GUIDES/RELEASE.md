@@ -209,6 +209,11 @@ Install: `chmod +x Exegol-<v>-x86_64.AppImage && ./Exegol-<v>-x86_64.AppImage`, 
 `sudo apt install ./exegol_<v>_amd64.deb`. Runtime needs: a desktop keyring (gnome-keyring or
 kwallet) for encrypted API keys, and `lsof` for ports (the Doctor warns about both).
 
+Updates: both update themselves from `latest-linux.yml`. The AppImage replaces its own file
+(it must be writable). The `.deb` carries `resources/package-type` = `deb`, so electron-updater
+uses its DebUpdater: it downloads the new `.deb` and installs it with `pkexec` (asks for the admin
+password) when the app quits or on Restart. There is no `.rpm`: on Fedora use the AppImage.
+
 ### 6. Publish to GitHub Releases
 
 ```bash

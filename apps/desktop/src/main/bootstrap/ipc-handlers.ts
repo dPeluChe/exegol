@@ -26,6 +26,7 @@ import {
 } from "../terminal/pty-visibility";
 import { whenSessionReady } from "../terminal/reattach-gate";
 import { requestPtyResize } from "../terminal/resize-request";
+import { popupAppMenu } from "../windows/app-menu";
 import { getMainWindow } from "./window";
 
 /** webContents we already wired a destroy listener for. */
@@ -177,6 +178,12 @@ export function registerIpcHandlers(): void {
   });
   ipcMain.on("window:close", () => {
     getMainWindow()?.close();
+  });
+  ipcMain.on("window:app-menu", (event, x: unknown, y: unknown) => {
+    const win = getMainWindow();
+    if (!win || event.sender !== win.webContents) return;
+    if (typeof x !== "number" || typeof y !== "number") return;
+    popupAppMenu(win, x, y);
   });
 
   // ── T102: Design Mode + QA — browser pane IPC ──────────────────────

@@ -319,6 +319,8 @@ contextBridge.exposeInMainWorld("api", {
     minimize: () => safe.send("window:minimize"),
     maximize: () => safe.send("window:maximize"),
     close: () => safe.send("window:close"),
+    /** Linux/Windows: the app menu at the button's corner (window coordinates) */
+    appMenu: (x: number, y: number) => safe.send("window:app-menu", x, y),
   },
   // T47: Notification navigation
   onNotificationNavigate: (callback: (data: { agentId: string }) => void) => {
