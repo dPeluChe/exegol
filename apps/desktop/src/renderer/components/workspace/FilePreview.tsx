@@ -1,7 +1,7 @@
 import { ExternalLink, FolderSearch, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { type FileContent, useWriteFile } from "../../hooks/use-trpc";
-import { editKeys } from "../../lib/keymap";
+import { editKeys, fileManagerLabel } from "../../lib/keymap";
 import { trpcMutate } from "../../lib/trpc-client";
 import type { FilesView } from "../../stores/workspace";
 import { ConfirmDialog } from "../common/ConfirmDialog";
@@ -237,9 +237,14 @@ function FilePreviewToolbar({
         <ExternalLink className="h-3 w-3" />
         Open
       </button>
-      <button type="button" onClick={onReveal} className={action} title="Reveal in Finder">
+      <button
+        type="button"
+        onClick={onReveal}
+        className={action}
+        title={`Reveal in ${fileManagerLabel()}`}
+      >
         <FolderSearch className="h-3 w-3" />
-        Finder
+        {fileManagerLabel()}
       </button>
     </div>
   );

@@ -7,7 +7,7 @@ vi.mock("../ide/detect", () => ({
   detectIdes: async () => new Map([["cursor", { argv: ["cursor"], line: "goto" }]]),
 }));
 
-import { detectProject, fileManagerName, folderKinds, pickEditor } from "./project-detect";
+import { detectProject, folderKinds, pickEditor } from "./project-detect";
 
 describe("folderKinds", () => {
   it("reads git, Node scripts, Xcode and Swift packages", () => {
@@ -45,14 +45,6 @@ describe("pickEditor", () => {
       label: "hx",
     });
     expect(pickEditor("custom", installed, null)).toBeNull();
-  });
-});
-
-describe("fileManagerName", () => {
-  it("names the platform's", () => {
-    expect(fileManagerName("darwin")).toBe("Finder");
-    expect(fileManagerName("win32")).toBe("Explorer");
-    expect(fileManagerName("linux")).toBe("File manager");
   });
 });
 

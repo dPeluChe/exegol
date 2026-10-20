@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { useCliInstalls } from "../../hooks/use-cli-updates";
 import { isLaunchable, useEnabledProviders } from "../../hooks/use-providers";
+import { fileManagerLabel } from "../../lib/keymap";
 import { launcherActions, launcherFolder, orderedCommands } from "../../lib/launcher";
 import { sessionsInFolder } from "../../lib/launcher-sessions";
 import { useWorkspaceStore } from "../../stores/workspace";
@@ -139,7 +140,7 @@ export function EmptyPane({ paneId, folder: remembered }: { paneId: string; fold
   const commands = folder ? orderedCommands(folder.scripts, pins, folder.rel) : [];
   const actions = launcherActions({ atRoot, git: !!folder?.git, editor: !!detect?.editor });
   const layout = SIZE_LAYOUT[size];
-  const fileManager = detect?.fileManager || "Finder";
+  const fileManager = detect?.fileManager || fileManagerLabel();
 
   const backToGrid = () => {
     setPicked(null);

@@ -9,7 +9,7 @@ import {
   dragRect,
   type WindowRect,
 } from "../../lib/file-window";
-import { appKeys, editKeys } from "../../lib/keymap";
+import { appKeys, editKeys, fileManagerLabel } from "../../lib/keymap";
 import { useAgentStore } from "../../stores/agents";
 import {
   closeFileWindow,
@@ -161,7 +161,7 @@ function FileWindow({ peek }: { peek: TerminalLinkPeek }) {
           type="button"
           className={action}
           onClick={() => openPeekWith(peek, "reveal")}
-          title="Reveal in Finder"
+          title={`Reveal in ${fileManagerLabel()}`}
         >
           <FolderSearch className="h-3 w-3" />
         </button>

@@ -1,3 +1,5 @@
+import { fileManagerName } from "@exegol/shared";
+
 /**
  * The app's modifier per platform. macOS: Cmd. Linux and Windows: Ctrl+Shift, because a focused
  * terminal owns Ctrl+letter (Ctrl+D is EOF, Ctrl+W deletes a word) and the Super key belongs to
@@ -8,11 +10,10 @@ export const PLATFORM =
   typeof window === "undefined" ? "darwin" : (window.api?.app?.getPlatform?.() ?? "darwin");
 export const IS_MAC = PLATFORM === "darwin";
 
-/** What the OS calls its file manager, for "Open in ..." labels */
+/** What the OS calls its file manager, for "Reveal in ..." labels (Linux: "Files"; the launcher
+ *  has main's detected one in `ProjectDetect.fileManager`) */
 export function fileManagerLabel(platform = PLATFORM): string {
-  if (platform === "darwin") return "Finder";
-  if (platform === "win32") return "Explorer";
-  return "File manager";
+  return fileManagerName(platform);
 }
 
 interface ChordEvent {

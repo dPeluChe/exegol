@@ -56,6 +56,11 @@ describe("findDeepLinkArg", () => {
     );
   });
 
+  it("reads a Linux cold-start argv (packaged binary, Chromium switches)", () => {
+    const argv = ["/opt/Exegol/exegol", "--no-sandbox", "exegol://open?path=%2Fhome%2Fa%2Fp"];
+    expect(parseDeepLink(findDeepLinkArg(argv) ?? "")).toEqual({ path: "/home/a/p" });
+  });
+
   it("returns null when absent", () => {
     expect(findDeepLinkArg(["/usr/bin/app", "--flag"])).toBeNull();
   });
