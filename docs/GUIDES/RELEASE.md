@@ -220,12 +220,12 @@ RpmUpdater the same way (dnf, zypper or rpm, through `pkexec`).
 ### 5c. Windows (NSIS installer)
 
 Same model as Linux: `.github/workflows/windows.yml` runs on `windows-latest` when a release is
-published, builds core-rust (`core-rust.win32-x64-msvc.node`) and node-pty for Electron, packages the
+published, builds core-rust (`core-rust.win32-x64-msvc.node`; node-pty uses its N-API prebuilds), packages the
 NSIS installer and attaches `Exegol-<v>-x64.exe`, its `.exe.blockmap` and `latest.yml` to that release.
 Rerun it by hand from Actions → Windows build (optionally with a tag). With `test` checked it builds
-the selected branch, keeps the installer as a run artifact (7 days), attaches nothing, and runs
-`bun run test` + `bun run test:shared` on Windows in a separate job (to see what breaks on Windows
-paths; nothing depends on it): `gh workflow run windows.yml --ref <branch> -f test=true`.
+the selected branch, keeps the installer as a run artifact (7 days) and attaches nothing:
+`gh workflow run windows.yml --ref <branch> -f test=true`. The unit tests run on Windows in
+`ci.yml` (`windows-tests`) on every PR and push to main, not here.
 
 Unsigned: no code-signing certificate yet, so SmartScreen shows "Windows protected your PC" on the
 first run of the downloaded installer; More info → Run anyway. The installer is per user (no admin),
@@ -270,7 +270,7 @@ x.y.z-canary.YYYYMMDDHHmmss — canary builds (auto-detected by updater)
 
 ## CI checks
 
-Pull requests and pushes to main run lint, TypeScript checks, tests, and builds through `.github/workflows/ci.yml`. See [Pipeline evidence and CI](PIPELINE_EVIDENCE_AND_CI.md) for commands and scope.
+Pull requests and pushes to main run lint, TypeScript checks, tests, and builds through `.github/workflows/ci.yml` on macOS, plus the unit tests on Windows (`windows-tests`, in parallel). See [Pipeline evidence and CI](PIPELINE_EVIDENCE_AND_CI.md) for commands and scope.
 
 ## Future: automated releases (T45)
 

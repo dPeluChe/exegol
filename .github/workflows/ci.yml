@@ -28,6 +28,26 @@ jobs:
       - run: bun run test:shared
       - run: cargo test --locked --manifest-path packages/core-rust/Cargo.toml
       - run: bun run build
+  windows-tests:
+    # Unit tests on Windows paths and shells, beside the macOS checks (free on a public repo)
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        shell: bash
+    steps:
+      # Keep the repo's LF endings (the runner's git defaults to CRLF)
+      - run: git config --global core.autocrlf false
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020
+        with:
+          node-version: '22'
+      - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6
+        with:
+          bun-version: '1.2.23'
+      - run: bun install --frozen-lockfile
+      - run: bun run test
+      - run: bun run test:shared
   react-doctor:
     # React health of what the PR changes: errors fail it, new warnings are listed in the log to
     # fix or justify (a finding kept on purpose re-appears when its lines move, so warnings
