@@ -52,13 +52,24 @@ export function parseMountStats(agentId: unknown, input: unknown): MountLog | nu
     };
   }
   if (r.kind === "switch") {
-    const { activeMounts, hiddenMounts, afterMs, snapshotBytes, reflows, pending, ended } = r;
+    const {
+      keptMounts,
+      activeMounts,
+      hiddenMounts,
+      afterMs,
+      snapshotBytes,
+      reflows,
+      pending,
+      ended,
+    } = r;
     if (!count(activeMounts, 1e4) || !count(hiddenMounts, 1e4) || !count(afterMs, 1e7)) return null;
+    if (!count(keptMounts, 1e4)) return null;
     if (!count(snapshotBytes) || !count(reflows, 1e4) || !count(pending, 1e4)) return null;
     if (ended !== "settled" && ended !== "timeout" && ended !== "switched") return null;
     return {
       agentId,
       kind: "switch",
+      keptMounts: Math.round(keptMounts),
       activeMounts: Math.round(activeMounts),
       hiddenMounts: Math.round(hiddenMounts),
       afterMs: Math.round(afterMs),
@@ -115,7 +126,8 @@ export function formatMountLine(m: MountLog): string {
         : `${m.ended === "timeout" ? "timed out" : "cut short by another switch"} after ${m.afterMs}ms with ${m.pending} pending`;
     return (
       `[ProjectSwitch] ${m.agentId} mounted ${total} terminal${total === 1 ? "" : "s"}` +
-      ` (${m.activeMounts} in the active tab, ${m.hiddenMounts} in hidden tabs) ${outcome},` +
+      ` (${m.activeMounts} in the active tab, ${m.hiddenMounts} in hidden tabs),` +
+      ` ${m.keptMounts} already mounted, ${outcome},` +
       ` snapshots ${Math.round(m.snapshotBytes / 1024)} KB, reflows ${m.reflows}`
     );
   }

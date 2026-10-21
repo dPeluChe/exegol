@@ -111,3 +111,82 @@ describe("switching project", () => {
     expect(useAppStore.getState().activeProjectId).toBe("B");
   });
 });
+
+describe("projects kept mounted", () => {
+  const projectC = (): ProjectWorkspace => ({
+    tabs: [single("c1", "pc1")],
+    activeTabId: "c1",
+    panes: { pc1: { id: "pc1", type: "empty" } },
+  });
+  const projectD = (): ProjectWorkspace => ({
+    tabs: [single("d1", "pd1")],
+    activeTabId: "d1",
+    panes: { pd1: { id: "pd1", type: "empty" } },
+  });
+  const tabA3 = () =>
+    useWorkspaceStore.getState().projectWorkspaces.A?.tabs.find((t) => t.id === "a3");
+
+  beforeEach(() => {
+    useWorkspaceStore.setState((s) => ({
+      projectWorkspaces: { ...s.projectWorkspaces, C: projectC(), D: projectD() },
+      mountedProjects: ["A"],
+    }));
+  });
+
+  it("keeps the last three projects shown, most recent first", () => {
+    const app = useAppStore.getState();
+    app.setActiveProject("B");
+    expect(useWorkspaceStore.getState().mountedProjects).toEqual(["B", "A"]);
+    app.setActiveProject("C");
+    app.setActiveProject("D");
+    expect(useWorkspaceStore.getState().mountedProjects).toEqual(["D", "C", "B"]);
+    app.setActiveProject("B");
+    expect(useWorkspaceStore.getState().mountedProjects).toEqual(["B", "D", "C"]);
+  });
+
+  it("no project shown keeps none mounted", () => {
+    useAppStore.getState().setActiveProject("B");
+    useAppStore.getState().setActiveProject(null);
+    expect(useWorkspaceStore.getState().mountedProjects).toEqual([]);
+  });
+
+  it("a pane of a hidden kept project changes in its own project, never the active one", () => {
+    useAppStore.getState().setActiveProject("B");
+    useWorkspaceStore.getState().updatePane("pa2", { type: "terminal", agentId: "late-spawn" });
+    const ws = useWorkspaceStore.getState();
+    expect(ws.projectWorkspaces.A?.panes.pa2).toMatchObject({ agentId: "late-spawn" });
+    expect(ws.projectWorkspaces.B).toEqual(projectB());
+    expect(ws.focusedPaneId).toBe("pb1");
+  });
+
+  it("split sizes and equalize reach the tab's own project after a switch", () => {
+    useAppStore.getState().setActiveProject("B");
+    const ws = useWorkspaceStore.getState();
+    ws.setSplitSizes("a3", [], [30, 70]);
+    expect(tabA3()?.layout).toMatchObject({ sizes: [30, 70] });
+    ws.equalizeSplits("a3");
+    expect(tabA3()?.layout).toMatchObject({ sizes: [50, 50] });
+    expect(useWorkspaceStore.getState().projectWorkspaces.B).toEqual(projectB());
+  });
+
+  it("removing a hidden project's pane leaves the active project and its focus alone", () => {
+    useAppStore.getState().setActiveProject("B");
+    useWorkspaceStore.getState().removePane("a3", "pa3x");
+    const ws = useWorkspaceStore.getState();
+    expect(tabA3()?.layout).toEqual({ type: "pane", paneId: "pa3y" });
+    expect(ws.projectWorkspaces.A?.panes.pa3x).toBeUndefined();
+    expect(ws.projectWorkspaces.B).toEqual(projectB());
+    expect(ws.focusedPaneId).toBe("pb1");
+    expect(ws._activeProjectId).toBe("B");
+  });
+
+  it("an unknown pane or tab changes nothing", () => {
+    const before = useWorkspaceStore.getState().projectWorkspaces;
+    const ws = useWorkspaceStore.getState();
+    ws.updatePane("nope", { type: "git" });
+    ws.setSplitSizes("nope", [], [10, 90]);
+    ws.equalizeSplits("nope");
+    ws.removePane("nope", "pa1");
+    expect(useWorkspaceStore.getState().projectWorkspaces).toBe(before);
+  });
+});

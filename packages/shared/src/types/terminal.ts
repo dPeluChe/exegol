@@ -26,9 +26,11 @@ export type MountStats =
   /** The view's grid moved after the mount line (layout still settling): `changes` refits that
    *  changed it, the last one `afterMs` after the mount */
   | { kind: "settle"; mountGrid: string; finalGrid: string; afterMs: number; changes: number }
-  /** One project switch, sent under the project id: views mounted until each applied its snapshot */
+  /** One project switch, sent under the project id: views mounted until each applied its snapshot;
+   *  `keptMounts` terminals were already mounted (the project was kept mounted while hidden) */
   | {
       kind: "switch";
+      keptMounts: number;
       activeMounts: number;
       hiddenMounts: number;
       afterMs: number;

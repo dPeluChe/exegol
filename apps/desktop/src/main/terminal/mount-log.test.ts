@@ -47,6 +47,7 @@ describe("mount log", () => {
   it("formats a project switch, settled or cut short", () => {
     const sw = {
       kind: "switch",
+      keptMounts: 3,
       activeMounts: 1,
       hiddenMounts: 4,
       afterMs: 212.4,
@@ -57,7 +58,7 @@ describe("mount log", () => {
     };
     const stats = parseMountStats("project-1", sw);
     expect(stats && formatMountLine(stats)).toBe(
-      "[ProjectSwitch] project-1 mounted 5 terminals (1 in the active tab, 4 in hidden tabs) in 212ms, snapshots 3125 KB, reflows 2",
+      "[ProjectSwitch] project-1 mounted 5 terminals (1 in the active tab, 4 in hidden tabs), 3 already mounted, in 212ms, snapshots 3125 KB, reflows 2",
     );
     const late = parseMountStats("project-1", {
       ...sw,
@@ -68,6 +69,7 @@ describe("mount log", () => {
     expect(late && formatMountLine(late)).toContain("timed out after 3000ms with 3 pending,");
     expect(parseMountStats("project-1", { ...sw, ended: "/Users/me" })).toBeNull();
     expect(parseMountStats("project-1", { ...sw, hiddenMounts: "4" })).toBeNull();
+    expect(parseMountStats("project-1", { ...sw, keptMounts: -1 })).toBeNull();
   });
 
   it("formats a Send to with counts only, and drops anything else", () => {

@@ -67,9 +67,10 @@ export function useDeleteProject() {
     onSuccess: (_, id) => {
       // A removed project's Cmd+n would stay reserved and dead
       useShortcutStore.getState().assign(id, null);
-      // Its closed tabs cannot be reopened anywhere
+      // Its closed tabs cannot be reopened anywhere, and its hidden layer unmounts now
       useWorkspaceStore.setState((s) => ({
         recentlyClosed: s.recentlyClosed.filter((e) => e.projectId !== id),
+        mountedProjects: s.mountedProjects.filter((p) => p !== id),
       }));
       queryClient.invalidateQueries({ queryKey: ["projects"] });
     },

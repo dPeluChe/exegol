@@ -12,12 +12,16 @@ import {
   layoutHasPane,
   movePaneToTab,
   paneInTabOrFirst,
+  projectOfPane,
+  projectOfTab,
   pushClosed,
+  pwOf,
   releaseAgentPanes,
   removeNodeByPaneId,
   resolveCloseTarget,
   restoreClosedInto,
   setPw,
+  setPwOf,
   splitNodeByPaneId,
 } from "./helpers";
 import type {
@@ -48,10 +52,20 @@ function withFocus(
   return { ...setPw(s, next.pw), focusedPaneId: next.focusedPaneId };
 }
 
+/** `withFocus` for the active project; another (kept mounted) project's workspace changes alone */
+function withFocusIn(
+  s: WorkspaceStore,
+  pid: string,
+  updates: Partial<ProjectWorkspace>,
+): Partial<WorkspaceStore> {
+  return pid === s._activeProjectId ? withFocus(s, updates) : setPwOf(s, pid, updates);
+}
+
 type TabsPanesSlice = Pick<
   WorkspaceStore,
   | "projectWorkspaces"
   | "_activeProjectId"
+  | "mountedProjects"
   | "focusedPaneId"
   | "paneCwd"
   | "paneLastExit"
@@ -85,9 +99,12 @@ type TabsPanesSlice = Pick<
   | "setPaneLastExit"
 >;
 
+const initialProjectId = useAppStore.getState().activeProjectId;
+
 export const createTabsPanesSlice: WorkspaceSliceCreator<TabsPanesSlice> = (set, get) => ({
   projectWorkspaces: {},
-  _activeProjectId: useAppStore.getState().activeProjectId,
+  _activeProjectId: initialProjectId,
+  mountedProjects: initialProjectId ? [initialProjectId] : [],
   focusedPaneId: null,
   paneCwd: {},
   paneLastExit: {},
@@ -185,7 +202,9 @@ export const createTabsPanesSlice: WorkspaceSliceCreator<TabsPanesSlice> = (set,
 
   removePane: (tabId, paneId) =>
     set((s) => {
-      const pw = getPw(s);
+      const pid = projectOfTab(s, tabId);
+      if (!pid) return s;
+      const pw = pwOf(s, pid);
       const tab = pw.tabs.find((t) => t.id === tabId);
       if (!tab) return s;
 
@@ -206,7 +225,7 @@ export const createTabsPanesSlice: WorkspaceSliceCreator<TabsPanesSlice> = (set,
       if (!newLayout) {
         const emptyPane = createEmptyPane();
         return {
-          ...withFocus(s, {
+          ...withFocusIn(s, pid, {
             tabs: pw.tabs.map((t) =>
               t.id === tabId
                 ? { ...t, layout: { type: "pane" as const, paneId: emptyPane.id } }
@@ -220,7 +239,7 @@ export const createTabsPanesSlice: WorkspaceSliceCreator<TabsPanesSlice> = (set,
       }
 
       return {
-        ...withFocus(s, {
+        ...withFocusIn(s, pid, {
           tabs: pw.tabs.map((t) => (t.id === tabId ? { ...t, layout: newLayout } : t)),
           panes: restPanes,
         }),
@@ -287,34 +306,30 @@ export const createTabsPanesSlice: WorkspaceSliceCreator<TabsPanesSlice> = (set,
 
   updatePane: (paneId, updates) =>
     set((s) => {
-      const pw = getPw(s);
+      const pid = projectOfPane(s, paneId);
+      const pw = pwOf(s, pid);
       const existing = pw.panes[paneId];
       if (!existing) return s;
       // Never moves the focus: a spawn finishing in another pane took it (Cmd+W then closed it)
-      return setPw(s, { panes: { ...pw.panes, [paneId]: { ...existing, ...updates } } });
+      return setPwOf(s, pid, { panes: { ...pw.panes, [paneId]: { ...existing, ...updates } } });
     }),
 
   setPaneUrl: (paneId, url) =>
     set((s) => {
-      for (const [projectId, pw] of Object.entries(s.projectWorkspaces)) {
-        const pane = pw.panes[paneId];
-        if (!pane) continue;
-        if (pane.url === url) return s;
-        const panes = { ...pw.panes, [paneId]: { ...pane, url } };
-        return { projectWorkspaces: { ...s.projectWorkspaces, [projectId]: { ...pw, panes } } };
-      }
-      return s;
+      const pid = projectOfPane(s, paneId);
+      const pw = pwOf(s, pid);
+      const pane = pw.panes[paneId];
+      if (!pane || pane.url === url) return s;
+      return setPwOf(s, pid, { panes: { ...pw.panes, [paneId]: { ...pane, url } } });
     }),
 
   setFilesView: (paneId, patch) =>
     set((s) => {
-      for (const [projectId, pw] of Object.entries(s.projectWorkspaces)) {
-        const pane = pw.panes[paneId];
-        if (!pane) continue;
-        const panes = { ...pw.panes, [paneId]: applyFilesView(pane, patch) };
-        return { projectWorkspaces: { ...s.projectWorkspaces, [projectId]: { ...pw, panes } } };
-      }
-      return s;
+      const pid = projectOfPane(s, paneId);
+      const pw = pwOf(s, pid);
+      const pane = pw.panes[paneId];
+      if (!pane) return s;
+      return setPwOf(s, pid, { panes: { ...pw.panes, [paneId]: applyFilesView(pane, patch) } });
     }),
 
   releaseAgent: (agentId) =>
@@ -428,7 +443,8 @@ export const createTabsPanesSlice: WorkspaceSliceCreator<TabsPanesSlice> = (set,
 
   equalizeSplits: (tabId) =>
     set((s) => {
-      const pw = getPw(s);
+      const pid = projectOfTab(s, tabId);
+      const pw = pwOf(s, pid);
       const tab = pw.tabs.find((t) => t.id === tabId);
       if (!tab || tab.layout.type !== "split") return s;
 
@@ -444,14 +460,15 @@ export const createTabsPanesSlice: WorkspaceSliceCreator<TabsPanesSlice> = (set,
       };
 
       const newLayout = equalize(tab.layout);
-      return setPw(s, {
+      return setPwOf(s, pid, {
         tabs: pw.tabs.map((t) => (t.id === tabId ? { ...t, layout: newLayout } : t)),
       });
     }),
 
   setSplitSizes: (tabId, path, sizes) =>
     set((s) => {
-      const pw = getPw(s);
+      const pid = projectOfTab(s, tabId);
+      const pw = pwOf(s, pid);
       const tab = pw.tabs.find((t) => t.id === tabId);
       if (!tab) return s;
       const update = (node: LayoutNode, depth: number): LayoutNode => {
@@ -472,7 +489,7 @@ export const createTabsPanesSlice: WorkspaceSliceCreator<TabsPanesSlice> = (set,
       };
       const layout = update(tab.layout, 0);
       if (layout === tab.layout) return s;
-      return setPw(s, { tabs: pw.tabs.map((t) => (t.id === tabId ? { ...t, layout } : t)) });
+      return setPwOf(s, pid, { tabs: pw.tabs.map((t) => (t.id === tabId ? { ...t, layout } : t)) });
     }),
 
   setPaneCwd: (paneId, cwd) =>

@@ -612,7 +612,8 @@ exchange-bus MVP only, no headless council executions. Absorbs:
     > Merged from the "Queue after 0.5.7" performance follow-ups (0.5.3 audit) on 2026-10-04.
     - `diff.gitState` every 15s per GitPane spawns 4 git + `gh pr view` (network): poll the PR on
       its own 2-5 min interval and invalidate after push/commit; `diff.status` repeats its git status
-    - Polls keep running while the window is unfocused and hidden panes stay mounted: wire
+    - Polls keep running while the window is unfocused and hidden tabs stay mounted (panes of a
+      hidden kept project already stop: `shown` from `ProjectScope`, 2026-10-21): wire
       TanStack `focusManager` to window blur/focus and `enabled: isVisible` on pane queries
     - `FloatingBrowser` polls `agents.list` every 5s (shared key makes it win over 30s)
 

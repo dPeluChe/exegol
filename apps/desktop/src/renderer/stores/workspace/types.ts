@@ -130,6 +130,9 @@ export interface WorkspaceStore {
   projectWorkspaces: Record<string, ProjectWorkspace>;
   /** Mirror of app store's activeProjectId — kept in sync so selectors re-evaluate on project switch */
   _activeProjectId: string | null;
+  /** Projects whose Agents workspace stays mounted (hidden when not active), most recent first,
+   *  the active one included (helpers#keepMounted). In memory only */
+  mountedProjects: string[];
   /** Focused pane (global — only one pane focused at a time) */
   focusedPaneId: string | null;
   /** User-saved layout templates — global, not per-project */
@@ -159,6 +162,7 @@ export interface WorkspaceStore {
   ) => void;
 
   // Pane actions
+  /** In whichever project holds `tabId` (a kept project's pane stays in its own project) */
   removePane: (tabId: string, paneId: string) => void;
   movePaneBeside: (
     tabId: string,
@@ -174,6 +178,7 @@ export interface WorkspaceStore {
     /** `id`: the caller needs the new pane (to spawn a shell into it) */
     config?: { agentId?: string; url?: string; id?: string; linkPreview?: boolean },
   ) => void;
+  /** In whichever project holds the pane (a spawn finishing after a project switch) */
   updatePane: (paneId: string, updates: Partial<Pane>) => void;
   /** The page a browser pane is on: any project's pane, without taking focus (a redirect in a
    *  background pane moved the cursor), and nothing when it did not change */
@@ -200,9 +205,10 @@ export interface WorkspaceStore {
   // Derived
   getActiveTab: () => WorkspaceTab | null;
   ensureDefaultTab: () => void;
-  /** Reset all split sizes in the active tab to equal proportions */
+  /** Reset all split sizes of a tab (of any project) to equal proportions */
   equalizeSplits: (tabId: string) => void;
-  /** Sizes of the split at `path` (child indexes from the tab's root), after a drag */
+  /** Sizes of the split at `path` (child indexes from the tab's root), after a drag; the tab's own
+   *  project even when the save lands after a switch */
   setSplitSizes: (tabId: string, path: number[], sizes: number[]) => void;
   /**
    * Replace the tab layout with a built-in preset, reusing existing panes.

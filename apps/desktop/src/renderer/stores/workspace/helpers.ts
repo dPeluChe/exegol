@@ -19,17 +19,21 @@ export function createEmptyPane(): Pane {
 
 const EMPTY_PW: ProjectWorkspace = { tabs: [], activeTabId: null, panes: {} };
 
-export function getPw(state: WorkspaceStore): ProjectWorkspace {
-  const pid = state._activeProjectId;
+/** One project's workspace (empty when it has none) */
+export function pwOf(state: WorkspaceStore, pid: string | null): ProjectWorkspace {
   if (!pid) return EMPTY_PW;
   return state.projectWorkspaces[pid] ?? EMPTY_PW;
 }
 
-export function setPw(
+export function getPw(state: WorkspaceStore): ProjectWorkspace {
+  return pwOf(state, state._activeProjectId);
+}
+
+export function setPwOf(
   state: WorkspaceStore,
+  pid: string | null,
   updates: Partial<ProjectWorkspace>,
 ): Partial<WorkspaceStore> {
-  const pid = state._activeProjectId;
   if (!pid) return {};
   const current = state.projectWorkspaces[pid] ?? EMPTY_PW;
   return {
@@ -38,6 +42,66 @@ export function setPw(
       [pid]: { ...current, ...updates },
     },
   };
+}
+
+export function setPw(
+  state: WorkspaceStore,
+  updates: Partial<ProjectWorkspace>,
+): Partial<WorkspaceStore> {
+  return setPwOf(state, state._activeProjectId, updates);
+}
+
+/** The project whose workspace matches, the active one first: a pane of a project kept mounted
+ *  (hidden) writes into its own project, never the active one */
+function projectWhere(
+  state: WorkspaceStore,
+  has: (pw: ProjectWorkspace) => boolean,
+): string | null {
+  const active = state._activeProjectId;
+  if (active && state.projectWorkspaces[active] && has(state.projectWorkspaces[active])) {
+    return active;
+  }
+  for (const [pid, pw] of Object.entries(state.projectWorkspaces)) {
+    if (has(pw)) return pid;
+  }
+  return null;
+}
+
+export function projectOfPane(state: WorkspaceStore, paneId: string): string | null {
+  return projectWhere(state, (pw) => !!pw.panes[paneId]);
+}
+
+export function projectOfTab(state: WorkspaceStore, tabId: string): string | null {
+  return projectWhere(state, (pw) => pw.tabs.some((t) => t.id === tabId));
+}
+
+/** Projects whose Agents workspace stays mounted (hidden) after a switch, the active one included */
+export const MOUNTED_PROJECTS_MAX = 3;
+
+/** Most recent first, `next` at the front, trimmed to `max`. No project shown (null): none stays
+ *  mounted, as WorkspaceView then renders no Agents section */
+export function keepMounted(
+  list: string[],
+  next: string | null,
+  max = MOUNTED_PROJECTS_MAX,
+): string[] {
+  if (!next) return [];
+  if (list[0] === next && list.length <= max) return list;
+  return [next, ...list.filter((p) => p !== next)].slice(0, max);
+}
+
+/** The layers to render: the kept projects, the active one always among them, in a stable order
+ *  (an LRU reorder must not move a layer's DOM) */
+export function mountedLayers(list: string[], active: string | null): string[] {
+  const ids = active && !list.includes(active) ? [active, ...list] : list;
+  return [...ids].sort();
+}
+
+/** Terminal views a kept project already has mounted: what a switch back to it does not rebuild */
+export function mountedTerminals(pw: ProjectWorkspace, floating: Record<string, unknown>): number {
+  return Object.values(pw.panes).filter(
+    (p) => p.type === "terminal" && !!p.agentId && !floating[p.id] && !p.invalidReason,
+  ).length;
 }
 
 /** A files pane with `patch` applied; another file starts at its own default mode and the top */
@@ -367,7 +431,8 @@ export function restoreClosedInto(
   };
 }
 
-/** Leave the active project (its active tab remembering the focused pane) for `next`, as left */
+/** Leave the active project (its active tab remembering the focused pane) for `next`, as left;
+ *  `next` becomes the most recent kept-mounted project */
 export function switchProject(state: WorkspaceStore, next: string | null): Partial<WorkspaceStore> {
   const prev = state._activeProjectId;
   const prevPw = prev ? state.projectWorkspaces[prev] : undefined;
@@ -381,5 +446,6 @@ export function switchProject(state: WorkspaceStore, next: string | null): Parti
     _activeProjectId: next,
     projectWorkspaces,
     focusedPaneId: nextPw ? activePaneId(nextPw, null) : null,
+    mountedProjects: keepMounted(state.mountedProjects, next),
   };
 }

@@ -12,7 +12,7 @@ import {
   X,
 } from "lucide-react";
 import { type DragEvent, lazy, Suspense, useCallback, useEffect, useRef, useState } from "react";
-import { useProjectContext } from "../../contexts/ProjectContext";
+import { usePaneProject } from "../../contexts/ProjectScope";
 import { resumeSessionInto } from "../../hooks/use-resume-agent";
 import { useAgent } from "../../hooks/use-trpc";
 import { closeWithConfirm } from "../../lib/close-target";
@@ -29,8 +29,8 @@ import {
   type FilesViewPatch,
   getProjectState,
   type Pane,
-  selectPanes,
-  selectTabs,
+  selectPanesOf,
+  selectTabsOf,
   useWorkspaceStore,
 } from "../../stores/workspace";
 import { closeTargetFor } from "../../stores/workspace/helpers";
@@ -63,8 +63,8 @@ function PaneToolbar({
   isSplitPane: boolean;
 }) {
   const markPaneFloating = useWorkspaceStore((s) => s.markPaneFloating);
-  const panes = useWorkspaceStore(selectPanes);
-  const { projectId, project } = useProjectContext();
+  const { projectId, project } = usePaneProject();
+  const panes = useWorkspaceStore(selectPanesOf(projectId));
   // A terminal offers a browser beside it and a browser a terminal
   const companion =
     paneType === "terminal" ? "browser" : paneType === "browser" ? "terminal" : null;
@@ -343,7 +343,7 @@ function RecoverableTerminalPane({ agentId, paneId }: { agentId: string; paneId:
 // ─── Files Pane ─────────────────────────────────────────────────────────
 
 function FilesPaneContent({ pane, paneId }: PaneContentProps) {
-  const { project } = useProjectContext();
+  const { project } = usePaneProject();
   const setFilesView = useWorkspaceStore((s) => s.setFilesView);
   const onViewChange = useCallback(
     (patch: FilesViewPatch) => setFilesView(paneId, patch),
@@ -371,6 +371,22 @@ function FilesPaneContent({ pane, paneId }: PaneContentProps) {
   );
 }
 
+// ─── Browser pane (only in the shown project) ───────────────────────────────
+
+/** A webview's partition is its project's (persist:project-<id>) and cannot change once attached:
+ *  a browser pane mounts only in the active project's layer and unmounts while it is kept hidden */
+function ScopedBrowserPane({ pane, paneId }: PaneContentProps) {
+  const { shown } = usePaneProject();
+  if (!shown) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <Globe className="h-6 w-6 text-text-muted" />
+      </div>
+    );
+  }
+  return <BrowserPane pane={pane} paneId={paneId} />;
+}
+
 // ─── Pane body by type ──────────────────────────────────────────────────────
 
 type PaneContentProps = { pane: Pane; paneId: string };
@@ -382,7 +398,7 @@ const PANE_CONTENT: Record<Pane["type"], (props: PaneContentProps) => React.Reac
     ) : (
       <EmptyPane paneId={paneId} folder={pane.launcherFolder} />
     ),
-  browser: ({ pane, paneId }) => <BrowserPane pane={pane} paneId={paneId} />,
+  browser: ({ pane, paneId }) => <ScopedBrowserPane pane={pane} paneId={paneId} />,
   files: ({ pane, paneId }) => (
     <FilesPaneContent key={pane.filePath ?? "default"} pane={pane} paneId={paneId} />
   ),
@@ -493,8 +509,8 @@ interface WorkspacePaneProps {
 }
 
 export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
-  const { projectId: paneProjectId } = useProjectContext();
-  const pane = useWorkspaceStore((s) => selectPanes(s)[paneId]);
+  const { projectId: paneProjectId } = usePaneProject();
+  const pane = useWorkspaceStore((s) => selectPanesOf(paneProjectId)(s)[paneId]);
   const setFocusedPane = useWorkspaceStore((s) => s.setFocusedPane);
   const focusedPaneId = useWorkspaceStore((s) => s.focusedPaneId);
   const isFloating = useWorkspaceStore((s) => !!s.floatingPanes[paneId]);
@@ -503,7 +519,7 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
 
   // Check if this pane is inside a split (has siblings) — enables drag-out
   const isSplitPane = useWorkspaceStore((s) => {
-    const tab = selectTabs(s).find((t) => t.id === tabId);
+    const tab = selectTabsOf(paneProjectId)(s).find((t) => t.id === tabId);
     return tab ? collectPaneIds(tab.layout).length > 1 : false;
   });
 

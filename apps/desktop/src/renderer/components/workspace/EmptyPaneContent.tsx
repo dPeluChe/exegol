@@ -2,7 +2,7 @@ import type { AgentProvider, ResumableSession } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { ChevronDown, ChevronRight, History } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
-import { useProjectContext } from "../../contexts/ProjectContext";
+import { usePaneProject } from "../../contexts/ProjectScope";
 import { useCliInstalls } from "../../hooks/use-cli-updates";
 import { isLaunchable, useEnabledProviders } from "../../hooks/use-providers";
 import { useSimulatorAvailable } from "../../hooks/use-simulator";
@@ -112,7 +112,7 @@ interface Picked {
  * (click or 1-9) turns the pane into its launch form. Mini panes use the modal instead
  */
 export function EmptyPane({ paneId, folder: remembered }: { paneId: string; folder?: string }) {
-  const { projectId, project } = useProjectContext();
+  const { projectId, project } = usePaneProject();
   const updatePane = useWorkspaceStore((s) => s.updatePane);
   const { containerRef, size } = usePaneSize();
   const [picked, setPicked] = useState<Picked | null>(null);
