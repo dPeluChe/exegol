@@ -145,7 +145,7 @@ Sequential agent orchestration in shared worktrees. Exegol controls everything â
 14 built-in providers (Claude Code, Codex, Gemini, Antigravity, Devin, Aider, Goose, OpenCode, Amp, Kiro, Kilo Code, Crush, Factory Droid, Terminal/shell) + custom, in `agents/registry.ts`. Each has: `supportsPromptArg`, `promptFlag`, `enabled`. `supportsPromptArg: false` (launch without prompt injection): Gemini, Aider, OpenCode, Kiro, Kilo Code, Crush, shell.
 
 ### Key patterns
-- **tRPC over IPC**: 41 routers in main process (`ipc/router.ts`), renderer calls via `window.api.trpc.invoke`
+- **tRPC over IPC**: 41 routers in main process (`ipc/router.ts`), renderer calls via `window.api.trpc.invoke` (`lib/trpc-client.ts`: errors come back without Electron's "Error invoking remote method" prefix and with the tRPC `code`, carried in the error name)
 - **Push-first**: `broadcastAgentStatus()` IPC events, polling reduced to 30s fallback
 - **Structured errors** (T80): `ExegolError` â†’ `TransientError` / `PermanentError` / `TimeoutError` hierarchy with `cause` chain. `isTransient()`/`isPermanent()` type guards. `withRetry()` helper retries only on transient errors with exponential backoff (1s base, max 3). MCP disconnect and scoring API errors classified as transient.
 - **Lifecycle scripts** (T91): `.exegol/lifecycle.yaml` (or `.yml`) per repo with `setup`, `beforeAgent`, `afterCommit`, `teardown` hooks. Setup runs once per session per project on first agent spawn. beforeAgent prepended to shell command. Teardown awaited before worktree deletion. Simple line-based parser (no YAML library).

@@ -8,7 +8,12 @@ import { z } from "zod";
 
 const execFileAsync = promisify(execFile);
 
-import { MAX_BROWSER_HOSTS, parseBrowserHosts, projectCreateSchema } from "@exegol/shared";
+import {
+  type FolderInspection,
+  MAX_BROWSER_HOSTS,
+  parseBrowserHosts,
+  projectCreateSchema,
+} from "@exegol/shared";
 import { coreRust } from "../../agents/spawn-env";
 import { getWorktreeName, removeManagedWorktree } from "../../agents/worktrees";
 import { copyCookiesForHosts, markCookiesMigrated } from "../../browser/electron-host";
@@ -45,18 +50,8 @@ import {
   isIconFile,
 } from "../../system/project-icons";
 import { publicProcedure, router } from "../trpc";
+import { initGitRepo, inspectFolder } from "./project-folder";
 import { resolveProjectFolder } from "./project-paths";
-
-async function isGitRepo(path: string): Promise<boolean> {
-  try {
-    await execFileAsync("git", ["rev-parse", "--is-inside-work-tree"], {
-      cwd: path,
-    });
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 async function getGitRemote(path: string): Promise<string | null> {
   try {
@@ -115,30 +110,38 @@ export const projectRouter = router({
     return getProject(ctx.db, input.id) ?? null;
   }),
 
+  /** Add project: what the picked folder is before it is added (already a project, a repo,
+   *  a folder inside one, or no repo) */
+  inspectFolder: publicProcedure
+    .input(z.object({ path: z.string().min(1) }))
+    .query(({ ctx, input }) =>
+      isAbsolute(input.path) ? inspectFolder(input.path, listProjects(ctx.db)) : null,
+    ),
+
   create: publicProcedure
-    .input(projectCreateSchema.extend({ appearance: appearanceSchema.optional() }))
-    .mutation(async ({ ctx, input: { appearance, ...input } }) => {
-      if (!existsSync(input.path)) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: `Path does not exist: ${input.path}`,
-        });
+    .input(
+      projectCreateSchema.extend({
+        appearance: appearanceSchema.optional(),
+        /** No repo there yet: `git init` on defaultBranch first */
+        initGit: z.boolean().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input: { appearance, initGit, ...input } }) => {
+      const folder = await inspectFolder(input.path, listProjects(ctx.db));
+      if (folder.kind === "existing") {
+        throw new TRPCError({ code: "CONFLICT", message: `Already in Exegol as '${folder.name}'` });
       }
-
-      const stats = statSync(input.path);
-      if (!stats.isDirectory()) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: `Path is not a directory: ${input.path}`,
-        });
+      const refusal = (
+        {
+          missing: "Path does not exist",
+          notDirectory: "Path is not a directory",
+          noGit: initGit ? undefined : "Path is not a git repository",
+        } as Partial<Record<FolderInspection["kind"], string>>
+      )[folder.kind];
+      if (refusal) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: `${refusal}: ${input.path}` });
       }
-
-      if (!(await isGitRepo(input.path))) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: `Path is not a git repository: ${input.path}`,
-        });
-      }
+      if (folder.kind === "noGit") await initGitRepo(input.path, input.defaultBranch);
 
       const gitRemote = input.gitRemote ?? (await getGitRemote(input.path));
 

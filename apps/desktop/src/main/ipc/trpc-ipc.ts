@@ -57,7 +57,8 @@ export function registerTrpcIpcHandler(): void {
           ? // biome-ignore lint/suspicious/noExplicitAny: tRPC Proxy requires any
             (error as any).code
           : "INTERNAL_SERVER_ERROR";
-      throw Object.assign(new Error(message), { code });
+      // Electron passes only `${name}: ${message}` to the renderer: the name carries the code
+      throw Object.assign(new Error(message), { code, name: code });
     }
   });
 }

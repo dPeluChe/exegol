@@ -43,7 +43,7 @@ function mapRow(row: Record<string, unknown>): PathClaim {
 }
 
 /** Windows paths compare with either separator, any case, with or without the \\?\ prefix */
-const winKey = (p: string) =>
+export const winKey = (p: string) =>
   p
     .replace(/\//g, "\\")
     .replace(/^\\\\\?\\/, "")
