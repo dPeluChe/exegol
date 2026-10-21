@@ -8,8 +8,10 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
 
 ## Workspace
 
-- **Projects**: any folder or git repo. Each one has its own tabs, name, color or icon, and an
-  optional keyboard number (Edit project). Projects can be grouped in the sidebar.
+- **Projects**: a git repo. Each one has its own tabs, name, color or icon, and an
+  optional keyboard number (Edit project). Projects can be grouped in the sidebar. Add Project
+  checks the folder as you pick it: one already added offers Go to project, one with no repo
+  offers Initialize git and add (`git init`, no commit), and a folder inside a repo offers its root.
 - **Sidebar views**: a selector under Dashboard switches the sidebar between Agents (live
   sessions per project, with an "Active only" filter: working or waiting on you), Projects and Needs attention. Each tab
   shows its count; a new attention item never switches the view by itself. The collapsed rail
