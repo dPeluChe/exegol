@@ -47,6 +47,8 @@ export interface CustomLayoutSlot {
   filePath?: string;
   /** A browser's device size */
   viewport?: PageSize;
+  /** A simulator's device */
+  simUdid?: string;
   /** A terminal's program: "shell", or the agent CLI with its launch choices. The session itself
    *  (agentId) is not saved: applying the layout starts a fresh one */
   cliType?: string;
@@ -275,6 +277,7 @@ export function templateFromLayout(
         url: original?.url,
         filePath: original?.filePath,
         viewport: original?.viewport,
+        simUdid: original?.simUdid,
         ...(original?.type === "terminal" && original.agentId ? agentOf(original.agentId) : {}),
       });
       const placeholder = `${SLOT_PREFIX}${slotCounter}__`;
@@ -298,7 +301,14 @@ export function templateFromLayout(
  *  (`spawns`), a terminal pane with no session would only show "not found" */
 function slotPane(id: string, hint: CustomLayoutSlot | undefined): Pane {
   if (!hint || hint.type === "terminal") return { id, type: "empty" };
-  return { id, type: hint.type, url: hint.url, filePath: hint.filePath, viewport: hint.viewport };
+  return {
+    id,
+    type: hint.type,
+    url: hint.url,
+    filePath: hint.filePath,
+    viewport: hint.viewport,
+    simUdid: hint.simUdid,
+  };
 }
 
 export function computeCustomPresetTransformation(

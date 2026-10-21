@@ -104,6 +104,10 @@ export function useLauncherActions({
       );
     }
     if (action === "editor") openProjectInIde({ projectId, file: cwd });
+    if (action === "simulator") {
+      focusNewPane(paneId);
+      updatePane(paneId, { type: "simulator" });
+    }
   };
 
   return { run, runCommand, launching };

@@ -13,12 +13,14 @@ import {
   RotateCcw,
   Search,
   Settings,
+  Smartphone,
   Split,
   Square,
   Terminal,
   X,
 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSimulatorAvailable } from "../hooks/use-simulator";
 import { closeActivePane, reopenClosed } from "../lib/close-target";
 import { appKeys } from "../lib/keymap";
 import { movePane, paneMoveTargets } from "../lib/move-pane";
@@ -26,6 +28,7 @@ import { SIDEBAR_VIEW_META } from "../lib/sidebar-views";
 import { runCommandInNewTab } from "../lib/spawn-shell";
 import {
   addTabAndFocus,
+  openSimulatorForActivePane,
   openTerminalHere,
   splitActivePane,
   splitActiveWithTerminal,
@@ -77,6 +80,7 @@ function useCommands(close: () => void, open: boolean): Command[] {
     const paneId = selectActivePaneId(s);
     return !!paneId && selectPanes(s)[paneId]?.type === "empty";
   });
+  const simulator = useSimulatorAvailable();
 
   return useMemo(() => {
     const run = (fn: () => void) => () => {
@@ -195,6 +199,17 @@ function useCommands(close: () => void, open: boolean): Command[] {
             },
           ]
         : []),
+      ...(simulator
+        ? [
+            {
+              id: "ws:simulator",
+              label: emptyPane ? "Open Simulator Here" : "New Simulator in Split",
+              category: "workspace" as const,
+              icon: Smartphone,
+              action: run(openSimulatorForActivePane),
+            },
+          ]
+        : []),
       ...(open ? movePaneCommands(run) : []),
 
       // Agent commands
@@ -229,7 +244,7 @@ function useCommands(close: () => void, open: boolean): Command[] {
     ];
 
     return cmds;
-  }, [agents, close, emptyPane, open]);
+  }, [agents, close, emptyPane, open, simulator]);
 }
 
 // ─── Fuzzy Filter ────────��──────────────────────────────────────────────────

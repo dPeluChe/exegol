@@ -32,6 +32,7 @@ import { scrollbackRouter } from "./procedures/scrollback";
 import { searchRouter } from "./procedures/search";
 import { settingsRouter } from "./procedures/settings";
 import { sidecarRouter } from "./procedures/sidecar";
+import { simulatorRouter } from "./procedures/simulator";
 import { skillInstallerRouter } from "./procedures/skill-installer";
 import { skillsRouter } from "./procedures/skills";
 import { storageRouter } from "./procedures/storage";
@@ -81,6 +82,7 @@ export const appRouter = router({
   storage: storageRouter,
   ide: ideRouter,
   sidecar: sidecarRouter,
+  simulator: simulatorRouter,
 });
 
 export type AppRouter = typeof appRouter;

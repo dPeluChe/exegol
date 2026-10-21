@@ -168,3 +168,14 @@ export function splitWithBrowser(
   focusNewPane(id);
   useWorkspaceStore.getState().splitPane(tabId, paneId, direction, "browser", { id, url });
 }
+
+/** The palette's Simulator: in the active pane when it is an empty launcher, else beside it */
+export function openSimulatorForActivePane(): void {
+  const tabId = getProjectState().activeTabId;
+  const paneId = getActivePaneId();
+  if (!tabId || !paneId) return;
+  if (activeEmptyPaneId()) {
+    focusNewPane(paneId);
+    useWorkspaceStore.getState().updatePane(paneId, { type: "simulator" });
+  } else splitAndFocus(tabId, paneId, "horizontal", "simulator");
+}

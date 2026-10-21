@@ -42,6 +42,7 @@ import { BrowserPane } from "./BrowserPaneContent";
 import { EmptyPane } from "./EmptyPaneContent";
 import { PaneContextMenu } from "./PaneContextMenu";
 import { PANE_DRAG_TYPE, PaneDragHandle, readPaneDrag } from "./PaneDragHandle";
+import { SimulatorPane } from "./SimulatorPane";
 
 // Lazy: xterm + addons (~470KB) only load when a terminal pane mounts
 const TerminalPanel = lazy(() =>
@@ -402,6 +403,7 @@ const PANE_CONTENT: Record<Pane["type"], (props: PaneContentProps) => React.Reac
     <FilesPaneContent key={pane.filePath ?? "default"} pane={pane} paneId={paneId} />
   ),
   git: ({ pane }) => <GitPane key={pane.filePath ?? "default"} overridePath={pane.filePath} />,
+  simulator: ({ pane, paneId }) => <SimulatorPane pane={pane} paneId={paneId} />,
   empty: ({ pane, paneId }) => <EmptyPane paneId={paneId} folder={pane.launcherFolder} />,
 };
 
@@ -561,11 +563,8 @@ export function WorkspacePane({ paneId, tabId }: WorkspacePaneProps) {
         agentId={pane.agentId}
         isSplitPane={isSplitPane}
         onSplit={(dir, newType) => {
-          if (newType !== "browser") {
-            splitAndFocus(tabId, paneId, dir, newType ?? "empty");
-            return;
-          }
-          splitWithBrowser(tabId, paneId, dir);
+          if (newType === "browser") splitWithBrowser(tabId, paneId, dir);
+          else splitAndFocus(tabId, paneId, dir, newType ?? "empty");
         }}
         onSplitTerminal={() => void splitWithTerminal(tabId, paneId)}
         onEqualize={() => useWorkspaceStore.getState().equalizeSplits(tabId)}

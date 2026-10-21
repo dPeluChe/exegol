@@ -379,6 +379,20 @@
       "status",
       "warm",
       "stop"
+    ],
+    "simulator": [
+      "boot",
+      "button",
+      "devices",
+      "key",
+      "openApp",
+      "screenSize",
+      "screenshot",
+      "shutdown",
+      "support",
+      "swipe",
+      "tap",
+      "type"
     ]
   },
   "ipc": [
@@ -473,6 +487,11 @@
     "dictation:key",
     "dictation:done",
     "sidecar:health",
+    "simulator:stream-start",
+    "simulator:stream-visible",
+    "simulator:stream-stop",
+    "simulator:frame",
+    "simulator:stream-state",
     "gpu:process-gone"
   ]
 }

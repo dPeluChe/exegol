@@ -46,7 +46,7 @@ describe("describeClose", () => {
     );
   });
 
-  it("browser, files and an ended session are named; unsaved edits are called out", () => {
+  it("browser, files, simulator and an ended session are named; unsaved edits are called out", () => {
     const b = pane("b", "browser", { url: "http://localhost:8007/app" });
     expect(describeClose([b], agents, none)?.title).toBe("Close pane Browser localhost:8007/app?");
     expect(describeClose([pane("t", "terminal", { agentId: "a2" })], agents, none)?.lines).toEqual([
@@ -56,6 +56,10 @@ describe("describeClose", () => {
     const f = pane("f", "files", { openFile: "/repo/src/app.ts" });
     expect(describeClose([f], agents, new Set(["f"]))?.lines).toEqual([
       "Files app.ts: unsaved changes are lost.",
+      REOPEN,
+    ]);
+    expect(describeClose([pane("s", "simulator")], agents, none)?.lines).toEqual([
+      "Simulator: closes the view, the device keeps running.",
       REOPEN,
     ]);
   });

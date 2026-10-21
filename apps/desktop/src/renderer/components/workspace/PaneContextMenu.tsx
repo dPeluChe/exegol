@@ -14,10 +14,12 @@ import {
   RefreshCw,
   Rows,
   Send,
+  Smartphone,
   TerminalSquare,
   Trash2,
 } from "lucide-react";
 import { useState } from "react";
+import { useSimulatorAvailable } from "../../hooks/use-simulator";
 import { movePane, paneMoveTargets } from "../../lib/move-pane";
 import type { PaneType } from "../../stores/workspace";
 import { ContextMenu, type MenuItem, type MenuSection } from "../common/ContextMenu";
@@ -30,6 +32,8 @@ interface PaneContextMenuProps {
   paneType: PaneType;
   agentId?: string;
   isSplitPane: boolean;
+  /** macOS with Xcode: offers Split with Simulator */
+  simulator?: boolean;
   onSplit: (direction: "horizontal" | "vertical", newType?: PaneType) => void;
   /** A shell beside this pane, in the folder it works in (lib/split-terminal) */
   onSplitTerminal: () => void;
@@ -107,6 +111,7 @@ function moveSection({ paneId }: MenuActions): MenuItem[] {
 
 function splitSection({
   isSplitPane,
+  simulator,
   onSplit,
   onSplitTerminal,
   onFloat,
@@ -122,6 +127,15 @@ function splitSection({
     { label: "Split Vertically", icon: Rows, shortcut: "⌘⇧D", action: () => onSplit("vertical") },
     { label: "Split with Browser", icon: Globe, action: () => onSplit("horizontal", "browser") },
     { label: "Split with Terminal", icon: TerminalSquare, shortcut: "⌘Y", action: onSplitTerminal },
+    ...(simulator
+      ? [
+          {
+            label: "Split with Simulator",
+            icon: Smartphone,
+            action: () => onSplit("horizontal", "simulator"),
+          },
+        ]
+      : []),
     ...(onFloat ? [{ label: "Float to Window", icon: PictureInPicture2, action: onFloat }] : []),
     ...(isSplitPane ? [{ label: "Equalize Splits", icon: Equal, action: onEqualize }] : []),
   ];
@@ -156,6 +170,7 @@ function buildMenuSections(actions: MenuActions, sendPage?: MenuItem["page"]): M
 }
 
 export function PaneContextMenu({ children, ...actions }: PaneContextMenuProps) {
+  const simulator = useSimulatorAvailable();
   // The selection when the menu opened: a TUI repaint or mouse report can clear it before a pick
   const [openedWith, setOpenedWith] = useState("");
   const readSelection = () =>
@@ -174,7 +189,7 @@ export function PaneContextMenu({ children, ...actions }: PaneContextMenuProps) 
   return (
     <ContextMenu
       onOpen={() => setOpenedWith(readSelection())}
-      sections={() => buildMenuSections(actions, sendPage())}
+      sections={() => buildMenuSections({ ...actions, simulator }, sendPage())}
     >
       {children}
     </ContextMenu>

@@ -25,6 +25,7 @@ export * from "./search";
 export * from "./session-recovery";
 export * from "./settings";
 export * from "./sidecar-health";
+export * from "./simulator";
 export * from "./skill";
 export * from "./terminal";
 export * from "./token-usage";

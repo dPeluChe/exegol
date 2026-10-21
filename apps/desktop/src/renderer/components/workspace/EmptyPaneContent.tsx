@@ -5,6 +5,7 @@ import { useEffect, useRef, useState } from "react";
 import { usePaneProject } from "../../contexts/ProjectScope";
 import { useCliInstalls } from "../../hooks/use-cli-updates";
 import { isLaunchable, useEnabledProviders } from "../../hooks/use-providers";
+import { useSimulatorAvailable } from "../../hooks/use-simulator";
 import { fileManagerLabel } from "../../lib/keymap";
 import { launcherActions, launcherFolder, orderedCommands } from "../../lib/launcher";
 import { sessionsInFolder } from "../../lib/launcher-sessions";
@@ -138,7 +139,13 @@ export function EmptyPane({ paneId, folder: remembered }: { paneId: string; fold
   });
   const { pins } = useRunPins(projectId ?? "");
   const commands = folder ? orderedCommands(folder.scripts, pins, folder.rel) : [];
-  const actions = launcherActions({ atRoot, git: !!folder?.git, editor: !!detect?.editor });
+  const simulator = useSimulatorAvailable();
+  const actions = launcherActions({
+    atRoot,
+    git: !!folder?.git,
+    editor: !!detect?.editor,
+    simulator,
+  });
   const layout = SIZE_LAYOUT[size];
   const fileManager = detect?.fileManager || fileManagerLabel();
 

@@ -52,8 +52,9 @@ const ROW = "flex max-w-full flex-wrap justify-center gap-1 pane-narrow:w-full";
 const FILL = "pane-narrow:min-w-0 pane-narrow:flex-[1_1_5.5rem] pane-narrow:justify-center";
 
 /**
- * T197/T204: what the pane can become in the launcher's folder (keys T, F, G, B, O, E), then the
- * folder's commands, pinned first and the rest behind "+N", the first nine on Option+1..9
+ * T197/T204: what the pane can become in the launcher's folder (keys T, F, G, B, O, E, and S
+ * for the Simulator on a Mac with Xcode), then the folder's commands, pinned first and the rest
+ * behind "+N", the first nine on Option+1..9
  */
 export function FolderActions({
   projectId,

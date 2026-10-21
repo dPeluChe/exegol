@@ -24,6 +24,7 @@ import { applyDictationSettings, dictationSettings } from "./dictation/service";
 import { installPreviewSession, registerPreviewScheme } from "./files-preview/preview-host";
 import { startPrWatch, stopPrWatch } from "./integrations/github/pr-watch";
 import { registerDictationIpc } from "./ipc/procedures/dictation";
+import { registerSimulatorIpc } from "./ipc/procedures/simulator";
 import { registerTrpcIpcHandler } from "./ipc/trpc-ipc";
 import { broadcast } from "./lib/event-bus";
 import { flushLogSync, logger, markShutdown, startLogFile } from "./lib/logger";
@@ -39,6 +40,7 @@ import { setDesktopChannelDb } from "./notifications/channels/desktop";
 import { installSessionPermissions } from "./permissions/session";
 import { getPipelineExecutor } from "./pipeline/executor";
 import { getSchedulerEngine } from "./scheduler/engine";
+import { stopAllStreams } from "./simulator/stream";
 import { ensureDefaultSkills } from "./skills/discovery";
 import { ensureCanonicalPaths } from "./skills/paths";
 import { offerMoveToApplications, relocateAppPaths } from "./system/app-relocation";
@@ -99,6 +101,7 @@ app.whenReady().then(async () => {
   registerFloatingIpcHandlers();
   registerSettingsIpcHandlers();
   registerDictationIpc();
+  registerSimulatorIpc();
   applyDictationSettings(getDb(), dictationSettings(getDb()));
   installSessionPermissions();
   installPreviewSession(getDb());
@@ -255,6 +258,7 @@ function teardownSteps() {
     { name: "settingsWindow", run: closeSettingsWindow },
     { name: "dictationEngine", run: stopEngine },
     { name: "dictationMedia", run: releaseMediaNow },
+    { name: "simulatorStreams", run: stopAllStreams },
     // T145: close the MCP socket + revoke all tokens so shim calls fail fast
     // instead of hanging, and the socket file doesn't go stale on disk.
     { name: "mcpServer", run: stopExegolMcpServer },

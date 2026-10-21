@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Simulator pane (macOS with Xcode): see and drive an iOS Simulator inside Exegol. Pick a device, boot it, and the pane shows its screen live; click to tap, drag to swipe, and type while the pane has the focus. The toolbar has Home, copy or save a screenshot, Open in Simulator.app, and boot or shut down. Open it from the launcher's Simulator button (key S), right-click a pane > Split with Simulator, or the Command Palette; the pane reopens on the same device after a restart. It needs AXe, a free open-source tool: install it with `brew install cameroncooke/axe/axe` (the pane shows the command to copy when it is missing, and never installs it for you)
+
 ### Changed
 - Switching back to one of your last 3 projects no longer rebuilds its terminals: they stay open in the background with its files and git panes. Browser panes still reload, and hidden projects stop polling git
 - Add Project checks the folder before you submit: one already in Exegol shows its name and a Go to project button (no more database error), a folder with no git repo can be initialized and added in one click, and a folder inside another repo offers to use that repo's root instead
