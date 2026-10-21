@@ -2,17 +2,13 @@ import { Button, Input } from "@exegol/ui";
 import { FolderSearch } from "lucide-react";
 import { useState } from "react";
 import { useCreateProject } from "../../../hooks/use-trpc";
+import { folderName } from "../../../lib/add-project";
 import { useAppStore } from "../../../stores/app";
 
 interface FirstProjectStepProps {
   onNext: () => void;
   onBack: () => void;
   onSkip: () => void;
-}
-
-function deriveProjectName(folderPath: string): string {
-  const segments = folderPath.replace(/\\/g, "/").split("/").filter(Boolean);
-  return segments[segments.length - 1] ?? "Untitled";
 }
 
 export function FirstProjectStep({ onNext, onBack, onSkip }: FirstProjectStepProps) {
@@ -30,7 +26,7 @@ export function FirstProjectStep({ onNext, onBack, onSkip }: FirstProjectStepPro
       if (result && !result.canceled && result.filePaths?.[0]) {
         const selected = result.filePaths[0];
         setFolderPath(selected);
-        if (!projectName) setProjectName(deriveProjectName(selected));
+        if (!projectName) setProjectName(folderName(selected));
       }
     } catch {
       // Dialog not available in dev, user can type the path manually

@@ -1,46 +1,41 @@
-import { execFile } from "node:child_process";
 import { stat } from "node:fs/promises";
 import { basename } from "node:path";
-import { promisify } from "node:util";
 import type { FolderInspection } from "@exegol/shared";
 import { TRPCError } from "@trpc/server";
+import { winKey } from "../../db/queries/path-claims";
 import { logger } from "../../lib/logger";
+import { runGit } from "../../lib/worktree-safety";
 import { realpathSafe } from "../../security/path-guard";
-
-const execFileAsync = promisify(execFile);
 
 /** Comparison key for an already realpath-resolved folder: no trailing separator, and any case
  *  on macOS and Windows, whose default file systems ignore it */
 export function folderKey(p: string, platform: NodeJS.Platform = process.platform): string {
-  let s = platform === "win32" ? p.replace(/\//g, "\\").replace(/^\\\\\?\\/, "") : p;
+  let s = platform === "win32" ? winKey(p) : p;
   s = s.replace(/[\\/]+$/, "") || s.slice(0, 1);
-  return platform === "darwin" || platform === "win32" ? s.toLowerCase() : s;
-}
-
-export async function sameFolder(a: string, b: string, platform?: NodeJS.Platform) {
-  const [x, y] = await Promise.all([realpathSafe(a), realpathSafe(b)]);
-  return folderKey(x, platform) === folderKey(y, platform);
+  return platform === "darwin" ? s.toLowerCase() : s;
 }
 
 export async function findProjectAt<T extends { id: string; name: string; path: string }>(
   projects: T[],
   path: string,
-  platform?: NodeJS.Platform,
 ): Promise<T | undefined> {
-  const key = folderKey(await realpathSafe(path), platform);
-  for (const p of projects) {
-    if (folderKey(await realpathSafe(p.path), platform) === key) return p;
-  }
-  return undefined;
+  const keyOf = async (p: string) => folderKey(await realpathSafe(p));
+  const [key, keys] = await Promise.all([
+    keyOf(path),
+    Promise.all(projects.map((p) => keyOf(p.path))),
+  ]);
+  return projects[keys.indexOf(key)];
 }
 
-/** `--show-toplevel` rather than `--is-inside-work-tree`: a repo's subfolder passes the latter */
-export async function gitToplevel(path: string): Promise<string | null> {
+/** `--show-prefix` is empty at the repo root; a repo's subfolder passes `--is-inside-work-tree` */
+async function gitPlace(path: string): Promise<FolderInspection> {
   try {
-    const { stdout } = await execFileAsync("git", ["rev-parse", "--show-toplevel"], { cwd: path });
-    return stdout.trim() || null;
+    const [toplevel = "", prefix = ""] = (
+      await runGit(["rev-parse", "--show-toplevel", "--show-prefix"], path)
+    ).split("\n");
+    return prefix.trim() ? { kind: "subfolder", toplevel: toplevel.trim() } : { kind: "repo" };
   } catch {
-    return null;
+    return { kind: "noGit" };
   }
 }
 
@@ -48,27 +43,23 @@ export async function inspectFolder(
   path: string,
   projects: { id: string; name: string; path: string }[],
 ): Promise<FolderInspection> {
-  const info = await stat(path).catch(() => null);
-  const existing = await findProjectAt(projects, path);
-  const existingProject = existing ? { id: existing.id, name: existing.name } : undefined;
-  if (!info?.isDirectory()) {
-    return { exists: !!info, isDirectory: false, existingProject, git: "none" };
-  }
-  const toplevel = await gitToplevel(path);
-  if (!toplevel) return { exists: true, isDirectory: true, existingProject, git: "none" };
-  if (await sameFolder(toplevel, path)) {
-    return { exists: true, isDirectory: true, existingProject, git: "repo" };
-  }
-  return { exists: true, isDirectory: true, existingProject, git: "subfolder", toplevel };
+  const [info, existing] = await Promise.all([
+    stat(path).catch(() => null),
+    findProjectAt(projects, path),
+  ]);
+  if (existing) return { kind: "existing", id: existing.id, name: existing.name };
+  if (!info) return { kind: "missing" };
+  if (!info.isDirectory()) return { kind: "notDirectory" };
+  return gitPlace(path);
 }
 
 /** `git init` for Add project, no commit. The branch name is checked by git itself */
 export async function initGitRepo(path: string, branch: string): Promise<void> {
   try {
-    await execFileAsync("git", ["check-ref-format", "--branch", branch], { cwd: path });
+    await runGit(["check-ref-format", "--branch", branch], path);
   } catch {
     throw new TRPCError({ code: "BAD_REQUEST", message: `Invalid branch name: ${branch}` });
   }
   logger.info(`[Projects] git init ${basename(path)}`);
-  await execFileAsync("git", ["init", `--initial-branch=${branch}`], { cwd: path });
+  await runGit(["init", `--initial-branch=${branch}`], path);
 }

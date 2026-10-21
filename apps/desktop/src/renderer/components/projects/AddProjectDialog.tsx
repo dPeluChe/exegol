@@ -5,13 +5,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderSearch, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { useCreateProject } from "../../hooks/use-trpc";
-import {
-  type FolderNotice,
-  folderName,
-  folderNotice,
-  ipcErrorMessage,
-  isAbsoluteFolder,
-} from "../../lib/add-project";
+import { folderName, isAbsoluteFolder } from "../../lib/add-project";
 import { trpcInvoke } from "../../lib/trpc-client";
 import { showProject } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
@@ -52,7 +46,8 @@ export function AddProjectDialog({ open, onOpenChange }: AddProjectDialogProps) 
     enabled: canCheck,
   });
   // Only once the check caught up with what is typed: a stale verdict would name another folder
-  const notice = checkedPath === scanPath ? folderNotice(inspection) : null;
+  const notice =
+    checkedPath === scanPath && inspection && inspection.kind !== "repo" ? inspection : null;
   const appearance = picked ?? {
     color: null,
     icon: null,
@@ -122,9 +117,11 @@ export function AddProjectDialog({ open, onOpenChange }: AddProjectDialogProps) 
       });
       setActiveProject(project.id);
       resetAndClose();
-    } catch {
+    } catch (err) {
       // Added meanwhile (another window, a race with the check): the notice offers Go to project
-      queryClient.invalidateQueries({ queryKey: ["projects", "inspectFolder"] });
+      if ((err as { code?: string }).code === "CONFLICT") {
+        queryClient.invalidateQueries({ queryKey: ["projects", "inspectFolder"] });
+      }
     } finally {
       submittingRef.current = false;
     }
@@ -241,7 +238,7 @@ export function AddProjectDialog({ open, onOpenChange }: AddProjectDialogProps) 
             {/* Error: an already added folder is the notice's job */}
             {createProject.isError && notice?.kind !== "existing" && (
               <p className="text-xs text-error">
-                Failed to add project: {ipcErrorMessage(createProject.error)}
+                Failed to add project: {createProject.error?.message}
               </p>
             )}
 
@@ -277,7 +274,7 @@ function FolderNoticeView({
   onUseToplevel,
   onAdd,
 }: {
-  notice: FolderNotice;
+  notice: Exclude<FolderInspection, { kind: "repo" }>;
   busy: boolean;
   onGoTo: (id: string) => void;
   onUseToplevel: (toplevel: string) => void;

@@ -5,7 +5,8 @@ import { join } from "node:path";
 import Database from "libsql";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { runMigrations } from "../../db/migrations";
-import { findProjectAt, folderKey, inspectFolder, sameFolder } from "./project-folder";
+import { realpathSafe } from "../../security/path-guard";
+import { findProjectAt, folderKey, inspectFolder } from "./project-folder";
 
 vi.mock("../../agents/spawn-env", () => ({ coreRust: null }));
 
@@ -46,18 +47,22 @@ describe("findProjectAt", () => {
 
 describe("inspectFolder", () => {
   it("tells a repo, a folder inside one and a folder with no repo apart", async () => {
-    expect(await inspectFolder(repo, [])).toEqual({ exists: true, isDirectory: true, git: "repo" });
-    const sub = await inspectFolder(join(repo, "web"), []);
-    expect(sub.git).toBe("subfolder");
-    expect(await sameFolder(sub.toplevel ?? "", repo)).toBe(true);
-    expect((await inspectFolder(plain, [])).git).toBe("none");
+    expect(await inspectFolder(repo, [])).toEqual({ kind: "repo" });
+    expect(await inspectFolder(join(repo, "web"), [])).toEqual({
+      kind: "subfolder",
+      toplevel: await realpathSafe(repo),
+    });
+    expect(await inspectFolder(plain, [])).toEqual({ kind: "noGit" });
   });
 
-  it("reports a missing folder and the project already there", async () => {
-    expect(await inspectFolder(join(tmp, "nope"), [])).toMatchObject({ exists: false });
-    expect(
-      (await inspectFolder(repo, [{ id: "p1", name: "Repo", path: repo }])).existingProject,
-    ).toEqual({ id: "p1", name: "Repo" });
+  it("reports a missing folder, a file and the project already there", async () => {
+    expect(await inspectFolder(join(tmp, "nope"), [])).toEqual({ kind: "missing" });
+    expect(await inspectFolder(join(repo, ".git", "HEAD"), [])).toEqual({ kind: "notDirectory" });
+    expect(await inspectFolder(repo, [{ id: "p1", name: "Repo", path: repo }])).toEqual({
+      kind: "existing",
+      id: "p1",
+      name: "Repo",
+    });
   });
 });
 

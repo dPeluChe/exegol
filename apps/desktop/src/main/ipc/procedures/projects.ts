@@ -8,7 +8,12 @@ import { z } from "zod";
 
 const execFileAsync = promisify(execFile);
 
-import { MAX_BROWSER_HOSTS, parseBrowserHosts, projectCreateSchema } from "@exegol/shared";
+import {
+  type FolderInspection,
+  MAX_BROWSER_HOSTS,
+  parseBrowserHosts,
+  projectCreateSchema,
+} from "@exegol/shared";
 import { coreRust } from "../../agents/spawn-env";
 import { getWorktreeName, removeManagedWorktree } from "../../agents/worktrees";
 import { copyCookiesForHosts, markCookiesMigrated } from "../../browser/electron-host";
@@ -45,7 +50,7 @@ import {
   isIconFile,
 } from "../../system/project-icons";
 import { publicProcedure, router } from "../trpc";
-import { findProjectAt, gitToplevel, initGitRepo, inspectFolder } from "./project-folder";
+import { initGitRepo, inspectFolder } from "./project-folder";
 import { resolveProjectFolder } from "./project-paths";
 
 async function getGitRemote(path: string): Promise<string | null> {
@@ -122,39 +127,21 @@ export const projectRouter = router({
       }),
     )
     .mutation(async ({ ctx, input: { appearance, initGit, ...input } }) => {
-      if (!existsSync(input.path)) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: `Path does not exist: ${input.path}`,
-        });
+      const folder = await inspectFolder(input.path, listProjects(ctx.db));
+      if (folder.kind === "existing") {
+        throw new TRPCError({ code: "CONFLICT", message: `Already in Exegol as '${folder.name}'` });
       }
-
-      const stats = statSync(input.path);
-      if (!stats.isDirectory()) {
-        throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: `Path is not a directory: ${input.path}`,
-        });
+      const refusal = (
+        {
+          missing: "Path does not exist",
+          notDirectory: "Path is not a directory",
+          noGit: initGit ? undefined : "Path is not a git repository",
+        } as Partial<Record<FolderInspection["kind"], string>>
+      )[folder.kind];
+      if (refusal) {
+        throw new TRPCError({ code: "BAD_REQUEST", message: `${refusal}: ${input.path}` });
       }
-
-      const existing = await findProjectAt(listProjects(ctx.db), input.path);
-      if (existing) {
-        throw new TRPCError({
-          code: "CONFLICT",
-          message: `Already in Exegol as '${existing.name}'`,
-          cause: { id: existing.id, name: existing.name },
-        });
-      }
-
-      if (!(await gitToplevel(input.path))) {
-        if (!initGit) {
-          throw new TRPCError({
-            code: "BAD_REQUEST",
-            message: `Path is not a git repository: ${input.path}`,
-          });
-        }
-        await initGitRepo(input.path, input.defaultBranch);
-      }
+      if (folder.kind === "noGit") await initGitRepo(input.path, input.defaultBranch);
 
       const gitRemote = input.gitRemote ?? (await getGitRemote(input.path));
 

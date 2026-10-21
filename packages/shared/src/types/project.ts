@@ -48,12 +48,13 @@ export type ProjectDetect = {
   fileManager: string;
 };
 
-/** Add project: the picked folder before it is added (`projects.inspectFolder`). "subfolder"
- *  is a folder inside a repo whose root (`toplevel`) is elsewhere */
-export type FolderInspection = {
-  exists: boolean;
-  isDirectory: boolean;
-  existingProject?: { id: string; name: string };
-  git: "repo" | "subfolder" | "none";
-  toplevel?: string;
-};
+/** Add project: what the picked folder is before it is added (`projects.inspectFolder`), the
+ *  first that applies in this order. "subfolder" is a folder inside a repo whose root
+ *  (`toplevel`) is elsewhere */
+export type FolderInspection =
+  | { kind: "existing"; id: string; name: string }
+  | { kind: "missing" }
+  | { kind: "notDirectory" }
+  | { kind: "noGit" }
+  | { kind: "subfolder"; toplevel: string }
+  | { kind: "repo" };
