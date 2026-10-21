@@ -22,6 +22,7 @@ import { registerTerminalLinkProviders } from "./terminal-link-providers";
 import type { TerminalInstanceProps } from "./terminal-types";
 import { watchTuiCopy } from "./tui-copy";
 import { tuneWheelSensitivity } from "./tui-wheel";
+import { applyUnicode11Widths } from "./unicode-widths";
 
 const CTRL_V = "\x16";
 
@@ -92,7 +93,8 @@ export function setupTerminalSession(
     cursorStyle: "bar",
     scrollback: 5_000,
     allowProposedApi: true,
-    convertEol: true,
+    // No convertEol: an inline TUI in raw mode (bubbletea) moves down with a bare LF and expects
+    // to keep its column; main's HeadlessEmulator never converted either
     disableStdin: deps.readOnly,
     // A TUI tracking the mouse (Claude) turns xterm's selection off: Option+drag selects anyway,
     // as Shift+drag does off macOS, so Copy and Send to still have text
@@ -103,6 +105,7 @@ export function setupTerminalSession(
   terminal.loadAddon(fitAddon);
   const serializeAddon = new SerializeAddon();
   terminal.loadAddon(serializeAddon);
+  applyUnicode11Widths(terminal);
 
   terminal.open(container);
 

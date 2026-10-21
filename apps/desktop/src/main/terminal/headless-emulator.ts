@@ -3,6 +3,7 @@
 // Tracks terminal state and modes for snapshot generation and session reattach.
 
 import { SerializeAddon } from "@xterm/addon-serialize";
+import { Unicode11Addon } from "@xterm/addon-unicode11";
 import { Terminal } from "@xterm/headless";
 import { utf8Tail } from "./pty-sidecar-flusher";
 
@@ -50,6 +51,10 @@ export class HeadlessEmulator {
     this.terminal = new Terminal({ cols, rows, scrollback, allowProposedApi: true });
     this.serializer = new SerializeAddon();
     this.terminal.loadAddon(this.serializer);
+    // Same cell widths as the renderer's xterm (unicode-widths.ts), or a snapshot replays emoji
+    // lines one cell short
+    this.terminal.loadAddon(new Unicode11Addon());
+    this.terminal.unicode.activeVersion = "11";
     // In the parser, not a regex per write: a sequence split across writes or `?1049;1006h`
     // counts, and the modes match what is parsed (T138). false: xterm still applies them
     const decMode = (enabled: boolean) => (params: (number | number[])[]) => {
