@@ -47,3 +47,13 @@ export type ProjectDetect = {
   /** Finder, Explorer or File manager */
   fileManager: string;
 };
+
+/** Add project: the picked folder before it is added (`projects.inspectFolder`). "subfolder"
+ *  is a folder inside a repo whose root (`toplevel`) is elsewhere */
+export type FolderInspection = {
+  exists: boolean;
+  isDirectory: boolean;
+  existingProject?: { id: string; name: string };
+  git: "repo" | "subfolder" | "none";
+  toplevel?: string;
+};

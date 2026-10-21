@@ -10,6 +10,7 @@
       "forgetBrowserPermission",
       "get",
       "iconImage",
+      "inspectFolder",
       "list",
       "listAllWorktrees",
       "listWorktrees",

@@ -45,18 +45,8 @@ import {
   isIconFile,
 } from "../../system/project-icons";
 import { publicProcedure, router } from "../trpc";
+import { findProjectAt, gitToplevel, initGitRepo, inspectFolder } from "./project-folder";
 import { resolveProjectFolder } from "./project-paths";
-
-async function isGitRepo(path: string): Promise<boolean> {
-  try {
-    await execFileAsync("git", ["rev-parse", "--is-inside-work-tree"], {
-      cwd: path,
-    });
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 async function getGitRemote(path: string): Promise<string | null> {
   try {
@@ -115,9 +105,23 @@ export const projectRouter = router({
     return getProject(ctx.db, input.id) ?? null;
   }),
 
+  /** Add project: what the picked folder is before it is added (already a project, a repo,
+   *  a folder inside one, or no repo) */
+  inspectFolder: publicProcedure
+    .input(z.object({ path: z.string().min(1) }))
+    .query(({ ctx, input }) =>
+      isAbsolute(input.path) ? inspectFolder(input.path, listProjects(ctx.db)) : null,
+    ),
+
   create: publicProcedure
-    .input(projectCreateSchema.extend({ appearance: appearanceSchema.optional() }))
-    .mutation(async ({ ctx, input: { appearance, ...input } }) => {
+    .input(
+      projectCreateSchema.extend({
+        appearance: appearanceSchema.optional(),
+        /** No repo there yet: `git init` on defaultBranch first */
+        initGit: z.boolean().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input: { appearance, initGit, ...input } }) => {
       if (!existsSync(input.path)) {
         throw new TRPCError({
           code: "BAD_REQUEST",
@@ -133,11 +137,23 @@ export const projectRouter = router({
         });
       }
 
-      if (!(await isGitRepo(input.path))) {
+      const existing = await findProjectAt(listProjects(ctx.db), input.path);
+      if (existing) {
         throw new TRPCError({
-          code: "BAD_REQUEST",
-          message: `Path is not a git repository: ${input.path}`,
+          code: "CONFLICT",
+          message: `Already in Exegol as '${existing.name}'`,
+          cause: { id: existing.id, name: existing.name },
         });
+      }
+
+      if (!(await gitToplevel(input.path))) {
+        if (!initGit) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: `Path is not a git repository: ${input.path}`,
+          });
+        }
+        await initGitRepo(input.path, input.defaultBranch);
       }
 
       const gitRemote = input.gitRemote ?? (await getGitRemote(input.path));

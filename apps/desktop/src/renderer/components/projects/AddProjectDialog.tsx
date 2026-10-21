@@ -1,10 +1,19 @@
+import type { FolderInspection } from "@exegol/shared";
 import { Button, Input } from "@exegol/ui";
 import * as Dialog from "@radix-ui/react-dialog";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderSearch, X } from "lucide-react";
 import { useRef, useState } from "react";
 import { useCreateProject } from "../../hooks/use-trpc";
+import {
+  type FolderNotice,
+  folderName,
+  folderNotice,
+  ipcErrorMessage,
+  isAbsoluteFolder,
+} from "../../lib/add-project";
 import { trpcInvoke } from "../../lib/trpc-client";
+import { showProject } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import {
   type FoundIcon,
@@ -17,32 +26,55 @@ interface AddProjectDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-function deriveProjectName(folderPath: string): string {
-  const segments = folderPath.replace(/\\/g, "/").split("/").filter(Boolean);
-  return segments[segments.length - 1] ?? "Untitled";
-}
+/** Typing waits this long before the folder is inspected and scanned for icons */
+const CHECK_DELAY_MS = 300;
 
 export function AddProjectDialog({ open, onOpenChange }: AddProjectDialogProps) {
   const [folderPath, setFolderPath] = useState("");
+  const [checkedPath, setCheckedPath] = useState("");
   const [projectName, setProjectName] = useState("");
   const [defaultBranch, setDefaultBranch] = useState("main");
   // Nothing picked: the first image found, which is what create adopts on its own
   const [picked, setPicked] = useState<ProjectAppearance | null>(null);
+  const checkTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const scanPath = folderPath.trim();
+  const canCheck = open && isAbsoluteFolder(checkedPath);
   const { data: found = [], isFetching: scanning } = useQuery({
-    queryKey: ["projects", "detectIconsAt", scanPath],
-    queryFn: () => trpcInvoke<FoundIcon[]>("projects.detectIconsAt", { path: scanPath }),
-    enabled: open && /^(\/|[A-Za-z]:[\\/])/.test(scanPath),
+    queryKey: ["projects", "detectIconsAt", checkedPath],
+    queryFn: () => trpcInvoke<FoundIcon[]>("projects.detectIconsAt", { path: checkedPath }),
+    enabled: canCheck,
     staleTime: 30_000,
   });
+  const { data: inspection } = useQuery({
+    queryKey: ["projects", "inspectFolder", checkedPath],
+    queryFn: () =>
+      trpcInvoke<FolderInspection | null>("projects.inspectFolder", { path: checkedPath }),
+    enabled: canCheck,
+  });
+  // Only once the check caught up with what is typed: a stale verdict would name another folder
+  const notice = checkedPath === scanPath ? folderNotice(inspection) : null;
   const appearance = picked ?? {
     color: null,
     icon: null,
     iconImage: found[0]?.path ?? null,
   };
 
+  const queryClient = useQueryClient();
   const createProject = useCreateProject();
   const setActiveProject = useAppStore((s) => s.setActiveProject);
+
+  const changeFolder = (value: string, delay: number) => {
+    setFolderPath(value);
+    // A choice from another folder would point outside this one
+    setPicked(null);
+    createProject.reset();
+    if (!projectName || projectName === folderName(folderPath)) {
+      setProjectName(folderName(value));
+    }
+    clearTimeout(checkTimer.current);
+    if (delay) checkTimer.current = setTimeout(() => setCheckedPath(value.trim()), delay);
+    else setCheckedPath(value.trim());
+  };
 
   const handleBrowse = async () => {
     try {
@@ -52,56 +84,56 @@ export function AddProjectDialog({ open, onOpenChange }: AddProjectDialogProps) 
         title: "Select Project Folder",
       });
       if (result && !result.canceled && result.filePaths?.[0]) {
-        const selected = result.filePaths[0];
-        setFolderPath(selected);
-        setPicked(null);
-        if (!projectName) {
-          setProjectName(deriveProjectName(selected));
-        }
+        changeFolder(result.filePaths[0], 0);
       }
     } catch {
       // Dialog not available in dev, user can type manually
     }
   };
 
-  const handlePathChange = (value: string) => {
-    setFolderPath(value);
-    // A choice from another folder would point outside this one
+  const resetAndClose = () => {
+    clearTimeout(checkTimer.current);
+    setFolderPath("");
+    setCheckedPath("");
+    setProjectName("");
+    setDefaultBranch("main");
     setPicked(null);
-    if (!projectName || projectName === deriveProjectName(folderPath)) {
-      setProjectName(deriveProjectName(value));
-    }
+    onOpenChange(false);
+  };
+
+  const goToProject = (id: string) => {
+    resetAndClose();
+    showProject(id);
   };
 
   // isPending lands a render late: a double Enter would create the project twice
   const submittingRef = useRef(false);
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!folderPath.trim() || !projectName.trim() || submittingRef.current) return;
+  const addProject = async (initGit = false) => {
+    if (!scanPath || !projectName.trim() || submittingRef.current) return;
     submittingRef.current = true;
-
     try {
       const project = await createProject.mutateAsync({
         name: projectName.trim(),
-        path: folderPath.trim(),
+        path: scanPath,
         gitRemote: null,
-        defaultBranch: defaultBranch || "main",
+        defaultBranch: defaultBranch.trim() || "main",
         appearance: picked ?? undefined,
+        initGit,
       });
-
       setActiveProject(project.id);
-
-      // Reset form
-      setFolderPath("");
-      setProjectName("");
-      setDefaultBranch("main");
-      setPicked(null);
-      onOpenChange(false);
+      resetAndClose();
     } catch {
-      // Error handled by mutation state
+      // Added meanwhile (another window, a race with the check): the notice offers Go to project
+      queryClient.invalidateQueries({ queryKey: ["projects", "inspectFolder"] });
     } finally {
       submittingRef.current = false;
     }
+  };
+
+  const blocked = notice !== null && notice.kind !== "subfolder";
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!blocked) void addProject();
   };
 
   return (
@@ -137,7 +169,7 @@ export function AddProjectDialog({ open, onOpenChange }: AddProjectDialogProps) 
                 <Input
                   id="add-project-folder"
                   value={folderPath}
-                  onChange={(e) => handlePathChange(e.target.value)}
+                  onChange={(e) => changeFolder(e.target.value, CHECK_DELAY_MS)}
                   placeholder="/path/to/your/project"
                   className="flex-1 border-[var(--border)] bg-[var(--bg-tertiary)] text-[var(--text-primary)]"
                 />
@@ -150,7 +182,17 @@ export function AddProjectDialog({ open, onOpenChange }: AddProjectDialogProps) 
                   <FolderSearch className="h-4 w-4" />
                 </Button>
               </div>
-              <p className="text-[10px] text-text-muted">Must be a git repository</p>
+              {notice ? (
+                <FolderNoticeView
+                  notice={notice}
+                  busy={createProject.isPending}
+                  onGoTo={goToProject}
+                  onUseToplevel={(toplevel) => changeFolder(toplevel, 0)}
+                  onAdd={(initGit) => void addProject(initGit)}
+                />
+              ) : (
+                <p className="text-[10px] text-text-muted">Must be a git repository</p>
+              )}
             </div>
 
             {/* Project Name */}
@@ -196,13 +238,10 @@ export function AddProjectDialog({ open, onOpenChange }: AddProjectDialogProps) 
               </div>
             )}
 
-            {/* Error */}
-            {createProject.isError && (
+            {/* Error: an already added folder is the notice's job */}
+            {createProject.isError && notice?.kind !== "existing" && (
               <p className="text-xs text-error">
-                Failed to add project:{" "}
-                {createProject.error instanceof Error
-                  ? createProject.error.message
-                  : "Unknown error"}
+                Failed to add project: {ipcErrorMessage(createProject.error)}
               </p>
             )}
 
@@ -218,7 +257,7 @@ export function AddProjectDialog({ open, onOpenChange }: AddProjectDialogProps) 
               </Button>
               <Button
                 type="submit"
-                disabled={!folderPath.trim() || !projectName.trim() || createProject.isPending}
+                disabled={!scanPath || !projectName.trim() || createProject.isPending || blocked}
                 className="bg-accent text-white"
               >
                 {createProject.isPending ? "Adding..." : "Add Project"}
@@ -228,5 +267,67 @@ export function AddProjectDialog({ open, onOpenChange }: AddProjectDialogProps) 
         </Dialog.Content>
       </Dialog.Portal>
     </Dialog.Root>
+  );
+}
+
+function FolderNoticeView({
+  notice,
+  busy,
+  onGoTo,
+  onUseToplevel,
+  onAdd,
+}: {
+  notice: FolderNotice;
+  busy: boolean;
+  onGoTo: (id: string) => void;
+  onUseToplevel: (toplevel: string) => void;
+  onAdd: (initGit: boolean) => void;
+}) {
+  if (notice.kind === "missing") return <p className="text-xs text-error">Folder not found</p>;
+  if (notice.kind === "notDirectory") {
+    return <p className="text-xs text-error">This path is a file, not a folder</p>;
+  }
+  if (notice.kind === "existing") {
+    return (
+      <NoticeBox message={`Already in Exegol as '${notice.name}'`}>
+        <Button type="button" size="sm" onClick={() => onGoTo(notice.id)}>
+          Go to project
+        </Button>
+      </NoticeBox>
+    );
+  }
+  if (notice.kind === "noGit") {
+    return (
+      <NoticeBox message="This folder is not a git repository">
+        <Button type="button" size="sm" disabled={busy} onClick={() => onAdd(true)}>
+          Initialize git and add
+        </Button>
+      </NoticeBox>
+    );
+  }
+  return (
+    <NoticeBox message={`This folder is inside the repo ${notice.toplevel}`}>
+      <Button type="button" size="sm" onClick={() => onUseToplevel(notice.toplevel)}>
+        Use {folderName(notice.toplevel)}
+      </Button>
+      <Button
+        type="button"
+        size="sm"
+        variant="outline"
+        disabled={busy}
+        onClick={() => onAdd(false)}
+      >
+        Add this folder anyway
+      </Button>
+    </NoticeBox>
+  );
+}
+
+function NoticeBox({ message, children }: { message: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-2 rounded-md border border-warning/40 bg-warning/10 p-2">
+      <p className="break-all text-xs text-warning">{message}</p>
+      <div className="flex flex-wrap gap-2">{children}</div>
+    </div>
   );
 }

@@ -52,6 +52,7 @@ export function useCreateProject() {
     mutationFn: (
       data: ProjectCreate & {
         appearance?: { color: string | null; icon: string | null; iconImage: string | null };
+        initGit?: boolean;
       },
     ) => trpcMutate<Project>("projects.create", data),
     onSuccess: () => {
