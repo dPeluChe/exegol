@@ -2,7 +2,7 @@ import { stepZoom, type ZoomAction } from "@exegol/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { Globe, RotateCw } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useProjectContext } from "../../contexts/ProjectContext";
+import { usePaneProject } from "../../contexts/ProjectScope";
 import { useMountEffect } from "../../hooks/use-mount-effect";
 import { type PortInfo, useSetPreferredPort } from "../../hooks/use-trpc-scheduler";
 import { isPasteTarget } from "../../lib/agent-input";
@@ -175,7 +175,7 @@ function useRunningProjectAgents(projectId: string | null) {
 }
 
 export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
-  const { projectId, project } = useProjectContext();
+  const { projectId, project } = usePaneProject();
   const { pagePorts, helperPorts, preferredPort, autoPort } = useDevServerPorts(
     project?.path ?? null,
     projectId,

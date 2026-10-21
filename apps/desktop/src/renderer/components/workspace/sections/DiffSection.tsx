@@ -9,7 +9,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
-import { useProjectContext } from "../../../contexts/ProjectContext";
+import { usePaneProject } from "../../../contexts/ProjectScope";
 import {
   type ReviewSignal,
   type ReviewSummary,
@@ -144,7 +144,7 @@ function ReviewSummaryBanner({ summary }: { summary: ReviewSummary }) {
 }
 
 export function DiffSection({ overridePath }: { overridePath?: string } = {}) {
-  const { projectId } = useProjectContext();
+  const { projectId, shown } = usePaneProject();
   const [diffMode, setDiffMode] = useState<DiffMode>("unstaged");
   const [viewMode, setViewMode] = useState<ViewMode>("split");
   const [autoRefresh, setAutoRefresh] = useState(false);
@@ -153,7 +153,7 @@ export function DiffSection({ overridePath }: { overridePath?: string } = {}) {
     data: rawDiff,
     isLoading,
     refetch,
-  } = useDiff(projectId, diffMode, overridePath, autoRefresh ? 5000 : undefined);
+  } = useDiff(projectId, diffMode, overridePath, autoRefresh && shown ? 5000 : undefined);
   const { data: reviewSummary } = useReviewSummary(projectId, overridePath, diffMode === "staged");
 
   // Derive parsed files from raw diff (Rule 1: derive, don't sync)

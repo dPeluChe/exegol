@@ -24,6 +24,7 @@ export function createSwitchTracker({ now, schedule, send }: SwitchDeps) {
   let open: {
     projectId: string;
     startedAt: number;
+    kept: number;
     active: number;
     hidden: number;
     pending: number;
@@ -41,6 +42,7 @@ export function createSwitchTracker({ now, schedule, send }: SwitchDeps) {
     const end = ended === "settled" ? s.lastAt : now();
     send(s.projectId, {
       kind: "switch",
+      keptMounts: s.kept,
       activeMounts: s.active,
       hiddenMounts: s.hidden,
       afterMs: end - s.startedAt,
@@ -52,8 +54,9 @@ export function createSwitchTracker({ now, schedule, send }: SwitchDeps) {
   };
 
   return {
-    /** null: no project shown (Dashboard); a switch still open is reported as cut short */
-    start(projectId: string | null): void {
+    /** null: no project shown; a switch still open is reported as cut short. `kept`: terminals
+     *  the project already had mounted (kept mounted while hidden), none of them rebuilt */
+    start(projectId: string | null, kept = 0): void {
       finish("switched");
       if (!projectId) return;
       const startedAt = now();
@@ -64,6 +67,7 @@ export function createSwitchTracker({ now, schedule, send }: SwitchDeps) {
       open = {
         projectId,
         startedAt,
+        kept,
         active: 0,
         hidden: 0,
         pending: 0,

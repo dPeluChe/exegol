@@ -89,8 +89,14 @@ function SnapshotEntry({
   );
 }
 
-export function OplogSnapshotTimeline({ projectId }: { projectId: string | null }) {
-  const { data: snapshots, isLoading } = useOplogSnapshots(projectId);
+export function OplogSnapshotTimeline({
+  projectId,
+  shown,
+}: {
+  projectId: string | null;
+  shown: boolean;
+}) {
+  const { data: snapshots, isLoading } = useOplogSnapshots(projectId, shown);
   const restoreMutation = useRestoreOplogSnapshot(projectId);
   const [confirmSha, setConfirmSha] = useState<string | null>(null);
 

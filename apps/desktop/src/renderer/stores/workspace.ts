@@ -10,7 +10,9 @@ import {
   findFirstPaneId,
   getPw,
   layoutHasPane,
+  mountedTerminals,
   paneInTabOrFirst,
+  pwOf,
   switchProject,
 } from "./workspace/helpers";
 import { migrateWorkspaceState, onWorkspaceRehydrate } from "./workspace/recovery";
@@ -43,6 +45,21 @@ export function selectPanes(s: WorkspaceStore): Record<string, Pane> {
   return getPw(s).panes;
 }
 
+// ─── Selectors of one project (a kept mounted layer reads its own, not the active one) ──
+
+export const selectPanesOf =
+  (projectId: string | null) =>
+  (s: WorkspaceStore): Record<string, Pane> =>
+    pwOf(s, projectId).panes;
+export const selectTabsOf =
+  (projectId: string | null) =>
+  (s: WorkspaceStore): WorkspaceTab[] =>
+    pwOf(s, projectId).tabs;
+export const selectActiveTabIdOf =
+  (projectId: string | null) =>
+  (s: WorkspaceStore): string | null =>
+    pwOf(s, projectId).activeTabId;
+
 // ─── Store (composed from slices) ───────────────────────────────────────────
 
 export const useWorkspaceStore = create<WorkspaceStore>()(
@@ -71,9 +88,11 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
 
 useAppStore.subscribe((state) => {
   const ws = useWorkspaceStore.getState();
-  if (state.activeProjectId !== ws._activeProjectId) {
-    projectSwitchStarted(state.activeProjectId);
-    useWorkspaceStore.setState(switchProject(ws, state.activeProjectId));
+  const next = state.activeProjectId;
+  if (next !== ws._activeProjectId) {
+    const kept = next && ws.mountedProjects.includes(next);
+    projectSwitchStarted(next, kept ? mountedTerminals(pwOf(ws, next), ws.floatingPanes) : 0);
+    useWorkspaceStore.setState(switchProject(ws, next));
   }
 });
 

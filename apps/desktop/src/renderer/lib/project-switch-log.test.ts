@@ -53,6 +53,7 @@ describe("createSwitchTracker", () => {
         projectId: "p1",
         report: {
           kind: "switch",
+          keptMounts: 0,
           activeMounts: 1,
           hiddenMounts: 2,
           afterMs: 120,
@@ -90,6 +91,18 @@ describe("createSwitchTracker", () => {
     tracker.start("p1");
     advance(SWITCH_IDLE_MS);
     expect(sent[0]?.report).toMatchObject({ activeMounts: 0, hiddenMounts: 0, ended: "settled" });
+  });
+
+  it("a switch back to a kept project counts the terminals it did not rebuild", () => {
+    const { tracker, sent, advance } = setup();
+    tracker.start("p1", 4);
+    advance(SWITCH_IDLE_MS);
+    expect(sent[0]?.report).toMatchObject({
+      keptMounts: 4,
+      activeMounts: 0,
+      hiddenMounts: 0,
+      ended: "settled",
+    });
   });
 
   it("a new switch cuts the open one short and ignores its late snapshots", () => {

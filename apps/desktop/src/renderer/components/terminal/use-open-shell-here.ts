@@ -9,19 +9,19 @@ export function useOpenShellHere({
   agentId,
   paneId,
   agentProjectId,
-  activeProjectId,
+  paneProjectId,
   stopAgent,
 }: {
   agentId: string;
   paneId: string | undefined;
   agentProjectId: string | undefined;
-  activeProjectId: string | null | undefined;
+  paneProjectId: string | null | undefined;
   stopAgent: ReturnType<typeof useStopAgent>;
 }) {
   return useCallback(async () => {
     // A "Failed to start" agent may already be gone from store+DB — fall back
-    // to the workspace's active project (the pane lives in its view anyway).
-    const pid = agentProjectId ?? activeProjectId;
+    // to the project of the pane.
+    const pid = agentProjectId ?? paneProjectId;
     if (!pid || !paneId) {
       useToastStore.getState().addToast({
         type: "error",
@@ -42,5 +42,5 @@ export function useOpenShellHere({
         body: err instanceof Error ? err.message : String(err),
       });
     }
-  }, [agentProjectId, activeProjectId, paneId, agentId, stopAgent]);
+  }, [agentProjectId, paneProjectId, paneId, agentId, stopAgent]);
 }
