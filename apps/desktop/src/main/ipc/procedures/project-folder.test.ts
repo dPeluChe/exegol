@@ -1,11 +1,10 @@
 import { execFileSync } from "node:child_process";
-import { existsSync, mkdirSync, mkdtempSync, rmSync, symlinkSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, realpathSync, rmSync, symlinkSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "libsql";
 import { afterAll, describe, expect, it, vi } from "vitest";
 import { runMigrations } from "../../db/migrations";
-import { realpathSafe } from "../../security/path-guard";
 import { findProjectAt, folderKey, inspectFolder } from "./project-folder";
 
 vi.mock("../../agents/spawn-env", () => ({ coreRust: null }));
@@ -48,10 +47,11 @@ describe("findProjectAt", () => {
 describe("inspectFolder", () => {
   it("tells a repo, a folder inside one and a folder with no repo apart", async () => {
     expect(await inspectFolder(repo, [])).toEqual({ kind: "repo" });
-    expect(await inspectFolder(join(repo, "web"), [])).toEqual({
-      kind: "subfolder",
-      toplevel: await realpathSafe(repo),
-    });
+    const sub = await inspectFolder(join(repo, "web"), []);
+    expect(sub.kind).toBe("subfolder");
+    // Windows: git prints the long path, the runner's temp dir may be an 8.3 short name
+    const top = sub.kind === "subfolder" ? sub.toplevel : "";
+    expect(folderKey(realpathSync.native(top))).toBe(folderKey(realpathSync.native(repo)));
     expect(await inspectFolder(plain, [])).toEqual({ kind: "noGit" });
   });
 

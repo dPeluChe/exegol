@@ -1,5 +1,5 @@
 import { stat } from "node:fs/promises";
-import { basename } from "node:path";
+import { basename, resolve } from "node:path";
 import type { FolderInspection } from "@exegol/shared";
 import { TRPCError } from "@trpc/server";
 import { winKey } from "../../db/queries/path-claims";
@@ -27,13 +27,15 @@ export async function findProjectAt<T extends { id: string; name: string; path: 
   return projects[keys.indexOf(key)];
 }
 
-/** `--show-prefix` is empty at the repo root; a repo's subfolder passes `--is-inside-work-tree` */
+/** `--show-prefix` is empty at the repo root; `resolve` turns git's C:/ toplevel into a native path */
 async function gitPlace(path: string): Promise<FolderInspection> {
   try {
     const [toplevel = "", prefix = ""] = (
       await runGit(["rev-parse", "--show-toplevel", "--show-prefix"], path)
     ).split("\n");
-    return prefix.trim() ? { kind: "subfolder", toplevel: toplevel.trim() } : { kind: "repo" };
+    return prefix.trim()
+      ? { kind: "subfolder", toplevel: resolve(toplevel.trim()) }
+      : { kind: "repo" };
   } catch {
     return { kind: "noGit" };
   }
