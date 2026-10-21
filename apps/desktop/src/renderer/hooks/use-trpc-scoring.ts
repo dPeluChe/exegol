@@ -97,11 +97,12 @@ export function useReviewSummary(
 
 // ─── Oplog ──────────────────────────────────────────────────────────────────
 
-export function useProjectOplog(projectId: string | null, limit = 100) {
+/** `shown` false: the pane's project is kept mounted but hidden, no polling */
+export function useProjectOplog(projectId: string | null, shown = true, limit = 100) {
   return useQuery({
     queryKey: ["oplog", "project", projectId, limit],
     queryFn: () => trpcInvoke<OplogEntry[]>("oplog.listProject", { projectId, limit }),
-    enabled: !!projectId,
+    enabled: !!projectId && shown,
     refetchInterval: 30_000,
   });
 }
@@ -120,11 +121,11 @@ export function useUndoOplog() {
 
 // ─── Oplog v2 (T129) — hidden-ref turn snapshots ───────────────────────────
 
-export function useOplogSnapshots(projectId: string | null, limit = 200) {
+export function useOplogSnapshots(projectId: string | null, shown = true, limit = 200) {
   return useQuery({
     queryKey: ["oplog", "snapshots", projectId, limit],
     queryFn: () => trpcInvoke<OplogSnapshot[]>("oplog.listSnapshots", { projectId, limit }),
-    enabled: !!projectId,
+    enabled: !!projectId && shown,
     refetchInterval: 15_000,
   });
 }

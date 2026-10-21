@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Switching back to one of your last 3 projects no longer rebuilds its terminals: they stay open in the background with its files and git panes. Browser panes still reload, and hidden projects stop polling git
+
 ## [0.5.26] — 2026-10-20 — Windows and Fedora builds, Linux and Windows parity
 
 ### Added

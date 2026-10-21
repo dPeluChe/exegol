@@ -5,6 +5,8 @@ import { trpcInvoke } from "../../lib/trpc-client";
 export function useTerminalGitInfo(
   projectId: string | undefined,
   branchName: string | null | undefined,
+  /** Off while the pane's project is kept mounted but hidden: no polling there */
+  shown = true,
 ) {
   // T155 (verify session): repo-root agents have no worktree branch — show the
   // repo's current branch + dirty count instead. Query keys shared with
@@ -18,7 +20,7 @@ export function useTerminalGitInfo(
   const { data: gitStatusFiles } = useQuery({
     queryKey: ["git", "status", projectId],
     queryFn: () => trpcInvoke<Array<{ path: string }>>("diff.status", { projectId }),
-    enabled: !!projectId,
+    enabled: !!projectId && shown,
     refetchInterval: 15_000,
   });
   const { data: repoUrl } = useQuery({

@@ -10,7 +10,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useCallback, useState } from "react";
-import { useProjectContext } from "../../contexts/ProjectContext";
+import { usePaneProject } from "../../contexts/ProjectScope";
 import { setFileDragData } from "../../lib/file-drag";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { toastError, useToastStore } from "../../stores/toasts";
@@ -33,10 +33,12 @@ const filePaths = (f: FileStatus) => (f.origPath ? [f.origPath, f.path] : [f.pat
 // ─── Hooks ──────────────────────────────────────────────────────────────────
 
 function useGitStatus(projectId: string | undefined, pathOverride?: string) {
+  // A project kept mounted but hidden stops polling (refreshed when shown again)
+  const { shown } = usePaneProject();
   return useQuery({
     queryKey: ["git", "status", pathOverride || projectId],
     queryFn: () => trpcInvoke<FileStatus[]>("diff.status", { projectId, pathOverride }),
-    enabled: !!projectId,
+    enabled: !!projectId && shown,
     refetchInterval: 15_000,
   });
 }
@@ -300,7 +302,7 @@ function FileRow({
 // ─── Main GitPane ───────────────────────────────────────────────────────────
 
 export function GitPane({ overridePath }: { overridePath?: string } = {}) {
-  const { projectId } = useProjectContext();
+  const { projectId } = usePaneProject();
   const [view, setView] = useState<GitView>("changes");
 
   return (

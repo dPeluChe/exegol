@@ -1,7 +1,7 @@
 import { deriveIsolationMode, isSessionReconnecting } from "@exegol/shared";
 import { AlertCircle } from "lucide-react";
 import { type RefObject, useCallback, useEffect, useMemo, useRef } from "react";
-import { useProjectContext } from "../../contexts/ProjectContext";
+import { usePaneProject } from "../../contexts/ProjectScope";
 import { useResumeAgent } from "../../hooks/use-resume-agent";
 import { useAgent, useStopAgent } from "../../hooks/use-trpc";
 import { useSessionRecovery } from "../../lib/session-recovery";
@@ -35,13 +35,13 @@ interface TerminalPanelProps {
 
 export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) {
   // Use push-driven store for instant status updates (not 30s polling)
-  const { projectId: activeProjectId } = useProjectContext();
+  const { projectId: paneProjectId, shown } = usePaneProject();
   const { storeAgent, isolationMode, agent } = usePanelAgent(agentId);
   const { scrollAtTop, scrollAtBottom, hasNewOutput, handleScrollPosition } =
     useTerminalScrollState();
   const terminalRef = useRef<TerminalInstanceHandle>(null);
   const { sendSections, showSendTo, setShowSendTo, onSelectionChange, onTuiCopy, getSelection } =
-    useSendTo(agentId, storeAgent?.projectId ?? activeProjectId ?? undefined, terminalRef, paneId);
+    useSendTo(agentId, storeAgent?.projectId ?? paneProjectId ?? undefined, terminalRef, paneId);
   const { viewMode, setViewMode, liveSnapshot, toggleLiveView } = useLiveViewMode(terminalRef);
   const stopAgent = useStopAgent();
   const resumeAgent = useResumeAgent();
@@ -50,15 +50,15 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
   const { hasData, startTimedOut, isStopped, scrollbackContent, scrollbackLoading } =
     useTerminalLifecycle({ agentId, status: agent?.status, reconnecting });
 
-  const toolbarProjectId = agent?.projectId ?? activeProjectId ?? undefined;
-  const gitInfo = useTerminalGitInfo(toolbarProjectId, agent?.branchName);
+  const toolbarProjectId = agent?.projectId ?? paneProjectId ?? undefined;
+  const gitInfo = useTerminalGitInfo(toolbarProjectId, agent?.branchName, shown);
   const filesPeek = useFilesPeek(toolbarProjectId);
   const agentProjectId = agent?.projectId;
   const handleOpenShellHere = useOpenShellHere({
     agentId,
     paneId,
     agentProjectId,
-    activeProjectId,
+    paneProjectId,
     stopAgent,
   });
   // A browser pane beside this one: the preview chip, the repo button

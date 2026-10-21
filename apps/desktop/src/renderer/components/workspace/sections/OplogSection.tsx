@@ -11,7 +11,7 @@ import {
   Undo2,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
-import { useProjectContext } from "../../../contexts/ProjectContext";
+import { usePaneProject } from "../../../contexts/ProjectScope";
 import { useProjectOplog, useUndoOplog } from "../../../hooks/use-trpc";
 import { formatTimeAgoLong } from "../../../lib/format";
 import { ConfirmDialog, EmptyState, LoadingSpinner } from "../../common";
@@ -129,8 +129,8 @@ const OPERATION_FILTERS = [
 // ─── Main Section ───────────────────────────────────────────────────────────
 
 export function OplogSection() {
-  const { projectId } = useProjectContext();
-  const { data: entries, isLoading } = useProjectOplog(projectId);
+  const { projectId, shown } = usePaneProject();
+  const { data: entries, isLoading } = useProjectOplog(projectId, shown);
   const undoMutation = useUndoOplog();
   const [filter, setFilter] = useState<string>("all");
   const [confirmUndoId, setConfirmUndoId] = useState<string | null>(null);
@@ -235,7 +235,7 @@ export function OplogSection() {
 
       {/* Timeline */}
       {view === "snapshots" ? (
-        <OplogSnapshotTimeline projectId={projectId} />
+        <OplogSnapshotTimeline projectId={projectId} shown={shown} />
       ) : (
         <div className="flex-1 overflow-y-auto p-4">
           {filteredEntries.length === 0 ? (
