@@ -53,15 +53,16 @@ export function ConfirmDialog({
             (document.activeElement as HTMLElement | null)?.blur();
             cancelRef.current?.focus();
           }}
-          className="fixed left-1/2 top-1/2 z-50 w-full max-w-sm -translate-x-1/2 -translate-y-1/2 rounded-lg border p-6 shadow-2xl"
+          className="fixed left-1/2 top-1/2 z-50 flex max-h-[85vh] w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 -translate-y-1/2 flex-col rounded-lg border p-6 shadow-2xl"
           style={{
             background: "var(--bg-secondary)",
             borderColor: "var(--border)",
           }}
         >
-          <div className="mb-2 flex items-center justify-between">
+          <div className="mb-2 flex items-start justify-between gap-3">
             <Dialog.Title
-              className="text-base font-semibold"
+              title={title}
+              className="line-clamp-2 min-w-0 text-base font-semibold"
               style={{ color: "var(--text-primary)" }}
             >
               {title}
@@ -70,7 +71,7 @@ export function ConfirmDialog({
               <button
                 type="button"
                 aria-label="Close"
-                className="flex h-6 w-6 items-center justify-center rounded transition-colors hover:bg-white/10"
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded transition-colors hover:bg-white/10"
                 style={{ color: "var(--text-muted)" }}
               >
                 <X className="h-4 w-4" />
@@ -79,7 +80,7 @@ export function ConfirmDialog({
           </div>
 
           <Dialog.Description
-            className="mb-6 text-sm leading-relaxed"
+            className="mb-6 min-h-0 overflow-y-auto text-sm leading-relaxed"
             style={{ color: "var(--text-secondary)" }}
           >
             {description}

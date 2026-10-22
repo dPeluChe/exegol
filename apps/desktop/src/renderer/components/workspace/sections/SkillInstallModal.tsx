@@ -21,10 +21,10 @@ export function SkillInstallModal({ onClose }: { onClose: () => void }) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60">
-      <div className="w-[560px] max-h-[80vh] flex flex-col rounded-xl border border-border bg-bg-primary shadow-2xl">
+      <div className="w-[560px] max-w-[calc(100vw-2rem)] [overflow-wrap:anywhere] max-h-[80vh] flex flex-col rounded-xl border border-border bg-bg-primary shadow-2xl">
         {/* Header */}
-        <div className="flex items-center justify-between border-b border-border px-4 py-3">
-          <div className="flex items-center gap-2">
+        <div className="flex items-center justify-between gap-3 border-b border-border px-4 py-3">
+          <div className="flex min-w-0 items-center gap-2">
             <Download className="h-4 w-4 text-accent" />
             <span className="text-sm font-medium text-text-primary">Install Skills</span>
           </div>

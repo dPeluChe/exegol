@@ -40,12 +40,12 @@ export function TaskDetailModal({
       {/* biome-ignore lint/a11y/noStaticElementInteractions: modal stop propagation */}
       {/* biome-ignore lint/a11y/useKeyWithClickEvents: handled by backdrop */}
       <div
-        className="w-full max-w-md rounded-xl border border-border bg-bg-secondary p-4 shadow-2xl"
+        className="max-h-[85vh] w-[calc(100%-2rem)] max-w-md overflow-y-auto [overflow-wrap:anywhere] rounded-xl border border-border bg-bg-secondary p-4 shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="mb-3 flex items-start justify-between">
-          <div className="flex items-center gap-2">
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
             <span
               className={cn(
                 "h-2 w-2 shrink-0 rounded-full",

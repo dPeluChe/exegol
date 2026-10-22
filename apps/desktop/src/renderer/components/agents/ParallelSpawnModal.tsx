@@ -143,7 +143,7 @@ export function ParallelSpawnModal({ projectId, onClose }: ParallelSpawnModalPro
       <div className="absolute inset-0 bg-black/60" onClick={onClose} role="none" />
 
       {/* Modal */}
-      <div className="relative z-10 w-[480px] rounded-xl border border-border bg-bg-primary shadow-2xl">
+      <div className="relative z-10 max-h-[90vh] w-[480px] max-w-[calc(100vw-2rem)] overflow-y-auto [overflow-wrap:anywhere] rounded-xl border border-border bg-bg-primary shadow-2xl">
         {/* Header */}
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <div className="flex items-center gap-2">

@@ -181,7 +181,7 @@ function ShortcutsOverlay({ onClose }: { onClose: () => void }) {
   return (
     <div className="fixed inset-0 z-[200] flex items-center justify-center">
       <div className="absolute inset-0 bg-black/60" onClick={onClose} role="none" />
-      <div className="relative z-10 w-[400px] rounded-xl border border-border bg-bg-primary p-4 shadow-2xl">
+      <div className="relative z-10 max-h-[85vh] w-[400px] max-w-[calc(100vw-2rem)] overflow-y-auto [overflow-wrap:anywhere] rounded-xl border border-border bg-bg-primary p-4 shadow-2xl">
         <h2 className="mb-3 text-sm font-semibold text-text-primary">Keyboard Shortcuts</h2>
         <div className="grid grid-cols-2 gap-y-1.5 text-[11px]">
           {shortcutsWith(settings?.dictation)

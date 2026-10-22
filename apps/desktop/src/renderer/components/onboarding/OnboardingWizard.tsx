@@ -62,7 +62,7 @@ export function OnboardingWizard() {
   return (
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70">
       {/* Capped to the window: a long step scrolls inside instead of pushing its buttons off */}
-      <div className="flex max-h-[90vh] w-full max-w-lg flex-col rounded-lg border border-border bg-bg-secondary p-6 shadow-2xl">
+      <div className="flex max-h-[90vh] w-[calc(100%-2rem)] max-w-lg flex-col [overflow-wrap:anywhere] rounded-lg border border-border bg-bg-secondary p-6 shadow-2xl">
         <div className="mb-5 shrink-0">
           <div className="flex items-center justify-center gap-1.5">
             {STEPS.map(({ id }, i) => (

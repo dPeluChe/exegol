@@ -64,15 +64,15 @@ function BugReportDialog() {
     <Dialog.Portal>
       <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
       <Dialog.Content
-        className="fixed left-1/2 top-[8%] z-50 flex max-h-[84vh] w-full max-w-2xl -translate-x-1/2 flex-col gap-3 overflow-hidden rounded-xl border p-4 shadow-2xl"
+        className="fixed left-1/2 top-[8%] z-50 flex max-h-[84vh] w-[calc(100%-2rem)] max-w-2xl -translate-x-1/2 flex-col gap-3 overflow-hidden rounded-xl border p-4 shadow-2xl"
         style={{ background: "var(--bg-secondary)", borderColor: "var(--border)" }}
       >
         <div className="flex items-center gap-2">
           <Bug className="h-4 w-4 text-accent" />
-          <Dialog.Title className="text-sm font-semibold text-text-primary">
+          <Dialog.Title className="min-w-0 text-sm font-semibold text-text-primary">
             Report a bug
           </Dialog.Title>
-          <Dialog.Close className="ml-auto rounded p-1 text-text-muted hover:bg-white/10 hover:text-text-primary">
+          <Dialog.Close className="shrink-0 ml-auto rounded p-1 text-text-muted hover:bg-white/10 hover:text-text-primary">
             <X className="h-3.5 w-3.5" />
           </Dialog.Close>
         </div>

@@ -32,7 +32,7 @@ function WelcomeTourDialog() {
     >
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
-        <Dialog.Content className="fixed left-1/2 top-[15%] z-50 flex max-h-[80vh] w-full max-w-md -translate-x-1/2 flex-col gap-4 rounded-xl border border-border bg-bg-secondary p-5 shadow-2xl">
+        <Dialog.Content className="fixed left-1/2 top-[15%] z-50 flex max-h-[80vh] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 flex-col gap-4 rounded-xl border border-border bg-bg-secondary p-5 shadow-2xl">
           <div className="flex items-center justify-between">
             <p className="text-[10px] uppercase tracking-wider text-text-muted">
               Tour · {step + 1} of {WELCOME_TOUR_STEPS.length}
@@ -47,7 +47,7 @@ function WelcomeTourDialog() {
           </div>
 
           <div className="min-h-0 flex-1 overflow-y-auto">
-            <Dialog.Title className="mb-2 text-sm font-semibold text-text-primary">
+            <Dialog.Title className="min-w-0 mb-2 text-sm font-semibold text-text-primary">
               {current.title}
             </Dialog.Title>
             <Dialog.Description asChild>

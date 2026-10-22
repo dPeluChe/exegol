@@ -729,14 +729,14 @@ function RenameDialog({
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60" />
         <Dialog.Content
-          className="fixed left-1/2 top-1/3 z-50 w-full max-w-sm -translate-x-1/2 rounded-lg border p-4 shadow-2xl"
+          className="fixed left-1/2 top-1/3 z-50 w-[calc(100%-2rem)] max-w-sm max-h-[85vh] overflow-y-auto -translate-x-1/2 rounded-lg border p-4 shadow-2xl"
           style={{ background: "var(--bg-secondary)", borderColor: "var(--border)" }}
           onOpenAutoFocus={() => {
             setName(current);
             setError(null);
           }}
         >
-          <Dialog.Title className="mb-2 text-sm font-semibold text-text-primary">
+          <Dialog.Title className="min-w-0 mb-2 text-sm font-semibold text-text-primary">
             Rename {current}
           </Dialog.Title>
           <input

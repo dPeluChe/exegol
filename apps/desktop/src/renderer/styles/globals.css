@@ -216,3 +216,9 @@ body {
   transform-origin: left;
   animation: countdown-drain linear forwards;
 }
+
+/* Long unbroken text (URLs, paths, branch names) wraps inside every dialog instead of spilling out */
+[role="dialog"],
+[role="alertdialog"] {
+  overflow-wrap: anywhere;
+}

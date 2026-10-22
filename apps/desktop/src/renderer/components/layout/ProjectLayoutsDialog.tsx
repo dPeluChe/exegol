@@ -42,15 +42,15 @@ export function ProjectLayoutsDialog({
     <Dialog.Root open onOpenChange={onOpenChange}>
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/50" />
-        <Dialog.Content className="fixed left-1/2 top-[15%] z-50 flex w-full max-w-md -translate-x-1/2 flex-col gap-3 rounded-xl border border-border bg-bg-secondary p-4 shadow-2xl">
-          <div className="flex items-center justify-between">
-            <Dialog.Title className="flex items-center gap-2 text-sm font-semibold text-text-primary">
+        <Dialog.Content className="fixed left-1/2 top-[15%] z-50 flex w-[calc(100%-2rem)] max-w-md max-h-[85vh] overflow-y-auto -translate-x-1/2 flex-col gap-3 rounded-xl border border-border bg-bg-secondary p-4 shadow-2xl">
+          <div className="flex items-center justify-between gap-3">
+            <Dialog.Title className="min-w-0 flex items-center gap-2 text-sm font-semibold text-text-primary">
               <LayoutGrid className="h-4 w-4" />
               Layouts · {project.name}
             </Dialog.Title>
             <Dialog.Close
               aria-label="Close"
-              className="rounded p-1 text-text-muted hover:bg-white/10"
+              className="shrink-0 rounded p-1 text-text-muted hover:bg-white/10"
             >
               <X className="h-3.5 w-3.5" />
             </Dialog.Close>
