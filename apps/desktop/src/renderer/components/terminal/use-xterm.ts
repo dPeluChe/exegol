@@ -35,7 +35,7 @@ import {
   type TerminalInstanceProps,
 } from "./terminal-types";
 import { createWebglController, type WebglController } from "./terminal-webgl";
-import { HIDE_DEBOUNCE_MS, useTerminalVisibility } from "./use-terminal-visibility";
+import { useTerminalVisibility } from "./use-terminal-visibility";
 import { trackTerminalView, webglBudget } from "./webgl-budget";
 
 /** Sessions this renderer has mounted an owner view of: the first mount kicks an alt screen */
@@ -254,6 +254,8 @@ export function useXterm({
       next.terminal.options.fontSize = live.cardFont;
     }
     webglPendingRef.current = wantsWebgl(mirror, live.cliType);
+    // Shown once WebGL draws (the visibility effect), never as a DOM frame first
+    if (webglPendingRef.current) setConcealed(next.terminal, true);
     const refit = () => {
       if (webglPendingRef.current) return;
       if (!latest.current.sizeTerminal(next.terminal, next.fitAddon)) return;
@@ -375,26 +377,34 @@ export function useXterm({
       resizeDroppedRef.current = false;
       refitRef.current();
     }
-    if (onScreen && !webglRef.current && !useCanvas) {
-      // Same as the menu's Refresh Terminal: the resize makes a TUI redraw its screen
-      const controller = createWebglController(terminal, () =>
-        window.dispatchEvent(new CustomEvent("exegol:kick-terminal", { detail: { agentId } })),
-      );
-      controller.attach();
-      webglRef.current = controller;
-      if (webglPendingRef.current) {
+    if (onScreen && !useCanvas) {
+      let controller = webglRef.current;
+      if (!controller) {
+        controller = createWebglController(terminal, {
+          // Same as the menu's Refresh Terminal: the resize makes a TUI redraw its screen
+          onLost: () =>
+            window.dispatchEvent(new CustomEvent("exegol:kick-terminal", { detail: { agentId } })),
+          onEvicted: () => {
+            setConcealed(terminal, true);
+            webglPendingRef.current = true;
+          },
+          onAttached: () => revealAfterDraw(terminal),
+        });
+        webglRef.current = controller;
+      }
+      const result = controller.unpark();
+      if (webglPendingRef.current && result !== "reused") {
         webglPendingRef.current = false;
         refitRef.current();
       }
-    } else if (!onScreen && webglRef.current) {
-      // Debounced like the IPC hide: scrolling past must not tear down and
-      // rebuild a GL context and its glyph atlas every time
-      const timer = setTimeout(() => {
-        webglRef.current?.dispose();
-        webglRef.current = null;
-        webglPendingRef.current = !useCanvas && !webglBudget.isDomOnly();
-      }, HIDE_DEBOUNCE_MS);
-      return () => clearTimeout(timer);
+      // No slot yet: the DOM renderer shows rather than a blank pane
+      if (result === "dom") {
+        const timer = setTimeout(() => setConcealed(terminal, false), DOM_REVEAL_MS);
+        return () => clearTimeout(timer);
+      }
+    } else if (!onScreen) {
+      // At once: the context stays, it only becomes the first a shown terminal may take
+      webglRef.current?.park();
     }
   }, [session, isVisible, shown, mirror, cliType, agentId]);
 
@@ -507,6 +517,26 @@ function inActiveTab(paneId: string): boolean {
   const { tabs, activeTabId } = getProjectState();
   const tab = tabs.find((t) => t.id === activeTabId);
   return !!tab && layoutHasPane(tab.layout, paneId);
+}
+
+/** Longest a pane stays concealed waiting for WebGL: then it shows whatever renderer it has */
+const DOM_REVEAL_MS = 150;
+
+/** Hides the DOM renderer's frame (wider cells, then the glyph atlas build) while WebGL takes over */
+function setConcealed(terminal: Terminal, concealed: boolean): void {
+  if (terminal.element) terminal.element.style.opacity = concealed ? "0" : "";
+}
+
+/** Shown on the first frame the new renderer drew; xterm skips frames while off screen, hence the timer */
+function revealAfterDraw(terminal: Terminal): void {
+  const reveal = () => {
+    rendered.dispose();
+    clearTimeout(timer);
+    setConcealed(terminal, false);
+  };
+  const rendered = terminal.onRender(reveal);
+  const timer = setTimeout(reveal, DOM_REVEAL_MS);
+  terminal.refresh(0, terminal.rows - 1);
 }
 
 /** Mirrors and canvas-only CLIs never take WebGL, nor anything once the GPU fell back for good */

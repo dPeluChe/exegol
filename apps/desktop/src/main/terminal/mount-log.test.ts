@@ -55,10 +55,11 @@ describe("mount log", () => {
       reflows: 2,
       pending: 0,
       ended: "settled",
+      webgl: { reused: 3, attached: 1, evicted: 0 },
     };
     const stats = parseMountStats("project-1", sw);
     expect(stats && formatMountLine(stats)).toBe(
-      "[ProjectSwitch] project-1 mounted 5 terminals (1 in the active tab, 4 in hidden tabs), 3 already mounted, in 212ms, snapshots 3125 KB, reflows 2",
+      "[ProjectSwitch] project-1 mounted 5 terminals (1 in the active tab, 4 in hidden tabs), 3 already mounted, in 212ms, snapshots 3125 KB, reflows 2, webgl 3 reused, 1 new, 0 evicted",
     );
     const late = parseMountStats("project-1", {
       ...sw,
@@ -70,6 +71,9 @@ describe("mount log", () => {
     expect(parseMountStats("project-1", { ...sw, ended: "/Users/me" })).toBeNull();
     expect(parseMountStats("project-1", { ...sw, hiddenMounts: "4" })).toBeNull();
     expect(parseMountStats("project-1", { ...sw, keptMounts: -1 })).toBeNull();
+    expect(
+      parseMountStats("project-1", { ...sw, webgl: { ...sw.webgl, evicted: "x" } }),
+    ).toBeNull();
   });
 
   it("formats a Send to with counts only, and drops anything else", () => {

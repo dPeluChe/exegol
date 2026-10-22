@@ -56,4 +56,41 @@ describe("createWebglBudget", () => {
     budget.release();
     expect(onChange).toHaveBeenCalledTimes(3);
   });
+
+  it("at the cap evicts the oldest parked context and hands its slot over", () => {
+    const budget = createWebglBudget(2);
+    budget.acquire();
+    budget.acquire();
+    const older = vi.fn();
+    const newer = vi.fn();
+    budget.park(older);
+    budget.park(newer);
+    expect(budget.acquire()).toBe(true);
+    expect(older).toHaveBeenCalledTimes(1);
+    expect(newer).not.toHaveBeenCalled();
+    expect(budget.live()).toBe(2);
+    expect(budget.counts().evicted).toBe(1);
+  });
+
+  it("a terminal shown again leaves the parked list", () => {
+    const budget = createWebglBudget(1);
+    budget.acquire();
+    const evict = vi.fn();
+    budget.park(evict);
+    budget.unpark(evict);
+    expect(budget.acquire()).toBe(false);
+    expect(evict).not.toHaveBeenCalled();
+  });
+
+  it("parking gives the slot to a shown terminal that waited", () => {
+    const budget = createWebglBudget(1);
+    budget.acquire();
+    const waiter = vi.fn(() => budget.acquire());
+    budget.acquire(waiter);
+    const evict = vi.fn();
+    budget.park(evict);
+    expect(evict).toHaveBeenCalledTimes(1);
+    expect(waiter).toHaveBeenCalledTimes(1);
+    expect(budget.live()).toBe(1);
+  });
 });

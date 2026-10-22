@@ -38,6 +38,8 @@ export type MountStats =
       reflows: number;
       pending: number;
       ended: "settled" | "timeout" | "switched";
+      /** WebGL contexts during the switch: parked ones shown again, new ones, parked ones evicted */
+      webgl: { reused: number; attached: number; evicted: number };
     }
   /** One Send to, sent under the target's id: what reached it, never the text. `from`: the
    *  selection at pick time or the one the list opened with */

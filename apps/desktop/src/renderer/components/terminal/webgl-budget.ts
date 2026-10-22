@@ -1,6 +1,6 @@
-/** Chromium drops the oldest WebGL context past ~16 per renderer; panes, a floating
- *  terminal and the GPU's own churn must stay well under that */
-export const MAX_WEBGL_CONTEXTS = 8;
+/** Chromium drops the oldest WebGL context past 16 per renderer. Disposed addons now lose their
+ *  context at once (terminal-webgl), so 12 leaves room for churn and keeps more hidden ones parked */
+export const MAX_WEBGL_CONTEXTS = 12;
 const REPORT_DEBOUNCE_MS = 1_000;
 
 export interface WebglBudget {
@@ -14,6 +14,20 @@ export interface WebglBudget {
   live: () => number;
   /** The cap denied a context at least once */
   capped: () => boolean;
+  /** A hidden terminal keeps its context but offers the slot: at the cap the oldest parked one is
+   *  evicted (`evict` drops the addon without `release`, the slot passes on) */
+  park: (evict: () => void) => void;
+  unpark: (evict: () => void) => void;
+  /** Counted since load, read as differences by the project switch log */
+  counts: () => WebglCounts;
+  /** A context was created (`attached`) or a parked one shown again (`reused`) */
+  note: (event: "attached" | "reused") => void;
+}
+
+export interface WebglCounts {
+  attached: number;
+  reused: number;
+  evicted: number;
 }
 
 export function createWebglBudget(cap = MAX_WEBGL_CONTEXTS, onChange?: () => void): WebglBudget {
@@ -21,6 +35,16 @@ export function createWebglBudget(cap = MAX_WEBGL_CONTEXTS, onChange?: () => voi
   let domOnly = false;
   let capped = false;
   const waiters: Array<() => void> = [];
+  // Oldest first: the least recently hidden context goes first
+  const parked: Array<() => void> = [];
+  const counts: WebglCounts = { attached: 0, reused: 0, evicted: 0 };
+  const evictOldest = (): boolean => {
+    const evict = parked.shift();
+    if (!evict) return false;
+    counts.evicted++;
+    evict();
+    return true;
+  };
   return {
     acquire(onFree) {
       if (domOnly) return false;
@@ -29,6 +53,7 @@ export function createWebglBudget(cap = MAX_WEBGL_CONTEXTS, onChange?: () => voi
         onChange?.();
         return true;
       }
+      if (evictOldest()) return true;
       if (!capped) {
         capped = true;
         onChange?.();
@@ -52,6 +77,23 @@ export function createWebglBudget(cap = MAX_WEBGL_CONTEXTS, onChange?: () => voi
     isDomOnly: () => domOnly,
     live: () => live,
     capped: () => capped,
+    park(evict) {
+      if (!parked.includes(evict)) parked.push(evict);
+      // A shown terminal is drawing on the DOM renderer for want of a slot: it takes this one
+      const waiter = waiters.shift();
+      if (!waiter) return;
+      evictOldest();
+      live--;
+      waiter();
+    },
+    unpark(evict) {
+      const at = parked.indexOf(evict);
+      if (at >= 0) parked.splice(at, 1);
+    },
+    counts: () => ({ ...counts }),
+    note(event) {
+      counts[event]++;
+    },
   };
 }
 

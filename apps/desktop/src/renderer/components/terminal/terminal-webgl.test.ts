@@ -1,6 +1,8 @@
 import type { Terminal } from "@xterm/xterm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+const loseContext = vi.fn();
+
 const addonInstances: Array<{
   dispose: ReturnType<typeof vi.fn>;
   onContextLoss: ReturnType<typeof vi.fn>;
@@ -11,6 +13,7 @@ vi.mock("@xterm/addon-webgl", () => {
   class WebglAddon {
     dispose = vi.fn();
     onContextLoss = vi.fn();
+    _renderer = { _gl: { getExtension: () => ({ loseContext }) } };
     constructor() {
       const handle = {
         dispose: this.dispose,
@@ -27,6 +30,7 @@ vi.mock("@xterm/addon-webgl", () => {
 });
 
 import { createWebglController } from "./terminal-webgl";
+import { createWebglBudget } from "./webgl-budget";
 
 function makeFakeTerminal(): Terminal {
   return {
@@ -72,7 +76,7 @@ describe("createWebglController — max retries", () => {
 
   it("calls onLost on each loss, and a minute without losses restores the budget", () => {
     const onLost = vi.fn();
-    const controller = createWebglController(makeFakeTerminal(), onLost);
+    const controller = createWebglController(makeFakeTerminal(), { onLost });
     controller.attach();
     for (let i = 0; i < 3; i++) {
       addonInstances[i]?.trigger();
@@ -137,5 +141,56 @@ describe("createWebglController — rebuild after a GPU crash", () => {
     controller.dispose();
     controller.rebuild();
     expect(addonInstances).toHaveLength(1);
+  });
+});
+
+describe("createWebglController — parked while hidden", () => {
+  beforeEach(() => {
+    addonInstances.length = 0;
+  });
+
+  it("loses the GL context of an addon it disposes (xterm 0.19 keeps it alive)", () => {
+    loseContext.mockClear();
+    const controller = createWebglController(makeFakeTerminal(), {}, createWebglBudget(2));
+    controller.unpark();
+    controller.dispose();
+    expect(loseContext).toHaveBeenCalledTimes(1);
+  });
+
+  it("keeps its context while hidden and reuses it when shown", () => {
+    const budget = createWebglBudget(2);
+    const controller = createWebglController(makeFakeTerminal(), {}, budget);
+    expect(controller.unpark()).toBe("attached");
+    controller.park();
+    expect(controller.unpark()).toBe("reused");
+    expect(addonInstances).toHaveLength(1);
+    expect(addonInstances[0]?.dispose).not.toHaveBeenCalled();
+  });
+
+  it("gives its slot to a shown terminal, then takes a new context when shown again", () => {
+    const budget = createWebglBudget(1);
+    const onEvicted = vi.fn();
+    const hidden = createWebglController(makeFakeTerminal(), { onEvicted }, budget);
+    hidden.unpark();
+    hidden.park();
+    const shown = createWebglController(makeFakeTerminal(), {}, budget);
+    expect(shown.unpark()).toBe("attached");
+    expect(addonInstances[0]?.dispose).toHaveBeenCalledTimes(1);
+    expect(onEvicted).toHaveBeenCalledTimes(1);
+    shown.park();
+    expect(hidden.unpark()).toBe("attached");
+    expect(budget.live()).toBe(1);
+  });
+
+  it("a GPU rebuild while parked waits for the terminal to be shown", () => {
+    const budget = createWebglBudget(2);
+    const controller = createWebglController(makeFakeTerminal(), {}, budget);
+    controller.unpark();
+    controller.park();
+    controller.rebuild();
+    expect(addonInstances).toHaveLength(1);
+    expect(budget.live()).toBe(0);
+    expect(controller.unpark()).toBe("attached");
+    expect(addonInstances).toHaveLength(2);
   });
 });

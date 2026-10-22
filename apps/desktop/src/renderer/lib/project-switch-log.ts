@@ -1,4 +1,5 @@
 import type { MountStats } from "@exegol/shared";
+import { type WebglCounts, webglBudget } from "../components/terminal/webgl-budget";
 
 /** Past this the summary goes out with what is still pending */
 export const SWITCH_CAP_MS = 3_000;
@@ -17,10 +18,11 @@ interface SwitchDeps {
   now: () => number;
   schedule: (fn: () => void, ms: number) => () => void;
   send: (projectId: string, report: SwitchReport) => void;
+  webglCounts: () => WebglCounts;
 }
 
 /** What one project switch costs: terminals mounted per tab kind until each applied its snapshot */
-export function createSwitchTracker({ now, schedule, send }: SwitchDeps) {
+export function createSwitchTracker({ now, schedule, send, webglCounts }: SwitchDeps) {
   let open: {
     projectId: string;
     startedAt: number;
@@ -31,6 +33,7 @@ export function createSwitchTracker({ now, schedule, send }: SwitchDeps) {
     bytes: number;
     reflows: number;
     lastAt: number;
+    webglAtStart: WebglCounts;
     cancelTimers: () => void;
   } | null = null;
 
@@ -40,6 +43,7 @@ export function createSwitchTracker({ now, schedule, send }: SwitchDeps) {
     open = null;
     s.cancelTimers();
     const end = ended === "settled" ? s.lastAt : now();
+    const gl = webglCounts();
     send(s.projectId, {
       kind: "switch",
       keptMounts: s.kept,
@@ -50,6 +54,11 @@ export function createSwitchTracker({ now, schedule, send }: SwitchDeps) {
       reflows: s.reflows,
       pending: s.pending,
       ended,
+      webgl: {
+        reused: gl.reused - s.webglAtStart.reused,
+        attached: gl.attached - s.webglAtStart.attached,
+        evicted: gl.evicted - s.webglAtStart.evicted,
+      },
     });
   };
 
@@ -74,6 +83,7 @@ export function createSwitchTracker({ now, schedule, send }: SwitchDeps) {
         bytes: 0,
         reflows: 0,
         lastAt: startedAt,
+        webglAtStart: webglCounts(),
         cancelTimers: () => {
           stopCap();
           stopIdle();
@@ -114,6 +124,7 @@ const tracker = createSwitchTracker({
   send: (projectId, report) => {
     if (typeof window !== "undefined") window.api?.terminal?.mountLog?.(projectId, report);
   },
+  webglCounts: () => webglBudget.counts(),
 });
 
 export const projectSwitchStarted = tracker.start;

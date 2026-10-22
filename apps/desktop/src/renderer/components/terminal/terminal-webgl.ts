@@ -17,7 +17,14 @@ export interface WebglController {
   rebuild: () => void;
   /** Whether WebGL ultimately failed and we're on the DOM renderer. */
   hasFallenBack: () => boolean;
+  /** Off screen: the context stays (no DOM frame and atlas rebuild on return) until a shown
+   *  terminal needs its slot */
+  park: () => void;
+  /** Back on screen: `reused` drew at once, `attached` is a new context, `dom` waits for a slot */
+  unpark: () => WebglReturn;
 }
+
+export type WebglReturn = "reused" | "attached" | "dom";
 
 /**
  * Attach the WebGL addon to a terminal with context-loss recovery.
@@ -28,9 +35,31 @@ export interface WebglController {
  * owner kick the PTY: a TUI stayed blank after a GPU crash until it was resized.
  * Only `onContextLoss`: a second DOM listener on the same canvas double-fires per loss.
  */
+/**
+ * xterm 0.19's dispose removes the canvas but keeps its GL context, which still counts toward
+ * Chromium's cap until garbage collected (xtermjs/xterm.js#6068): lose it on purpose.
+ */
+function disposeAddon(addon: WebglAddon): void {
+  const gl = (addon as unknown as { _renderer?: { _gl?: WebGL2RenderingContext } })._renderer?._gl;
+  addon.dispose();
+  try {
+    gl?.getExtension("WEBGL_lose_context")?.loseContext();
+  } catch {
+    /* already lost */
+  }
+}
+
+export interface WebglHooks {
+  onLost?: () => void;
+  /** A shown terminal took this parked one's slot: it now draws on the DOM renderer */
+  onEvicted?: () => void;
+  /** A context attached; xterm draws with it on the next frame */
+  onAttached?: () => void;
+}
+
 export function createWebglController(
   terminal: Terminal,
-  onLost?: () => void,
+  { onLost, onEvicted, onAttached }: WebglHooks = {},
   budget: WebglBudget = webglBudget,
 ): WebglController {
   let addon: WebglAddon | null = null;
@@ -39,6 +68,7 @@ export function createWebglController(
   let lastLossAt = 0;
   let fellBack = false;
   let disposed = false;
+  let parked = false;
 
   function clearScheduled(): void {
     if (scheduledTimer) {
@@ -49,7 +79,7 @@ export function createWebglController(
 
   function dropAddon(): void {
     if (!addon) return;
-    addon.dispose();
+    disposeAddon(addon);
     addon = null;
     budget.release();
   }
@@ -57,8 +87,16 @@ export function createWebglController(
   // Denied at the cap: this terminal draws on the DOM renderer until a slot frees
   const attachWhenFree = () => attach();
 
+  // The slot passes to a shown terminal, so no release
+  const evict = () => {
+    if (addon) disposeAddon(addon);
+    addon = null;
+    onEvicted?.();
+  };
+
   function onContextLost(): void {
     if (disposed) return;
+    budget.unpark(evict);
     dropAddon();
     onLost?.();
     const now = Date.now();
@@ -84,13 +122,16 @@ export function createWebglController(
   }
 
   function attach(): void {
-    if (disposed || fellBack || addon) return;
+    // Parked: the new context waits until the terminal is shown again
+    if (disposed || fellBack || addon || parked) return;
     if (!budget.acquire(attachWhenFree)) return;
     try {
       const webgl = new WebglAddon();
       webgl.onContextLoss(() => onContextLost());
       terminal.loadAddon(webgl);
       addon = webgl;
+      budget.note("attached");
+      onAttached?.();
     } catch {
       // WebGL unavailable on this device: xterm keeps the DOM renderer
       fellBack = true;
@@ -101,6 +142,7 @@ export function createWebglController(
   function detach(): void {
     clearScheduled();
     budget.cancelWait(attachWhenFree);
+    budget.unpark(evict);
     dropAddon();
   }
 
@@ -110,7 +152,27 @@ export function createWebglController(
     retries = 0;
     lastLossAt = 0;
     fellBack = false;
+    // A parked terminal takes its new context when it is shown again
+    if (parked) onEvicted?.();
+    else attach();
+  }
+
+  function park(): void {
+    if (disposed || parked) return;
+    parked = true;
+    if (addon) budget.park(evict);
+    else budget.cancelWait(attachWhenFree);
+  }
+
+  function unpark(): WebglReturn {
+    parked = false;
+    budget.unpark(evict);
+    if (addon) {
+      budget.note("reused");
+      return "reused";
+    }
     attach();
+    return addon ? "attached" : "dom";
   }
 
   function dispose(): void {
@@ -124,5 +186,7 @@ export function createWebglController(
     dispose,
     rebuild,
     hasFallenBack: () => fellBack,
+    park,
+    unpark,
   };
 }
