@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
+- Fewer database writes while agents run (a status or step that did not change is not written, a step at most once a second), lighter agent reads, and faster agent and project deletes
 - Fewer re-renders with many agents: a status update redraws only what shows that agent instead of the whole window, the 30 s agent poll redraws nothing when nothing changed, and Send to menus are built only while open
 - Smaller app: it no longer ships packages only the interface uses, source maps, type definitions or non-English Electron locales (unpacked macOS app about 490 MB to 306 MB)
 

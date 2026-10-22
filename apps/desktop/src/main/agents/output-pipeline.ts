@@ -2,6 +2,7 @@ import { createOutputProcessor } from "./agent-output-processor";
 import type { SessionMaps } from "./agent-session-callbacks";
 import { getProviderRegistry } from "./registry";
 import { type AgentContext, broadcastAgentStatus } from "./spawn-env";
+import { forgetAgentStatusWrites } from "./status-writes";
 import { createTitleStatusTracker } from "./title-status";
 
 /** CLIs that report their state in the terminal title (T56) */
@@ -38,6 +39,7 @@ export function attachOutputPipeline(maps: SessionMaps, agent: AgentContext): vo
 }
 
 export function detachOutputPipeline(maps: SessionMaps, agentId: string): void {
+  forgetAgentStatusWrites(agentId);
   maps.outputProcessors.delete(agentId);
   maps.titleTrackers.delete(agentId);
   maps.scrollbackBuffers.delete(agentId);

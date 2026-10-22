@@ -2,6 +2,7 @@ import {
   type Agent,
   type AgentCreate,
   type AgentStatus,
+  agentRowSchema,
   type HistoryEntry,
   LIVE_STATUSES,
 } from "@exegol/shared";
@@ -15,15 +16,24 @@ import { mapAgentRow, nanoid } from "./helpers";
 
 type ActiveAgent = Agent & { projectName: string; groupColor: string | null };
 
+/** Placeholders for `...LIVE_STATUSES` in an `IN (...)` */
+export const liveIn = () => [...LIVE_STATUSES].map(() => "?").join(",");
+
+/** What `mapAgentRow` reads, over `agents a` + `worktrees w`. Never final_output: up to 16 KB per
+ *  row that only `getAgentFinalOutput` needs */
+export const AGENT_COLUMNS = Object.keys(agentRowSchema.shape)
+  .map((c) => (c === "branch_name" ? "w.branch_name" : `a.${c}`))
+  .join(", ");
+const AGENT_FROM = "FROM agents a LEFT JOIN worktrees w ON w.id = a.worktree_id";
+
 /** T156: every non-terminal agent across ALL projects, with project name +
  *  group color — the renderer store only knows projects opened this session. */
 export function listActiveAgents(db: Database.Database): ActiveAgent[] {
   const statuses = [...LIVE_STATUSES];
   const rows = db
     .prepare(
-      `SELECT a.*, w.branch_name, p.name as project_name, g.color as group_color
-       FROM agents a
-       LEFT JOIN worktrees w ON w.id = a.worktree_id
+      `SELECT ${AGENT_COLUMNS}, p.name as project_name, g.color as group_color
+       ${AGENT_FROM}
        JOIN projects p ON p.id = a.project_id
        LEFT JOIN project_groups g ON g.id = p.group_id
        WHERE a.status IN (${statuses.map(() => "?").join(",")})
@@ -40,9 +50,8 @@ export function listActiveAgents(db: Database.Database): ActiveAgent[] {
 export function listAgents(db: Database.Database, projectId: string): Agent[] {
   const rows = db
     .prepare(
-      `SELECT a.*, w.branch_name
-       FROM agents a
-       LEFT JOIN worktrees w ON w.id = a.worktree_id
+      `SELECT ${AGENT_COLUMNS}
+       ${AGENT_FROM}
        WHERE a.project_id = ? AND a.archived_at IS NULL
        ORDER BY a.started_at DESC`,
     )
@@ -176,6 +185,21 @@ export function setAgentSuspended(db: Database.Database, id: string, at: number 
   db.prepare("UPDATE agents SET suspended_at = ? WHERE id = ?").run(at, id);
 }
 
+/** Stopped and suspended in one statement: the pane shows Resume, not the crash */
+export function suspendStoppedAgents(
+  db: Database.Database,
+  ids: readonly string[],
+  step: string,
+  at: number,
+  onlyStatus?: AgentStatus,
+): void {
+  if (ids.length === 0) return;
+  db.prepare(
+    `UPDATE agents SET suspended_at = ?, status = 'stopped', current_step = ?
+     WHERE id IN (${ids.map(() => "?").join(",")})${onlyStatus ? " AND status = ?" : ""}`,
+  ).run(at, step, ...ids, ...(onlyStatus ? [onlyStatus] : []));
+}
+
 /** Muted or suspended: it must not ask for attention */
 export function isAgentQuiet(db: Database.Database, id: string): boolean {
   try {
@@ -217,9 +241,8 @@ export function findLiveAgentsByAlias(db: Database.Database, alias: string): Age
   const statuses = [...LIVE_STATUSES];
   const rows = db
     .prepare(
-      `SELECT a.*, w.branch_name
-       FROM agents a
-       LEFT JOIN worktrees w ON w.id = a.worktree_id
+      `SELECT ${AGENT_COLUMNS}
+       ${AGENT_FROM}
        WHERE LOWER(a.alias) = LOWER(?)
          AND a.status IN (${statuses.map(() => "?").join(",")})`,
     )
@@ -230,9 +253,8 @@ export function findLiveAgentsByAlias(db: Database.Database, alias: string): Age
 export function getAgent(db: Database.Database, id: string): Agent | null {
   const row = db
     .prepare(
-      `SELECT a.*, w.branch_name
-       FROM agents a
-       LEFT JOIN worktrees w ON w.id = a.worktree_id
+      `SELECT ${AGENT_COLUMNS}
+       ${AGENT_FROM}
        WHERE a.id = ?`,
     )
     .get(id);
@@ -242,7 +264,9 @@ export function getAgent(db: Database.Database, id: string): Agent | null {
 export function listAgentsByIds(db: Database.Database, ids: string[]): Agent[] {
   if (ids.length === 0) return [];
   const rows = db
-    .prepare(`SELECT * FROM agents WHERE id IN (${ids.map(() => "?").join(",")})`)
+    .prepare(
+      `SELECT ${AGENT_COLUMNS} ${AGENT_FROM} WHERE a.id IN (${ids.map(() => "?").join(",")})`,
+    )
     .all(...ids);
   return (rows as Record<string, unknown>[]).map(mapAgentRow);
 }
@@ -287,21 +311,53 @@ export function createAgent(db: Database.Database, data: AgentCreate): Agent {
   return getAgent(db, id)!;
 }
 
+const statusStatements = new WeakMap<
+  Database.Database,
+  { status: Database.Statement; statusStep: Database.Statement; stepIf: Database.Statement }
+>();
+
+function statusStatementsFor(db: Database.Database) {
+  let s = statusStatements.get(db);
+  if (!s) {
+    s = {
+      status: db.prepare("UPDATE agents SET status = ? WHERE id = ? AND status IS NOT ?"),
+      statusStep: db.prepare(
+        `UPDATE agents SET status = ?, current_step = ?
+         WHERE id = ? AND (status IS NOT ? OR current_step IS NOT ?)`,
+      ),
+      stepIf: db.prepare(
+        "UPDATE agents SET current_step = ? WHERE id = ? AND status = ? AND current_step IS NOT ?",
+      ),
+    };
+    statusStatements.set(db, s);
+  }
+  return s;
+}
+
+/** An unchanged pair writes nothing (status_changed_at moves only on a new status). True if written */
 export function updateAgentStatus(
   db: Database.Database,
   id: string,
   status: AgentStatus,
   currentStep?: string,
-): void {
-  if (currentStep !== undefined) {
-    db.prepare("UPDATE agents SET status = ?, current_step = ? WHERE id = ?").run(
-      status,
-      currentStep,
-      id,
-    );
-  } else {
-    db.prepare("UPDATE agents SET status = ? WHERE id = ?").run(status, id);
-  }
+): boolean {
+  const s = statusStatementsFor(db);
+  const info =
+    currentStep !== undefined
+      ? s.statusStep.run(status, currentStep, id, status, currentStep)
+      : s.status.run(status, id, status);
+  return Number(info.changes ?? 0) > 0;
+}
+
+/** The step only while the row still holds `status`: a late write never undoes another writer's */
+export function updateAgentStepIfStatus(
+  db: Database.Database,
+  id: string,
+  status: AgentStatus,
+  currentStep: string,
+): boolean {
+  const info = statusStatementsFor(db).stepIf.run(currentStep, id, status, currentStep);
+  return Number(info.changes ?? 0) > 0;
 }
 
 export function stopAgent(
@@ -436,12 +492,15 @@ export function recoverStaleAgents(
     logger.info(
       `[Recovery] ${agent.id} (${agent.cli_type}, status=${agent.status}, pid=${agent.pid ?? "null"}): crashed, ${reason}`,
     );
-    db.prepare(
-      "UPDATE agents SET status = 'crashed', stopped_at = ?, current_step = 'Session interrupted — app exited unexpectedly', pid = NULL WHERE id = ?",
-    ).run(now, agent.id);
     crashed++;
     crashedIds.push(agent.id);
     lastActive.set(agent.id, lastActiveOf(agent));
+  }
+  if (crashedIds.length > 0) {
+    db.prepare(
+      `UPDATE agents SET status = 'crashed', stopped_at = ?, current_step = 'Session interrupted — app exited unexpectedly', pid = NULL
+       WHERE id IN (${crashedIds.map(() => "?").join(",")})`,
+    ).run(now, ...crashedIds);
   }
 
   return { crashed, alive, crashedIds, reasons, lastActive };
@@ -450,14 +509,13 @@ export function recoverStaleAgents(
 /** T176: hide an ended session from the dashboard. Live agents are refused —
  *  archiving one would make a running session invisible. */
 export function archiveAgent(db: Database.Database, id: string): boolean {
-  const statuses = [...LIVE_STATUSES];
   const info = db
     .prepare(
       `UPDATE agents SET archived_at = unixepoch()
        WHERE id = ? AND archived_at IS NULL
-         AND status NOT IN (${statuses.map(() => "?").join(",")})`,
+         AND status NOT IN (${liveIn()})`,
     )
-    .run(id, ...statuses);
+    .run(id, ...LIVE_STATUSES);
   return Number(info.changes ?? 0) > 0;
 }
 
@@ -606,8 +664,6 @@ export function getAgentFinalOutput(db: Database.Database, id: string): string |
   return row?.final_output ?? null;
 }
 
-const liveIn = () => [...LIVE_STATUSES].map(() => "?").join(",");
-
 export function countLiveAgentsInWorktree(
   db: Database.Database,
   worktreeId: string,
@@ -640,6 +696,16 @@ export function listLiveAgentIds(db: Database.Database, projectId: string): stri
     .prepare(`SELECT id FROM agents WHERE project_id = ? AND status IN (${liveIn()})`)
     .all(projectId, ...LIVE_STATUSES) as { id: string }[];
   return rows.map((r) => r.id);
+}
+
+/** Live non-shell sessions and their CLI, for the MCP status map */
+export function listLiveAgentClis(db: Database.Database): { id: string; cliType: string }[] {
+  return db
+    .prepare(
+      `SELECT id, cli_type AS cliType FROM agents
+       WHERE cli_type != 'shell' AND status IN (${liveIn()})`,
+    )
+    .all(...LIVE_STATUSES) as { id: string; cliType: string }[];
 }
 
 export interface LiveAgentPid {
