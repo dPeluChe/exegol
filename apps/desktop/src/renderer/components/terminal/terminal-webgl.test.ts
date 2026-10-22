@@ -36,15 +36,32 @@ vi.mock("@xterm/addon-webgl", () => {
 import { createWebglController, webglCounts } from "./terminal-webgl";
 import { createWebglBudget } from "./webgl-budget";
 
+beforeEach(() => {
+  addonInstances.length = 0;
+  vi.useFakeTimers();
+  vi.stubGlobal("requestAnimationFrame", (cb: () => void) => setTimeout(cb, 16));
+  vi.stubGlobal("cancelAnimationFrame", (id: ReturnType<typeof setTimeout>) => clearTimeout(id));
+});
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
+
 function makeFakeTerminal() {
   const renders: Array<() => void> = [];
   const element = { style: { opacity: "" } };
   const terminal = {
     loadAddon: vi.fn(),
     element,
+    // Like xterm's emitter: a disposed listener never fires again
     onRender: vi.fn((cb: () => void) => {
       renders.push(cb);
-      return { dispose: vi.fn() };
+      return {
+        dispose: () => {
+          const at = renders.indexOf(cb);
+          if (at >= 0) renders.splice(at, 1);
+        },
+      };
     }),
   } as unknown as Terminal;
   return Object.assign(terminal, { renders, fakeElement: element });
@@ -58,14 +75,6 @@ function shownController(...args: Parameters<typeof createWebglController>) {
 }
 
 describe("createWebglController — max retries", () => {
-  beforeEach(() => {
-    addonInstances.length = 0;
-    vi.useFakeTimers();
-  });
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
   it("retries with backoff (250ms, 1s, 3s), then stays on the DOM renderer", () => {
     const controller = shownController(makeFakeTerminal());
 
@@ -124,14 +133,6 @@ describe("createWebglController — max retries", () => {
 });
 
 describe("createWebglController — rebuild after a GPU crash", () => {
-  beforeEach(() => {
-    addonInstances.length = 0;
-    vi.useFakeTimers();
-  });
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
   it("swaps in a fresh addon and gives WebGL back to a terminal that fell back", () => {
     const controller = shownController(makeFakeTerminal());
     for (let i = 0; i < 4; i++) {
@@ -162,14 +163,6 @@ describe("createWebglController — rebuild after a GPU crash", () => {
 });
 
 describe("createWebglController — parked while hidden", () => {
-  beforeEach(() => {
-    addonInstances.length = 0;
-    vi.useFakeTimers();
-  });
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
   it("loses the GL context of an addon it disposes (xterm 0.19 keeps it alive)", () => {
     loseContext.mockClear();
     const controller = shownController(makeFakeTerminal(), {}, createWebglBudget(2));
@@ -178,7 +171,6 @@ describe("createWebglController — parked while hidden", () => {
   });
 
   it("starts concealed and pending, shows one frame after WebGL's first render", () => {
-    vi.stubGlobal("requestAnimationFrame", (cb: () => void) => setTimeout(cb, 16));
     const terminal = makeFakeTerminal();
     const onRendererChanged = vi.fn();
     const controller = createWebglController(terminal, { onRendererChanged }, createWebglBudget(2));
@@ -191,7 +183,6 @@ describe("createWebglController — parked while hidden", () => {
     expect(terminal.fakeElement.style.opacity).toBe("0");
     vi.advanceTimersByTime(20);
     expect(terminal.fakeElement.style.opacity).toBe("");
-    vi.unstubAllGlobals();
   });
 
   it("with no slot shows the DOM renderer after the reveal cap", () => {
@@ -223,7 +214,6 @@ describe("createWebglController — parked while hidden", () => {
   });
 
   it("a context hidden before it drew stays concealed until it draws", () => {
-    vi.stubGlobal("requestAnimationFrame", (cb: () => void) => setTimeout(cb, 16));
     const terminal = makeFakeTerminal();
     const controller = createWebglController(terminal, {}, createWebglBudget(2));
     controller.unpark();
@@ -233,7 +223,6 @@ describe("createWebglController — parked while hidden", () => {
     terminal.renders.at(-1)?.();
     vi.advanceTimersByTime(20);
     expect(terminal.fakeElement.style.opacity).toBe("");
-    vi.unstubAllGlobals();
   });
 
   it("in DOM-only mode a concealed terminal shows at once", () => {
@@ -306,16 +295,6 @@ function rng(seed: number) {
 }
 
 describe("createWebglController — random sequences keep the invariants", () => {
-  beforeEach(() => {
-    addonInstances.length = 0;
-    vi.useFakeTimers();
-    vi.stubGlobal("requestAnimationFrame", (cb: () => void) => setTimeout(cb, 16));
-  });
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    vi.useRealTimers();
-  });
-
   it.each(Array.from({ length: 200 }, (_, i) => i + 1))("seed %i", (seed) => {
     const rand = rng(seed);
     const pick = <T>(xs: T[]): T => xs[Math.floor(rand() * xs.length)] as T;
@@ -328,21 +307,23 @@ describe("createWebglController — random sequences keep the invariants", () =>
       disposed: boolean;
     };
     const views: View[] = [];
+    const owner = new Map<object, View>();
     const mount = () => {
       const terminal = makeFakeTerminal();
-      views.push({
+      const view: View = {
         terminal,
         controller: createWebglController(terminal, {}, budget),
         shown: false,
         disposed: false,
+      };
+      (terminal.loadAddon as ReturnType<typeof vi.fn>).mockImplementation((a: object) => {
+        owner.set(a, view);
       });
+      views.push(view);
     };
     for (let i = 0; i < 5; i++) mount();
     const live = () => addonInstances.filter((a) => a.dispose.mock.calls.length === 0);
-    const holder = (addon: object) =>
-      views.find((v) =>
-        (v.terminal.loadAddon as ReturnType<typeof vi.fn>).mock.calls.some((c) => c[0] === addon),
-      );
+    const holder = (addon: object) => owner.get(addon);
 
     const check = (step: string) => {
       const alive = live();
@@ -391,7 +372,7 @@ describe("createWebglController — random sequences keep the invariants", () =>
         // Rare, as in the app (three GPU crashes)
         if (rand() < 0.1) budget.setDomOnly();
       } else if (op === "render") {
-        for (const cb of v.terminal.renders.splice(0)) cb();
+        for (const cb of v.terminal.renders.slice()) cb();
       } else {
         v.controller.dispose();
         v.disposed = true;
@@ -401,9 +382,9 @@ describe("createWebglController — random sequences keep the invariants", () =>
     }
 
     // Settled: no shown terminal stays concealed once renders ran and the caps passed
-    for (const v of views) for (const cb of v.terminal.renders.splice(0)) cb();
+    for (const v of views) for (const cb of v.terminal.renders.slice()) cb();
     vi.advanceTimersByTime(10_000);
-    for (const v of views) for (const cb of v.terminal.renders.splice(0)) cb();
+    for (const v of views) for (const cb of v.terminal.renders.slice()) cb();
     vi.advanceTimersByTime(200);
     check(`seed ${seed} settled`);
     for (const v of views) {
