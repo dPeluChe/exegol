@@ -10,6 +10,7 @@ import { findOnPath } from "../agents/spawn-env";
 import { childEnv } from "../lib/child-env";
 import { execFileAsync } from "../lib/exec-file";
 import { logger } from "../lib/logger";
+import { launchFor } from "../lib/win-launch";
 
 const IGNORED_DIRS = new Set([
   "node_modules",
@@ -26,12 +27,26 @@ const IGNORED_DIRS = new Set([
 /** 32k tokens fits a prompt. A trs without `ingest` fails and falls back */
 const TRS_INGEST_ARGS = ["ingest", "--print", "--budget", "32k"];
 
+let missingLogged = false;
+
 async function generateDigestViaTrs(projectPath: string): Promise<string | null> {
   const trs = findOnPath("trs");
-  if (!trs) return null;
+  if (!trs) {
+    if (!missingLogged) logger.info("[Knowledge] trs not on PATH, using the internal digest");
+    missingLogged = true;
+    return null;
+  }
+  // npm installs trs.cmd on Windows, which execFile cannot start alone
+  const { command, args, verbatim } = launchFor(
+    [trs, ...TRS_INGEST_ARGS, projectPath],
+    process.platform,
+    process.env.ComSpec,
+  );
   try {
     // stderr carries notices (not a git repository, size), never the digest
-    const { stdout } = await execFileAsync(trs, [...TRS_INGEST_ARGS, projectPath], {
+    const { stdout } = await execFileAsync(command, args, {
+      windowsVerbatimArguments: verbatim,
+      windowsHide: true,
       env: childEnv(),
       timeout: 30_000,
       maxBuffer: 2 * 1024 * 1024,

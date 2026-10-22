@@ -30,6 +30,22 @@ describe("computeDigest via trs ingest", () => {
     );
   });
 
+  it("starts an npm trs.cmd through cmd.exe on Windows", async () => {
+    const platform = Object.getOwnPropertyDescriptor(process, "platform") as PropertyDescriptor;
+    Object.defineProperty(process, "platform", { value: "win32" });
+    try {
+      trs.path = "C:\\npm\\trs.cmd";
+      trs.run.mockResolvedValue({ stdout: "# proj", stderr: "" });
+      expect(await computeDigest("C:\\p")).toBe("# proj");
+      const [command, args, opts] = trs.run.mock.calls[0] ?? [];
+      expect(command).toMatch(/cmd\.exe$/i);
+      expect(args.at(-1)).toContain("ingest");
+      expect(opts.windowsVerbatimArguments).toBe(true);
+    } finally {
+      Object.defineProperty(process, "platform", platform);
+    }
+  });
+
   it("falls back to the internal summary when trs fails or prints nothing", async () => {
     const projectPath = mkdtempSync(join(tmpdir(), "exegol-digest-test-"));
     trs.path = "/bin/trs";
