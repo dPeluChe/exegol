@@ -9,6 +9,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.27] — 2026-10-21 — Terminals keep their place, Add Project checks the folder, trs digest
+
 ### Changed
 - Switching back to one of your last 3 projects no longer rebuilds its terminals: they stay open in the background with its files and git panes. Browser panes still reload, and hidden projects stop polling git
 - Add Project checks the folder before you submit: one already in Exegol shows its name and a Go to project button (no more database error), a folder with no git repo can be initialized and added in one click, and a folder inside another repo offers to use that repo's root instead
