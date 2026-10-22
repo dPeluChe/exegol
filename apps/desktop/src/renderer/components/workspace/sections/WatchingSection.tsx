@@ -9,7 +9,16 @@ import {
   PinOff,
   X,
 } from "lucide-react";
-import { type DragEvent, useRef, useState } from "react";
+import {
+  type Dispatch,
+  type DragEvent,
+  memo,
+  type SetStateAction,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { useShallow } from "zustand/react/shallow";
 import { rememberMirrorFocus } from "../../../lib/pane-focus";
 import { type AgentState, useAgentStore } from "../../../stores/agents";
 import {
@@ -43,6 +52,33 @@ interface DragProps {
   onDrop: (e: DragEvent) => void;
 }
 
+type SetDragOver = Dispatch<SetStateAction<string | null>>;
+
+function dragPropsFor(
+  id: string,
+  setDragOver: SetDragOver,
+  moveWatched: (from: string, to: string) => void,
+): DragProps {
+  return {
+    draggable: true,
+    onDragStart: (e) => {
+      e.dataTransfer.setData(DRAG_TYPE, id);
+      e.dataTransfer.effectAllowed = "move";
+    },
+    onDragOver: (e) => {
+      if (!e.dataTransfer.types.includes(DRAG_TYPE)) return;
+      e.preventDefault();
+      setDragOver(id);
+    },
+    onDragLeave: () => setDragOver((cur) => (cur === id ? null : cur)),
+    onDrop: (e) => {
+      const moved = e.dataTransfer.getData(DRAG_TYPE);
+      setDragOver(null);
+      if (moved) moveWatched(moved, id);
+    },
+  };
+}
+
 /**
  * T194: sessions pinned from any project, each with an interactive mirror of its
  * terminal. The mirror types into the session but the pane that owns it keeps
@@ -52,7 +88,7 @@ interface DragProps {
  * in its row as a thin vertical strip. Order is the user's (drag strips or card
  * headers); a session that needs input opens itself in place.
  */
-export function WatchingSection({
+export const WatchingSection = memo(function WatchingSection({
   projectMeta,
   onOpenAgent,
 }: {
@@ -64,12 +100,17 @@ export function WatchingSection({
   const columns = useWatchStore((s) => s.columns);
   const setColumns = useWatchStore((s) => s.setColumns);
   const moveWatched = useWatchStore((s) => s.moveWatched);
-  const agents = useAgentStore((s) => s.agents);
-  const attentionItems = useAgentStore((s) => s.attentionItems);
+  // Only the watched sessions: a push for any other agent leaves the section alone
+  const agents = useAgentStore(
+    useShallow((s) => Object.fromEntries(watched.map((id) => [id, s.agents[id]]))),
+  );
+  const unreadIds = useAgentStore(
+    useShallow((s) => watched.filter((id) => s.attentionItems[id]?.read === false)),
+  );
   const gone = useWatchStore((s) => s.gone);
   const [dragOver, setDragOver] = useState<string | null>(null);
 
-  const needsInput = (id: string) => !!attentionItems[id] && !attentionItems[id]?.read;
+  const needsInput = (id: string) => unreadIds.includes(id);
   // A question opens a mirror on its own, but the open cap holds for it too
   const openIds = new Set(
     watched
@@ -97,24 +138,7 @@ export function WatchingSection({
   }
   if (row.length) rows.push(row);
 
-  const dragProps = (id: string): DragProps => ({
-    draggable: true,
-    onDragStart: (e) => {
-      e.dataTransfer.setData(DRAG_TYPE, id);
-      e.dataTransfer.effectAllowed = "move";
-    },
-    onDragOver: (e) => {
-      if (!e.dataTransfer.types.includes(DRAG_TYPE)) return;
-      e.preventDefault();
-      setDragOver(id);
-    },
-    onDragLeave: () => setDragOver((cur) => (cur === id ? null : cur)),
-    onDrop: (e) => {
-      const moved = e.dataTransfer.getData(DRAG_TYPE);
-      setDragOver(null);
-      if (moved) moveWatched(moved, id);
-    },
-  });
+  const dragProps = (id: string) => dragPropsFor(id, setDragOver, moveWatched);
 
   return (
     <section className="space-y-2">
@@ -145,7 +169,6 @@ export function WatchingSection({
               needsInput: needsInput(id),
               project: agent ? projectMeta.get(agent.projectId) : undefined,
               dropTarget: dragOver === id,
-              dragProps: dragProps(id),
             };
             const goneInfo = gone[id];
             if (openIds.has(id) && !agent && goneInfo) {
@@ -155,19 +178,27 @@ export function WatchingSection({
                   gone={goneInfo}
                   agentId={id}
                   height={FULL_HEIGHT}
-                  dragProps={common.dragProps}
+                  dragProps={dragProps(id)}
                   dropTarget={common.dropTarget}
                 />
               );
             }
             return openIds.has(id) && agent ? (
-              <WatchCard key={id} agent={agent} onOpenAgent={onOpenAgent} {...common} />
+              <WatchCard
+                key={id}
+                agent={agent}
+                onOpenAgent={onOpenAgent}
+                {...common}
+                setDragOver={setDragOver}
+                moveWatched={moveWatched}
+              />
             ) : (
               <CollapsedStrip
                 key={id}
                 agentId={id}
                 agent={agent}
                 onOpenAgent={onOpenAgent}
+                dragProps={dragProps(id)}
                 {...common}
               />
             );
@@ -179,7 +210,7 @@ export function WatchingSection({
       </div>
     </section>
   );
-}
+});
 
 function CollapsedStrip({
   agentId,
@@ -258,21 +289,28 @@ function CollapsedStrip({
   );
 }
 
-function WatchCard({
+// Memo: an open card holds a live mirror; only its own agent's changes should re-render it
+const WatchCard = memo(function WatchCard({
   agent,
   needsInput,
   project,
   onOpenAgent,
   dropTarget,
-  dragProps,
+  setDragOver,
+  moveWatched,
 }: {
   agent: AgentState;
   needsInput: boolean;
   project: ProjectMeta | undefined;
   onOpenAgent: (agent: AgentState) => void;
   dropTarget: boolean;
-  dragProps: DragProps;
+  setDragOver: SetDragOver;
+  moveWatched: (from: string, to: string) => void;
 }) {
+  const dragProps = useMemo(
+    () => dragPropsFor(agent.id, setDragOver, moveWatched),
+    [agent.id, setDragOver, moveWatched],
+  );
   const openedByUser = useWatchStore((s) => s.open.includes(agent.id));
   const toggleOpen = useWatchStore((s) => s.toggleOpen);
   const toggleWatch = useWatchStore((s) => s.toggleWatch);
@@ -389,7 +427,7 @@ function WatchCard({
       </div>
     </WatchCardMenu>
   );
-}
+});
 
 /**
  * A-/A+ and "fit session to card": a plain mirror shows the owner pane's grid

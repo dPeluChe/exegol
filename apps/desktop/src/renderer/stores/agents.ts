@@ -11,6 +11,7 @@ import {
 import type { QueryClient } from "@tanstack/react-query";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { useShallow } from "zustand/react/shallow";
 import { shallow } from "zustand/shallow";
 import { MCP_STATUS_KEY } from "../components/common/McpStatusIndicator";
 import { nextActivitySince } from "../lib/busy-time";
@@ -330,6 +331,10 @@ export function syncedStatus(current: AgentStatus, listed: AgentStatus): AgentSt
   return ENDED_STATUSES.has(current) && LIVE_STATUSES.has(listed) ? current : listed;
 }
 
+/** Mid-turn: not free for a restart, counted as running work */
+export const isWorking = (a: Pick<AgentState, "status">) =>
+  a.status === "running" || a.status === "spawning";
+
 /** syncFromDb id of the cross-project live-agent list: it syncs no project */
 export const FLEET_SYNC = "__fleet__";
 
@@ -514,6 +519,7 @@ export const useAgentStore = create<AgentStore>()(
               : { ...state.syncedProjects, [_projectId]: true as const };
           let added = 0;
           let merged = 0;
+          let changed = syncedProjects !== state.syncedProjects;
 
           const listed = new Set(dbAgents.map((a) => a.id));
           // Gone from the project's list too (archived or deleted): the close has landed. The
@@ -528,7 +534,8 @@ export const useAgentStore = create<AgentStore>()(
             if (existing) {
               merged++;
               // Merge: keep live runtime state (currentStep from parser), update DB state
-              updated[dbAgent.id] = {
+              const roles = dbAgent.modelRoles ?? existing.modelRoles ?? null;
+              const next: AgentState = {
                 ...existing,
                 status: syncedStatus(existing.status, dbAgent.status as AgentStatus),
                 branchName: dbAgent.branchName ?? existing.branchName ?? null,
@@ -541,12 +548,21 @@ export const useAgentStore = create<AgentStore>()(
                 launchedInShell: dbAgent.launchedInShell ?? existing.launchedInShell ?? false,
                 cliVersion: dbAgent.cliVersion ?? existing.cliVersion ?? null,
                 model: dbAgent.model ?? existing.model ?? null,
-                modelRoles: dbAgent.modelRoles ?? existing.modelRoles ?? null,
+                // Each fetch parses a new object: equal roles keep the old one
+                modelRoles: shallow(roles, existing.modelRoles ?? null)
+                  ? existing.modelRoles
+                  : roles,
                 yolo: dbAgent.yolo ?? existing.yolo ?? null,
                 claudeSessionId: existing.claudeSessionId ?? dbAgent.claudeSessionId ?? null,
               };
+              // Same values keep the same object: per-agent selectors and memos skip the poll
+              if (!shallow(next, existing)) {
+                updated[dbAgent.id] = next;
+                changed = true;
+              }
             } else {
               added++;
+              changed = true;
               // New from DB — agent we don't have in memory yet
               const dbStatus = dbAgent.status as AgentStatus;
               updated[dbAgent.id] = {
@@ -602,7 +618,7 @@ export const useAgentStore = create<AgentStore>()(
               !isClaudeQuestion(item, agent)
             );
           });
-          if (stale.length === 0) return { agents: updated, syncedProjects };
+          if (stale.length === 0) return changed ? { agents: updated, syncedProjects } : state;
 
           let unreadAttentionCount = state.unreadAttentionCount;
           const attentionItems = { ...state.attentionItems };
@@ -613,7 +629,12 @@ export const useAgentStore = create<AgentStore>()(
             delete attentionItems[id];
           }
 
-          return { agents: updated, attentionItems, unreadAttentionCount, syncedProjects };
+          return {
+            agents: changed ? updated : state.agents,
+            attentionItems,
+            unreadAttentionCount,
+            syncedProjects,
+          };
         }),
 
       // ─── T57: Attention inbox ──────────────────────────────────────────────
@@ -701,3 +722,14 @@ export const useAgentStore = create<AgentStore>()(
     },
   ),
 );
+
+/** A project's agents matching `pred`, by element: a push for an agent outside them, or one that
+ *  changes nothing they hold, does not re-render the caller */
+export function useProjectAgents(
+  projectId: string | null | undefined,
+  pred: (a: AgentState) => boolean,
+): AgentState[] {
+  return useAgentStore(
+    useShallow((s) => Object.values(s.agents).filter((a) => a.projectId === projectId && pred(a))),
+  );
+}

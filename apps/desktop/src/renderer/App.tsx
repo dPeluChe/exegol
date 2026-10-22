@@ -57,10 +57,9 @@ const OnboardingWizard = lazy(() =>
   })),
 );
 
-export default function App() {
-  const activeView = useAppStore((s) => s.activeView);
-  const sidebarCollapsed = useAppStore((s) => s.sidebarCollapsed);
-
+/** App-wide hooks, rendered last (their effects run after the tree's), so an agents push no longer
+ *  re-renders App */
+function AppEffects() {
   useHotkeys();
   useDictation();
   useToastEvents();
@@ -80,7 +79,12 @@ export default function App() {
   useActiveViewSync();
   useIdleSuspend();
   useWatchFollow();
+  return null;
+}
 
+export default function App() {
+  const activeView = useAppStore((s) => s.activeView);
+  const sidebarCollapsed = useAppStore((s) => s.sidebarCollapsed);
   const activeProjectId = useAppStore((s) => s.activeProjectId);
   // Projects opens over the workspace (as the Dashboard does): its panes stay mounted and sized
   const showWorkspace = activeView !== "projects" || activeProjectId !== null;
@@ -147,6 +151,7 @@ export default function App() {
         <Suspense fallback={null}>
           <WelcomeTour />
         </Suspense>
+        <AppEffects />
       </div>
     </TooltipProvider>
   );
