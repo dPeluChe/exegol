@@ -5,27 +5,14 @@
  * No dedicated DB table — the marker lives inline in the (gitignored) file.
  */
 
-import { execFile, execSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { promisify } from "node:util";
+import { execFileAsync } from "../lib/exec-file";
 import { computeDigest } from "./digest";
 import { ensureDigestGitignored, ensureKnowledgeDir, getDigestPath } from "./paths";
 
 const DIGEST_HEAD_MARKER = /<!-- exegol:digest-head:([0-9a-f]{7,40}) -->\n?/;
 const STALE_COMMIT_THRESHOLD = 10;
-
-function getGitHead(projectPath: string): string | null {
-  try {
-    return execSync("git rev-parse HEAD", { cwd: projectPath, timeout: 5_000 })
-      .toString("utf-8")
-      .trim();
-  } catch {
-    return null;
-  }
-}
-
-const execFileAsync = promisify(execFile);
 
 async function gitOut(projectPath: string, args: string[]): Promise<string | null> {
   try {
@@ -57,10 +44,22 @@ export async function isDigestStale(projectPath: string): Promise<boolean> {
   return behind >= STALE_COMMIT_THRESHOLD;
 }
 
-/** Force-regenerate DIGEST.md and stamp it with the current git HEAD. */
-export function refreshDigest(projectPath: string): string {
-  const body = computeDigest(projectPath);
-  const head = getGitHead(projectPath);
+const inFlight = new Map<string, Promise<string>>();
+
+/** Force-regenerate DIGEST.md and stamp it with the current git HEAD. One run per project at a time */
+export function refreshDigest(projectPath: string): Promise<string> {
+  const running = inFlight.get(projectPath);
+  if (running) return running;
+  const run = writeDigest(projectPath).finally(() => inFlight.delete(projectPath));
+  inFlight.set(projectPath, run);
+  return run;
+}
+
+async function writeDigest(projectPath: string): Promise<string> {
+  const [body, head] = await Promise.all([
+    computeDigest(projectPath),
+    gitOut(projectPath, ["rev-parse", "HEAD"]),
+  ]);
   const stamped = head ? `<!-- exegol:digest-head:${head} -->\n${body}` : body;
 
   ensureKnowledgeDir(projectPath);
@@ -74,7 +73,7 @@ export async function refreshDigestIfStale(
   projectPath: string,
 ): Promise<{ digest: string; refreshed: boolean }> {
   if (await isDigestStale(projectPath)) {
-    return { digest: refreshDigest(projectPath), refreshed: true };
+    return { digest: await refreshDigest(projectPath), refreshed: true };
   }
   return { digest: readFileSync(getDigestPath(projectPath), "utf-8"), refreshed: false };
 }

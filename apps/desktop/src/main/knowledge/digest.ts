@@ -1,13 +1,14 @@
 /**
  * Project Knowledge Node (T140) — DIGEST.md: auto-generated structural summary.
- * Tries an external `trs digest` binary first (if installed), falls back to a
- * small internal summarizer (top-level layout + package.json deps + file mix).
- * Derivable + high-churn — gitignored by default (see paths.ts).
+ * `trs ingest` when trs is on PATH, else a small internal summarizer (top-level layout +
+ * package.json deps + file mix). Derivable + high-churn — gitignored by default (see paths.ts).
  */
 
-import { execFileSync, execSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { extname, join } from "node:path";
+import { findOnPath } from "../agents/spawn-env";
+import { childEnv } from "../lib/child-env";
+import { execFileAsync } from "../lib/exec-file";
 import { logger } from "../lib/logger";
 
 const IGNORED_DIRS = new Set([
@@ -22,34 +23,25 @@ const IGNORED_DIRS = new Set([
   "coverage",
 ]);
 
-function isBinAvailable(bin: string): boolean {
-  try {
-    execSync(`command -v ${bin}`, { stdio: "ignore", timeout: 3_000 });
-    return true;
-  } catch {
-    return false;
-  }
-}
+/** 32k tokens fits a prompt. A trs without `ingest` fails and falls back */
+const TRS_INGEST_ARGS = ["ingest", "--print", "--budget", "32k"];
 
-/**
- * Run `trs digest <path>` if a `trs` binary is on PATH. No widely-available
- * `trs` tool ships a `digest` subcommand today, so this is expected to miss
- * and fall through to the internal summarizer on most machines — that's by
- * design, not a bug: any failure here is caught and logged, never fatal.
- */
-function generateDigestViaBinary(projectPath: string): string | null {
-  if (!isBinAvailable("trs")) return null;
+async function generateDigestViaTrs(projectPath: string): Promise<string | null> {
+  const trs = findOnPath("trs");
+  if (!trs) return null;
   try {
-    // execFileSync, never a shell string: a project path containing $(...) or
-    // backticks (legal on macOS) must not become command execution.
-    return execFileSync("trs", ["digest", projectPath], {
+    // stderr carries notices (not a git repository, size), never the digest
+    const { stdout } = await execFileAsync(trs, [...TRS_INGEST_ARGS, projectPath], {
+      env: childEnv(),
       timeout: 30_000,
       maxBuffer: 2 * 1024 * 1024,
-    })
-      .toString("utf-8")
-      .trim();
+    });
+    return stdout.trim() || null;
   } catch (err) {
-    logger.warn("[Knowledge] `trs digest` failed, falling back to internal summarizer:", err);
+    const code = (err as { code?: unknown }).code;
+    logger.warn(
+      `[Knowledge] trs ingest failed (${String(code ?? "error")}), using the internal digest`,
+    );
     return null;
   }
 }
@@ -141,7 +133,7 @@ function generateInternalDigest(projectPath: string): string {
   return `${parts.join("\n\n")}\n`;
 }
 
-/** Generate the digest: external `trs digest` binary if available, else the internal summarizer. */
-export function computeDigest(projectPath: string): string {
-  return generateDigestViaBinary(projectPath) ?? generateInternalDigest(projectPath);
+/** Generate the digest: `trs ingest` if available, else the internal summarizer. */
+export async function computeDigest(projectPath: string): Promise<string> {
+  return (await generateDigestViaTrs(projectPath)) ?? generateInternalDigest(projectPath);
 }

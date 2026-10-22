@@ -2,7 +2,7 @@ import { existsSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "libsql";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runMigrations } from "../db/migrations";
 import { ensureProjectBrief } from "../knowledge/brief";
 import { refreshDigest } from "../knowledge/staleness";
@@ -13,6 +13,12 @@ import {
   ExegolToolError,
   getToolDefsForAccessMode,
 } from "./exegol-tools";
+
+// The internal digest, never the real trs (it would record each call in ~/.trs history)
+vi.mock("../agents/spawn-env", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../agents/spawn-env")>()),
+  findOnPath: () => null,
+}));
 
 function makeContext(overrides: Partial<ExegolToolContext> = {}): ExegolToolContext {
   return { agentId: "agent-1", accessMode: "write", projectId: "proj-1", ...overrides };
@@ -123,7 +129,7 @@ describe("exegol-tools", () => {
 
     it("knowledge_get returns the brief and digest once initialized", async () => {
       ensureProjectBrief(projectPath);
-      refreshDigest(projectPath);
+      await refreshDigest(projectPath);
       const result = (await callExegolTool(db, "knowledge_get", {}, makeContext())) as {
         brief: string;
         digest: string;

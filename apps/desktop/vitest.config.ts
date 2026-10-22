@@ -1,3 +1,4 @@
+import { tmpdir } from "node:os";
 import path from "node:path";
 import { defineConfig } from "vitest/config";
 
@@ -8,6 +9,8 @@ export default defineConfig({
     testTimeout: process.platform === "win32" ? 30_000 : 5_000,
     hookTimeout: process.platform === "win32" ? 30_000 : 10_000,
     include: ["src/**/*.test.ts", "scripts/**/*.test.ts"],
+    // A test that reaches the real trs records the call in this folder, not the developer's ~/.trs
+    env: { TRS_HOME: path.join(tmpdir(), "exegol-test-trs") },
     coverage: {
       provider: "v8",
       include: [
