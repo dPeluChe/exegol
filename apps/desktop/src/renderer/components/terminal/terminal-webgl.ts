@@ -76,6 +76,8 @@ export function createWebglController(
   let concealed = false;
   let revealTimer: ReturnType<typeof setTimeout> | null = null;
   let firstRender: { dispose: () => void } | null = null;
+  // Bumped by every stop: a frame queued by a render before it no longer reveals
+  let revealGen = 0;
 
   function conceal(): void {
     concealed = true;
@@ -83,6 +85,7 @@ export function createWebglController(
   }
 
   function stopReveal(): void {
+    revealGen++;
     if (revealTimer) clearTimeout(revealTimer);
     revealTimer = null;
     firstRender?.dispose();
@@ -126,7 +129,9 @@ export function createWebglController(
     budget.unpark(evict);
     dropAddon();
     onLost?.();
-    onRendererChanged?.();
+    // Hidden: the next show takes a new context, never a DOM frame first
+    if (parked) conceal();
+    else onRendererChanged?.();
     const now = Date.now();
     if (now - lastLossAt > STABLE_RESET_MS) retries = 0;
     lastLossAt = now;
@@ -149,31 +154,50 @@ export function createWebglController(
     );
   }
 
+  // One frame past the first render: it can still be blank (xtermjs/xterm.js#6239)
+  function awaitFirstDraw(): void {
+    if (!concealed || firstRender) return;
+    const gen = revealGen;
+    firstRender = terminal.onRender(() => {
+      firstRender?.dispose();
+      firstRender = null;
+      requestAnimationFrame(() => {
+        if (gen === revealGen) reveal();
+      });
+    });
+  }
+
   function attach(): void {
     // Parked: the new context waits until the terminal is shown again
     if (disposed || fellBack || addon || parked) return;
     if (!budget.acquire(attachWhenFree)) return;
+    let webgl: WebglAddon | null = null;
     try {
-      const webgl = new WebglAddon();
+      const created = new WebglAddon();
+      webgl = created;
       // 0.19's loss timer can outlive dispose (fixed upstream in #5932)
-      webgl.onContextLoss(() => {
-        if (webgl === addon) onContextLost();
+      created.onContextLoss(() => {
+        if (created === addon) onContextLost();
       });
       // Swapping the renderer refreshes every row: the next render is WebGL's
-      terminal.loadAddon(webgl);
-      addon = webgl;
-      counts.attached++;
-      // One frame past the first render: it can still be blank (xtermjs/xterm.js#6239)
-      if (concealed && !firstRender) {
-        firstRender = terminal.onRender(() => requestAnimationFrame(reveal));
-      }
-      onRendererChanged?.();
+      terminal.loadAddon(created);
     } catch {
       // WebGL unavailable on this device: xterm keeps the DOM renderer
+      try {
+        webgl?.dispose();
+      } catch {
+        /* never loaded */
+      }
       fellBack = true;
       budget.release();
       reveal();
+      return;
     }
+    addon = webgl;
+    counts.attached++;
+    awaitFirstDraw();
+    // Outside the try: a refit that throws must not release a slot this terminal holds
+    onRendererChanged?.();
   }
 
   function detach(): void {
@@ -199,28 +223,38 @@ export function createWebglController(
     parked = true;
     // Hidden: a reveal still owed waits for the next show
     stopReveal();
-    if (addon) budget.park(evict);
-    else budget.cancelWait(attachWhenFree);
+    if (addon) {
+      budget.park(evict);
+    } else {
+      budget.cancelWait(attachWhenFree);
+      if (!fellBack) conceal();
+    }
   }
 
   function unpark(): void {
     if (disposed || !parked) return;
     parked = false;
     budget.unpark(evict);
-    if (addon) {
-      counts.reused++;
-      reveal();
-      return;
+    if (addon) counts.reused++;
+    else attach();
+    if (concealed) {
+      // DOM only: no renderer swap is coming, so no reason to wait
+      if (!addon && budget.isDomOnly()) {
+        reveal();
+      } else {
+        // A context attached before it was hidden may not have drawn yet
+        if (addon) awaitFirstDraw();
+        revealTimer = setTimeout(reveal, REVEAL_CAP_MS);
+      }
     }
-    attach();
     // No slot yet: `pending` cleared, so the DOM renderer is fitted and shown past the cap
     if (!addon) onRendererChanged?.();
-    if (concealed) revealTimer = setTimeout(reveal, REVEAL_CAP_MS);
   }
 
   function dispose(): void {
     disposed = true;
-    stopReveal();
+    // The terminal may live on without WebGL (a canvas-only CLI): never leave it hidden
+    reveal();
     detach();
   }
 

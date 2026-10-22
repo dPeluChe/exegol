@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const loseContext = vi.fn();
 
 const addonInstances: Array<{
+  addon: object;
   dispose: ReturnType<typeof vi.fn>;
   onContextLoss: ReturnType<typeof vi.fn>;
   trigger: () => void;
@@ -18,6 +19,7 @@ vi.mock("@xterm/addon-webgl", () => {
     _renderer = { _gl: { getExtension: () => ({ loseContext }) } };
     constructor() {
       const handle = {
+        addon: this,
         dispose: this.dispose,
         onContextLoss: this.onContextLoss,
         trigger: () => {
@@ -203,6 +205,45 @@ describe("createWebglController — parked while hidden", () => {
     expect(terminal.fakeElement.style.opacity).toBe("");
   });
 
+  it("a refit that throws on attach keeps the slot counted", () => {
+    const budget = createWebglBudget(2);
+    const controller = createWebglController(
+      makeFakeTerminal(),
+      {
+        onRendererChanged: () => {
+          throw new Error("fit failed");
+        },
+      },
+      budget,
+    );
+    expect(() => controller.unpark()).toThrow("fit failed");
+    expect(budget.live()).toBe(1);
+    controller.dispose();
+    expect(budget.live()).toBe(0);
+  });
+
+  it("a context hidden before it drew stays concealed until it draws", () => {
+    vi.stubGlobal("requestAnimationFrame", (cb: () => void) => setTimeout(cb, 16));
+    const terminal = makeFakeTerminal();
+    const controller = createWebglController(terminal, {}, createWebglBudget(2));
+    controller.unpark();
+    controller.park();
+    controller.unpark();
+    expect(terminal.fakeElement.style.opacity).toBe("0");
+    terminal.renders.at(-1)?.();
+    vi.advanceTimersByTime(20);
+    expect(terminal.fakeElement.style.opacity).toBe("");
+    vi.unstubAllGlobals();
+  });
+
+  it("in DOM-only mode a concealed terminal shows at once", () => {
+    const budget = createWebglBudget(2);
+    budget.setDomOnly();
+    const terminal = makeFakeTerminal();
+    createWebglController(terminal, {}, budget).unpark();
+    expect(terminal.fakeElement.style.opacity).toBe("");
+  });
+
   it("keeps its context while hidden and reuses it when shown", () => {
     const before = webglCounts();
     const controller = shownController(makeFakeTerminal(), {}, createWebglBudget(2));
@@ -250,5 +291,124 @@ describe("the addon internals disposeAddon reaches", () => {
     );
     expect(bundle).toContain("this._renderer=");
     expect(bundle).toContain("this._gl=this._canvas.getContext");
+  });
+});
+
+/** Small deterministic PRNG so a failing sequence replays from its seed */
+function rng(seed: number) {
+  let x = seed >>> 0 || 1;
+  return () => {
+    x ^= x << 13;
+    x ^= x >>> 17;
+    x ^= x << 5;
+    return (x >>> 0) / 2 ** 32;
+  };
+}
+
+describe("createWebglController — random sequences keep the invariants", () => {
+  beforeEach(() => {
+    addonInstances.length = 0;
+    vi.useFakeTimers();
+    vi.stubGlobal("requestAnimationFrame", (cb: () => void) => setTimeout(cb, 16));
+  });
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it.each(Array.from({ length: 200 }, (_, i) => i + 1))("seed %i", (seed) => {
+    const rand = rng(seed);
+    const pick = <T>(xs: T[]): T => xs[Math.floor(rand() * xs.length)] as T;
+    const CAP = 3;
+    const budget = createWebglBudget(CAP);
+    type View = {
+      terminal: ReturnType<typeof makeFakeTerminal>;
+      controller: ReturnType<typeof createWebglController>;
+      shown: boolean;
+      disposed: boolean;
+    };
+    const views: View[] = [];
+    const mount = () => {
+      const terminal = makeFakeTerminal();
+      views.push({
+        terminal,
+        controller: createWebglController(terminal, {}, budget),
+        shown: false,
+        disposed: false,
+      });
+    };
+    for (let i = 0; i < 5; i++) mount();
+    const live = () => addonInstances.filter((a) => a.dispose.mock.calls.length === 0);
+    const holder = (addon: object) =>
+      views.find((v) =>
+        (v.terminal.loadAddon as ReturnType<typeof vi.fn>).mock.calls.some((c) => c[0] === addon),
+      );
+
+    const check = (step: string) => {
+      const alive = live();
+      // Every live addon is one budget slot, held by a view that is not disposed
+      expect(budget.live(), step).toBe(alive.length);
+      expect(alive.length, step).toBeLessThanOrEqual(CAP);
+      for (const a of alive) expect(holder(a.addon)?.disposed, step).toBe(false);
+      for (const v of views) {
+        if (v.disposed) continue;
+        // A context is due on the next show: hidden, so concealed
+        if (v.controller.pending()) expect(v.terminal.fakeElement.style.opacity, step).toBe("0");
+      }
+    };
+
+    for (let i = 0; i < 120; i++) {
+      const open = views.filter((v) => !v.disposed);
+      const v = pick(open);
+      const op = pick([
+        "show",
+        "show",
+        "hide",
+        "hide",
+        "rebuild",
+        "loss",
+        "staleLoss",
+        "time",
+        "render",
+        "dispose",
+        "domOnly",
+      ]);
+      if (op === "show") {
+        v.shown = true;
+        v.controller.unpark();
+      } else if (op === "hide") {
+        v.shown = false;
+        v.controller.park();
+      } else if (op === "rebuild") {
+        v.controller.rebuild();
+      } else if (op === "loss" || op === "staleLoss") {
+        const own = addonInstances.filter((a) => holder(a.addon) === v);
+        const target = op === "loss" ? own.find((a) => a.dispose.mock.calls.length === 0) : own[0];
+        target?.trigger();
+      } else if (op === "time") {
+        vi.advanceTimersByTime(pick([16, 150, 300, 3_500]));
+      } else if (op === "domOnly") {
+        // Rare, as in the app (three GPU crashes)
+        if (rand() < 0.1) budget.setDomOnly();
+      } else if (op === "render") {
+        for (const cb of v.terminal.renders.splice(0)) cb();
+      } else {
+        v.controller.dispose();
+        v.disposed = true;
+        mount();
+      }
+      check(`seed ${seed} step ${i} ${op}`);
+    }
+
+    // Settled: no shown terminal stays concealed once renders ran and the caps passed
+    for (const v of views) for (const cb of v.terminal.renders.splice(0)) cb();
+    vi.advanceTimersByTime(10_000);
+    for (const v of views) for (const cb of v.terminal.renders.splice(0)) cb();
+    vi.advanceTimersByTime(200);
+    check(`seed ${seed} settled`);
+    for (const v of views) {
+      if (v.disposed || !v.shown) continue;
+      expect(v.terminal.fakeElement.style.opacity, `seed ${seed} shown view concealed`).toBe("");
+    }
   });
 });

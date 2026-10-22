@@ -384,6 +384,14 @@ export function useXterm({
     else webglRef.current?.park();
   }, [session, isVisible, shown, agentId]);
 
+  // A shell promoted to a canvas-only CLI (or a cliType that loaded after mount) drops WebGL
+  useEffect(() => {
+    if (!session || wantsWebgl(mirror, cliType) || !webglRef.current) return;
+    webglRef.current.dispose();
+    webglRef.current = null;
+    refitRef.current();
+  }, [session, mirror, cliType]);
+
   // T155 (verify session): manual "Refresh Terminal" from the pane menu —
   // refit + SIGWINCH jiggle + repaint, for TUIs stuck black after reload.
   useEffect(() => {
@@ -415,8 +423,7 @@ export function useXterm({
       try {
         webglRef.current?.rebuild();
         handleResize();
-        // A renderer swap already refreshed every row
-        if (!webglRef.current) terminal.refresh(0, terminal.rows - 1);
+        terminal.refresh(0, terminal.rows - 1);
         if (!mirror && !readOnly && terminal.buffer.active.type === "alternate") {
           window.api.terminal.redraw(agentId);
         }
