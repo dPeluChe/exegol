@@ -25,6 +25,9 @@ bun run build:rust       # Build Rust native module only
 bun run package:local    # Signed test DMG, never notarized: dist/local/Exegol-TEST-<x.y.z+1>-test.<sha>.dmg (-- --dry-run)
 bun run rebuild:native   # Rust + rebuild node-pty for Electron
 
+# `dependencies` is what electron-builder copies into app.asar: only packages main, preload, the
+# sidecar or the bins require() at runtime. Renderer-only packages go in devDependencies (Vite bundles them).
+
 # The PTY sidecar is DETACHED: it survives app restarts on purpose (that is what
 # keeps agent terminals alive across a reload) and therefore survives a rebuild
 # and an app UPDATE too — the running process keeps the old code.
@@ -119,7 +122,7 @@ message from the current diff via Claude Haiku (reuses Anthropic API key).
 ### Agent lifecycle
 1. User clicks agent in launcher/grid/quick-bar (all read from provider registry)
 2. `AgentManager.spawn()` → resolves provider → builds context (memory + MCP + skills) → spawns PTY via sidecar
-3. PTY output → sidecar ring buffer → JSON-RPC notification → main process → Rust `AgentOutputStream` (ANSI strip + status parse) or JS fallback
+3. PTY output → sidecar ring buffer → JSON-RPC notification → main process → Rust `AgentOutputStream` (ANSI strip + status parse) or JS fallback; DB status writes only on change (in SQL), step-only ones at most 1/s per agent (`agents/status-writes.ts`)
 4. Status broadcast via IPC push events → Zustand store → UI
 5. On exit: final output tail → scoring → oplog → worktree cleanup, skipped while another live agent shares it (all non-fatal). With `saveWorktreeWork` on (default), the worktree's pending work is first committed and pushed to its own branch (`agents/worktree-save.ts`); if that is refused (secret, hook, push, default branch) the worktree is kept Memory extraction on exit is currently not wired (T193.8)
 6. Close pane/tab/Cmd+W → stop agent + archive (`archiveAgent` sets `archived_at`; `listAgents` hides it) + remove from store. Shell rows are still deleted
@@ -145,7 +148,7 @@ Sequential agent orchestration in shared worktrees. Exegol controls everything �
 
 ### Key patterns
 - **tRPC over IPC**: 37 routers in main process (`ipc/router.ts`), renderer calls via `window.api.trpc.invoke` (`lib/trpc-client.ts`: errors come back without Electron's "Error invoking remote method" prefix and with the tRPC `code`, carried in the error name)
-- **Push-first**: `broadcastAgentStatus()` IPC events, polling reduced to 30s fallback
+- **Push-first**: `broadcastAgentStatus()` IPC events, polling reduced to 30s fallback. `syncFromDb` keeps unchanged agent objects (and the state); read a slice with `useProjectAgents` or a `useShallow` selector, not the whole `agents` map; app-wide hooks live in `AppEffects` (`App.tsx`), not in App
 - **Structured errors** (T80): `ExegolError` → `TransientError` / `PermanentError` / `TimeoutError` hierarchy with `cause` chain. `isTransient()`/`isPermanent()` type guards. `withRetry()` helper retries only on transient errors with exponential backoff (1s base, max 3). MCP disconnect and scoring API errors classified as transient.
 - **Lifecycle scripts** (T91): `.exegol/lifecycle.yaml` (or `.yml`) per repo with `setup`, `beforeAgent`, `afterCommit`, `teardown` hooks. Setup runs once per session per project on first agent spawn. beforeAgent prepended to shell command. Teardown awaited before worktree deletion. Simple line-based parser (no YAML library).
 - **Crash recovery**: `session.listInfo` RPC returns `{ id, alive, exitCode, signal }` — only ALIVE ids go to `reattachSidecarAgents()`, dead ones (in the sidecar's 60s grace period) fall through to `recoverStaleAgents()` and get marked as "crashed" with scrollback preserved (v0.3.0 fix: previously dead sessions were stuck as "running" with no PTY)
@@ -301,7 +304,7 @@ docs/
 
 ## Database
 
-36 base migrations + per-group `migration-sets/` (wave2: `w2b_` memory salience columns, `w2d_` budgets/groups; wave3: `w3_001`..`w3_029` alias, agent links, path claims, archived_at, message delivery, session history, pipeline evidence base, LLM score columns, PTY size, yolo, mute/suspend, project appearance, launched_in_shell, cli_version, model, pr_watch, token_usage scan key, scheduled runs + task timeout, status_changed_at + its trigger, project browser_hosts, browser_eval, project ide, dictation_history, agent model_roles, agent last_activity_at, agent last_cwd, agent resumed_from, browser_permissions) = 68 total · 37 tables: projects, project_groups, agents, agent_events, agent_links, worktrees, activities, search_index (FTS5), file_index, file_chunks, handoffs, messages, path_claims, scheduled_tasks, scheduled_runs, scheduled_results, task_queue, token_usage, budgets, budget_alerts, settings, prompts, skills_state, memories (+ reinforcement_count/last_reinforced_at/superseded_by), agent_scores, oplog, pipeline_templates, pipeline_runs, parallel_runs, diff_comments, qa_tests, qa_test_runs, dictation_history, browser_permissions, sessions, port_registry, host_metrics (last three unused, see T185.4)
+36 base migrations + per-group `migration-sets/` (wave2: `w2b_` memory salience columns, `w2d_` budgets/groups; wave3: `w3_001`..`w3_030` alias, agent links, path claims, archived_at, message delivery, session history, pipeline evidence base, LLM score columns, PTY size, yolo, mute/suspend, project appearance, launched_in_shell, cli_version, model, pr_watch, token_usage scan key, scheduled runs + task timeout, status_changed_at + its trigger, project browser_hosts, browser_eval, project ide, dictation_history, agent model_roles, agent last_activity_at, agent last_cwd, agent resumed_from, browser_permissions, `w3_030` FK indexes) = 69 total · 37 tables: projects, project_groups, agents, agent_events, agent_links, worktrees, activities, search_index (FTS5), file_index, file_chunks, handoffs, messages, path_claims, scheduled_tasks, scheduled_runs, scheduled_results, task_queue, token_usage, budgets, budget_alerts, settings, prompts, skills_state, memories (+ reinforcement_count/last_reinforced_at/superseded_by), agent_scores, oplog, pipeline_templates, pipeline_runs, parallel_runs, diff_comments, qa_tests, qa_test_runs, dictation_history, browser_permissions, sessions, port_registry, host_metrics (last three unused, see T185.4)
 
 **Migration rule**: parallel work groups append ONLY to their own `db/migration-sets/<group>.ts` file (id prefixes `w2a_`/`w2b_`/`w2d_`/`w3_`) — `migrations.ts` spreads them; never edit another group's set.
 

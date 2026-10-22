@@ -297,4 +297,21 @@ export const wave3Migrations: Migration[] = [
       PRIMARY KEY (project_id, origin, permission)
     );`,
   },
+  {
+    // Foreign keys without an index: every agent or project delete scanned these tables
+    id: "w3_030_fk_indexes",
+    sql: `CREATE INDEX IF NOT EXISTS idx_worktrees_agent ON worktrees(agent_id);
+    CREATE INDEX IF NOT EXISTS idx_worktrees_project ON worktrees(project_id);
+    CREATE INDEX IF NOT EXISTS idx_handoffs_agent ON handoffs(agent_id);
+    CREATE INDEX IF NOT EXISTS idx_handoffs_successor ON handoffs(successor_agent_id);
+    CREATE INDEX IF NOT EXISTS idx_task_queue_agent ON task_queue(agent_id);
+    CREATE INDEX IF NOT EXISTS idx_memories_source_agent ON memories(source_agent_id);
+    CREATE INDEX IF NOT EXISTS idx_agent_links_to ON agent_links(to_agent_id);
+    CREATE INDEX IF NOT EXISTS idx_scheduled_results_task ON scheduled_results(task_id);
+    CREATE INDEX IF NOT EXISTS idx_scheduled_results_agent ON scheduled_results(agent_id);
+    CREATE INDEX IF NOT EXISTS idx_prompts_project ON prompts(project_id);
+    CREATE INDEX IF NOT EXISTS idx_pipeline_templates_project ON pipeline_templates(project_id);
+    CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_project ON scheduled_tasks(project_id);
+    CREATE INDEX IF NOT EXISTS idx_dictation_history_project ON dictation_history(project_id);`,
+  },
 ];

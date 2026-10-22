@@ -1,7 +1,12 @@
 import { userInfo } from "node:os";
 import { type AgentStatus, LIVE_STATUSES } from "@exegol/shared";
 import type Database from "libsql";
-import { deleteShellRow, setAgentLastActivity, setAgentSuspended } from "../db/queries/agents";
+import {
+  deleteShellRow,
+  liveIn,
+  setAgentLastActivity,
+  setAgentSuspended,
+} from "../db/queries/agents";
 import { getAppSettings } from "../db/queries/settings";
 import { runNative } from "../lib/concurrency";
 import { broadcast } from "../lib/event-bus";
@@ -48,8 +53,7 @@ type Row = Record<string, unknown> & {
   started_at: number;
 };
 
-function liveSessions(db: Database.Database): LiveRow[] {
-  const statuses = [...LIVE_STATUSES];
+function liveSessions(db: Database.Database, id?: string): LiveRow[] {
   const rows = db
     .prepare(
       `SELECT a.id, a.project_id, p.name AS project_name, a.alias, a.cli_type, a.status, a.pid,
@@ -59,9 +63,9 @@ function liveSessions(db: Database.Database): LiveRow[] {
                        (SELECT path FROM worktrees WHERE agent_id = a.id LIMIT 1)) AS worktree_path
        FROM agents a JOIN projects p ON p.id = a.project_id
        WHERE a.archived_at IS NULL AND a.suspended_at IS NULL
-         AND a.status IN (${statuses.map(() => "?").join(",")})`,
+         AND a.status IN (${liveIn()})${id ? " AND a.id = ?" : ""}`,
     )
-    .all(...statuses) as Row[];
+    .all(...LIVE_STATUSES, ...(id ? [id] : [])) as Row[];
   const manager = getAgentManager();
   return rows.map((r) => ({
     id: r.id,
@@ -134,7 +138,7 @@ async function stopIdle(
   days: number,
   planned: IdleVerdict["kind"],
 ): Promise<Outcome | null> {
-  const s = liveSessions(db).find((r) => r.id === id);
+  const [s] = liveSessions(db, id);
   const verdict = s && idleVerdict(s, freshContext(days));
   // A CLI typed in a shell that started again was judged on the other rule: not this sweep
   if (!s || verdict?.kind !== planned || planned === "skip") return null;

@@ -29,14 +29,15 @@ export function useSendSections(
   projectId: string | undefined,
   enabled: boolean,
 ): SendSections {
-  const allAgents = useAgentStore((s) => s.agents);
+  // Closed: null selectors, so a push or a layout change does not re-render every pane
+  const allAgents = useAgentStore((s) => (enabled ? s.agents : null));
   const projectOrder = useAppStore((s) => s.liveProjectOrder);
   const { data: projects = [] } = useProjects();
-  const projectWorkspaces = useWorkspaceStore((s) => s.projectWorkspaces);
-  const paneCwd = useWorkspaceStore((s) => s.paneCwd);
+  const projectWorkspaces = useWorkspaceStore((s) => (enabled ? s.projectWorkspaces : null));
+  const paneCwd = useWorkspaceStore((s) => (enabled ? s.paneCwd : null));
   return useMemo(
     () =>
-      enabled
+      allAgents && projectWorkspaces && paneCwd
         ? buildSendSections(
             Object.values(allAgents),
             agentId,
@@ -46,7 +47,7 @@ export function useSendSections(
             shellFolders(projectWorkspaces, paneCwd),
           )
         : EMPTY,
-    [enabled, allAgents, agentId, projects, projectId, projectOrder, projectWorkspaces, paneCwd],
+    [allAgents, agentId, projects, projectId, projectOrder, projectWorkspaces, paneCwd],
   );
 }
 
@@ -56,10 +57,17 @@ export interface TargetPicker {
   names: Record<string, string>;
 }
 
-/** Agents a report from `paneId` can go to: its tab, the project's other tabs, other projects */
-export function useTabTargets(projectId: string | undefined, paneId: string): TargetPicker {
-  const sections = useSendSections("", projectId, true);
-  const pw = useWorkspaceStore((s) => (projectId ? s.projectWorkspaces[projectId] : undefined));
+/** Agents a report from `paneId` can go to: its tab, the project's other tabs, other projects.
+ *  Built only while `enabled` (the picker is shown) */
+export function useTabTargets(
+  projectId: string | undefined,
+  paneId: string,
+  enabled: boolean,
+): TargetPicker {
+  const sections = useSendSections("", projectId, enabled);
+  const pw = useWorkspaceStore((s) =>
+    enabled && projectId ? s.projectWorkspaces[projectId] : undefined,
+  );
   const groups = useMemo(() => {
     const tab = pw?.tabs.find((t) => collectPaneIds(t.layout).includes(paneId));
     const ids = (tab ? collectPaneIds(tab.layout) : []).map((id) => pw?.panes[id]?.agentId);

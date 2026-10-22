@@ -12,9 +12,9 @@ import { suspendAgent } from "../lib/session-quiet";
 import { runCommandBeside, runCommandInNewTab } from "../lib/spawn-shell";
 import { trpcInvoke } from "../lib/trpc-client";
 import {
-  type AgentState,
   findAgentPane,
   isLiveAgent,
+  isWorking,
   showProject,
   useAgentStore,
 } from "../stores/agents";
@@ -104,9 +104,6 @@ export async function updateAndRestart(
   restarts.watchUpdate(restartIds, shellId);
 }
 
-/** Free to restart: not in the middle of a turn */
-const busy = (a: AgentState) => a.status === "running" || a.status === "spawning";
-
 /** Restart the requested sessions once each is free: stop it quietly and resume the same
  *  conversation in its pane (the Suspend + Resume path). Mounted once, in App */
 export function useCliRestarts(): void {
@@ -150,7 +147,7 @@ export function useCliRestarts(): void {
         }
         continue;
       }
-      if (busy(agent) && when !== "now") continue;
+      if (isWorking(agent) && when !== "now") continue;
       restarts.cancel(id);
       const pane = findAgentPane(agent.id, agent.projectId)?.paneId;
       // Said out loud: it happens away from the click (after the turn), or nothing seemed to
