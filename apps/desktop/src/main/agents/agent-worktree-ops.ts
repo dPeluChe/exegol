@@ -7,6 +7,7 @@ import {
 } from "../db/queries";
 import { countLiveAgentsInWorktree } from "../db/queries/agents";
 import { getAppSettings } from "../db/queries/settings";
+import { invalidateProjectDiff } from "../ipc/procedures/diff-helpers";
 import { runNative } from "../lib/concurrency";
 import { logger } from "../lib/logger";
 import { loadLifecycleConfig, runLifecycleScript } from "../lifecycle/loader";
@@ -84,6 +85,8 @@ export async function cleanupWorktree(
         expectedBranch: getWorktreeByAgentId(db, agentId)?.branchName ?? null,
         alias,
       });
+      // The save commits and pushes: a Git pane on this worktree must not show the old state
+      invalidateProjectDiff(agent.projectId);
       announceSave(outcome, { alias, agentId, projectId: agent.projectId });
       // Not saved (push failed, secret, hook...): the worktree is the only copy, keep it
       if (outcome.status === "refused") {

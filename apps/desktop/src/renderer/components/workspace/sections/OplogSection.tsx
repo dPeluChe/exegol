@@ -11,7 +11,7 @@ import {
   Undo2,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
-import { usePaneProject } from "../../../contexts/ProjectScope";
+import { usePanePolling, usePaneProject } from "../../../contexts/ProjectScope";
 import { useProjectOplog, useUndoOplog } from "../../../hooks/use-trpc";
 import { formatTimeAgoLong } from "../../../lib/format";
 import { ConfirmDialog, EmptyState, LoadingSpinner } from "../../common";
@@ -129,7 +129,8 @@ const OPERATION_FILTERS = [
 // ─── Main Section ───────────────────────────────────────────────────────────
 
 export function OplogSection() {
-  const { projectId, shown } = usePaneProject();
+  const { projectId } = usePaneProject();
+  const shown = usePanePolling();
   const { data: entries, isLoading } = useProjectOplog(projectId, shown);
   const undoMutation = useUndoOplog();
   const [filter, setFilter] = useState<string>("all");

@@ -4,13 +4,14 @@ import { readFile } from "node:fs/promises";
 import * as os from "node:os";
 import { promisify } from "node:util";
 import type { MetricsSnapshot } from "@exegol/shared";
-import { app } from "electron";
+import { app, BrowserWindow } from "electron";
 import { broadcast } from "../lib/event-bus";
 import { getNotificationBus } from "../notifications/bus";
 import { getPtyHost } from "../terminal/pty-host";
 import { readPidFile } from "../terminal/pty-sidecar-discovery";
 import type { SessionMemoryResult } from "../terminal/pty-sidecar-protocol";
 import { readProcessMetrics } from "./process-metrics";
+import { type ProcRow, readProcessTable, readProcessUsage } from "./process-table";
 import { duBytes } from "./storage";
 
 const execFileAsync = promisify(execFile);
@@ -65,6 +66,8 @@ interface ProjectMetrics {
 // ─── Background Metrics Collector ───────────────────────────────────────────────
 
 const COLLECT_INTERVAL = 10_000; // 10 seconds
+/** The promotion poll reads the full table every 3 s: one this recent is reused, else a light ps */
+const SHARED_PS_AGE_MS = 4_000;
 
 let cachedMetrics: SystemMetrics | null = null;
 let collectorTimer: ReturnType<typeof setInterval> | null = null;
@@ -161,9 +164,43 @@ async function collectMetrics(): Promise<void> {
   }
 }
 
+/** Nobody sees metrics while every window is hidden or minimized */
+function anyWindowVisible(): boolean {
+  return BrowserWindow.getAllWindows().some(
+    (w) => !w.isDestroyed() && w.isVisible() && !w.isMinimized(),
+  );
+}
+
+let paused = false;
+let windowsWatched = false;
+
+async function tick(): Promise<void> {
+  if (anyWindowVisible()) {
+    paused = false;
+    await collectMetrics();
+    return;
+  }
+  paused = true;
+  // The ring-buffer warning is a notification: it still matters with no window shown
+  const mem = await getSidecarMemoryMetrics().catch(() => null);
+  if (mem) checkResourceThresholds(mem);
+}
+
+/** A window shown again gets fresh numbers now, not at the next tick */
+function resumeIfPaused(): void {
+  if (!paused || !collectorTimer || !anyWindowVisible()) return;
+  paused = false;
+  collectMetrics().catch(() => {});
+}
+
+function watchWindow(w: BrowserWindow): void {
+  w.on("show", resumeIfPaused);
+  w.on("restore", resumeIfPaused);
+}
+
 /**
  * Start the background metrics collector.
- * Collects every 10 seconds in a non-blocking way.
+ * Collects every 10 seconds in a non-blocking way; paused while no window is visible.
  */
 export function startMetricsCollector(): void {
   if (collectorTimer) return;
@@ -171,10 +208,14 @@ export function startMetricsCollector(): void {
   // First collection immediately
   collectMetrics().catch(() => {});
 
-  // Then every COLLECT_INTERVAL
   collectorTimer = setInterval(() => {
-    collectMetrics().catch(() => {});
+    tick().catch(() => {});
   }, COLLECT_INTERVAL);
+  if (windowsWatched) return;
+  windowsWatched = true;
+  for (const w of BrowserWindow.getAllWindows()) watchWindow(w);
+  app.on("browser-window-created", (_e, w) => watchWindow(w));
+  app.on("browser-window-focus", resumeIfPaused);
 }
 
 /**
@@ -302,35 +343,28 @@ async function getProcessUsage(cores: number): Promise<ProcessUsage> {
   }
   const sidecarPid = readPidFile()?.pid ?? 0;
   // No ps on Windows: Exegol's own Electron processes only
-  const { stdout } =
+  const rows =
     process.platform === "win32"
-      ? { stdout: "" }
-      : await execFileAsync("ps", ["-A", "-o", "pid=,ppid=,rss=,%cpu="], {
-          timeout: 5_000,
-        });
-  const rows = stdout
-    .trim()
-    .split("\n")
-    .map((l) => l.trim().split(/\s+/).map(Number))
-    .filter((r) => r.length === 4) as [number, number, number, number][];
-  const children = new Map<number, [number, number, number, number][]>();
-  for (const r of rows) children.set(r[1], [...(children.get(r[1]) ?? []), r]);
+      ? []
+      : (readProcessTable.recent(SHARED_PS_AGE_MS) ?? (await readProcessUsage()));
+  const children = new Map<number, ProcRow[]>();
+  for (const r of rows) children.set(r.ppid, [...(children.get(r.ppid) ?? []), r]);
 
   let agentsCpu = 0;
   let agentsMemory = 0;
   let agentProcesses = 0;
-  const sidecar = rows.find((r) => r[0] === sidecarPid);
+  const sidecar = rows.find((r) => r.pid === sidecarPid);
   if (sidecar) {
-    exegolCpu += sidecar[3];
-    exegolMemory += sidecar[2] * 1024;
+    exegolCpu += sidecar.cpu ?? 0;
+    exegolMemory += (sidecar.rss ?? 0) * 1024;
     let level = children.get(sidecarPid) ?? [];
     while (level.length > 0) {
       for (const r of level) {
-        agentsCpu += r[3];
-        agentsMemory += r[2] * 1024;
+        agentsCpu += r.cpu ?? 0;
+        agentsMemory += (r.rss ?? 0) * 1024;
         agentProcesses++;
       }
-      level = level.flatMap((r) => children.get(r[0]) ?? []);
+      level = level.flatMap((r) => children.get(r.pid) ?? []);
     }
   }
   const share = (pct: number) => Math.round((pct / Math.max(1, cores)) * 10) / 10;

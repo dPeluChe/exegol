@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { readFile, readlink } from "node:fs/promises";
+import { readFile, readlink, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { logger } from "../lib/logger";
@@ -176,66 +176,74 @@ function parsePortFromMatch(match: RegExpMatchArray | null, index: number): numb
   return n > 0 && n <= 65535 ? n : null;
 }
 
+/** package.json scripts: --port NNNN or -p NNNN */
+function scriptPorts(raw: string): (number | null)[] {
+  const pkg = JSON.parse(raw);
+  return Object.values(pkg.scripts ?? {}).flatMap((script) =>
+    ((script as string).match(/(?:--port|-p)\s+(\d+)/g) ?? []).map((m) =>
+      parsePortFromMatch(m.match(/(\d+)/), 1),
+    ),
+  );
+}
+
+const envPort = (raw: string) => [parsePortFromMatch(raw.match(/^PORT\s*=\s*(\d+)/m), 1)];
+const vitePort = (raw: string) => [parsePortFromMatch(raw.match(/port\s*:\s*(\d+)/), 1)];
+const nextPort = (raw: string) => [parsePortFromMatch(raw.match(/port\s*[=:]\s*(\d+)/), 1)];
+
+/** The files read for expected ports, and how; the cache signature covers the same list */
+const CONFIG_FILES: { file: string; ports: (raw: string) => (number | null)[] }[] = [
+  { file: "package.json", ports: scriptPorts },
+  { file: ".env", ports: envPort },
+  { file: ".env.local", ports: envPort },
+  { file: "vite.config.ts", ports: vitePort },
+  { file: "vite.config.js", ports: vitePort },
+  { file: "next.config.js", ports: nextPort },
+  { file: "next.config.mjs", ports: nextPort },
+];
+
+/** Each config file's mtime and size ("-" when missing): equal means the ports did not change */
+export async function configSignature(
+  projectPath: string,
+  statFile: (path: string) => Promise<{ mtimeMs: number; size: number }> = stat,
+): Promise<string> {
+  const parts = await Promise.all(
+    CONFIG_FILES.map(({ file }) =>
+      statFile(join(projectPath, file)).then(
+        (s) => `${s.mtimeMs}:${s.size}`,
+        () => "-",
+      ),
+    ),
+  );
+  return parts.join("|");
+}
+
+const configPorts = new AsyncLruCache<string, ConfiguredPort[]>(64);
+
+/** Every sidebar row asks every 10 s: the files are parsed again only after one changes */
+async function cachedConfigPorts(projectPath: string): Promise<ConfiguredPort[]> {
+  const signature = await configSignature(projectPath);
+  return configPorts.getOrCompute(`${projectPath}|${signature}`, () =>
+    parseConfigPorts(projectPath),
+  );
+}
+
 /** Parse common config files for expected port numbers */
 async function parseConfigPorts(projectPath: string): Promise<ConfiguredPort[]> {
   const ports: ConfiguredPort[] = [];
   const seen = new Set<number>();
-
-  const addPort = (port: number | null, file: string) => {
-    if (port && !seen.has(port)) {
-      seen.add(port);
-      ports.push({ port, source: "config", file });
-    }
-  };
-
-  // package.json scripts: --port NNNN or -p NNNN
-  try {
-    const raw = await readFile(join(projectPath, "package.json"), "utf-8");
-    const pkg = JSON.parse(raw);
-    if (pkg.scripts) {
-      for (const script of Object.values(pkg.scripts)) {
-        const matches = (script as string).match(/(?:--port|-p)\s+(\d+)/g);
-        if (matches) {
-          for (const m of matches) {
-            addPort(parsePortFromMatch(m.match(/(\d+)/), 1), "package.json");
-          }
+  for (const { file, ports: read } of CONFIG_FILES) {
+    try {
+      const raw = await readFile(join(projectPath, file), "utf-8");
+      for (const port of read(raw)) {
+        if (port && !seen.has(port)) {
+          seen.add(port);
+          ports.push({ port, source: "config", file });
         }
       }
-    }
-  } catch {
-    /* no package.json */
-  }
-
-  // .env and .env.local: PORT=NNNN
-  for (const envFile of [".env", ".env.local"]) {
-    try {
-      const raw = await readFile(join(projectPath, envFile), "utf-8");
-      addPort(parsePortFromMatch(raw.match(/^PORT\s*=\s*(\d+)/m), 1), envFile);
     } catch {
-      /* file doesn't exist */
+      /* missing or unreadable */
     }
   }
-
-  // vite.config.ts/js: server: { port: NNNN }
-  for (const viteFile of ["vite.config.ts", "vite.config.js"]) {
-    try {
-      const raw = await readFile(join(projectPath, viteFile), "utf-8");
-      addPort(parsePortFromMatch(raw.match(/port\s*:\s*(\d+)/), 1), viteFile);
-    } catch {
-      /* file doesn't exist */
-    }
-  }
-
-  // next.config.js/mjs
-  for (const nextFile of ["next.config.js", "next.config.mjs"]) {
-    try {
-      const raw = await readFile(join(projectPath, nextFile), "utf-8");
-      addPort(parsePortFromMatch(raw.match(/port\s*[=:]\s*(\d+)/), 1), nextFile);
-    } catch {
-      /* file doesn't exist */
-    }
-  }
-
   return ports;
 }
 
@@ -243,7 +251,7 @@ async function parseConfigPorts(projectPath: string): Promise<ConfiguredPort[]> 
 export async function getProjectPorts(projectPath: string): Promise<PortInfo[]> {
   const [runtime, config] = await Promise.all([
     detectListeningPorts(projectPath),
-    parseConfigPorts(projectPath),
+    cachedConfigPorts(projectPath),
   ]);
 
   return [...runtime, ...config];

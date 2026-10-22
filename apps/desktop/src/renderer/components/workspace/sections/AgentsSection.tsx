@@ -1,5 +1,5 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
-import { ProjectScope } from "../../../contexts/ProjectScope";
+import { ProjectScope, TabShown } from "../../../contexts/ProjectScope";
 import { useMountEffect } from "../../../hooks/use-mount-effect";
 import { dispatchRefitTerminals } from "../../../lib/dispatch-refit";
 import {
@@ -42,7 +42,9 @@ function AllTabsLayout({ projectId, shown }: { projectId: string; shown: boolean
           key={tab.id}
           className={tab.id === activeTabId ? "h-full" : "invisible absolute inset-0"}
         >
-          <WorkspaceLayout layout={tab.layout} tabId={tab.id} />
+          <TabShown shown={tab.id === activeTabId}>
+            <WorkspaceLayout layout={tab.layout} tabId={tab.id} />
+          </TabShown>
         </div>
       ))}
     </>

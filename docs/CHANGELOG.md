@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Changed
+- Less background CPU: metrics pause while Exegol is hidden, idle terminals stop polling the process list, Git panes in hidden tabs stop polling, and Git status reads are shared for 2 s
+
 ### Fixed
 - Switching projects no longer repaints the terminals' letters: a terminal off screen keeps its GPU renderer until another one needs it, one that must rebuild it stays hidden until it has drawn, and closed renderers free their GPU context at once. A terminal that only finds a GPU slot later is refitted to its narrower cells
 - Dialogs fit their text: a long URL, path or name wraps inside the dialog instead of running past its edge and under the close button, long titles stop at two lines, tall dialogs scroll, and every dialog keeps a margin from the window edges

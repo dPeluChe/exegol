@@ -3,6 +3,7 @@ import type Database from "libsql";
 import { coreRust } from "../../agents/spawn-env";
 import { execFileAsync } from "../../lib/exec-file";
 import { AsyncLruCache } from "../../lib/lru-cache";
+import { forgetGitState } from "./diff-state";
 
 export { coreRust };
 
@@ -10,8 +11,10 @@ export { coreRust };
 // Invalidated whenever a mutation touches the same projectId.
 // TTL: agents edit files without going through a mutation, so invalidation alone never sees them
 export const diffCache = new AsyncLruCache<string, unknown>(6, 5_000);
+/** The one place a git write through Exegol clears what it cached: diffs, status and state */
 export function invalidateProjectDiff(projectId: string): void {
   diffCache.invalidateWhere((k) => k.startsWith(`${projectId}|`));
+  forgetGitState();
 }
 
 // ─── Helpers ────────────────────────────────────────────────────────────────

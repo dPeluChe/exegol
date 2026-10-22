@@ -30,6 +30,20 @@ export function ProjectScope({
   return <ProjectScopeContext.Provider value={value}>{children}</ProjectScopeContext.Provider>;
 }
 
+const TabShownContext = createContext(true);
+
+/** One workspace tab: the inactive ones stay mounted (live terminals) but stop polling */
+export function TabShown({ shown, children }: { shown: boolean; children: React.ReactNode }) {
+  return <TabShownContext.Provider value={shown}>{children}</TabShownContext.Provider>;
+}
+
+/** Whether a pane's polls should run: its project is shown and its tab is the active one */
+export function usePanePolling(): boolean {
+  const { shown } = usePaneProject();
+  const tabShown = useContext(TabShownContext);
+  return shown && tabShown;
+}
+
 /** The project of the pane this renders in (its ProjectScope), else the active project */
 export function usePaneProject(): ProjectScopeValue {
   const scope = useContext(ProjectScopeContext);

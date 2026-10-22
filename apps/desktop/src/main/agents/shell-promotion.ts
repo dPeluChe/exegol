@@ -18,6 +18,7 @@ import { pickAgentCodename } from "./agent-names";
 import type { SessionMaps } from "./agent-session-callbacks";
 import { dropFollowUps } from "./follow-up-queue";
 import { attachOutputPipeline, detachOutputPipeline } from "./output-pipeline";
+import { lastInputOf } from "./session-activity";
 import { broadcastAgentStatus } from "./spawn-env";
 
 /** A terminal session the watcher looks at: a plain shell, or one already promoted */
@@ -168,11 +169,44 @@ function reportShellCommands(
 }
 
 const POLL_MS = 3_000;
+/** A read this recent (and newer than the last input) is as good as a new one */
+const SHARED_READ_MS = 1_500;
+/** Shells left alone still get a read this often: a background job can start a CLI */
+const IDLE_READ_MS = 30_000;
+
+/**
+ * Whether a tick needs the process table. A plain shell at its prompt (no foreground command at
+ * the last read) starts nothing until input reaches it, so a tick with only such shells and no
+ * input since the poll before the last read skips the `ps`. That one extra poll covers a read
+ * landing between Enter and the CLI's exec (slow preexec hooks), which sees no foreground yet.
+ */
+export function needsProcessRead(
+  sessions: Pick<TerminalSession, "id" | "cliType" | "currentStep" | "launchedInShell">[],
+  lastRead: { at: number; ids: ReadonlySet<string> },
+  inputAt: (id: string) => number | undefined,
+  now: number,
+): boolean {
+  if (now - lastRead.at >= IDLE_READ_MS) return true;
+  return sessions.some(
+    (s) =>
+      s.cliType !== "shell" ||
+      s.launchedInShell ||
+      s.currentStep !== null ||
+      !lastRead.ids.has(s.id) ||
+      (inputAt(s.id) ?? 0) >= lastRead.at - POLL_MS,
+  );
+}
+
+/** How old a shared read may be: never older than the newest input, so a CLI typed is seen */
+export function sharedReadAge(lastInput: number, now: number): number {
+  return Math.max(0, Math.min(SHARED_READ_MS, now - lastInput - 1));
+}
 
 /**
  * An agent CLI typed in a plain terminal (any provider) turns that session into the agent:
  * rename, status, attention, resume and scoring then work as for one Exegol launched.
- * One `ps` per tick, only while a terminal session is live.
+ * One `ps` per tick, only while a terminal session is live and could have started something
+ * (`needsProcessRead`), shared with the metrics collector when recent.
  */
 export function startShellPromotion(db: Database.Database, maps: SessionMaps): () => void {
   // A Windows process read starts PowerShell (~0.5 s CPU): too heavy every 3 s
@@ -181,14 +215,20 @@ export function startShellPromotion(db: Database.Database, maps: SessionMaps): (
     return () => {};
   }
   let busy = false;
+  let lastRead: { at: number; ids: ReadonlySet<string> } = { at: 0, ids: new Set() };
   const tick = async () => {
     if (busy) return;
     busy = true;
     try {
       const sessions = listTerminalSessions(db);
       if (sessions.length === 0) return;
+      const now = Date.now();
+      if (!needsProcessRead(sessions, lastRead, lastInputOf, now)) return;
+      const newestInput = Math.max(0, ...sessions.map((s) => lastInputOf(s.id) ?? 0));
+      const maxAgeMs = sharedReadAge(newestInput, now);
       const args: Record<string, string> = {};
-      const rows = await readProcessTable();
+      const rows = await readProcessTable({ maxAgeMs });
+      lastRead = { at: now - maxAgeMs, ids: new Set(sessions.map((s) => s.id)) };
       const found = matchShellClis(sessions, rows, providerCommands(), args);
       const shells = sessions.filter((s) => s.cliType === "shell" && !found[s.id]);
       reportShellCommands(db, shells, foregroundCommands(shells, rows));

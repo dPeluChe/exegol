@@ -94,6 +94,8 @@ export const oplogRouter = router({
       // Perform the revert
       const newSha = rust.revertToSnapshot(project.path, refBefore);
 
+      invalidateProjectDiff(projectId);
+
       // Record the revert in oplog
       const revertEntry = createOplogEntry(ctx.db, {
         agentId: entry.agent_id as string,
@@ -155,6 +157,7 @@ export const oplogRouter = router({
       }
 
       const newSha = coreRust.restoreOplogSnapshot(project.path, input.sha);
+      invalidateProjectDiff(input.projectId);
       logger.info("[Oplog] Restored turn snapshot:", {
         sha: input.sha.slice(0, 8),
         newCommit: newSha.slice(0, 8),

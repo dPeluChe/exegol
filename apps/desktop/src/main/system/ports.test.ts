@@ -1,5 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { lsofStdout, parseLsofListenLine, readProcCwds } from "./ports";
+import { configSignature, lsofStdout, parseLsofListenLine, readProcCwds } from "./ports";
+
+describe("configSignature", () => {
+  it("changes when a config file's mtime or size does, and marks missing files", async () => {
+    const files: Record<string, { mtimeMs: number; size: number }> = {
+      "/p/package.json": { mtimeMs: 1, size: 10 },
+    };
+    const statFile = async (path: string) => {
+      const s = files[path];
+      if (!s) throw new Error("ENOENT");
+      return s;
+    };
+    const before = await configSignature("/p", statFile);
+    expect(before).toBe("1:10|-|-|-|-|-|-");
+    expect(await configSignature("/p", statFile)).toBe(before);
+    files["/p/.env"] = { mtimeMs: 2, size: 5 };
+    expect(await configSignature("/p", statFile)).not.toBe(before);
+  });
+});
 
 describe("lsofStdout", () => {
   it("keeps what a run that exited 1 printed", () => {

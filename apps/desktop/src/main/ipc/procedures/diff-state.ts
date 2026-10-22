@@ -1,7 +1,7 @@
 import { currentBranch, detectGhCli, isDefaultBranch } from "../../integrations/github/gh";
 import { execFileAsync } from "../../lib/exec-file";
 import { AsyncLruCache } from "../../lib/lru-cache";
-import { readGitStatus } from "./git-status";
+import { forgetGitStatus, readGitStatus } from "./git-status";
 
 interface GitState {
   branch: string;
@@ -33,6 +33,19 @@ export function forgetPrState(cwd: string): void {
   prCache.invalidateWhere((k) => k.startsWith(`${cwd}|`));
 }
 
+/** SmartGitAction, the status bar widget and a second Git pane on one folder share a read for 2 s */
+const stateReads = new AsyncLruCache<string, GitState>(16, 2_000);
+
+/** After a git write through Exegol (via `invalidateProjectDiff`): status and state run git again */
+export function forgetGitState(): void {
+  stateReads.invalidateWhere(() => true);
+  forgetGitStatus();
+}
+
+export function buildGitState(cwd: string, defaultBranch = "main"): Promise<GitState> {
+  return stateReads.getOrCompute(`${cwd}|${defaultBranch}`, () => readGitState(cwd, defaultBranch));
+}
+
 async function readPrState(cwd: string): Promise<GitState["pr"]> {
   try {
     const { stdout } = await execFileAsync(
@@ -61,7 +74,7 @@ async function readPrState(cwd: string): Promise<GitState["pr"]> {
   }
 }
 
-export async function buildGitState(cwd: string, defaultBranch = "main"): Promise<GitState> {
+async function readGitState(cwd: string, defaultBranch: string): Promise<GitState> {
   const branch = (await currentBranch(cwd)) ?? "unknown";
 
   // Upstream + ahead/behind

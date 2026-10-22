@@ -1,7 +1,7 @@
 import { deriveIsolationMode, isSessionReconnecting } from "@exegol/shared";
 import { AlertCircle } from "lucide-react";
 import { type RefObject, useCallback, useEffect, useMemo, useRef } from "react";
-import { usePaneProject } from "../../contexts/ProjectScope";
+import { usePanePolling, usePaneProject } from "../../contexts/ProjectScope";
 import { useResumeAgent } from "../../hooks/use-resume-agent";
 import { useAgent, useStopAgent } from "../../hooks/use-trpc";
 import { useSessionRecovery } from "../../lib/session-recovery";
@@ -35,7 +35,8 @@ interface TerminalPanelProps {
 
 export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) {
   // Use push-driven store for instant status updates (not 30s polling)
-  const { projectId: paneProjectId, shown } = usePaneProject();
+  const { projectId: paneProjectId } = usePaneProject();
+  const polling = usePanePolling();
   const { storeAgent, isolationMode, agent } = usePanelAgent(agentId);
   const { scrollAtTop, scrollAtBottom, hasNewOutput, handleScrollPosition } =
     useTerminalScrollState();
@@ -51,7 +52,7 @@ export function TerminalPanel({ agentId, paneId, onReady }: TerminalPanelProps) 
     useTerminalLifecycle({ agentId, status: agent?.status, reconnecting });
 
   const toolbarProjectId = agent?.projectId ?? paneProjectId ?? undefined;
-  const gitInfo = useTerminalGitInfo(toolbarProjectId, agent?.branchName, shown);
+  const gitInfo = useTerminalGitInfo(toolbarProjectId, agent?.branchName, polling);
   const filesPeek = useFilesPeek(toolbarProjectId);
   const agentProjectId = agent?.projectId;
   const handleOpenShellHere = useOpenShellHere({

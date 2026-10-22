@@ -10,7 +10,7 @@ import {
   Sparkles,
 } from "lucide-react";
 import { useCallback, useState } from "react";
-import { usePaneProject } from "../../contexts/ProjectScope";
+import { usePanePolling, usePaneProject } from "../../contexts/ProjectScope";
 import { setFileDragData } from "../../lib/file-drag";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { toastError, useToastStore } from "../../stores/toasts";
@@ -33,12 +33,12 @@ const filePaths = (f: FileStatus) => (f.origPath ? [f.origPath, f.path] : [f.pat
 // ─── Hooks ──────────────────────────────────────────────────────────────────
 
 function useGitStatus(projectId: string | undefined, pathOverride?: string) {
-  // A project kept mounted but hidden stops polling (refreshed when shown again)
-  const { shown } = usePaneProject();
+  // A hidden tab or kept project stops polling (refreshed when shown again)
+  const polling = usePanePolling();
   return useQuery({
     queryKey: ["git", "status", pathOverride || projectId],
     queryFn: () => trpcInvoke<FileStatus[]>("diff.status", { projectId, pathOverride }),
-    enabled: !!projectId && shown,
+    enabled: !!projectId && polling,
     refetchInterval: 15_000,
   });
 }

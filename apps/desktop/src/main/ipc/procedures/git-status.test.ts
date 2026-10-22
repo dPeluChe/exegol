@@ -3,7 +3,7 @@ import { mkdtempSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { gitErrorSummary, runGit } from "./diff-helpers";
+import { gitErrorSummary, invalidateProjectDiff, runGit } from "./diff-helpers";
 import { parseGitStatus, readGitStatus } from "./git-status";
 
 describe("parseGitStatus", () => {
@@ -88,9 +88,20 @@ describe("against a real repo", () => {
     });
 
     await runGit(cwd, ["reset", "-q", "HEAD", "--", "b.txt", "c d.txt"]);
+    invalidateProjectDiff("p1");
     const after = await readGitStatus(cwd);
     expect(after).toContainEqual({ status: "D", staged: false, path: "b.txt" });
     expect(after).toContainEqual({ status: "?", staged: false, path: "c d.txt" });
+  });
+
+  it("shares one git status per folder for 2 s; invalidateProjectDiff clears it", async () => {
+    const [a, b] = await Promise.all([readGitStatus(cwd), readGitStatus(cwd)]);
+    expect(a).toBe(b);
+    writeFileSync(join(cwd, "a.txt"), "edited outside\n");
+    expect(await readGitStatus(cwd)).toBe(a);
+    await runGit(cwd, ["add", "a.txt"]);
+    invalidateProjectDiff("p1");
+    expect(await readGitStatus(cwd)).toContainEqual({ status: "M", staged: true, path: "a.txt" });
   });
 
   it("throws git's own message", async () => {

@@ -6,7 +6,7 @@ vi.mock("./output-pipeline", () => ({
   detachOutputPipeline: vi.fn(),
 }));
 
-const { planShellTransitions } = await import("./shell-promotion");
+const { needsProcessRead, planShellTransitions, sharedReadAge } = await import("./shell-promotion");
 
 const shell = {
   id: "s1",
@@ -57,5 +57,47 @@ describe("planShellTransitions", () => {
 
   it("ignores a provider id that is not a known CLI type", () => {
     expect(planShellTransitions([shell], { s1: "my-custom" }, parsing([]))).toEqual([]);
+  });
+});
+
+describe("needsProcessRead", () => {
+  const read = { at: 10_000, ids: new Set(["s1"]) };
+  const noInput = () => undefined;
+
+  it("skips a shell at its prompt with no input since the last read", () => {
+    expect(needsProcessRead([shell], read, noInput, 13_000)).toBe(false);
+    expect(needsProcessRead([shell], read, () => 6_999, 13_000)).toBe(false);
+  });
+
+  it("reads one more poll after input: the last read may have landed before the CLI's exec", () => {
+    expect(needsProcessRead([shell], read, () => 9_999, 13_000)).toBe(true);
+    expect(needsProcessRead([shell], read, () => 7_000, 13_000)).toBe(true);
+    expect(needsProcessRead([shell], { ...read, at: 13_000 }, () => 9_999, 16_000)).toBe(false);
+  });
+
+  it("reads after input, a foreground command, a promoted CLI or a new session", () => {
+    expect(needsProcessRead([shell], read, () => 10_000, 13_000)).toBe(true);
+    expect(needsProcessRead([{ ...shell, currentStep: "npm" }], read, noInput, 13_000)).toBe(true);
+    expect(
+      needsProcessRead(
+        [{ ...shell, cliType: "codex", launchedInShell: true }],
+        read,
+        noInput,
+        13_000,
+      ),
+    ).toBe(true);
+    expect(needsProcessRead([{ ...shell, id: "s2" }], read, noInput, 13_000)).toBe(true);
+  });
+
+  it("still reads every 30 s", () => {
+    expect(needsProcessRead([shell], read, noInput, 40_000)).toBe(true);
+  });
+});
+
+describe("sharedReadAge", () => {
+  it("never takes a read older than the newest input", () => {
+    expect(sharedReadAge(0, 100_000)).toBe(1_500);
+    expect(sharedReadAge(99_800, 100_000)).toBe(199);
+    expect(sharedReadAge(100_000, 100_000)).toBe(0);
   });
 });

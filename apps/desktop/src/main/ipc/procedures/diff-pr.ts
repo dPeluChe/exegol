@@ -3,7 +3,7 @@ import { z } from "zod";
 import { detectGhCli } from "../../integrations/github/gh";
 import { execFileAsync } from "../../lib/exec-file";
 import { publicProcedure } from "../trpc";
-import { resolveProjectPath } from "./diff-helpers";
+import { invalidateProjectDiff, resolveProjectPath } from "./diff-helpers";
 import { forgetPrState } from "./diff-state";
 
 export const prProcedures = {
@@ -37,6 +37,7 @@ export const prProcedures = {
       try {
         const { stdout } = await execFileAsync("gh", args, { cwd, timeout: 30_000 });
         forgetPrState(cwd);
+        invalidateProjectDiff(input.projectId);
         return { url: stdout.trim() };
       } catch (err) {
         throw new TRPCError({
@@ -69,6 +70,7 @@ export const prProcedures = {
       try {
         const { stdout } = await execFileAsync("gh", args, { cwd, timeout: 60_000 });
         forgetPrState(cwd);
+        invalidateProjectDiff(input.projectId);
         return { output: stdout.trim() || "Merged successfully" };
       } catch (err) {
         throw new TRPCError({
