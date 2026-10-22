@@ -18,16 +18,6 @@ export interface WebglBudget {
    *  evicted (`evict` drops the addon without `release`, the slot passes on) */
   park: (evict: () => void) => void;
   unpark: (evict: () => void) => void;
-  /** Counted since load, read as differences by the project switch log */
-  counts: () => WebglCounts;
-  /** A context was created (`attached`) or a parked one shown again (`reused`) */
-  note: (event: "attached" | "reused") => void;
-}
-
-export interface WebglCounts {
-  attached: number;
-  reused: number;
-  evicted: number;
 }
 
 export function createWebglBudget(cap = MAX_WEBGL_CONTEXTS, onChange?: () => void): WebglBudget {
@@ -37,13 +27,15 @@ export function createWebglBudget(cap = MAX_WEBGL_CONTEXTS, onChange?: () => voi
   const waiters: Array<() => void> = [];
   // Oldest first: the least recently hidden context goes first
   const parked: Array<() => void> = [];
-  const counts: WebglCounts = { attached: 0, reused: 0, evicted: 0 };
   const evictOldest = (): boolean => {
     const evict = parked.shift();
-    if (!evict) return false;
-    counts.evicted++;
-    evict();
-    return true;
+    evict?.();
+    return evict !== undefined;
+  };
+  const release = () => {
+    live = Math.max(0, live - 1);
+    onChange?.();
+    waiters.shift()?.();
   };
   return {
     acquire(onFree) {
@@ -61,11 +53,7 @@ export function createWebglBudget(cap = MAX_WEBGL_CONTEXTS, onChange?: () => voi
       if (onFree && !waiters.includes(onFree)) waiters.push(onFree);
       return false;
     },
-    release() {
-      live = Math.max(0, live - 1);
-      onChange?.();
-      waiters.shift()?.();
-    },
+    release,
     cancelWait(onFree) {
       const at = waiters.indexOf(onFree);
       if (at >= 0) waiters.splice(at, 1);
@@ -80,19 +68,11 @@ export function createWebglBudget(cap = MAX_WEBGL_CONTEXTS, onChange?: () => voi
     park(evict) {
       if (!parked.includes(evict)) parked.push(evict);
       // A shown terminal is drawing on the DOM renderer for want of a slot: it takes this one
-      const waiter = waiters.shift();
-      if (!waiter) return;
-      evictOldest();
-      live--;
-      waiter();
+      if (waiters.length > 0 && evictOldest()) release();
     },
     unpark(evict) {
       const at = parked.indexOf(evict);
       if (at >= 0) parked.splice(at, 1);
-    },
-    counts: () => ({ ...counts }),
-    note(event) {
-      counts[event]++;
     },
   };
 }

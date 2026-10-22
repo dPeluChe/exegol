@@ -69,7 +69,6 @@ describe("createWebglBudget", () => {
     expect(older).toHaveBeenCalledTimes(1);
     expect(newer).not.toHaveBeenCalled();
     expect(budget.live()).toBe(2);
-    expect(budget.counts().evicted).toBe(1);
   });
 
   it("a terminal shown again leaves the parked list", () => {

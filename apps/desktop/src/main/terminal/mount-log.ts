@@ -1,4 +1,4 @@
-import type { MountStats } from "@exegol/shared";
+import type { MountStats, WebglCounts } from "@exegol/shared";
 import { createLogLimiter } from "../lib/log-limiter";
 
 export const AGENT_ID = /^[\w-]{1,64}$/;
@@ -30,6 +30,17 @@ function count(n: unknown, max = 1e9): n is number {
 }
 
 const isGrid = (g: unknown): g is string => typeof g === "string" && GRID.test(g);
+
+function parseWebglCounts(input: unknown): WebglCounts | null {
+  if (!input || typeof input !== "object") return null;
+  const { reused, attached, evicted } = input as Record<string, unknown>;
+  if (!count(reused, 1e4) || !count(attached, 1e4) || !count(evicted, 1e4)) return null;
+  return {
+    reused: Math.round(reused),
+    attached: Math.round(attached),
+    evicted: Math.round(evicted),
+  };
+}
 
 /** The renderer is untrusted: anything that is not a plain count or grid drops the line */
 export function parseMountStats(agentId: unknown, input: unknown): MountLog | null {
@@ -67,9 +78,8 @@ export function parseMountStats(agentId: unknown, input: unknown): MountLog | nu
     if (!count(keptMounts, 1e4)) return null;
     if (!count(snapshotBytes) || !count(reflows, 1e4) || !count(pending, 1e4)) return null;
     if (ended !== "settled" && ended !== "timeout" && ended !== "switched") return null;
-    if (typeof webgl !== "object" || webgl === null) return null;
-    const gl = webgl as Record<string, unknown>;
-    if (!count(gl.reused, 1e4) || !count(gl.attached, 1e4) || !count(gl.evicted, 1e4)) return null;
+    const gl = parseWebglCounts(webgl);
+    if (!gl) return null;
     return {
       agentId,
       kind: "switch",
@@ -81,11 +91,7 @@ export function parseMountStats(agentId: unknown, input: unknown): MountLog | nu
       reflows: Math.round(reflows),
       pending: Math.round(pending),
       ended,
-      webgl: {
-        reused: Math.round(gl.reused),
-        attached: Math.round(gl.attached),
-        evicted: Math.round(gl.evicted),
-      },
+      webgl: gl,
     };
   }
   if (r.kind === "send") {

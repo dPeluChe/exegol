@@ -1,5 +1,5 @@
-import type { MountStats } from "@exegol/shared";
-import { type WebglCounts, webglBudget } from "../components/terminal/webgl-budget";
+import type { MountStats, WebglCounts } from "@exegol/shared";
+import { webglCounts } from "../components/terminal/webgl-counts";
 
 /** Past this the summary goes out with what is still pending */
 export const SWITCH_CAP_MS = 3_000;
@@ -44,6 +44,7 @@ export function createSwitchTracker({ now, schedule, send, webglCounts }: Switch
     s.cancelTimers();
     const end = ended === "settled" ? s.lastAt : now();
     const gl = webglCounts();
+    const at = s.webglAtStart;
     send(s.projectId, {
       kind: "switch",
       keptMounts: s.kept,
@@ -55,9 +56,9 @@ export function createSwitchTracker({ now, schedule, send, webglCounts }: Switch
       pending: s.pending,
       ended,
       webgl: {
-        reused: gl.reused - s.webglAtStart.reused,
-        attached: gl.attached - s.webglAtStart.attached,
-        evicted: gl.evicted - s.webglAtStart.evicted,
+        reused: gl.reused - at.reused,
+        attached: gl.attached - at.attached,
+        evicted: gl.evicted - at.evicted,
       },
     });
   };
@@ -124,7 +125,7 @@ const tracker = createSwitchTracker({
   send: (projectId, report) => {
     if (typeof window !== "undefined") window.api?.terminal?.mountLog?.(projectId, report);
   },
-  webglCounts: () => webglBudget.counts(),
+  webglCounts,
 });
 
 export const projectSwitchStarted = tracker.start;

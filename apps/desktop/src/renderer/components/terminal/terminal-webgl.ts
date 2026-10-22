@@ -1,6 +1,7 @@
 import { WebglAddon } from "@xterm/addon-webgl";
 import type { Terminal } from "@xterm/xterm";
 import { type WebglBudget, webglBudget } from "./webgl-budget";
+import { counts } from "./webgl-counts";
 
 /** Backoff: a crashed GPU process (window moved to another display) takes seconds to return */
 const RETRY_DELAYS_MS = [250, 1_000, 3_000];
@@ -8,36 +9,30 @@ const RETRY_DELAYS_MS = [250, 1_000, 3_000];
 const STABLE_RESET_MS = 60_000;
 /** Every terminal loses its context in the same tick: spread the rebuilds */
 const JITTER_MS = 200;
+/** Longest a terminal stays concealed waiting for WebGL: then it shows whatever renderer it has */
+const REVEAL_CAP_MS = 150;
 
 export interface WebglController {
-  attach: () => void;
-  detach: () => void;
   dispose: () => void;
   /** A fresh addon and retry budget: after a GPU process crash the old context can look alive yet never draw */
   rebuild: () => void;
-  /** Whether WebGL ultimately failed and we're on the DOM renderer. */
-  hasFallenBack: () => boolean;
-  /** Off screen: the context stays (no DOM frame and atlas rebuild on return) until a shown
-   *  terminal needs its slot */
+  /** Off screen: the context stays until a shown terminal needs its slot */
   park: () => void;
-  /** Back on screen: `reused` drew at once, `attached` is a new context, `dom` waits for a slot */
-  unpark: () => WebglReturn;
+  unpark: () => void;
+  /** A context is due on the next show: fits wait, WebGL cells are narrower than the DOM's */
+  pending: () => boolean;
 }
 
-export type WebglReturn = "reused" | "attached" | "dom";
+export interface WebglHooks {
+  onLost?: () => void;
+  /** The renderer changed or `pending` cleared: the owner refits (cell widths differ) */
+  onRendererChanged?: () => void;
+}
 
 /**
- * Attach the WebGL addon to a terminal with context-loss recovery.
- *
- * xterm's own `webglcontextrestored` path redraws; `onContextLoss` fires only when that
- * failed (3s later). Disposing the addon swaps in the DOM renderer with a full refresh, then
- * we retry with backoff, and fall back for good once the delays run out. `onLost` lets the
- * owner kick the PTY: a TUI stayed blank after a GPU crash until it was resized.
- * Only `onContextLoss`: a second DOM listener on the same canvas double-fires per loss.
- */
-/**
  * xterm 0.19's dispose removes the canvas but keeps its GL context, which still counts toward
- * Chromium's cap until garbage collected (xtermjs/xterm.js#6068): lose it on purpose.
+ * Chromium's cap until garbage collected (xtermjs/xterm.js#6068): lose it on purpose. Drop once
+ * the addon does it.
  */
 function disposeAddon(addon: WebglAddon): void {
   const gl = (addon as unknown as { _renderer?: { _gl?: WebGL2RenderingContext } })._renderer?._gl;
@@ -49,56 +44,92 @@ function disposeAddon(addon: WebglAddon): void {
   }
 }
 
-export interface WebglHooks {
-  onLost?: () => void;
-  /** A shown terminal took this parked one's slot: it now draws on the DOM renderer */
-  onEvicted?: () => void;
-  /** A context attached; xterm draws with it on the next frame */
-  onAttached?: () => void;
-}
-
+/**
+ * One terminal's WebGL addon, created parked. While `pending` the terminal is concealed and is
+ * revealed a frame after WebGL's first render (150 ms cap), so the DOM renderer's frame (wider
+ * cells, then the atlas build) never shows. Loss: xterm waits 3 s for a restore, then we retry.
+ */
 export function createWebglController(
   terminal: Terminal,
-  { onLost, onEvicted, onAttached }: WebglHooks = {},
+  { onLost, onRendererChanged }: WebglHooks = {},
   budget: WebglBudget = webglBudget,
 ): WebglController {
   let addon: WebglAddon | null = null;
-  let scheduledTimer: ReturnType<typeof setTimeout> | null = null;
+  let retryTimer: ReturnType<typeof setTimeout> | null = null;
   let retries = 0;
   let lastLossAt = 0;
   let fellBack = false;
   let disposed = false;
-  let parked = false;
+  let parked = true;
+  let concealed = false;
+  let revealTimer: ReturnType<typeof setTimeout> | null = null;
+  let revealRender: { dispose: () => void } | null = null;
+  let revealFrame = 0;
 
-  function clearScheduled(): void {
-    if (scheduledTimer) {
-      clearTimeout(scheduledTimer);
-      scheduledTimer = null;
+  const pending = () => parked && !addon && !fellBack && !disposed;
+
+  function setConcealed(hidden: boolean): void {
+    concealed = hidden;
+    if (terminal.element) terminal.element.style.opacity = hidden ? "0" : "";
+  }
+
+  // The one conceal rule: a context due on the next show means a renderer swap to hide
+  function syncConceal(): void {
+    if (pending() && !concealed) setConcealed(true);
+  }
+
+  function stopReveal(): void {
+    if (revealTimer) clearTimeout(revealTimer);
+    revealTimer = null;
+    revealRender?.dispose();
+    revealRender = null;
+    if (revealFrame) cancelAnimationFrame(revealFrame);
+    revealFrame = 0;
+  }
+
+  function reveal(): void {
+    stopReveal();
+    if (concealed) setConcealed(false);
+  }
+
+  // A frame past the first render: it can still be blank (xtermjs/xterm.js#6239)
+  function awaitFirstDraw(): void {
+    if (!concealed || revealRender || revealFrame) return;
+    revealRender = terminal.onRender(() => {
+      revealRender?.dispose();
+      revealRender = null;
+      revealFrame = requestAnimationFrame(reveal);
+    });
+  }
+
+  function dropAddon(release: boolean): void {
+    if (addon) {
+      disposeAddon(addon);
+      addon = null;
+      if (release) budget.release();
     }
+    syncConceal();
   }
-
-  function dropAddon(): void {
-    if (!addon) return;
-    disposeAddon(addon);
-    addon = null;
-    budget.release();
-  }
-
-  // Denied at the cap: this terminal draws on the DOM renderer until a slot frees
-  const attachWhenFree = () => attach();
 
   // The slot passes to a shown terminal, so no release
   const evict = () => {
-    if (addon) disposeAddon(addon);
-    addon = null;
-    onEvicted?.();
+    counts.evicted++;
+    dropAddon(false);
   };
+
+  function detach(): void {
+    if (retryTimer) clearTimeout(retryTimer);
+    retryTimer = null;
+    budget.cancelWait(attach);
+    budget.unpark(evict);
+    dropAddon(true);
+  }
 
   function onContextLost(): void {
     if (disposed) return;
-    budget.unpark(evict);
-    dropAddon();
+    detach();
     onLost?.();
+    if (!parked) onRendererChanged?.();
     const now = Date.now();
     if (now - lastLossAt > STABLE_RESET_MS) retries = 0;
     lastLossAt = now;
@@ -109,84 +140,92 @@ export function createWebglController(
       return;
     }
     retries++;
-    // Always clear before reassigning so a redundant loss event doesn't leak
-    // the previously-scheduled retry timer (which would still attach()).
-    clearScheduled();
-    scheduledTimer = setTimeout(
+    retryTimer = setTimeout(
       () => {
-        scheduledTimer = null;
-        if (!disposed) attach();
+        retryTimer = null;
+        attach();
       },
       delay + Math.random() * JITTER_MS,
     );
   }
 
-  function attach(): void {
+  /** `queued`: a slot frees later and attaches then; `none`: no renderer swap is coming */
+  function attach(): "attached" | "queued" | "none" {
     // Parked: the new context waits until the terminal is shown again
-    if (disposed || fellBack || addon || parked) return;
-    if (!budget.acquire(attachWhenFree)) return;
+    if (disposed || fellBack || addon || parked) return "none";
+    if (!budget.acquire(attach)) return budget.isDomOnly() ? "none" : "queued";
+    let created: WebglAddon | null = null;
     try {
-      const webgl = new WebglAddon();
-      webgl.onContextLoss(() => onContextLost());
-      terminal.loadAddon(webgl);
-      addon = webgl;
-      budget.note("attached");
-      onAttached?.();
+      created = new WebglAddon();
+      // 0.19's loss timer can outlive dispose (fixed upstream in #5932)
+      created.onContextLoss(() => {
+        if (created === addon) onContextLost();
+      });
+      // Swapping the renderer refreshes every row: the next render is WebGL's
+      terminal.loadAddon(created);
     } catch {
       // WebGL unavailable on this device: xterm keeps the DOM renderer
+      try {
+        created?.dispose();
+      } catch {
+        /* never loaded */
+      }
       fellBack = true;
       budget.release();
+      reveal();
+      return "none";
     }
-  }
-
-  function detach(): void {
-    clearScheduled();
-    budget.cancelWait(attachWhenFree);
-    budget.unpark(evict);
-    dropAddon();
+    addon = created;
+    counts.attached++;
+    awaitFirstDraw();
+    // After the slot is held: a refit that throws must not release it
+    onRendererChanged?.();
+    return "attached";
   }
 
   function rebuild(): void {
     if (disposed) return;
-    detach();
     retries = 0;
     lastLossAt = 0;
     fellBack = false;
-    // A parked terminal takes its new context when it is shown again
-    if (parked) onEvicted?.();
-    else attach();
+    detach();
+    attach();
   }
 
   function park(): void {
     if (disposed || parked) return;
     parked = true;
+    // Hidden: a reveal still owed waits for the next show
+    stopReveal();
     if (addon) budget.park(evict);
-    else budget.cancelWait(attachWhenFree);
+    else budget.cancelWait(attach);
+    syncConceal();
   }
 
-  function unpark(): WebglReturn {
+  function unpark(): void {
+    if (disposed || !parked) return;
     parked = false;
     budget.unpark(evict);
-    if (addon) {
-      budget.note("reused");
-      return "reused";
+    if (addon) counts.reused++;
+    const swap = addon ? "attached" : attach();
+    if (concealed && swap === "none") {
+      reveal();
+    } else if (concealed) {
+      // A context attached before it was hidden may not have drawn yet; a queued one subscribes on attach
+      if (addon) awaitFirstDraw();
+      revealTimer = setTimeout(reveal, REVEAL_CAP_MS);
     }
-    attach();
-    return addon ? "attached" : "dom";
+    // No context yet: `pending` cleared, so the DOM renderer is fitted
+    if (!addon) onRendererChanged?.();
   }
 
   function dispose(): void {
     disposed = true;
+    // The terminal may live on without WebGL (a canvas-only CLI): never leave it hidden
+    reveal();
     detach();
   }
 
-  return {
-    attach,
-    detach,
-    dispose,
-    rebuild,
-    hasFallenBack: () => fellBack,
-    park,
-    unpark,
-  };
+  syncConceal();
+  return { dispose, rebuild, park, unpark, pending };
 }

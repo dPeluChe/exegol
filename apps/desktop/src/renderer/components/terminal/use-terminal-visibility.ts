@@ -2,7 +2,7 @@ import { type RefObject, useEffect, useId, useRef, useState } from "react";
 
 /** Long enough that scrolling past a pane costs nothing; short enough that a
  *  backgrounded agent stops paying IPC almost immediately. */
-export const HIDE_DEBOUNCE_MS = 1_500;
+const HIDE_DEBOUNCE_MS = 1_500;
 
 /** T38: whether the terminal's box is on screen; reported to main (T178) */
 export function useTerminalVisibility(
