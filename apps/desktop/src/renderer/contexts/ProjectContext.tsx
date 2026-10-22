@@ -5,22 +5,13 @@ import { useMountEffect } from "../hooks/use-mount-effect";
 import { useAgents, useProject } from "../hooks/use-trpc";
 import { startAgentBrowserPush } from "../stores/agent-browser";
 // Stale activeProjectId is cleaned up by useAutoSelectProject in App.tsx.
-import {
-  type AgentState,
-  startAgentStatusPush,
-  stopAgentStatusPush,
-  useAgentStore,
-} from "../stores/agents";
+import { startAgentStatusPush, stopAgentStatusPush, useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
 
 interface ProjectContextValue {
   project: Project | null;
   projectId: string | null;
   isLoading: boolean;
-  /** Agents filtered for the active project */
-  agents: AgentState[];
-  /** Count of agents with status 'running' */
-  runningAgentCount: number;
 }
 
 const ProjectContext = createContext<ProjectContextValue | null>(null);
@@ -30,7 +21,6 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
   const { data: project, isLoading } = useProject(activeProjectId);
   const { data: dbAgents } = useAgents(activeProjectId);
   const syncFromDb = useAgentStore((s) => s.syncFromDb);
-  const agentsRecord = useAgentStore((s) => s.agents);
   const queryClient = useQueryClient();
 
   // T17: Subscribe to push events for agent status updates (Rule 4: external system sync)
@@ -52,20 +42,11 @@ export function ProjectProvider({ children }: { children: React.ReactNode }) {
     }
   }, [dbAgents, activeProjectId, syncFromDb]);
 
-  const value = useMemo<ProjectContextValue>(() => {
-    const agents = activeProjectId
-      ? Object.values(agentsRecord).filter((a) => a.projectId === activeProjectId)
-      : [];
-    const runningAgentCount = agents.filter((a) => a.status === "running").length;
-
-    return {
-      project: project ?? null,
-      projectId: activeProjectId,
-      isLoading,
-      agents,
-      runningAgentCount,
-    };
-  }, [activeProjectId, project, isLoading, agentsRecord]);
+  // No agents here: every consumer would re-render on each status push
+  const value = useMemo<ProjectContextValue>(
+    () => ({ project: project ?? null, projectId: activeProjectId, isLoading }),
+    [activeProjectId, project, isLoading],
+  );
 
   return <ProjectContext.Provider value={value}>{children}</ProjectContext.Provider>;
 }

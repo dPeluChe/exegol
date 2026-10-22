@@ -2,6 +2,7 @@ import { cn } from "@exegol/ui";
 import { Cpu, FolderGit2, GitBranch, HardDrive, MemoryStick, Server } from "lucide-react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
 import { type ProjectMetrics, useProjectMetrics } from "../../../hooks/use-trpc";
+import { isWorking, useProjectAgents } from "../../../stores/agents";
 import { EmptyState } from "../../common";
 import { AgentProcessTable } from "./AgentProcessTable";
 import { DevServersCard } from "./DevServersCard";
@@ -122,7 +123,7 @@ function MetricCard({
 // ─── Main Section ───────────────────────────────────────────────────────────
 
 export function ResourcesSection() {
-  const { project, agents } = useProjectContext();
+  const { project, projectId } = useProjectContext();
   const { metrics, cpuHistory, memHistory } = useLiveSystemMetrics();
 
   const { data: projectMetrics, isLoading: projectLoading } = useProjectMetrics(
@@ -135,7 +136,7 @@ export function ResourcesSection() {
     projectMetrics?.agentProcesses,
   );
 
-  const runningAgents = agents.filter((a) => a.status === "running" || a.status === "spawning");
+  const runningAgents = useProjectAgents(projectId, isWorking);
 
   if (!project) {
     return (
