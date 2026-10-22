@@ -82,9 +82,6 @@ export function useXterm({
   const refitRef = useRef<() => void>(() => {});
   // A hide dropped a size this view was settling: refit once it is back on screen
   const resizeDroppedRef = useRef(false);
-  // WebGL cells are whole device pixels (8.0 vs the DOM's 8.43 px): a fit before the addon attaches
-  // lands ~5% fewer columns and refits a frame later (`settled 130x57 -> 137x57`)
-  const webglPendingRef = useRef(false);
   // The live session in state, so the visibility effects re-run on every rebuild
   const [session, setSession] = useState<TerminalSession | null>(null);
   // Inactive tabs and the Agents area under the Dashboard are `invisible`, which xterm and an
@@ -253,11 +250,19 @@ export function useXterm({
     if (live.cardOwns && live.cardFont) {
       next.terminal.options.fontSize = live.cardFont;
     }
-    webglPendingRef.current = wantsWebgl(mirror, live.cliType);
-    // Shown once WebGL draws (the visibility effect), never as a DOM frame first
-    if (webglPendingRef.current) setConcealed(next.terminal, true);
+    // Parked and concealed until the visibility effect shows it: never a DOM frame first
+    webglRef.current = wantsWebgl(mirror, live.cliType)
+      ? createWebglController(next.terminal, {
+          // Same as the menu's Refresh Terminal: the resize makes a TUI redraw its screen
+          onLost: () =>
+            window.dispatchEvent(new CustomEvent("exegol:kick-terminal", { detail: { agentId } })),
+          onRendererChanged: () => refitRef.current(),
+        })
+      : null;
     const refit = () => {
-      if (webglPendingRef.current) return;
+      // WebGL cells are whole device pixels (8.0 vs the DOM's 8.43 px): a fit before the addon
+      // attaches lands ~5% fewer columns and refits a frame later (`settled 130x57 -> 137x57`)
+      if (webglRef.current?.pending()) return;
       if (!latest.current.sizeTerminal(next.terminal, next.fitAddon)) return;
       settle?.fit(gridLabel(next.terminal.cols, next.terminal.rows));
       fitted = true;
@@ -367,9 +372,6 @@ export function useXterm({
     const terminal = session?.terminal;
     // Rebuilt earlier in this commit: the render carrying the new session attaches
     if (!terminal || terminal !== terminalRef.current) return;
-    // Mirrors draw on canvas: several open at once would eat into Chromium's
-    // ~16 WebGL contexts, and each one rebuilds its atlas on every font fit
-    const useCanvas = !wantsWebgl(mirror, cliType);
     const onScreen = isVisible && shown;
     // A size measured just before hiding is not the one it comes back to
     if (!onScreen && cancelPtyResize(agentId, terminal)) resizeDroppedRef.current = true;
@@ -377,36 +379,10 @@ export function useXterm({
       resizeDroppedRef.current = false;
       refitRef.current();
     }
-    if (onScreen && !useCanvas) {
-      let controller = webglRef.current;
-      if (!controller) {
-        controller = createWebglController(terminal, {
-          // Same as the menu's Refresh Terminal: the resize makes a TUI redraw its screen
-          onLost: () =>
-            window.dispatchEvent(new CustomEvent("exegol:kick-terminal", { detail: { agentId } })),
-          onEvicted: () => {
-            setConcealed(terminal, true);
-            webglPendingRef.current = true;
-          },
-          onAttached: () => revealAfterDraw(terminal),
-        });
-        webglRef.current = controller;
-      }
-      const result = controller.unpark();
-      if (webglPendingRef.current && result !== "reused") {
-        webglPendingRef.current = false;
-        refitRef.current();
-      }
-      // No slot yet: the DOM renderer shows rather than a blank pane
-      if (result === "dom") {
-        const timer = setTimeout(() => setConcealed(terminal, false), DOM_REVEAL_MS);
-        return () => clearTimeout(timer);
-      }
-    } else if (!onScreen) {
-      // At once: the context stays, it only becomes the first a shown terminal may take
-      webglRef.current?.park();
-    }
-  }, [session, isVisible, shown, mirror, cliType, agentId]);
+    // Parking is at once: the context stays, it only becomes the first a shown terminal may take
+    if (onScreen) webglRef.current?.unpark();
+    else webglRef.current?.park();
+  }, [session, isVisible, shown, agentId]);
 
   // T155 (verify session): manual "Refresh Terminal" from the pane menu —
   // refit + SIGWINCH jiggle + repaint, for TUIs stuck black after reload.
@@ -439,7 +415,8 @@ export function useXterm({
       try {
         webglRef.current?.rebuild();
         handleResize();
-        terminal.refresh(0, terminal.rows - 1);
+        // A renderer swap already refreshed every row
+        if (!webglRef.current) terminal.refresh(0, terminal.rows - 1);
         if (!mirror && !readOnly && terminal.buffer.active.type === "alternate") {
           window.api.terminal.redraw(agentId);
         }
@@ -519,27 +496,9 @@ function inActiveTab(paneId: string): boolean {
   return !!tab && layoutHasPane(tab.layout, paneId);
 }
 
-/** Longest a pane stays concealed waiting for WebGL: then it shows whatever renderer it has */
-const DOM_REVEAL_MS = 150;
-
-/** Hides the DOM renderer's frame (wider cells, then the glyph atlas build) while WebGL takes over */
-function setConcealed(terminal: Terminal, concealed: boolean): void {
-  if (terminal.element) terminal.element.style.opacity = concealed ? "0" : "";
-}
-
-/** Shown on the first frame the new renderer drew; xterm skips frames while off screen, hence the timer */
-function revealAfterDraw(terminal: Terminal): void {
-  const reveal = () => {
-    rendered.dispose();
-    clearTimeout(timer);
-    setConcealed(terminal, false);
-  };
-  const rendered = terminal.onRender(reveal);
-  const timer = setTimeout(reveal, DOM_REVEAL_MS);
-  terminal.refresh(0, terminal.rows - 1);
-}
-
-/** Mirrors and canvas-only CLIs never take WebGL, nor anything once the GPU fell back for good */
+/** Mirrors draw on canvas: several open at once would eat into Chromium's ~16 WebGL contexts,
+ *  and each one rebuilds its atlas on every font fit. Nor canvas-only CLIs, nor anything once
+ *  the GPU fell back for good */
 function wantsWebgl(mirror: boolean, cliType: string | undefined): boolean {
   return !mirror && !(cliType && CANVAS_ONLY_CLI_TYPES.has(cliType)) && !webglBudget.isDomOnly();
 }

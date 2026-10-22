@@ -10,6 +10,13 @@ export interface LiveSnapshot {
 }
 
 /** `terminal:mount-log`, logged by main as `[TermMount]`: sizes, counts and times, never content */
+/** WebGL contexts in a renderer: parked ones shown again, new ones, parked ones evicted */
+export interface WebglCounts {
+  reused: number;
+  attached: number;
+  evicted: number;
+}
+
 export type MountStats =
   | { kind: "unmount" }
   | {
@@ -38,8 +45,7 @@ export type MountStats =
       reflows: number;
       pending: number;
       ended: "settled" | "timeout" | "switched";
-      /** WebGL contexts during the switch: parked ones shown again, new ones, parked ones evicted */
-      webgl: { reused: number; attached: number; evicted: number };
+      webgl: WebglCounts;
     }
   /** One Send to, sent under the target's id: what reached it, never the text. `from`: the
    *  selection at pick time or the one the list opened with */
