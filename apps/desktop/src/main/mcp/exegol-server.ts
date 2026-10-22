@@ -19,7 +19,7 @@ import { connect, createServer, type Server, type Socket } from "node:net";
 import { type AgentStatus, LIVE_STATUSES, type McpAgentState } from "@exegol/shared";
 import type Database from "libsql";
 import { forgetBrowserAgent } from "../browser/agent-browser-tools";
-import { listActiveAgents } from "../db/queries/agents";
+import { listLiveAgentClis } from "../db/queries/agents";
 import { findBlockingClaim } from "../db/queries/path-claims";
 import { isNamedPipe } from "../lib/ipc-endpoint";
 import { logger } from "../lib/logger";
@@ -143,8 +143,7 @@ function markDisconnected(connId: number): void {
 export function getMcpAgentStates(db: Database.Database): Record<string, McpAgentState> {
   const connected = new Set(connectedBy.values());
   const out: Record<string, McpAgentState> = {};
-  for (const a of listActiveAgents(db)) {
-    if (a.cliType === "shell") continue;
+  for (const a of listLiveAgentClis(db)) {
     out[a.id] = connected.has(a.id)
       ? "connected"
       : tokensByAgent.has(a.id) && readsExegolMcpConfig(a.cliType)

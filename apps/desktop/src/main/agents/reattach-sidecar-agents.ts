@@ -53,7 +53,9 @@ export async function reattachSidecarAgents(
   const stale = db
     .prepare(
       // A terminal whose CLI exited sits idle at its prompt, PTY alive: it is reattached too
-      `SELECT * FROM agents WHERE status IN ('running', 'spawning', 'waiting_input')
+      `SELECT id, cli_type, project_id, task_description, status, current_step, launched_in_shell,
+              pty_cols, pty_rows, resume_command
+       FROM agents WHERE status IN ('running', 'spawning', 'waiting_input')
        OR (launched_in_shell = 1 AND status = 'idle')`,
     )
     .all() as Array<Record<string, unknown>>;
@@ -80,6 +82,11 @@ export async function reattachSidecarAgents(
   const ptyHost = getPtyHost();
   const sidecarSet = new Set(sidecarSessionIds);
   const updateResumeCommand = db.prepare("UPDATE agents SET resume_command = ? WHERE id = ?");
+  const projectPaths = new Map(
+    (db.prepare("SELECT id, path FROM projects").all() as { id: string; path: string }[]).map(
+      (p) => [p.id, p.path],
+    ),
+  );
 
   const rows = new Map<string, Record<string, unknown>>();
   for (const row of stale) {
@@ -202,11 +209,7 @@ export async function reattachSidecarAgents(
         try {
           ensureExegolMcpServerStarted(db);
           const wt = worktrees.get(agentId);
-          const projectPath = (
-            db.prepare("SELECT path FROM projects WHERE id = ?").get(projectId) as
-              | { path?: string }
-              | undefined
-          )?.path;
+          const projectPath = projectPaths.get(projectId);
           const cwd = wt?.worktreePath ?? projectPath;
           // Per-agent file first (no cwd guessing, no sibling collision).
           const token = readPerAgentMcpToken(agentId) ?? (cwd ? readAgentMcpToken(cwd) : null);

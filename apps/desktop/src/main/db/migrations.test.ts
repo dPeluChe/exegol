@@ -244,3 +244,37 @@ describe("w3_023_project_ide", () => {
     expect(db.prepare("SELECT 1 FROM settings WHERE key = 'project_ides'").get()).toBeUndefined();
   });
 });
+
+describe("w3_030_fk_indexes", () => {
+  it("indexes the foreign keys an agent or project delete looks up", () => {
+    const db = new Database(":memory:");
+    runMigrations(db);
+    const leads = (table: string, column: string) =>
+      (db.prepare(`PRAGMA index_list(${table})`).all() as { name: string }[]).some(
+        (ix) =>
+          (db.prepare(`PRAGMA index_info(${ix.name})`).all() as { name: string }[])[0]?.name ===
+          column,
+      );
+    for (const [table, column] of [
+      ["worktrees", "agent_id"],
+      ["worktrees", "project_id"],
+      ["handoffs", "agent_id"],
+      ["handoffs", "successor_agent_id"],
+      ["task_queue", "agent_id"],
+      ["memories", "source_agent_id"],
+      ["agent_links", "to_agent_id"],
+      ["scheduled_results", "task_id"],
+      ["scheduled_results", "agent_id"],
+      ["prompts", "project_id"],
+      ["pipeline_templates", "project_id"],
+      ["scheduled_tasks", "project_id"],
+      ["dictation_history", "project_id"],
+    ] as const) {
+      expect(leads(table, column), `${table}.${column}`).toBe(true);
+    }
+    const plan = db
+      .prepare("EXPLAIN QUERY PLAN SELECT id FROM worktrees WHERE agent_id = ?")
+      .all("a1") as { detail: string }[];
+    expect(plan.map((p) => p.detail).join(" ")).toContain("idx_worktrees_agent");
+  });
+});

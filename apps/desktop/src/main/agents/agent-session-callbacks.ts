@@ -6,7 +6,7 @@ import {
   LIVE_STATUSES,
 } from "@exegol/shared";
 import type Database from "libsql";
-import { isAgentQuiet, updateAgentStatus } from "../db/queries";
+import { isAgentQuiet } from "../db/queries";
 import { getAgentCwd, setAgentFinalOutput } from "../db/queries/agents";
 import { releasePaths } from "../db/queries/path-claims";
 import { broadcast } from "../lib/event-bus";
@@ -46,6 +46,7 @@ import {
   scoreAndRecordOplog,
 } from "./spawn-env";
 import { stripAnsi, stripOscSequences } from "./status-parser";
+import { writeAgentStatus } from "./status-writes";
 import { endTurn, forgetTurns, startTurn } from "./turn-snapshots";
 
 /** The parser re-reports the same status on every redraw (agy: each keystroke): a change always
@@ -131,7 +132,7 @@ function applyAgentSignals(
 
   if (signalStatus || turnStarted || turnEnded || needsAttention) {
     if (signalStatus) {
-      updateAgentStatus(db, agent.id, signalStatus, currentStep ?? undefined);
+      writeAgentStatus(db, agent.id, signalStatus, currentStep ?? undefined);
     }
     // Turn boundaries and attention only: a "running" per tool call was most of the log
     if (turnStarted || turnEnded || needsAttention || idleOnly) {
@@ -393,7 +394,7 @@ export function createSpawnCallbacks(
               `[AgentCallback] Status change: ${agent.id} (${agent.cliType}) → ${scrapedStatus}${suppressedNote(skipped)}`,
             );
           }
-          updateAgentStatus(db, agent.id, scrapedStatus as AgentStatus, result.currentStep);
+          writeAgentStatus(db, agent.id, scrapedStatus as AgentStatus, result.currentStep);
           broadcastAgentStatus({
             agentId: agent.id,
             projectId: agent.projectId,
@@ -403,7 +404,7 @@ export function createSpawnCallbacks(
             timestamp: Date.now(),
           });
         } else if (result.currentStep) {
-          updateAgentStatus(db, agent.id, "running", result.currentStep);
+          writeAgentStatus(db, agent.id, "running", result.currentStep);
           broadcastAgentStatus({
             agentId: agent.id,
             projectId: agent.projectId,

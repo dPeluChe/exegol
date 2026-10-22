@@ -15,6 +15,7 @@ import {
 import { hookCwdOf } from "../../agents/hook-cwd";
 import { setIdleExempt } from "../../agents/idle-exempt";
 import { broadcastShellClosed } from "../../agents/spawn-env";
+import { forgetAgentStatusWrites } from "../../agents/status-writes";
 import {
   getAgent,
   getWorktreeByAgentId,
@@ -229,6 +230,8 @@ export const agentRouter = router({
     .mutation(({ ctx, input }) => {
       const agent = getAgent(ctx.db, input.id);
       if (!agent) return null;
+      // The renderer's step wins over a parser step still waiting for its 1 s slot
+      forgetAgentStatusWrites(input.id);
       updateAgentStatus(ctx.db, input.id, input.status, input.currentStep);
       return getAgent(ctx.db, input.id) ?? null;
     }),
