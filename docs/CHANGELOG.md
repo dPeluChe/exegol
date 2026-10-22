@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- Switching projects no longer repaints the terminals' letters: a terminal off screen keeps its GPU renderer until another one needs it, one that must rebuild it stays hidden until it has drawn, and closed renderers free their GPU context at once
 - Dialogs fit their text: a long URL, path or name wraps inside the dialog instead of running past its edge and under the close button, long titles stop at two lines, tall dialogs scroll, and every dialog keeps a margin from the window edges
 
 ## [0.5.27] — 2026-10-21 — Terminals keep their place, Add Project checks the folder, trs digest

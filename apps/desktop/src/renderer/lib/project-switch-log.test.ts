@@ -8,6 +8,7 @@ import {
 
 function setup() {
   let t = 0;
+  const gl = { attached: 0, reused: 0, evicted: 0 };
   const timers: Array<{ at: number; fn: () => void; live: boolean }> = [];
   const sent: Array<{ projectId: string; report: SwitchReport }> = [];
   const tracker = createSwitchTracker({
@@ -20,6 +21,7 @@ function setup() {
       };
     },
     send: (projectId, report) => sent.push({ projectId, report }),
+    webglCounts: () => ({ ...gl }),
   });
   const advance = (to: number) => {
     t = to;
@@ -30,13 +32,16 @@ function setup() {
       }
     }
   };
-  return { tracker, sent, advance };
+  return { tracker, sent, advance, gl };
 }
 
 describe("createSwitchTracker", () => {
   it("reports once every mounted view applied its snapshot", () => {
-    const { tracker, sent, advance } = setup();
+    const { tracker, sent, advance, gl } = setup();
+    gl.reused = 5;
     tracker.start("p1");
+    gl.reused = 7;
+    gl.attached = 1;
     const a = tracker.mounted(true);
     const h1 = tracker.mounted(false);
     const h2 = tracker.mounted(false);
@@ -61,6 +66,7 @@ describe("createSwitchTracker", () => {
           reflows: 1,
           pending: 0,
           ended: "settled",
+          webgl: { reused: 2, attached: 1, evicted: 0 },
         },
       },
     ]);

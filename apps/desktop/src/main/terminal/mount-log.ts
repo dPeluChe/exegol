@@ -61,11 +61,15 @@ export function parseMountStats(agentId: unknown, input: unknown): MountLog | nu
       reflows,
       pending,
       ended,
+      webgl,
     } = r;
     if (!count(activeMounts, 1e4) || !count(hiddenMounts, 1e4) || !count(afterMs, 1e7)) return null;
     if (!count(keptMounts, 1e4)) return null;
     if (!count(snapshotBytes) || !count(reflows, 1e4) || !count(pending, 1e4)) return null;
     if (ended !== "settled" && ended !== "timeout" && ended !== "switched") return null;
+    if (typeof webgl !== "object" || webgl === null) return null;
+    const gl = webgl as Record<string, unknown>;
+    if (!count(gl.reused, 1e4) || !count(gl.attached, 1e4) || !count(gl.evicted, 1e4)) return null;
     return {
       agentId,
       kind: "switch",
@@ -77,6 +81,11 @@ export function parseMountStats(agentId: unknown, input: unknown): MountLog | nu
       reflows: Math.round(reflows),
       pending: Math.round(pending),
       ended,
+      webgl: {
+        reused: Math.round(gl.reused),
+        attached: Math.round(gl.attached),
+        evicted: Math.round(gl.evicted),
+      },
     };
   }
   if (r.kind === "send") {
@@ -128,7 +137,8 @@ export function formatMountLine(m: MountLog): string {
       `[ProjectSwitch] ${m.agentId} mounted ${total} terminal${total === 1 ? "" : "s"}` +
       ` (${m.activeMounts} in the active tab, ${m.hiddenMounts} in hidden tabs),` +
       ` ${m.keptMounts} already mounted, ${outcome},` +
-      ` snapshots ${Math.round(m.snapshotBytes / 1024)} KB, reflows ${m.reflows}`
+      ` snapshots ${Math.round(m.snapshotBytes / 1024)} KB, reflows ${m.reflows},` +
+      ` webgl ${m.webgl.reused} reused, ${m.webgl.attached} new, ${m.webgl.evicted} evicted`
     );
   }
   if (m.kind === "send") {
