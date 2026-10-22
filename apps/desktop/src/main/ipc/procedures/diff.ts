@@ -56,6 +56,29 @@ async function runGitPush(cwd: string, args: string[]): Promise<string> {
   );
 }
 
+/** Push, setting the upstream for a new branch */
+async function push(cwd: string): Promise<{ output: string }> {
+  try {
+    const stdout = await runGitPush(cwd, ["push"]);
+    return { output: stdout.trim() };
+  } catch (err) {
+    // If no upstream, auto-set it and retry
+    const msg = err instanceof Error ? err.message : String(err);
+    if (msg.includes("no upstream branch") || msg.includes("has no upstream")) {
+      const { stdout: branch } = await execFileAsync("git", ["branch", "--show-current"], {
+        cwd,
+      });
+      const out = await runGitPush(cwd, ["push", "--set-upstream", "origin", branch.trim()]).catch(
+        (e) => {
+          throw new Error(gitErrorSummary((e as Error).cause ?? e));
+        },
+      );
+      return { output: out.trim() || "Pushed with upstream set" };
+    }
+    throw new Error(gitErrorSummary((err as Error).cause ?? err));
+  }
+}
+
 // ─── Router ─────────────────────────────────────────────────────────────────
 
 export const diffRouter = router({
@@ -155,8 +178,7 @@ export const diffRouter = router({
       const cwd = input.pathOverride || resolveProjectPath(ctx.db, input.projectId);
       const args =
         input.files && input.files.length > 0 ? ["add", "--", ...input.files] : ["add", "-A"];
-      await runGit(cwd, args);
-      invalidateProjectDiff(input.projectId);
+      await runGit(cwd, args).finally(() => invalidateProjectDiff(input.projectId));
       return { success: true };
     }),
 
@@ -175,8 +197,7 @@ export const diffRouter = router({
         input.files && input.files.length > 0
           ? ["reset", "-q", "HEAD", "--", ...input.files]
           : ["reset", "-q", "HEAD"];
-      await runGit(cwd, args);
-      invalidateProjectDiff(input.projectId);
+      await runGit(cwd, args).finally(() => invalidateProjectDiff(input.projectId));
       return { success: true };
     }),
 
@@ -201,13 +222,17 @@ export const diffRouter = router({
           /* */
         }
       }
-      // Stage all if requested (avoids race condition from separate stage+commit calls)
-      if (input.stageAll) {
-        await runGit(cwd, ["add", "-A"]);
+      try {
+        // Stage all if requested (avoids race condition from separate stage+commit calls)
+        if (input.stageAll) {
+          await runGit(cwd, ["add", "-A"]);
+        }
+        const stdout = await runGit(cwd, ["commit", "-m", input.message]);
+        return { output: stdout.trim() };
+      } finally {
+        // A refused commit after the add still changed the index
+        invalidateProjectDiff(input.projectId);
       }
-      const stdout = await runGit(cwd, ["commit", "-m", input.message]);
-      invalidateProjectDiff(input.projectId);
-      return { output: stdout.trim() };
     }),
 
   /** Push to remote (auto-sets upstream for new branches) */
@@ -215,28 +240,7 @@ export const diffRouter = router({
     .input(z.object({ projectId: z.string(), pathOverride: z.string().optional() }))
     .mutation(async ({ ctx, input }) => {
       const cwd = input.pathOverride || resolveProjectPath(ctx.db, input.projectId);
-      try {
-        const stdout = await runGitPush(cwd, ["push"]);
-        return { output: stdout.trim() };
-      } catch (err) {
-        // If no upstream, auto-set it and retry
-        const msg = err instanceof Error ? err.message : String(err);
-        if (msg.includes("no upstream branch") || msg.includes("has no upstream")) {
-          const { stdout: branch } = await execFileAsync("git", ["branch", "--show-current"], {
-            cwd,
-          });
-          const out = await runGitPush(cwd, [
-            "push",
-            "--set-upstream",
-            "origin",
-            branch.trim(),
-          ]).catch((e) => {
-            throw new Error(gitErrorSummary((e as Error).cause ?? e));
-          });
-          return { output: out.trim() || "Pushed with upstream set" };
-        }
-        throw new Error(gitErrorSummary((err as Error).cause ?? err));
-      }
+      return push(cwd).finally(() => invalidateProjectDiff(input.projectId));
     }),
 
   /** Get current branch name */

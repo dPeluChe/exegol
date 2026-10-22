@@ -1,4 +1,5 @@
 import { execFileAsync } from "../../lib/exec-file";
+import { AsyncLruCache } from "../../lib/lru-cache";
 
 export interface GitFileStatus {
   /** One letter: M A D R C T, "?" untracked, "U" conflict */
@@ -51,7 +52,19 @@ export function parseGitStatus(raw: string): GitFileStatus[] {
   return files;
 }
 
-export async function readGitStatus(cwd: string): Promise<GitFileStatus[]> {
+/** The Git pane, Smart Git button and terminal toolbars ask on their own timers: they share
+ *  one `git status` per folder for 2 s. A git write through Exegol clears it */
+const statusReads = new AsyncLruCache<string, GitFileStatus[]>(16, 2_000);
+
+export function forgetGitStatus(): void {
+  statusReads.invalidateWhere(() => true);
+}
+
+export function readGitStatus(cwd: string): Promise<GitFileStatus[]> {
+  return statusReads.getOrCompute(cwd, () => spawnGitStatus(cwd));
+}
+
+async function spawnGitStatus(cwd: string): Promise<GitFileStatus[]> {
   const { stdout } = await execFileAsync("git", ["status", "--porcelain=v1", "-z", "-uall"], {
     cwd,
     maxBuffer: 1024 * 1024,

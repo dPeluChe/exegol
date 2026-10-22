@@ -27,17 +27,21 @@ export class AsyncLruCache<K, V> {
     if (hit) this.cache.delete(key);
     const pending = this.inflight.get(key);
     if (pending) return pending;
-    const promise = (async () => {
+    let promise: Promise<V> | undefined;
+    promise = (async () => {
       try {
         const value = await factory();
-        this.cache.set(key, { value, at: Date.now() });
-        if (this.cache.size > this.maxSize) {
-          const oldest = this.cache.keys().next().value;
-          if (oldest !== undefined) this.cache.delete(oldest);
+        // Invalidated while it ran: the value predates the change, so it is not kept
+        if (this.inflight.get(key) === promise) {
+          this.cache.set(key, { value, at: Date.now() });
+          if (this.cache.size > this.maxSize) {
+            const oldest = this.cache.keys().next().value;
+            if (oldest !== undefined) this.cache.delete(oldest);
+          }
         }
         return value;
       } finally {
-        this.inflight.delete(key);
+        if (this.inflight.get(key) === promise) this.inflight.delete(key);
       }
     })();
     this.inflight.set(key, promise);

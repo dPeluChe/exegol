@@ -11,7 +11,7 @@ import {
   Upload,
 } from "lucide-react";
 import { useCallback } from "react";
-import { usePaneProject } from "../../contexts/ProjectScope";
+import { usePanePolling } from "../../contexts/ProjectScope";
 import { openInBrowser } from "../../lib/open-in-browser";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useToastStore } from "../../stores/toasts";
@@ -208,12 +208,12 @@ export function SmartGitAction({
   isCommitting,
 }: SmartGitActionProps) {
   const queryClient = useQueryClient();
-  const { shown } = usePaneProject();
+  const polling = usePanePolling();
 
   const { data: state, isLoading } = useQuery({
     queryKey: ["git", "state", overridePath || projectId],
     queryFn: () => trpcInvoke<GitState>("diff.gitState", { projectId, pathOverride: overridePath }),
-    enabled: !!projectId && shown,
+    enabled: !!projectId && polling,
     refetchInterval: 15_000,
   });
 

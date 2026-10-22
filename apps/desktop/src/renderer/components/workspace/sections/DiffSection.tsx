@@ -9,7 +9,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
-import { usePaneProject } from "../../../contexts/ProjectScope";
+import { usePanePolling, usePaneProject } from "../../../contexts/ProjectScope";
 import {
   type ReviewSignal,
   type ReviewSummary,
@@ -144,7 +144,8 @@ function ReviewSummaryBanner({ summary }: { summary: ReviewSummary }) {
 }
 
 export function DiffSection({ overridePath }: { overridePath?: string } = {}) {
-  const { projectId, shown } = usePaneProject();
+  const { projectId } = usePaneProject();
+  const shown = usePanePolling();
   const [diffMode, setDiffMode] = useState<DiffMode>("unstaged");
   const [viewMode, setViewMode] = useState<ViewMode>("split");
   const [autoRefresh, setAutoRefresh] = useState(false);
