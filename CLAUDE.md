@@ -148,7 +148,7 @@ Sequential agent orchestration in shared worktrees. Exegol controls everything �
 
 ### Key patterns
 - **tRPC over IPC**: 37 routers in main process (`ipc/router.ts`), renderer calls via `window.api.trpc.invoke` (`lib/trpc-client.ts`: errors come back without Electron's "Error invoking remote method" prefix and with the tRPC `code`, carried in the error name)
-- **Push-first**: `broadcastAgentStatus()` IPC events, polling reduced to 30s fallback
+- **Push-first**: `broadcastAgentStatus()` IPC events, polling reduced to 30s fallback. `syncFromDb` keeps unchanged agent objects (and the state); read a slice with `useProjectAgents` or a `useShallow` selector, not the whole `agents` map; app-wide hooks live in `AppEffects` (`App.tsx`), not in App
 - **Structured errors** (T80): `ExegolError` → `TransientError` / `PermanentError` / `TimeoutError` hierarchy with `cause` chain. `isTransient()`/`isPermanent()` type guards. `withRetry()` helper retries only on transient errors with exponential backoff (1s base, max 3). MCP disconnect and scoring API errors classified as transient.
 - **Lifecycle scripts** (T91): `.exegol/lifecycle.yaml` (or `.yml`) per repo with `setup`, `beforeAgent`, `afterCommit`, `teardown` hooks. Setup runs once per session per project on first agent spawn. beforeAgent prepended to shell command. Teardown awaited before worktree deletion. Simple line-based parser (no YAML library).
 - **Crash recovery**: `session.listInfo` RPC returns `{ id, alive, exitCode, signal }` — only ALIVE ids go to `reattachSidecarAgents()`, dead ones (in the sidecar's 60s grace period) fall through to `recoverStaleAgents()` and get marked as "crashed" with scrollback preserved (v0.3.0 fix: previously dead sessions were stuck as "running" with no PTY)

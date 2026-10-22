@@ -18,12 +18,12 @@ import {
   Square,
   XCircle,
 } from "lucide-react";
-import { useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { useFleetSync } from "../../../hooks/use-fleet-sync";
 import { useNow } from "../../../hooks/use-now";
 import { submitToAgent } from "../../../lib/agent-input";
 import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
-import { type AgentState, jumpToAgent, useAgentStore } from "../../../stores/agents";
+import { type AgentState, isWorking, jumpToAgent, useAgentStore } from "../../../stores/agents";
 import { useAppStore } from "../../../stores/app";
 import { useWatchStore } from "../../../stores/watch";
 import { ResumeButton } from "../../agents/ResumeButton";
@@ -122,8 +122,6 @@ interface ProjectInfo {
 }
 
 type GroupBy = "state" | "project";
-
-const isWorking = (a: AgentState) => a.status === "running" || a.status === "spawning";
 
 // ─── Component ──────────────────────────────────────────────────────────
 
@@ -390,8 +388,8 @@ export function AgentDashboard() {
                         agent={agent}
                         projectMeta={projectMeta.get(agent.projectId)}
                         hasUnread={group.unread.has(agent.id)}
-                        onClick={() => navigateToAgent(agent)}
-                        onArchive={() => archiveOne(agent.id)}
+                        onOpenAgent={navigateToAgent}
+                        onArchiveAgent={archiveOne}
                       />
                     )}
                   />
@@ -405,10 +403,8 @@ export function AgentDashboard() {
                           groupBy === "state" ? projectMeta.get(agent.projectId) : undefined
                         }
                         hasUnread={group.unread.has(agent.id)}
-                        onClick={() => navigateToAgent(agent)}
-                        onArchive={
-                          LIVE_STATUSES.has(agent.status) ? undefined : () => archiveOne(agent.id)
-                        }
+                        onOpenAgent={navigateToAgent}
+                        onArchiveAgent={LIVE_STATUSES.has(agent.status) ? undefined : archiveOne}
                       />
                     ))}
                   </div>
@@ -489,21 +485,24 @@ function dayLabel(startedAt: number | null): string {
   return d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
 }
 
-function AgentCard({
+// Memo: the dashboard regroups on every push; a card re-renders only when its own agent changes
+const AgentCard = memo(function AgentCard({
   agent,
   projectMeta,
   hasUnread,
-  onClick,
-  onArchive,
+  onOpenAgent,
+  onArchiveAgent,
 }: {
   agent: AgentState;
   /** Set only in by-state grouping — shows which project the card belongs to. */
   projectMeta?: ProjectMeta;
   hasUnread: boolean;
-  onClick: () => void;
+  onOpenAgent: (agent: AgentState) => void;
   /** Set only for ended sessions — a live agent has nothing to dismiss. */
-  onArchive?: () => void;
+  onArchiveAgent?: (agentId: string) => void;
 }) {
+  const onClick = () => onOpenAgent(agent);
+  const onArchive = onArchiveAgent ? () => onArchiveAgent(agent.id) : undefined;
   const config = STATUS_CONFIG[agent.status] ?? DEFAULT_STATUS;
   const canPeek = LIVE_STATUSES.has(agent.status);
   const [peekOpen, setPeekOpen] = useState(false);
@@ -583,7 +582,7 @@ function AgentCard({
       </div>
     </FleetCardMenu>
   );
-}
+});
 
 /** What this agent said to the others and they to it (agent_send), with delivery state */
 function MessagesToggle({

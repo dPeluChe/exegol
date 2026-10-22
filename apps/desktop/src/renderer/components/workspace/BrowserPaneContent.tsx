@@ -1,7 +1,7 @@
 import { stepZoom, type ZoomAction } from "@exegol/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import { Globe, RotateCw } from "lucide-react";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { usePaneProject } from "../../contexts/ProjectScope";
 import { useMountEffect } from "../../hooks/use-mount-effect";
 import { type PortInfo, useSetPreferredPort } from "../../hooks/use-trpc-scheduler";
@@ -9,7 +9,7 @@ import { isPasteTarget } from "../../lib/agent-input";
 import { isHttpUrl, toHttpUrl } from "../../lib/browser-viewports";
 import { claimPaneFocus } from "../../lib/pane-focus";
 import { trpcMutate } from "../../lib/trpc-client";
-import { useAgentStore } from "../../stores/agents";
+import { useProjectAgents } from "../../stores/agents";
 import { useToastStore } from "../../stores/toasts";
 import type { Pane } from "../../stores/workspace";
 import { useWorkspaceStore } from "../../stores/workspace";
@@ -166,14 +166,6 @@ function usePaneScreenshot(webviewRef: WebviewRef, paneId: string) {
   return save;
 }
 
-function useRunningProjectAgents(projectId: string | null) {
-  const allAgents = useAgentStore((s) => s.agents);
-  return useMemo(
-    () => Object.values(allAgents).filter((a) => a.projectId === projectId && isPasteTarget(a)),
-    [allAgents, projectId],
-  );
-}
-
 export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
   const { projectId, project } = usePaneProject();
   const { pagePorts, helperPorts, preferredPort, autoPort } = useDevServerPorts(
@@ -218,8 +210,7 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
   // The page could not reach this port: its chip turns red until a load succeeds
   const deadPort = loadError ? Number(currentUrl.match(/:(\d+)/)?.[1]) || null : null;
   const [issueMessage, setIssueMessage] = useState("");
-  const runningAgents = useRunningProjectAgents(projectId);
-  const issueTargets = useTabTargets(projectId ?? undefined, paneId);
+  const runningAgents = useProjectAgents(projectId, isPasteTarget);
 
   const qa = useBrowserQa({
     webviewRef,
@@ -242,6 +233,11 @@ export function BrowserPane({ pane, paneId }: { pane: Pane; paneId: string }) {
   useRegisterBrowserPane(webviewRef, paneId, projectId);
   const [asking, setAsking] = useState(false);
   const showAsk = asking && runningAgents.length > 0;
+  const issueTargets = useTabTargets(
+    projectId ?? undefined,
+    paneId,
+    !!qa.capturedElement && !showAsk,
+  );
   // The element picked for the question goes with the bar: no design bubble left behind
   const closeAsk = () => {
     setAsking(false);
