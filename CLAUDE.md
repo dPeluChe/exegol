@@ -25,6 +25,9 @@ bun run build:rust       # Build Rust native module only
 bun run package:local    # Signed test DMG, never notarized: dist/local/Exegol-TEST-<x.y.z+1>-test.<sha>.dmg (-- --dry-run)
 bun run rebuild:native   # Rust + rebuild node-pty for Electron
 
+# `dependencies` is what electron-builder copies into app.asar: only packages main, preload, the
+# sidecar or the bins require() at runtime. Renderer-only packages go in devDependencies (Vite bundles them).
+
 # The PTY sidecar is DETACHED: it survives app restarts on purpose (that is what
 # keeps agent terminals alive across a reload) and therefore survives a rebuild
 # and an app UPDATE too — the running process keeps the old code.

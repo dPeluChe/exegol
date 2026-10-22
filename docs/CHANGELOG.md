@@ -11,6 +11,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 - Fewer re-renders with many agents: a status update redraws only what shows that agent instead of the whole window, the 30 s agent poll redraws nothing when nothing changed, and Send to menus are built only while open
+- Smaller app: it no longer ships packages only the interface uses, source maps, type definitions or non-English Electron locales (unpacked macOS app about 490 MB to 306 MB)
 
 ### Fixed
 - Switching projects no longer repaints the terminals' letters: a terminal off screen keeps its GPU renderer until another one needs it, one that must rebuild it stays hidden until it has drawn, and closed renderers free their GPU context at once. A terminal that only finds a GPU slot later is refitted to its narrower cells

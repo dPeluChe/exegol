@@ -40,7 +40,18 @@ const config: Configuration = {
     buildResources: "src/resources/build",
   },
 
-  files: ["out/**/*", "!out/**/*.map", "package.json"],
+  files: [
+    "out/**/*",
+    "!out/**/*.map",
+    "package.json",
+    // Dev-only files of the runtime packages; LICENSE files stay
+    "!**/node_modules/**/*.{map,d.ts,d.mts,d.cts}",
+    "!**/node_modules/**/!(LICENSE*|LICENCE*|license*|licence*).md",
+    "!**/node_modules/**/{__tests__,tests,benchmarks,.github}/**",
+  ],
+
+  // No UI translations: English only (en.lproj on macOS, en-US.pak on Windows and Linux)
+  electronLanguages: ["en", "en-US"],
 
   asar: true,
   asarUnpack: [
