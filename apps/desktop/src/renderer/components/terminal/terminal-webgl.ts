@@ -1,7 +1,7 @@
-import type { WebglCounts } from "@exegol/shared";
 import { WebglAddon } from "@xterm/addon-webgl";
 import type { Terminal } from "@xterm/xterm";
 import { type WebglBudget, webglBudget } from "./webgl-budget";
+import { counts } from "./webgl-counts";
 
 /** Backoff: a crashed GPU process (window moved to another display) takes seconds to return */
 const RETRY_DELAYS_MS = [250, 1_000, 3_000];
@@ -28,11 +28,6 @@ export interface WebglHooks {
   /** The renderer changed or `pending` cleared: the owner refits (cell widths differ) */
   onRendererChanged?: () => void;
 }
-
-const counts: WebglCounts = { attached: 0, reused: 0, evicted: 0 };
-
-/** Counted since load, read as differences by the project switch log */
-export const webglCounts = (): WebglCounts => ({ ...counts });
 
 /**
  * xterm 0.19's dispose removes the canvas but keeps its GL context, which still counts toward

@@ -33,8 +33,9 @@ vi.mock("@xterm/addon-webgl", () => {
   return { WebglAddon };
 });
 
-import { createWebglController, webglCounts } from "./terminal-webgl";
+import { createWebglController } from "./terminal-webgl";
 import { createWebglBudget } from "./webgl-budget";
+import { webglCounts } from "./webgl-counts";
 
 beforeEach(() => {
   addonInstances.length = 0;

@@ -1,5 +1,5 @@
 import type { MountStats, WebglCounts } from "@exegol/shared";
-import { webglCounts } from "../components/terminal/terminal-webgl";
+import { webglCounts } from "../components/terminal/webgl-counts";
 
 /** Past this the summary goes out with what is still pending */
 export const SWITCH_CAP_MS = 3_000;
