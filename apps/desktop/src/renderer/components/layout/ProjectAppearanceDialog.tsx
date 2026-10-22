@@ -73,14 +73,14 @@ export function ProjectAppearanceDialog({
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60" />
         <Dialog.Content
-          className="fixed left-1/2 top-[10vh] z-50 max-h-[80vh] w-full max-w-sm -translate-x-1/2 overflow-y-auto rounded-lg border p-4 shadow-2xl"
+          className="fixed left-1/2 top-[10vh] z-50 max-h-[80vh] w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 overflow-y-auto rounded-lg border p-4 shadow-2xl"
           style={{ background: "var(--bg-secondary)", borderColor: "var(--border)" }}
         >
-          <div className="mb-3 flex items-center justify-between">
-            <Dialog.Title className="text-sm font-semibold text-text-primary">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <Dialog.Title className="min-w-0 text-sm font-semibold text-text-primary">
               Edit project
             </Dialog.Title>
-            <Dialog.Close className="rounded p-1 text-text-muted hover:bg-white/10">
+            <Dialog.Close className="shrink-0 rounded p-1 text-text-muted hover:bg-white/10">
               <X className="h-3.5 w-3.5" />
             </Dialog.Close>
           </div>

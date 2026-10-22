@@ -90,7 +90,7 @@ export function SpawnAgentModal({
       <div className="absolute inset-0 bg-black/60" onClick={onClose} role="none" />
 
       {/* Modal */}
-      <div className="relative z-10 flex max-h-[90vh] w-[480px] flex-col rounded-xl border border-border bg-bg-primary shadow-2xl">
+      <div className="relative z-10 flex max-h-[90vh] w-[480px] max-w-[calc(100vw-2rem)] flex-col [overflow-wrap:anywhere] rounded-xl border border-border bg-bg-primary shadow-2xl">
         {/* Header: the agent, switchable without closing */}
         <div className="flex items-start justify-between gap-2 border-b border-border px-4 py-3">
           <AgentSwitcher
