@@ -14,6 +14,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Add Project checks the folder before you submit: one already in Exegol shows its name and a Go to project button (no more database error), a folder with no git repo can be initialized and added in one click, and a folder inside another repo offers to use that repo's root instead
 
 ### Fixed
+- Knowledge: the project digest now comes from trs (`trs ingest`) when it is installed. Exegol called a `trs digest` command that does not exist, so it always used its own short summary, and generating the digest no longer freezes the app while trs runs
 - Terminals: CLIs that redraw their answer in place (Antigravity and other bubbletea apps) no longer write over earlier lines or spill past their boxes while streaming. Emoji now take two cells, as the CLI expects, and a line feed keeps the cursor's column like in other terminals
 
 ## [0.5.26] — 2026-10-20 — Windows and Fedora builds, Linux and Windows parity

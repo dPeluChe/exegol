@@ -68,9 +68,9 @@ export const knowledgeRouter = router({
   /** Force-regenerate DIGEST.md regardless of staleness. */
   refreshDigest: publicProcedure
     .input(z.object({ projectId: z.string() }))
-    .mutation(({ ctx, input }) => {
+    .mutation(async ({ ctx, input }) => {
       const projectPath = requireProjectPath(ctx.db, input.projectId);
-      const digest = refreshDigest(projectPath);
+      const digest = await refreshDigest(projectPath);
       syncManagedBlock(projectPath);
       return { digest };
     }),
