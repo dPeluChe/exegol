@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
+- A terminal printing colors that never repeat (gradients, `lolcat`, btop graphs) no longer slows every terminal on screen: it moves to the lighter renderer for 30 s, longer if it keeps doing it
 - Less background CPU: metrics pause while Exegol is hidden, idle terminals stop polling the process list, Git panes in hidden tabs stop polling, and Git status reads are shared for 2 s
 - Fewer database writes while agents run (a status or step that did not change is not written, a step at most once a second), lighter agent reads, and faster agent and project deletes
 - Fewer re-renders with many agents: a status update redraws only what shows that agent instead of the whole window, the 30 s agent poll redraws nothing when nothing changed, and Send to menus are built only while open

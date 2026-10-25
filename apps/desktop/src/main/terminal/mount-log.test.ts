@@ -95,6 +95,19 @@ describe("mount log", () => {
     expect(JSON.stringify(extra)).not.toContain("secret");
   });
 
+  it("formats a glyph atlas churn with counts only, and drops anything else", () => {
+    const churn = { kind: "atlas-churn", pages: 16.2, overMs: 412.7, domForMs: 30_000 };
+    const stats = parseMountStats("a", churn);
+    expect(stats && formatMountLine(stats)).toBe(
+      "[TermMount] a glyph atlas churn: 16 pages in 413ms, DOM renderer for 30s",
+    );
+    expect(parseMountStats("a", { ...churn, pages: -1 })).toBeNull();
+    expect(parseMountStats("a", { ...churn, domForMs: "30s" })).toBeNull();
+    expect(JSON.stringify(parseMountStats("a", { ...churn, text: "secret" }))).not.toContain(
+      "secret",
+    );
+  });
+
   it("an unmount is one short line", () => {
     const stats = parseMountStats("a", { kind: "unmount" });
     expect(stats && formatMountLine(stats)).toBe("[TermMount] a unmount");

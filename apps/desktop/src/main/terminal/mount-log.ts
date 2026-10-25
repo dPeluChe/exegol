@@ -11,14 +11,18 @@ export const resizeLogLimit = createLogLimiter(10_000);
 
 /** A settle line follows its mount within the second: limited on its own key, not dropped */
 export const mountLogKey = (m: MountLog) =>
-  m.kind === "settle" || m.kind === "switch" || m.kind === "send"
+  m.kind === "settle" || m.kind === "switch" || m.kind === "send" || m.kind === "atlas-churn"
     ? `${m.agentId}:${m.kind}`
     : m.agentId;
+
+/** A view that left WebGL is a warning; the other lines are timings */
+export const mountLogWarns = (m: MountLog) => m.kind === "atlas-churn";
 
 export function forgetTerminalLogs(agentId: string): void {
   mountLogLimit.forget(agentId);
   mountLogLimit.forget(`${agentId}:settle`);
   mountLogLimit.forget(`${agentId}:send`);
+  mountLogLimit.forget(`${agentId}:atlas-churn`);
   visibleLogLimit.forget(agentId);
   resizeLogLimit.forget(agentId);
 }
@@ -112,6 +116,17 @@ export function parseMountStats(agentId: unknown, input: unknown): MountLog | nu
       action,
     };
   }
+  if (r.kind === "atlas-churn") {
+    const { pages, overMs, domForMs } = r;
+    if (!count(pages, 1e6) || !count(overMs, 1e7) || !count(domForMs, 1e8)) return null;
+    return {
+      agentId,
+      kind: "atlas-churn",
+      pages: Math.round(pages),
+      overMs: Math.round(overMs),
+      domForMs: Math.round(domForMs),
+    };
+  }
   if (r.kind !== "mount") return null;
   const { snapGrid, fitGrid, snapshotBytes, snapshotMs, paintMs, replayed, dropped, kick } = r;
   if ((snapGrid !== null && !isGrid(snapGrid)) || !isGrid(fitGrid)) return null;
@@ -149,6 +164,9 @@ export function formatMountLine(m: MountLog): string {
   }
   if (m.kind === "send") {
     return `[SendTo] ${m.agentId} (${m.target}) ${m.action}: ${m.chars} chars, ${m.lines} line${m.lines === 1 ? "" : "s"}, ${m.from} selection`;
+  }
+  if (m.kind === "atlas-churn") {
+    return `[TermMount] ${m.agentId} glyph atlas churn: ${m.pages} pages in ${m.overMs}ms, DOM renderer for ${Math.round(m.domForMs / 1000)}s`;
   }
   if (m.kind === "settle") {
     return `[TermMount] ${m.agentId} settled ${m.mountGrid} -> ${m.finalGrid} after ${m.afterMs}ms (${m.changes} change${m.changes === 1 ? "" : "s"})`;
