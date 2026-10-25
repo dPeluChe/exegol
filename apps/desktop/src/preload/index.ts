@@ -119,7 +119,8 @@ contextBridge.exposeInMainWorld("api", {
     /** Forget the session's history in main and the sidecar (Clear Terminal) */
     clear: (id: string) => safe.send("terminal:clear", id),
     /** How many terminal views repainted after a GPU process crash (main logs the count) */
-    gpuRepainted: (views: number) => safe.send("terminal:gpu-repainted", views),
+    gpuRepainted: (report: import("@exegol/shared").GpuRepaintReport) =>
+      safe.send("terminal:gpu-repainted", report),
     /** Mounted views and live WebGL contexts in this window, logged with a GPU crash */
     gpuStats: (stats: { views: number; webgl: number; capped: boolean }) =>
       safe.send("terminal:gpu-stats", stats),

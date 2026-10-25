@@ -6,6 +6,8 @@ import {
   createGpuCrashTracker,
   describeGpu,
   describeGpuCrash,
+  describeGpuRepaint,
+  parseGpuRepaint,
   parseGpuStats,
   type SystemEvent,
   type TerminalGpuStats,
@@ -74,9 +76,11 @@ export function startGpuWatch(): void {
     }
     statsByWindow.set(id, stats);
   });
-  ipcMain.on("terminal:gpu-repainted", (_event, views: unknown) => {
-    if (typeof views !== "number" || !Number.isInteger(views) || views < 1) return;
-    logger.info(`[Terminal] GPU process restarted: repainting ${views} terminal view(s)`);
+  ipcMain.on("terminal:gpu-repainted", (_event, input: unknown) => {
+    const report = parseGpuRepaint(input);
+    if (!report) return;
+    const log = report.afterDrop > 0 ? logger.warn : logger.info;
+    log(`[Terminal] ${describeGpuRepaint(report)}`);
   });
   ipcMain.handle("gpu:dom-only", () => tracker.isDomOnly());
   powerMonitor.on("suspend", onSuspend);

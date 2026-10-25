@@ -1,7 +1,8 @@
 import { WebglAddon } from "@xterm/addon-webgl";
 import type { Terminal } from "@xterm/xterm";
+import { GPU_DROP_EVENT, GPU_REPAINT_EVENT, type GpuRepaintDetail } from "../../lib/gpu-repaint";
 import { type WebglBudget, webglBudget } from "./webgl-budget";
-import { counts } from "./webgl-counts";
+import { counts, trackWebglAddon } from "./webgl-counts";
 
 /** Backoff: a crashed GPU process (window moved to another display) takes seconds to return */
 const RETRY_DELAYS_MS = [250, 1_000, 3_000];
@@ -14,6 +15,9 @@ const REVEAL_CAP_MS = 150;
 
 export interface WebglController {
   dispose: () => void;
+  /** Lets go of the context and resets the retry budget. After a GPU crash every view drops first:
+   *  xterm frees the glyph atlas they share (blank since the crash) only when its last view does */
+  drop: () => void;
   /** A fresh addon and retry budget: after a GPU process crash the old context can look alive yet never draw */
   rebuild: () => void;
   /** Off screen: the context stays until a shown terminal needs its slot */
@@ -37,6 +41,7 @@ export interface WebglHooks {
 function disposeAddon(addon: WebglAddon): void {
   const gl = (addon as unknown as { _renderer?: { _gl?: WebGL2RenderingContext } })._renderer?._gl;
   addon.dispose();
+  trackWebglAddon(-1);
   try {
     gl?.getExtension("WEBGL_lose_context")?.loseContext();
   } catch {
@@ -176,6 +181,7 @@ export function createWebglController(
       return "none";
     }
     addon = created;
+    trackWebglAddon(1);
     counts.attached++;
     awaitFirstDraw();
     // After the slot is held: a refit that throws must not release it
@@ -183,12 +189,16 @@ export function createWebglController(
     return "attached";
   }
 
-  function rebuild(): void {
+  function drop(): void {
     if (disposed) return;
     retries = 0;
     lastLossAt = 0;
     fellBack = false;
     detach();
+  }
+
+  function rebuild(): void {
+    drop();
     attach();
   }
 
@@ -227,5 +237,31 @@ export function createWebglController(
   }
 
   syncConceal();
-  return { dispose, rebuild, park, unpark, pending };
+  return { dispose, drop, rebuild, park, unpark, pending };
+}
+
+/**
+ * One view's part in a GPU crash repaint (lib/gpu-repaint): drop on the first event, rebuild on
+ * the second, then `repaint` (refit, refresh, kick a TUI; false while not mounted, so not counted)
+ */
+export function listenGpuRepaint(
+  target: EventTarget,
+  webgl: () => WebglController | null,
+  repaint: () => boolean,
+): () => void {
+  const onDrop = () => webgl()?.drop();
+  const onRepaint = (e: Event) => {
+    try {
+      webgl()?.rebuild();
+      if (repaint()) (e as CustomEvent<GpuRepaintDetail>).detail.views++;
+    } catch {
+      /* not ready */
+    }
+  };
+  target.addEventListener(GPU_DROP_EVENT, onDrop);
+  target.addEventListener(GPU_REPAINT_EVENT, onRepaint);
+  return () => {
+    target.removeEventListener(GPU_DROP_EVENT, onDrop);
+    target.removeEventListener(GPU_REPAINT_EVENT, onRepaint);
+  };
 }
