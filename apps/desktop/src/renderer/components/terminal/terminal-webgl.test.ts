@@ -155,9 +155,22 @@ describe("createWebglController — rebuild after a GPU crash", () => {
     expect(addonInstances).toHaveLength(2);
   });
 
+  it("drop lets go of the context and its slot, and the rebuild after it attaches once", () => {
+    const budget = createWebglBudget(2);
+    const controller = shownController(makeFakeTerminal(), {}, budget);
+    controller.drop();
+    expect(addonInstances[0]?.dispose).toHaveBeenCalled();
+    expect(budget.live()).toBe(0);
+    expect(addonInstances).toHaveLength(1);
+    controller.rebuild();
+    expect(addonInstances).toHaveLength(2);
+    expect(budget.live()).toBe(1);
+  });
+
   it("does nothing once disposed", () => {
     const controller = shownController(makeFakeTerminal());
     controller.dispose();
+    controller.drop();
     controller.rebuild();
     expect(addonInstances).toHaveLength(1);
   });

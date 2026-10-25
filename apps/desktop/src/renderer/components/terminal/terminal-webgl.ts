@@ -14,6 +14,9 @@ const REVEAL_CAP_MS = 150;
 
 export interface WebglController {
   dispose: () => void;
+  /** Lets go of the context and resets the retry budget. After a GPU crash every view drops first:
+   *  xterm frees the glyph atlas they share (blank since the crash) only when its last view does */
+  drop: () => void;
   /** A fresh addon and retry budget: after a GPU process crash the old context can look alive yet never draw */
   rebuild: () => void;
   /** Off screen: the context stays until a shown terminal needs its slot */
@@ -183,12 +186,16 @@ export function createWebglController(
     return "attached";
   }
 
-  function rebuild(): void {
+  function drop(): void {
     if (disposed) return;
     retries = 0;
     lastLossAt = 0;
     fellBack = false;
     detach();
+  }
+
+  function rebuild(): void {
+    drop();
     attach();
   }
 
@@ -227,5 +234,5 @@ export function createWebglController(
   }
 
   syncConceal();
-  return { dispose, rebuild, park, unpark, pending };
+  return { dispose, drop, rebuild, park, unpark, pending };
 }

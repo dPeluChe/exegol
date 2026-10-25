@@ -10,6 +10,8 @@ export interface WindowView {
 const SETTLE_MS = 500;
 
 export const GPU_REPAINT_EVENT = "exegol:gpu-repaint";
+/** Sent first: every view lets go of WebGL before any rebuilds (terminal-webgl `drop`) */
+export const GPU_DROP_EVENT = "exegol:gpu-drop";
 
 export interface GpuRepaintDetail {
   /** Each terminal view that repainted adds one (dispatchEvent runs the handlers synchronously) */
@@ -45,6 +47,7 @@ function currentView(): WindowView {
 }
 
 function repaintTerminals(): void {
+  window.dispatchEvent(new Event(GPU_DROP_EVENT));
   const detail: GpuRepaintDetail = { views: 0 };
   window.dispatchEvent(new CustomEvent<GpuRepaintDetail>(GPU_REPAINT_EVENT, { detail }));
   dispatchRefitTerminals();
