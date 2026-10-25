@@ -12,12 +12,15 @@ const addonInstances: Array<{
   dispose: ReturnType<typeof vi.fn>;
   onContextLoss: ReturnType<typeof vi.fn>;
   trigger: () => void;
+  /** The shared atlas made a page: every addon on it forwards the same canvas */
+  addPage: (canvas: object) => void;
 }> = [];
 
 vi.mock("@xterm/addon-webgl", () => {
   class WebglAddon {
     dispose = vi.fn();
     onContextLoss = vi.fn();
+    onAddTextureAtlasCanvas = vi.fn();
     _renderer = { _gl: { getExtension: () => ({ loseContext }) } };
     constructor() {
       const handle = {
@@ -29,6 +32,9 @@ vi.mock("@xterm/addon-webgl", () => {
           const callback = this.onContextLoss.mock.calls[0]?.[0];
           if (callback) callback();
         },
+        addPage: (canvas: object) => {
+          for (const [cb] of this.onAddTextureAtlasCanvas.mock.calls) cb(canvas);
+        },
       };
       addonInstances.push(handle);
     }
@@ -37,12 +43,14 @@ vi.mock("@xterm/addon-webgl", () => {
 });
 
 import { repaintTerminals } from "../../lib/gpu-repaint";
+import { CHURN_COOLDOWNS_MS, CHURN_PAGES, resetPageNotes } from "./atlas-churn";
 import { createWebglController, listenGpuRepaint } from "./terminal-webgl";
 import { createWebglBudget } from "./webgl-budget";
 import { liveWebglAddons, webglCounts } from "./webgl-counts";
 
 beforeEach(() => {
   addonInstances.length = 0;
+  resetPageNotes();
   vi.useFakeTimers();
   vi.stubGlobal("requestAnimationFrame", (cb: () => void) => setTimeout(cb, 16));
   vi.stubGlobal("cancelAnimationFrame", (id: ReturnType<typeof setTimeout>) => clearTimeout(id));
@@ -70,6 +78,10 @@ function makeFakeTerminal() {
     }),
   } as unknown as Terminal;
   return Object.assign(terminal, { renders, fakeElement: element });
+}
+
+function renderOnce(t: { renders: Array<() => void> }) {
+  for (const cb of t.renders.slice()) cb();
 }
 
 /** Created parked, as use-xterm does at mount; shown at once */
@@ -244,7 +256,7 @@ describe("createWebglController — parked while hidden", () => {
     controller.unpark();
     expect(controller.pending()).toBe(false);
     expect(onRendererChanged).toHaveBeenCalledTimes(1);
-    terminal.renders[0]?.();
+    renderOnce(terminal);
     expect(terminal.fakeElement.style.opacity).toBe("0");
     vi.advanceTimersByTime(20);
     expect(terminal.fakeElement.style.opacity).toBe("");
@@ -334,6 +346,92 @@ describe("createWebglController — parked while hidden", () => {
     expect(budget.live()).toBe(0);
     controller.unpark();
     expect(addonInstances).toHaveLength(2);
+  });
+});
+
+describe("createWebglController — glyph atlas churn", () => {
+  type View = ReturnType<typeof makeFakeTerminal>;
+  /** One frame of `t` that made `pages` new atlas pages, forwarded by every addon on the atlas */
+  function churnFrame(t: View, pages: number) {
+    for (let i = 0; i < pages; i++) {
+      const canvas = {};
+      for (const a of addonInstances) a.addPage(canvas);
+    }
+    renderOnce(t);
+  }
+
+  it("a view making pages fast goes to the DOM renderer, then back to WebGL after the cooldown", () => {
+    const terminal = makeFakeTerminal();
+    const budget = createWebglBudget(2);
+    const onChurn = vi.fn();
+    const onRendererChanged = vi.fn();
+    const controller = shownController(terminal, { onChurn, onRendererChanged }, budget);
+    onRendererChanged.mockClear();
+    for (let f = 0; f < 4; f++) {
+      churnFrame(terminal, CHURN_PAGES / 4);
+      vi.advanceTimersByTime(100);
+    }
+    expect(onChurn).toHaveBeenCalledTimes(1);
+    expect(onChurn.mock.calls[0]?.[0]).toEqual({
+      pages: CHURN_PAGES,
+      overMs: 300,
+      domForMs: CHURN_COOLDOWNS_MS[0],
+    });
+    expect(addonInstances[0]?.dispose).toHaveBeenCalled();
+    expect(budget.live()).toBe(0);
+    expect(onRendererChanged).toHaveBeenCalledTimes(1);
+    expect(controller.pending()).toBe(false);
+    // A GPU crash repaint meanwhile keeps it on the DOM renderer
+    controller.rebuild();
+    expect(addonInstances).toHaveLength(1);
+    vi.advanceTimersByTime(CHURN_COOLDOWNS_MS[0]);
+    expect(addonInstances).toHaveLength(2);
+    expect(budget.live()).toBe(1);
+  });
+
+  it("normal output (a page now and then) never trips", () => {
+    const terminal = makeFakeTerminal();
+    const onChurn = vi.fn();
+    shownController(terminal, { onChurn }, createWebglBudget(2));
+    for (let f = 0; f < 200; f++) {
+      churnFrame(terminal, f % 20 === 0 ? 1 : 0);
+      vi.advanceTimersByTime(100);
+    }
+    expect(onChurn).not.toHaveBeenCalled();
+    expect(addonInstances[0]?.dispose).not.toHaveBeenCalled();
+  });
+
+  it("on a shared atlas only the view that drew the pages leaves WebGL", () => {
+    const culprit = makeFakeTerminal();
+    const neighbour = makeFakeTerminal();
+    const budget = createWebglBudget(4);
+    const onChurn = vi.fn();
+    const onNeighbourChurn = vi.fn();
+    shownController(culprit, { onChurn }, budget);
+    shownController(neighbour, { onChurn: onNeighbourChurn }, budget);
+    for (let f = 0; f < 4; f++) {
+      churnFrame(culprit, CHURN_PAGES / 4);
+      renderOnce(neighbour);
+    }
+    expect(onChurn).toHaveBeenCalledTimes(1);
+    expect(onNeighbourChurn).not.toHaveBeenCalled();
+    expect(addonInstances[0]?.dispose).toHaveBeenCalled();
+    expect(addonInstances[1]?.dispose).not.toHaveBeenCalled();
+  });
+
+  it("a repeat within the calm window stays off longer; dispose cancels the return", () => {
+    const terminal = makeFakeTerminal();
+    const budget = createWebglBudget(2);
+    const onChurn = vi.fn();
+    const controller = shownController(terminal, { onChurn }, budget);
+    churnFrame(terminal, CHURN_PAGES);
+    vi.advanceTimersByTime(CHURN_COOLDOWNS_MS[0]);
+    churnFrame(terminal, CHURN_PAGES);
+    expect(onChurn.mock.calls.map(([t]) => t.domForMs)).toEqual(CHURN_COOLDOWNS_MS.slice(0, 2));
+    controller.dispose();
+    vi.advanceTimersByTime(CHURN_COOLDOWNS_MS[1]);
+    expect(addonInstances).toHaveLength(2);
+    expect(budget.live()).toBe(0);
   });
 });
 
@@ -445,7 +543,7 @@ describe("createWebglController — random sequences keep the invariants", () =>
         // Rare, as in the app (three GPU crashes)
         if (rand() < 0.1) budget.setDomOnly();
       } else if (op === "render") {
-        for (const cb of v.terminal.renders.slice()) cb();
+        renderOnce(v.terminal);
       } else {
         v.controller.dispose();
         v.disposed = true;
@@ -455,9 +553,9 @@ describe("createWebglController — random sequences keep the invariants", () =>
     }
 
     // Settled: no shown terminal stays concealed once renders ran and the caps passed
-    for (const v of views) for (const cb of v.terminal.renders.slice()) cb();
+    for (const v of views) renderOnce(v.terminal);
     vi.advanceTimersByTime(10_000);
-    for (const v of views) for (const cb of v.terminal.renders.slice()) cb();
+    for (const v of views) renderOnce(v.terminal);
     vi.advanceTimersByTime(200);
     check(`seed ${seed} settled`);
     for (const v of views) {

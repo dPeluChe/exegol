@@ -1,6 +1,7 @@
 import { WebglAddon } from "@xterm/addon-webgl";
 import type { Terminal } from "@xterm/xterm";
 import { GPU_DROP_EVENT, GPU_REPAINT_EVENT, type GpuRepaintDetail } from "../../lib/gpu-repaint";
+import { type ChurnTrip, claimPages, createChurnMeter, notePage } from "./atlas-churn";
 import { type WebglBudget, webglBudget } from "./webgl-budget";
 import { counts, trackWebglAddon } from "./webgl-counts";
 
@@ -31,6 +32,8 @@ export interface WebglHooks {
   onLost?: () => void;
   /** The renderer changed or `pending` cleared: the owner refits (cell widths differ) */
   onRendererChanged?: () => void;
+  /** This view's output churned the glyph atlas: on the DOM renderer for `domForMs` */
+  onChurn?: (trip: ChurnTrip) => void;
 }
 
 /**
@@ -56,7 +59,7 @@ function disposeAddon(addon: WebglAddon): void {
  */
 export function createWebglController(
   terminal: Terminal,
-  { onLost, onRendererChanged }: WebglHooks = {},
+  { onLost, onRendererChanged, onChurn }: WebglHooks = {},
   budget: WebglBudget = webglBudget,
 ): WebglController {
   let addon: WebglAddon | null = null;
@@ -70,8 +73,10 @@ export function createWebglController(
   let revealTimer: ReturnType<typeof setTimeout> | null = null;
   let revealRender: { dispose: () => void } | null = null;
   let revealFrame = 0;
+  let coolTimer: ReturnType<typeof setTimeout> | null = null;
+  const churn = createChurnMeter();
 
-  const pending = () => parked && !addon && !fellBack && !disposed;
+  const pending = () => parked && !addon && !fellBack && !disposed && !coolTimer;
 
   function setConcealed(hidden: boolean): void {
     concealed = hidden;
@@ -157,7 +162,7 @@ export function createWebglController(
   /** `queued`: a slot frees later and attaches then; `none`: no renderer swap is coming */
   function attach(): "attached" | "queued" | "none" {
     // Parked: the new context waits until the terminal is shown again
-    if (disposed || fellBack || addon || parked) return "none";
+    if (disposed || fellBack || addon || parked || coolTimer) return "none";
     if (!budget.acquire(attach)) return budget.isDomOnly() ? "none" : "queued";
     let created: WebglAddon | null = null;
     try {
@@ -166,6 +171,7 @@ export function createWebglController(
       created.onContextLoss(() => {
         if (created === addon) onContextLost();
       });
+      created.onAddTextureAtlasCanvas(notePage);
       // Swapping the renderer refreshes every row: the next render is WebGL's
       terminal.loadAddon(created);
     } catch {
@@ -188,6 +194,23 @@ export function createWebglController(
     onRendererChanged?.();
     return "attached";
   }
+
+  function coolDown(trip: ChurnTrip): void {
+    detach();
+    onRendererChanged?.();
+    onChurn?.(trip);
+    coolTimer = setTimeout(() => {
+      coolTimer = null;
+      attach();
+    }, trip.domForMs);
+  }
+
+  const renders = terminal.onRender(() => {
+    const pages = claimPages();
+    if (!pages || !addon) return;
+    const trip = churn.record(pages, Date.now());
+    if (trip) coolDown(trip);
+  });
 
   function drop(): void {
     if (disposed) return;
@@ -231,6 +254,9 @@ export function createWebglController(
 
   function dispose(): void {
     disposed = true;
+    renders.dispose();
+    if (coolTimer) clearTimeout(coolTimer);
+    coolTimer = null;
     // The terminal may live on without WebGL (a canvas-only CLI): never leave it hidden
     reveal();
     detach();

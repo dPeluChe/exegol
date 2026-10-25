@@ -1,0 +1,16 @@
+{
+  "name": "renderer-bench",
+  "private": true,
+  "type": "module",
+  "description": "Terminal renderer benchmark: xterm DOM, addon-webgl, Exegol's WebGL controller, Wraith WebGPU. Not a workspace: npm install here",
+  "scripts": {
+    "build": "esbuild page/bench.js --bundle --format=esm --outfile=page/bench.bundle.js && cp node_modules/@xterm/xterm/css/xterm.css node_modules/wraithterm/wasm/wraith_engine_bg.wasm page/"
+  },
+  "devDependencies": {
+    "@xterm/addon-unicode11": "0.9.0",
+    "@xterm/addon-webgl": "0.19.0",
+    "@xterm/xterm": "6.0.0",
+    "esbuild": "0.25.0",
+    "wraithterm": "0.5.0"
+  }
+}

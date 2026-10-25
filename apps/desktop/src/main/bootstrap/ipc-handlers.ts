@@ -14,6 +14,7 @@ import {
   formatMountLine,
   mountLogKey,
   mountLogLimit,
+  mountLogWarns,
   parseMountStats,
   visibleLogLimit,
 } from "../terminal/mount-log";
@@ -89,7 +90,9 @@ export function registerIpcHandlers(): void {
     if (!mount) return;
     const suppressed = mountLogLimit.take(mountLogKey(mount), Date.now());
     if (suppressed === null) return;
-    logger.info(`${formatMountLine(mount)}${suppressedNote(suppressed)}`);
+    const line = `${formatMountLine(mount)}${suppressedNote(suppressed)}`;
+    if (mountLogWarns(mount)) logger.warn(line);
+    else logger.info(line);
   });
 
   // A mount only needs to know whether output exists: serializing it just to test length cost 25-40ms

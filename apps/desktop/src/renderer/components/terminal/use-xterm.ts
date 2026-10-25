@@ -256,6 +256,8 @@ export function useXterm({
           onLost: () =>
             window.dispatchEvent(new CustomEvent("exegol:kick-terminal", { detail: { agentId } })),
           onRendererChanged: () => refitRef.current(),
+          onChurn: (trip) =>
+            window.api.terminal.mountLog(agentId, { kind: "atlas-churn", ...trip }),
         })
       : null;
     const refit = () => {

@@ -56,6 +56,9 @@ export type MountStats =
       ended: "settled" | "timeout" | "switched";
       webgl: WebglCounts;
     }
+  /** The view's output made `pages` glyph atlas pages in `overMs` (colors that never repeat):
+   *  on the DOM renderer for `domForMs` */
+  | { kind: "atlas-churn"; pages: number; overMs: number; domForMs: number }
   /** One Send to, sent under the target's id: what reached it, never the text. `from`: the
    *  selection at pick time or the one the list opened with */
   | {
