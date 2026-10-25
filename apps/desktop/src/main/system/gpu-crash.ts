@@ -1,3 +1,5 @@
+import type { GpuRepaintReport } from "@exegol/shared";
+
 /** Crashes this close together mean WebGL itself is the trigger on this machine */
 export const GPU_CRASH_LIMIT = 3;
 export const GPU_CRASH_WINDOW_MS = 10 * 60_000;
@@ -31,12 +33,32 @@ export interface TerminalGpuStats {
   capped: boolean;
 }
 
+const isCount = (n: unknown) => typeof n === "number" && Number.isInteger(n) && n >= 0 && n < 1e4;
+
 export function parseGpuStats(input: unknown): TerminalGpuStats | null {
   if (!input || typeof input !== "object") return null;
   const { views, webgl, capped } = input as Record<string, unknown>;
-  const count = (n: unknown) => typeof n === "number" && Number.isInteger(n) && n >= 0 && n < 1e4;
-  if (!count(views) || !count(webgl) || typeof capped !== "boolean") return null;
+  if (!isCount(views) || !isCount(webgl) || typeof capped !== "boolean") return null;
   return { views: views as number, webgl: webgl as number, capped };
+}
+
+export function parseGpuRepaint(input: unknown): GpuRepaintReport | null {
+  if (!input || typeof input !== "object") return null;
+  const { views, before, afterDrop, rebuilt } = input as Record<string, unknown>;
+  const counts = [views, before, afterDrop, rebuilt];
+  if (!counts.every(isCount) || (views as number) < 1) return null;
+  return {
+    views: views as number,
+    before: before as number,
+    afterDrop: afterDrop as number,
+    rebuilt: rebuilt as number,
+  };
+}
+
+/** The repaint line; an addon still held after the drop (WARN) is the blank-terminals case */
+export function describeGpuRepaint(r: GpuRepaintReport): string {
+  const line = `GPU process restarted: repainting ${r.views} terminal view(s), WebGL addons ${r.before} before, ${r.afterDrop} after the drop, ${r.rebuilt} rebuilt`;
+  return r.afterDrop > 0 ? `${line}: one still held keeps the blank glyph atlas` : line;
 }
 
 export interface SystemEvent {

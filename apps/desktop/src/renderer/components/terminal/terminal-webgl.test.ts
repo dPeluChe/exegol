@@ -7,6 +7,8 @@ const loseContext = vi.fn();
 
 const addonInstances: Array<{
   addon: object;
+  /** Addons alive (since load) when this one was built: they share xterm's glyph atlas with it */
+  aliveAtBuild: number;
   dispose: ReturnType<typeof vi.fn>;
   onContextLoss: ReturnType<typeof vi.fn>;
   trigger: () => void;
@@ -20,6 +22,7 @@ vi.mock("@xterm/addon-webgl", () => {
     constructor() {
       const handle = {
         addon: this,
+        aliveAtBuild: liveWebglAddons(),
         dispose: this.dispose,
         onContextLoss: this.onContextLoss,
         trigger: () => {
@@ -33,9 +36,10 @@ vi.mock("@xterm/addon-webgl", () => {
   return { WebglAddon };
 });
 
-import { createWebglController } from "./terminal-webgl";
+import { repaintTerminals } from "../../lib/gpu-repaint";
+import { createWebglController, listenGpuRepaint } from "./terminal-webgl";
 import { createWebglBudget } from "./webgl-budget";
-import { webglCounts } from "./webgl-counts";
+import { liveWebglAddons, webglCounts } from "./webgl-counts";
 
 beforeEach(() => {
   addonInstances.length = 0;
@@ -167,6 +171,53 @@ describe("createWebglController — rebuild after a GPU crash", () => {
     expect(budget.live()).toBe(1);
   });
 
+  it("a GPU repaint through the views' real listeners builds no addon beside a pre-crash one", () => {
+    const budget = createWebglBudget(12);
+    const base = liveWebglAddons();
+    const target = new EventTarget();
+    const make = () => {
+      const controller = shownController(makeFakeTerminal(), {}, budget);
+      listenGpuRepaint(
+        target,
+        () => controller,
+        () => true,
+      );
+      return controller;
+    };
+    const views = [make(), make(), make()];
+    const hidden = make();
+    hidden.park();
+    const before = addonInstances.length;
+
+    const report = repaintTerminals(target, () => liveWebglAddons() - base);
+    expect(report).toEqual({ views: 4, before: 4, afterDrop: 0, rebuilt: 3 });
+    const rebuilt = addonInstances.slice(before);
+    expect(rebuilt).toHaveLength(3);
+    // The first one built finds no other owner, so xterm makes it a fresh atlas
+    expect(rebuilt[0]?.aliveAtBuild).toBe(base);
+    hidden.unpark();
+    expect(addonInstances).toHaveLength(before + 4);
+    expect(views).toHaveLength(3);
+  });
+
+  it("a view still holding its addon after the drop shows in the report", () => {
+    const base = liveWebglAddons();
+    const target = new EventTarget();
+    const held = shownController(makeFakeTerminal(), {}, createWebglBudget(12));
+    // Listens to the repaint only, as a view that missed the drop would
+    target.addEventListener("exegol:gpu-repaint", () => held.rebuild());
+    expect(repaintTerminals(target, () => liveWebglAddons() - base).afterDrop).toBe(1);
+  });
+
+  it("rebuilding view by view (the old path) builds beside pre-crash addons", () => {
+    const budget = createWebglBudget(12);
+    const base = liveWebglAddons();
+    const views = [0, 1, 2].map(() => shownController(makeFakeTerminal(), {}, budget));
+    const before = addonInstances.length;
+    for (const c of views) c.rebuild();
+    expect((addonInstances[before]?.aliveAtBuild ?? 0) - base).toBe(2);
+  });
+
   it("does nothing once disposed", () => {
     const controller = shownController(makeFakeTerminal());
     controller.dispose();
@@ -287,13 +338,15 @@ describe("createWebglController — parked while hidden", () => {
 });
 
 describe("the addon internals disposeAddon reaches", () => {
+  const bundle = readFileSync(createRequire(import.meta.url).resolve("@xterm/addon-webgl"), "utf8");
+
   it("still name the renderer and its GL context (an upgrade that renames them breaks the #6068 workaround)", () => {
-    const bundle = readFileSync(
-      createRequire(import.meta.url).resolve("@xterm/addon-webgl"),
-      "utf8",
-    );
     expect(bundle).toContain("this._renderer=");
     expect(bundle).toContain("this._gl=this._canvas.getContext");
+  });
+
+  it("still share one glyph atlas per config among terminals (why a GPU repaint drops every view first)", () => {
+    expect(bundle).toContain("ownedBy.push(");
   });
 });
 
@@ -361,6 +414,7 @@ describe("createWebglController — random sequences keep the invariants", () =>
         "hide",
         "hide",
         "rebuild",
+        "gpuCrash",
         "loss",
         "staleLoss",
         "time",
@@ -376,6 +430,11 @@ describe("createWebglController — random sequences keep the invariants", () =>
         v.controller.park();
       } else if (op === "rebuild") {
         v.controller.rebuild();
+      } else if (op === "gpuCrash") {
+        // gpu-repaint: every view drops, then every view rebuilds
+        for (const o of open) o.controller.drop();
+        expect(live(), `step ${i} gpuCrash`).toHaveLength(0);
+        for (const o of open) o.controller.rebuild();
       } else if (op === "loss" || op === "staleLoss") {
         const own = addonInstances.filter((a) => holder(a.addon) === v);
         const target = op === "loss" ? own.find((a) => a.dispose.mock.calls.length === 0) : own[0];

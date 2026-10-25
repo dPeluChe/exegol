@@ -62,7 +62,7 @@ interface Window {
       setVisible: (id: string, visible: boolean, viewId: string, fresh?: boolean) => Promise<void>;
       redraw: (id: string) => void;
       clear: (id: string) => void;
-      gpuRepainted?: (views: number) => void;
+      gpuRepainted?: (report: import("@exegol/shared").GpuRepaintReport) => void;
       gpuStats?: (stats: { views: number; webgl: number; capped: boolean }) => void;
       getSize: (id: string) => Promise<{ cols: number; rows: number } | null>;
       onResized: (id: string, callback: (cols: number, rows: number) => void) => () => void;

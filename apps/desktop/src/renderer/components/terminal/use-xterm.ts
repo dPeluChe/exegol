@@ -5,7 +5,6 @@ import type { Terminal } from "@xterm/xterm";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLatest } from "../../hooks/use-latest";
 import { useSettings } from "../../hooks/use-trpc";
-import { GPU_DROP_EVENT, GPU_REPAINT_EVENT, type GpuRepaintDetail } from "../../lib/gpu-repaint";
 import { claimPaneFocus } from "../../lib/pane-focus";
 import { noteSwitchMount } from "../../lib/project-switch-log";
 import { useTerminalStore } from "../../stores/terminals";
@@ -34,7 +33,7 @@ import {
   LIGHT_TERMINAL_THEME,
   type TerminalInstanceProps,
 } from "./terminal-types";
-import { createWebglController, type WebglController } from "./terminal-webgl";
+import { createWebglController, listenGpuRepaint, type WebglController } from "./terminal-webgl";
 import { useTerminalVisibility } from "./use-terminal-visibility";
 import { trackTerminalView, webglBudget } from "./webgl-budget";
 
@@ -415,31 +414,24 @@ export function useXterm({
   // GPU process crashed (lib/gpu-repaint): a context xterm "restored" while hidden can stay
   // blank, so every view drops its addon (freeing the shared glyph atlas, blank since the
   // crash), then takes a new one, refits, repaints and kicks an alt-screen TUI
-  useEffect(() => {
-    const handleGpuRepaint = (e: Event) => {
-      const terminal = terminalRef.current;
-      if (!terminal) return;
-      const detail = (e as CustomEvent<GpuRepaintDetail>).detail;
-      detail.views++;
-      try {
-        webglRef.current?.rebuild();
-        handleResize();
-        terminal.refresh(0, terminal.rows - 1);
-        if (!mirror && !readOnly && terminal.buffer.active.type === "alternate") {
-          window.api.terminal.redraw(agentId);
-        }
-      } catch {
-        /* not ready */
-      }
-    };
-    const handleGpuDrop = () => webglRef.current?.drop();
-    window.addEventListener(GPU_DROP_EVENT, handleGpuDrop);
-    window.addEventListener(GPU_REPAINT_EVENT, handleGpuRepaint);
-    return () => {
-      window.removeEventListener(GPU_DROP_EVENT, handleGpuDrop);
-      window.removeEventListener(GPU_REPAINT_EVENT, handleGpuRepaint);
-    };
-  }, [agentId, mirror, readOnly, handleResize]);
+  useEffect(
+    () =>
+      listenGpuRepaint(
+        window,
+        () => webglRef.current,
+        () => {
+          const terminal = terminalRef.current;
+          if (!terminal) return false;
+          handleResize();
+          terminal.refresh(0, terminal.rows - 1);
+          if (!mirror && !readOnly && terminal.buffer.active.type === "alternate") {
+            window.api.terminal.redraw(agentId);
+          }
+          return true;
+        },
+      ),
+    [agentId, mirror, readOnly, handleResize],
+  );
 
   // Keyboard navigation (lib/pane-focus) hands this pane the cursor
   useEffect(() => {

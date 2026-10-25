@@ -1,4 +1,6 @@
+import type { GpuRepaintReport } from "@exegol/shared";
 import { webglBudget } from "../components/terminal/webgl-budget";
+import { liveWebglAddons } from "../components/terminal/webgl-counts";
 import { dispatchRefitTerminals } from "./dispatch-refit";
 
 export interface WindowView {
@@ -46,12 +48,17 @@ function currentView(): WindowView {
   return { visible: document.visibilityState === "visible", focused: document.hasFocus() };
 }
 
-function repaintTerminals(): void {
-  window.dispatchEvent(new Event(GPU_DROP_EVENT));
+/** Every view drops its context before any rebuilds: xterm frees the shared glyph atlas only once its last view lets go */
+export function repaintTerminals(
+  target: EventTarget,
+  liveContexts: () => number,
+): GpuRepaintReport {
+  const before = liveContexts();
+  target.dispatchEvent(new Event(GPU_DROP_EVENT));
+  const afterDrop = liveContexts();
   const detail: GpuRepaintDetail = { views: 0 };
-  window.dispatchEvent(new CustomEvent<GpuRepaintDetail>(GPU_REPAINT_EVENT, { detail }));
-  dispatchRefitTerminals();
-  if (detail.views > 0) window.api.terminal.gpuRepainted?.(detail.views);
+  target.dispatchEvent(new CustomEvent<GpuRepaintDetail>(GPU_REPAINT_EVENT, { detail }));
+  return { views: detail.views, before, afterDrop, rebuilt: liveContexts() };
 }
 
 /** Every window (main, floating, settings) follows main's `gpu:process-gone` */
@@ -62,7 +69,9 @@ export function installGpuRepaint(): void {
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
       timer = null;
-      repaintTerminals();
+      const report = repaintTerminals(window, liveWebglAddons);
+      dispatchRefitTerminals();
+      if (report.views > 0) window.api.terminal.gpuRepainted?.(report);
     }, SETTLE_MS);
   };
   // A window opened after the third crash starts on the DOM renderer too

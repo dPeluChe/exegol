@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { createGpuCrashTracker, describeGpu, describeGpuCrash, parseGpuStats } from "./gpu-crash";
+import {
+  createGpuCrashTracker,
+  describeGpu,
+  describeGpuCrash,
+  describeGpuRepaint,
+  parseGpuRepaint,
+  parseGpuStats,
+} from "./gpu-crash";
 
 const MIN = 60_000;
 
@@ -87,5 +94,31 @@ describe("describeGpu", () => {
 
   it("copes with no info at all", () => {
     expect(describeGpu(null, null)).toBe("GPU unknown");
+  });
+});
+
+describe("parseGpuRepaint", () => {
+  it("accepts the four counts with at least one view and rejects anything else", () => {
+    const report = { views: 15, before: 8, afterDrop: 0, rebuilt: 2 };
+    expect(parseGpuRepaint(report)).toEqual(report);
+    expect(parseGpuRepaint({ ...report, views: 0 })).toBeNull();
+    expect(parseGpuRepaint({ ...report, afterDrop: -1 })).toBeNull();
+    expect(parseGpuRepaint({ ...report, rebuilt: 1.5 })).toBeNull();
+    expect(parseGpuRepaint({ views: 3, before: 1, afterDrop: 0 })).toBeNull();
+    expect(parseGpuRepaint(3)).toBeNull();
+  });
+});
+
+describe("describeGpuRepaint", () => {
+  it("names the addons at each step", () => {
+    expect(describeGpuRepaint({ views: 15, before: 8, afterDrop: 0, rebuilt: 2 })).toBe(
+      "GPU process restarted: repainting 15 terminal view(s), WebGL addons 8 before, 0 after the drop, 2 rebuilt",
+    );
+  });
+
+  it("flags an addon that outlived the drop: the shared glyph atlas stays blank", () => {
+    const line = describeGpuRepaint({ views: 3, before: 3, afterDrop: 1, rebuilt: 3 });
+    expect(line).toContain("1 after the drop");
+    expect(line).toContain("blank glyph atlas");
   });
 });

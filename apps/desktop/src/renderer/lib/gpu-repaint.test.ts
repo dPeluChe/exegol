@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { createGpuRepaintGate } from "./gpu-repaint";
+import {
+  createGpuRepaintGate,
+  GPU_DROP_EVENT,
+  GPU_REPAINT_EVENT,
+  type GpuRepaintDetail,
+  repaintTerminals,
+} from "./gpu-repaint";
 
 const hidden = { visible: false, focused: false };
 const visibleUnfocused = { visible: true, focused: false };
@@ -42,5 +48,44 @@ describe("createGpuRepaintGate", () => {
     gate.lost(hidden);
     expect(gate.shown(focused)).toBe(true);
     expect(gate.shown(focused)).toBe(false);
+  });
+});
+
+describe("repaintTerminals", () => {
+  /** Views like use-xterm's: drop on the first event, count and rebuild on the second */
+  function setup(names: string[], missDrop: string[] = []) {
+    const target = new EventTarget();
+    const steps: string[] = [];
+    const holding = new Set(names);
+    for (const name of names) {
+      if (!missDrop.includes(name)) {
+        target.addEventListener(GPU_DROP_EVENT, () => {
+          steps.push(`drop ${name}`);
+          holding.delete(name);
+        });
+      }
+      target.addEventListener(GPU_REPAINT_EVENT, (e) => {
+        steps.push(`rebuild ${name}`);
+        (e as CustomEvent<GpuRepaintDetail>).detail.views++;
+        holding.add(name);
+      });
+    }
+    return { target, steps, live: () => holding.size };
+  }
+
+  it("every view drops before any rebuilds, so no old context holds the atlas", () => {
+    const { target, steps, live } = setup(["a", "b", "c"]);
+    expect(repaintTerminals(target, live)).toEqual({
+      views: 3,
+      before: 3,
+      afterDrop: 0,
+      rebuilt: 3,
+    });
+    expect(steps).toEqual(["drop a", "drop b", "drop c", "rebuild a", "rebuild b", "rebuild c"]);
+  });
+
+  it("reports a context that outlived the drop", () => {
+    const { target, live } = setup(["a", "b"], ["b"]);
+    expect(repaintTerminals(target, live).afterDrop).toBe(1);
   });
 });

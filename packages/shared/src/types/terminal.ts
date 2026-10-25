@@ -17,6 +17,15 @@ export interface WebglCounts {
   evicted: number;
 }
 
+/** One window's terminal repaint after a GPU process crash: WebGL addons alive at each step */
+export interface GpuRepaintReport {
+  views: number;
+  before: number;
+  /** Should be 0: an addon still held keeps xterm's shared glyph atlas, blank since the crash */
+  afterDrop: number;
+  rebuilt: number;
+}
+
 export type MountStats =
   | { kind: "unmount" }
   | {
