@@ -375,21 +375,36 @@ export function setAgentWorktree(db: Database.Database, agentId: string, worktre
   db.prepare("UPDATE agents SET worktree_id = ? WHERE id = ?").run(worktreeId, agentId);
 }
 
+export function setAgentPtySize(
+  db: Database.Database,
+  id: string,
+  size: { cols: number; rows: number },
+): void {
+  db.prepare("UPDATE agents SET pty_cols = ?, pty_rows = ? WHERE id = ?").run(
+    size.cols,
+    size.rows,
+    id,
+  );
+}
+
 export function clearAgentWorktree(db: Database.Database, agentId: string): void {
   db.prepare("UPDATE agents SET worktree_id = NULL WHERE id = ?").run(agentId);
 }
 
 /**
- * Single-query post-spawn activation: sets pid, session_id, and status = "running"
- * in one round-trip, replacing the three separate UPDATEs previously issued after
- * ptyHost.createSession() resolves.
+ * Single-query post-spawn activation: pid, session_id, status = "running" and the grid the
+ * PTY was created at, which a reattach rebuilds the model at (a pane fitting to that same
+ * grid sends no resize, so nothing else would record it).
  */
-export function activateAgent(db: Database.Database, agentId: string, pid: number): void {
-  db.prepare("UPDATE agents SET pid = ?, session_id = ?, status = 'running' WHERE id = ?").run(
-    pid,
-    agentId,
-    agentId,
-  );
+export function activateAgent(
+  db: Database.Database,
+  agentId: string,
+  pid: number,
+  size: { cols: number; rows: number },
+): void {
+  db.prepare(
+    "UPDATE agents SET pid = ?, session_id = ?, status = 'running', pty_cols = ?, pty_rows = ? WHERE id = ?",
+  ).run(pid, agentId, size.cols, size.rows, agentId);
 }
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,6 @@
 import { getAgentManager } from "../agents/manager";
 import { getDb } from "../db/client";
+import { setAgentPtySize } from "../db/queries/agents";
 import { broadcast } from "../lib/event-bus";
 import { suppressedNote } from "../lib/log-limiter";
 import { logger } from "../lib/logger";
@@ -20,9 +21,7 @@ export function requestPtyResize(agentId: string, cols: number, rows: number): v
   getAgentManager().resize(agentId, cols, rows);
   // Remembered so a reattach rebuilds the model at the size the output was drawn at
   try {
-    getDb()
-      .prepare("UPDATE agents SET pty_cols = ?, pty_rows = ? WHERE id = ?")
-      .run(cols, rows, agentId);
+    setAgentPtySize(getDb(), agentId, { cols, rows });
   } catch {
     /* not an agent row (or db closing): the default size is only a fallback */
   }
