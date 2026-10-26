@@ -9,6 +9,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.5.28] — 2026-10-26 — Terminals look right after a restart and a GPU crash, less background work, smaller app
+
 ### Changed
 - Watching cards have the pane toolbar's Restart / Update for their CLI and a Refresh button (also in their right-click menu)
 - A terminal printing colors that never repeat (gradients, `lolcat`, btop graphs) no longer slows every terminal on screen: it moves to the lighter renderer for 30 s, longer if it keeps doing it
