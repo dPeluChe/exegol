@@ -13,7 +13,7 @@ describe("watchCardMenu", () => {
   it("live card without selection: go, view controls, float, unpin", () => {
     expect(watchCardMenu(card)).toEqual([
       ["go-to"],
-      ["collapse", "fit-to-card", "font-smaller", "font-larger", "float"],
+      ["collapse", "fit-to-card", "font-smaller", "font-larger", "refresh", "float"],
       ["unpin"],
     ]);
   });

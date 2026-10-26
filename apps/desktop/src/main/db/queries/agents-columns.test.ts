@@ -1,5 +1,6 @@
 import Database from "libsql";
 import { describe, expect, it } from "vitest";
+import { wave3Migrations } from "../migration-sets/wave3";
 import { runMigrations } from "../migrations";
 import {
   AGENT_COLUMNS,
@@ -42,6 +43,16 @@ describe("agent rows", () => {
     activateAgent(db, "a1", 42, { cols: 177, rows: 66 });
     expect(agentPtySize(db, "a1")).toEqual({ cols: 177, rows: 66 });
     expect(getAgent(db, "a1")?.status).toBe("running");
+  });
+
+  it("a resume stored before the spawn grid takes its source's grid once", () => {
+    const db = setupDb();
+    db.prepare("UPDATE agents SET pty_cols = 177, pty_rows = 66 WHERE id = 'a3'").run();
+    db.prepare("UPDATE agents SET resumed_from = 'a3' WHERE id = 'a1'").run();
+    const fix = wave3Migrations.find((m) => m.id === "w3_031_resumed_pty_grid");
+    db.exec(fix?.sql ?? "");
+    expect(agentPtySize(db, "a1")).toEqual({ cols: 177, rows: 66 });
+    expect(agentPtySize(db, "a2")).toBeNull();
   });
 
   it("final_output is read only by its own getter", () => {

@@ -52,12 +52,9 @@ export async function reattachSidecarAgents(
 ): Promise<ReattachResult> {
   const stale = db
     .prepare(
-      // A terminal whose CLI exited sits idle at its prompt, PTY alive: it is reattached too.
-      // A resume spawned before its grid was stored at spawn started at its source's grid
+      // A terminal whose CLI exited sits idle at its prompt, PTY alive: it is reattached too
       `SELECT id, cli_type, project_id, task_description, status, current_step, launched_in_shell,
-              COALESCE(pty_cols, (SELECT s.pty_cols FROM agents s WHERE s.id = agents.resumed_from)) AS pty_cols,
-              COALESCE(pty_rows, (SELECT s.pty_rows FROM agents s WHERE s.id = agents.resumed_from)) AS pty_rows,
-              resume_command
+              pty_cols, pty_rows, resume_command
        FROM agents WHERE status IN ('running', 'spawning', 'waiting_input')
        OR (launched_in_shell = 1 AND status = 'idle')`,
     )

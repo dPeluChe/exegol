@@ -67,17 +67,18 @@ export const TINY_SNAPSHOT_BYTES = 256;
  * How a (re)mounted pane gets its program to repaint. A fitted grid that differs from the
  * snapshot's sends a PTY resize, which every TUI redraws on. At the same grid the snapshot is
  * exact, so only an alt screen that came back (nearly) empty, or a session's first mount in this
- * renderer, gets the redraw jiggle. Mirrors and read-only views never ask.
+ * renderer, gets the redraw jiggle. A mirror asks too (a pinned session after a restart may have
+ * no pane to do it, and its model came from the ring's tail); read-only views never ask.
  */
 export function mountRepaint(args: {
-  owner: boolean;
+  live: boolean;
   alternate: boolean;
   firstMount: boolean;
   snapshotBytes: number;
   snap: { cols: number; rows: number } | null;
   fit: { cols: number; rows: number };
 }): "resize" | "kick" | "none" {
-  if (!args.owner) return "none";
+  if (!args.live) return "none";
   const { snap, fit } = args;
   if (snap && (snap.cols !== fit.cols || snap.rows !== fit.rows)) return "resize";
   if (!args.alternate) return "none";

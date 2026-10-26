@@ -435,11 +435,6 @@ const DROP_INDICATOR: Record<DropSide, string> = {
   bottom: "inset-x-0 bottom-0 h-1/2",
 };
 
-const refitNextFrame = () =>
-  requestAnimationFrame(() => {
-    window.dispatchEvent(new Event("exegol:refit-terminals"));
-  });
-
 function usePaneDropTarget(tabId: string, paneId: string) {
   const mergeTabIntoSplit = useWorkspaceStore((s) => s.mergeTabIntoSplit);
   const movePaneBeside = useWorkspaceStore((s) => s.movePaneBeside);
@@ -468,7 +463,7 @@ function usePaneDropTarget(tabId: string, paneId: string) {
         const direction = dropSide === "left" || dropSide === "right" ? "horizontal" : "vertical";
         const sourceFirst = dropSide === "left" || dropSide === "top";
         mergeTabIntoSplit(sourceTabId, tabId, direction, sourceFirst);
-        refitNextFrame();
+        dispatchRefitTerminals();
         return;
       }
 
@@ -477,7 +472,7 @@ function usePaneDropTarget(tabId: string, paneId: string) {
       const dragged = readPaneDrag(e);
       if (dragged && dropSide && dragged.tabId === tabId && dragged.paneId !== paneId) {
         movePaneBeside(tabId, dragged.paneId, paneId, dropSide);
-        refitNextFrame();
+        dispatchRefitTerminals();
       }
     },
     [tabId, paneId, dropSide, mergeTabIntoSplit, movePaneBeside],

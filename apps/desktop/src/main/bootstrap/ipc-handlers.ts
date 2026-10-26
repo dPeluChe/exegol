@@ -61,7 +61,7 @@ export function registerIpcHandlers(): void {
     requestPtyResize(agentId, cols, rows);
   });
 
-  // Repaint without telling mirrors: the jiggle is not a real size change
+  // No terminal:resized broadcast: the jiggle is not a real size change
   ipcMain.on("terminal:redraw", (_event, agentId: string) => {
     getPtyHost().redraw(agentId);
   });

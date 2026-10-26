@@ -54,6 +54,22 @@ describe("PtyHost resize", () => {
     vi.advanceTimersByTime(60);
     expect(resize).toHaveBeenLastCalledWith("b", 100, 40);
   });
+
+  it("redraws asked within 500 ms are one repaint; a later one runs", async () => {
+    vi.useFakeTimers();
+    const host = new PtyHost();
+    const { client, resize } = fakeSidecar();
+    host.connectToSidecar(client);
+    await host.reattachSession("b", { cols: 100, rows: 40 }, callbacks);
+    resize.mockClear();
+    host.redraw("b");
+    vi.advanceTimersByTime(300);
+    host.redraw("b");
+    expect(resize).toHaveBeenCalledTimes(2);
+    vi.advanceTimersByTime(200);
+    host.redraw("b");
+    expect(resize).toHaveBeenCalledTimes(3);
+  });
 });
 
 describe("PtyHost requestedSize", () => {

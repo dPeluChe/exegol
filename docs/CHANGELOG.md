@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Changed
+- Watching cards have the pane toolbar's Restart / Update for their CLI and a Refresh button (also in their right-click menu)
 - A terminal printing colors that never repeat (gradients, `lolcat`, btop graphs) no longer slows every terminal on screen: it moves to the lighter renderer for 30 s, longer if it keeps doing it
 - Less background CPU: metrics pause while Exegol is hidden, idle terminals stop polling the process list, Git panes in hidden tabs stop polling, and Git status reads are shared for 2 s
 - Fewer database writes while agents run (a status or step that did not change is not written, a step at most once a second), lighter agent reads, and faster agent and project deletes
@@ -17,6 +18,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Smaller app: it no longer ships packages only the interface uses, source maps, type definitions or non-English Electron locales (unpacked macOS app about 490 MB to 306 MB)
 
 ### Fixed
+- Sessions pinned to Watching could show a broken screen after restarting Exegol until their project was opened: the Dashboard card now asks the CLI to redraw on its first showing, as a pane does
+- A refresh that reached a session from its pane and its Watching card at once (Refresh Terminal, a GPU crash repaint) made the CLI repaint twice; now it repaints once
 - A resumed session could show cut and overlapping lines after restarting Exegol until its CLI redrew: its terminal size was never saved, so the restart rebuilt the screen at 120x30
 - After a GPU process crash, agent and shell terminals stayed black with a few letters until Cmd+R: the new WebGL renderers reused the glyph atlas the crash had wiped. Every terminal now lets go of it first, so the repaint draws a fresh one
 - Switching projects no longer repaints the terminals' letters: a terminal off screen keeps its GPU renderer until another one needs it, one that must rebuild it stays hidden until it has drawn, and closed renderers free their GPU context at once. A terminal that only finds a GPU slot later is refitted to its narrower cells

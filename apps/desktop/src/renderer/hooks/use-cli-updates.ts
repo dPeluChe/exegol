@@ -34,18 +34,19 @@ const AWAIT_MS = 15_000;
 /** Installed and newest version of each CLI with a live session (main caches the network part) */
 export function useCliUpdates(): Map<string, CliUpdateStatus> {
   const awaiting = useCliRestartStore((s) => Object.values(s.pending).includes("update"));
-  const agents = useAgentStore((s) => s.agents);
-  const cliTypes = useMemo(
-    () =>
-      [
-        ...new Set(
-          Object.values(agents)
-            .filter(isLiveAgent)
-            .map((a) => a.cliType),
-        ),
-      ].sort(),
-    [agents],
+  // A string: every card and toolbar re-renders only when the set of live CLIs changes
+  const cliKey = useAgentStore((s) =>
+    [
+      ...new Set(
+        Object.values(s.agents)
+          .filter(isLiveAgent)
+          .map((a) => a.cliType),
+      ),
+    ]
+      .sort()
+      .join(","),
   );
+  const cliTypes = useMemo(() => (cliKey ? cliKey.split(",") : []), [cliKey]);
   const { data } = useQuery({
     queryKey: ["cliUpdates", cliTypes],
     queryFn: () => trpcInvoke<CliUpdateStatus[]>("doctor.cliUpdates", { cliTypes }),

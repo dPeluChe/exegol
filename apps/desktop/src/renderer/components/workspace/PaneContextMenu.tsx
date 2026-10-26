@@ -18,6 +18,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { useState } from "react";
+import { kickTerminal } from "../../lib/dispatch-refit";
 import { movePane, paneMoveTargets } from "../../lib/move-pane";
 import type { PaneType } from "../../stores/workspace";
 import { ContextMenu, type MenuItem, type MenuSection } from "../common/ContextMenu";
@@ -83,8 +84,7 @@ function terminalActionsSection({ agentId, onScrollTop, onScrollBottom }: MenuAc
     items.push({
       label: "Refresh Terminal",
       icon: RefreshCw,
-      action: () =>
-        window.dispatchEvent(new CustomEvent("exegol:kick-terminal", { detail: { agentId } })),
+      action: () => kickTerminal(agentId),
     });
   }
   return items;

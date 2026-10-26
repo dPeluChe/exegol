@@ -16,6 +16,7 @@ import {
   Pin,
   PinOff,
   Play,
+  RefreshCw,
   RotateCcw,
   Send,
 } from "lucide-react";
@@ -27,6 +28,7 @@ import {
   type WatchMenuItem,
   watchCardMenu,
 } from "../../../lib/dashboard-menu";
+import { kickTerminal } from "../../../lib/dispatch-refit";
 import { floatAgentPane } from "../../../lib/float-pane";
 import { setAgentMuted, suspendAgent } from "../../../lib/session-quiet";
 import { type AgentState, findAgentPane } from "../../../stores/agents";
@@ -152,6 +154,10 @@ export function WatchCardMenu({
         case "font-larger":
           return [
             { label: "Larger Text", icon: AArrowUp, action: () => stepCardFont(agent.id, 1) },
+          ];
+        case "refresh":
+          return [
+            { label: "Refresh Terminal", icon: RefreshCw, action: () => kickTerminal(agent.id) },
           ];
         case "float":
           return paneId
