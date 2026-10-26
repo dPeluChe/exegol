@@ -17,6 +17,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Smaller app: it no longer ships packages only the interface uses, source maps, type definitions or non-English Electron locales (unpacked macOS app about 490 MB to 306 MB)
 
 ### Fixed
+- Sessions pinned to Watching could show a broken screen after restarting Exegol until their project was opened: the Dashboard card now asks the CLI to redraw on its first showing, as a pane does
 - A resumed session could show cut and overlapping lines after restarting Exegol until its CLI redrew: its terminal size was never saved, so the restart rebuilt the screen at 120x30
 - After a GPU process crash, agent and shell terminals stayed black with a few letters until Cmd+R: the new WebGL renderers reused the glyph atlas the crash had wiped. Every terminal now lets go of it first, so the repaint draws a fresh one
 - Switching projects no longer repaints the terminals' letters: a terminal off screen keeps its GPU renderer until another one needs it, one that must rebuild it stays hidden until it has drawn, and closed renderers free their GPU context at once. A terminal that only finds a GPU slot later is refitted to its narrower cells

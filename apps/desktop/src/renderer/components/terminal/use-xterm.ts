@@ -37,7 +37,7 @@ import { createWebglController, listenGpuRepaint, type WebglController } from ".
 import { useTerminalVisibility } from "./use-terminal-visibility";
 import { trackTerminalView, webglBudget } from "./webgl-budget";
 
-/** Sessions this renderer has mounted an owner view of: the first mount kicks an alt screen */
+/** Sessions this renderer has mounted a live view of (pane or mirror): the first mount kicks an alt screen */
 const mountedSessions = new Set<string>();
 /** The grid each session's pane last fitted at, for the next mount to start from */
 const lastGrids = new Map<string, { cols: number; rows: number }>();
@@ -159,16 +159,15 @@ export function useXterm({
       const t = terminalRef.current;
       if (settled || !applied || !fitted || !t) return;
       settled = true;
-      const owner = !readOnly && !mirror;
       const repaint = mountRepaint({
-        owner,
+        live: !readOnly,
         alternate: t.buffer.active.type === "alternate",
         firstMount: !mountedSessions.has(agentId),
         snapshotBytes: applied.bytes,
         snap: applied.grid,
         fit: { cols: t.cols, rows: t.rows },
       });
-      if (owner) mountedSessions.add(agentId);
+      if (!readOnly) mountedSessions.add(agentId);
       if (repaint === "kick") window.api.terminal.redraw(agentId);
       window.api.terminal.mountLog(agentId, {
         kind: "mount",

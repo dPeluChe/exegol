@@ -71,7 +71,7 @@ describe("resizeToSnapshot", () => {
 
 describe("mountRepaint", () => {
   const snap = { cols: 108, rows: 54 };
-  const base = { owner: true, alternate: true, firstMount: false, snapshotBytes: 50_000, snap };
+  const base = { live: true, alternate: true, firstMount: false, snapshotBytes: 50_000, snap };
 
   it("lets the PTY resize repaint when the box fits another grid", () => {
     expect(mountRepaint({ ...base, fit: { cols: 102, rows: 54 } })).toBe("resize");
@@ -84,7 +84,7 @@ describe("mountRepaint", () => {
     expect(mountRepaint({ ...base, alternate: false, firstMount: true, fit: snap })).toBe("none");
   });
 
-  it("never asks from a mirror or a read-only view", () => {
-    expect(mountRepaint({ ...base, owner: false, firstMount: true, fit: snap })).toBe("none");
+  it("never asks from a read-only view", () => {
+    expect(mountRepaint({ ...base, live: false, firstMount: true, fit: snap })).toBe("none");
   });
 });
