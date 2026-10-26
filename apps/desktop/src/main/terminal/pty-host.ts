@@ -44,11 +44,15 @@ export type { SessionCallbacks } from "./pty-session-types";
 /** A snapshot waits at most this long for queued output to parse, then goes without a seq */
 const SNAPSHOT_PARSE_DEADLINE_MS = 1_500;
 
+/** Redraws asked within this of the last one are the same repaint */
+const REDRAW_WINDOW_MS = 500;
+
 export class PtyHost {
   private sessions = new Map<string, Session>();
   /** A pane can mount (and size itself) before its session is reattached;
    *  that size was dropped, so the PTY kept its old grid until the next resize */
   private pendingSizes = new Map<string, { cols: number; rows: number }>();
+  private lastRedrawAt = new Map<string, number>();
   /** Ring not parsed yet: a resize now would parse the rest of the ring at the wrong grid */
   private reattaching = new Set<string>();
   private outputWatchers = new Map<string, () => void>();
@@ -335,8 +339,13 @@ export class PtyHost {
   redraw(id: string): void {
     const s = this.sessions.get(id);
     if (!s?.alive) return;
+    // One repaint per burst: pane and mirror both ask on Refresh or a GPU repaint, and a view's
+    // mount kick lands right after the reattach's own redraw
+    const now = Date.now();
+    if (now - (this.lastRedrawAt.get(id) ?? 0) < REDRAW_WINDOW_MS) return;
     const { cols, rows } = s.emulator.size;
     if (cols < 3) return;
+    this.lastRedrawAt.set(id, now);
     this.resizePty(s, cols - 1, rows);
     setTimeout(() => {
       if (s.alive) this.resizePty(s, s.emulator.size.cols, s.emulator.size.rows);
@@ -503,6 +512,7 @@ export class PtyHost {
     session.emulator.dispose();
     this.sessions.delete(id);
     this.pendingSizes.delete(id);
+    this.lastRedrawAt.delete(id);
     this.exitWaiters.notify(id);
   }
 }

@@ -5,6 +5,7 @@ import type { Terminal } from "@xterm/xterm";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useLatest } from "../../hooks/use-latest";
 import { useSettings } from "../../hooks/use-trpc";
+import { kickTerminal } from "../../lib/dispatch-refit";
 import { claimPaneFocus } from "../../lib/pane-focus";
 import { noteSwitchMount } from "../../lib/project-switch-log";
 import { useTerminalStore } from "../../stores/terminals";
@@ -252,8 +253,7 @@ export function useXterm({
     webglRef.current = wantsWebgl(mirror, live.cliType)
       ? createWebglController(next.terminal, {
           // Same as the menu's Refresh Terminal: the resize makes a TUI redraw its screen
-          onLost: () =>
-            window.dispatchEvent(new CustomEvent("exegol:kick-terminal", { detail: { agentId } })),
+          onLost: () => kickTerminal(agentId),
           onRendererChanged: () => refitRef.current(),
           onChurn: (trip) =>
             window.api.terminal.mountLog(agentId, { kind: "atlas-churn", ...trip }),
@@ -392,25 +392,36 @@ export function useXterm({
     refitRef.current();
   }, [session, mirror, cliType]);
 
-  // T155 (verify session): manual "Refresh Terminal" from the pane menu —
-  // refit + SIGWINCH jiggle + repaint, for TUIs stuck black after reload.
+  // Refit, redraw this view and have the CLI repaint (all of it, or only an alt screen). Pane and
+  // mirror of one session both ask; main makes one repaint of the burst
+  const repaintView = useCallback(
+    (onlyAlt: boolean) => {
+      const terminal = terminalRef.current;
+      if (!terminal) return false;
+      handleResize();
+      terminal.refresh(0, terminal.rows - 1);
+      if (!readOnly && (!onlyAlt || terminal.buffer.active.type === "alternate")) {
+        window.api.terminal.redraw(agentId);
+      }
+      return true;
+    },
+    [agentId, readOnly, handleResize],
+  );
+
+  // Refresh Terminal (pane menu, Watching card)
   useEffect(() => {
     const handleKick = (e: Event) => {
       const detail = (e as CustomEvent).detail as { agentId?: string } | undefined;
       if (detail?.agentId !== agentId) return;
-      const terminal = terminalRef.current;
-      if (!terminal || mirror) return;
       try {
-        handleResize();
-        if (!readOnly) window.api.terminal.redraw(agentId);
-        terminal.refresh(0, terminal.rows - 1);
+        repaintView(false);
       } catch {
         /* not ready */
       }
     };
     window.addEventListener("exegol:kick-terminal", handleKick);
     return () => window.removeEventListener("exegol:kick-terminal", handleKick);
-  }, [agentId, mirror, readOnly, handleResize]);
+  }, [agentId, repaintView]);
 
   // GPU process crashed (lib/gpu-repaint): a context xterm "restored" while hidden can stay
   // blank, so every view drops its addon (freeing the shared glyph atlas, blank since the
@@ -420,18 +431,9 @@ export function useXterm({
       listenGpuRepaint(
         window,
         () => webglRef.current,
-        () => {
-          const terminal = terminalRef.current;
-          if (!terminal) return false;
-          handleResize();
-          terminal.refresh(0, terminal.rows - 1);
-          if (!mirror && !readOnly && terminal.buffer.active.type === "alternate") {
-            window.api.terminal.redraw(agentId);
-          }
-          return true;
-        },
+        () => repaintView(true),
       ),
-    [agentId, mirror, readOnly, handleResize],
+    [repaintView],
   );
 
   // Keyboard navigation (lib/pane-focus) hands this pane the cursor

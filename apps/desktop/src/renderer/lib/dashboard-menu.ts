@@ -11,6 +11,7 @@ export type WatchMenuItem =
   | "stop-fit"
   | "font-smaller"
   | "font-larger"
+  | "refresh"
   | "float"
   | "unpin";
 
@@ -31,7 +32,7 @@ export function watchCardMenu(s: WatchCardState): WatchMenuItem[][] {
   const mirror = s.live && s.expanded;
   const clipboard: WatchMenuItem[] = mirror && s.hasSelection ? ["copy", "send-selection"] : [];
   const sizing: WatchMenuItem[] = mirror
-    ? [s.sizing ? "stop-fit" : "fit-to-card", "font-smaller", "font-larger"]
+    ? [s.sizing ? "stop-fit" : "fit-to-card", "font-smaller", "font-larger", "refresh"]
     : [];
   const sections: WatchMenuItem[][] = [
     ["go-to", ...(s.live ? [] : (["resume"] as const))],

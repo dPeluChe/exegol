@@ -1,7 +1,6 @@
 import type { GpuRepaintReport } from "@exegol/shared";
 import { webglBudget } from "../components/terminal/webgl-budget";
 import { liveWebglAddons } from "../components/terminal/webgl-counts";
-import { dispatchRefitTerminals } from "./dispatch-refit";
 
 export interface WindowView {
   visible: boolean;
@@ -69,8 +68,8 @@ export function installGpuRepaint(): void {
     if (timer) clearTimeout(timer);
     timer = setTimeout(() => {
       timer = null;
+      // Each view refits and refreshes in its own repaint: no refit-terminals pass after it
       const report = repaintTerminals(window, liveWebglAddons);
-      dispatchRefitTerminals();
       if (report.views > 0) window.api.terminal.gpuRepainted?.(report);
     }, SETTLE_MS);
   };

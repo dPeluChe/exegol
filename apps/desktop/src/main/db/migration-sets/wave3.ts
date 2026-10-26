@@ -314,4 +314,13 @@ export const wave3Migrations: Migration[] = [
     CREATE INDEX IF NOT EXISTS idx_scheduled_tasks_project ON scheduled_tasks(project_id);
     CREATE INDEX IF NOT EXISTS idx_dictation_history_project ON dictation_history(project_id);`,
   },
+  {
+    // A resume started at its source's grid but stored none until the spawn grid was recorded;
+    // a reattach then rebuilt its model at the 120x30 default
+    id: "w3_031_resumed_pty_grid",
+    sql: `UPDATE agents SET
+      pty_cols = (SELECT s.pty_cols FROM agents s WHERE s.id = agents.resumed_from),
+      pty_rows = (SELECT s.pty_rows FROM agents s WHERE s.id = agents.resumed_from)
+    WHERE pty_cols IS NULL AND resumed_from IS NOT NULL;`,
+  },
 ];

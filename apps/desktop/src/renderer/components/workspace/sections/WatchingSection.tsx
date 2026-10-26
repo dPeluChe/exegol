@@ -7,6 +7,7 @@ import {
   Maximize2,
   Minimize2,
   PinOff,
+  RefreshCw,
   X,
 } from "lucide-react";
 import {
@@ -19,6 +20,7 @@ import {
   useState,
 } from "react";
 import { useShallow } from "zustand/react/shallow";
+import { kickTerminal } from "../../../lib/dispatch-refit";
 import { rememberMirrorFocus } from "../../../lib/pane-focus";
 import { type AgentState, useAgentStore } from "../../../stores/agents";
 import {
@@ -35,6 +37,7 @@ import { ProjectChip, type ProjectMeta } from "../../common/ProjectChip";
 import { SessionAlias } from "../../common/SessionAlias";
 import { StatusDot } from "../../common/StatusDot";
 import { ErrorBoundary, paneFallback } from "../../ErrorBoundary";
+import { CliUpdateControl } from "../../terminal/CliUpdateControl";
 import { FollowUpControl } from "../../terminal/FollowUpControl";
 import { TerminalInstance, type TerminalInstanceHandle } from "../../terminal/TerminalInstance";
 import { WatchCardMenu } from "./DashboardMenus";
@@ -368,7 +371,18 @@ const WatchCard = memo(function WatchCard({
             )}
           </div>
           <FollowUpControl agentId={agent.id} className="py-0.5 text-[10px]" />
+          {live && <CliUpdateControl agentId={agent.id} />}
           {live && <CardSizeControls agentId={agent.id} />}
+          {live && (
+            <button
+              type="button"
+              onClick={() => kickTerminal(agent.id)}
+              className="shrink-0 rounded p-1 text-text-muted hover:bg-white/10 hover:text-text-primary"
+              title="Refresh terminal: the CLI redraws its screen"
+            >
+              <RefreshCw className="h-3 w-3" />
+            </button>
+          )}
           <button
             type="button"
             onClick={() => onOpenAgent(agent)}
