@@ -3,6 +3,8 @@ import { describe, expect, it } from "vitest";
 import { runMigrations } from "../migrations";
 import {
   AGENT_COLUMNS,
+  activateAgent,
+  agentPtySize,
   getAgent,
   getAgentFinalOutput,
   listAgentsByIds,
@@ -32,6 +34,14 @@ describe("agent rows", () => {
   it("the shared column list never reads final_output", () => {
     expect(AGENT_COLUMNS).not.toContain("final_output");
     expect(AGENT_COLUMNS).toContain("w.branch_name");
+  });
+
+  it("activation records the grid the PTY was created at", () => {
+    const db = setupDb();
+    expect(agentPtySize(db, "a1")).toBeNull();
+    activateAgent(db, "a1", 42, { cols: 177, rows: 66 });
+    expect(agentPtySize(db, "a1")).toEqual({ cols: 177, rows: 66 });
+    expect(getAgent(db, "a1")?.status).toBe("running");
   });
 
   it("final_output is read only by its own getter", () => {

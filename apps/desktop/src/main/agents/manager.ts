@@ -235,7 +235,7 @@ export class AgentManager {
       { scrollbackPath, shellReadyGating: enableMarker, smallRingBuffer: isPlainShell },
     );
 
-    activateAgent(db, agent.id, pid);
+    activateAgent(db, agent.id, pid, size);
 
     if (stdinCommand) {
       if (enableMarker) {

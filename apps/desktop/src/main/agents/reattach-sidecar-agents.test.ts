@@ -7,6 +7,7 @@ const pty = vi.hoisted(() => ({
   inFlight: 0,
   maxInFlight: 0,
   order: [] as string[],
+  sizes: new Map<string, { cols: number; rows: number }>(),
 }));
 
 vi.mock("../lib/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn() } }));
@@ -22,8 +23,9 @@ vi.mock("../mcp/exegol-server", () => ({
 }));
 vi.mock("../terminal/pty-host", () => ({
   getPtyHost: () => ({
-    reattachSession: async (id: string) => {
+    reattachSession: async (id: string, size: { cols: number; rows: number }) => {
       pty.order.push(id);
+      pty.sizes.set(id, size);
       pty.maxInFlight = Math.max(pty.maxInFlight, ++pty.inFlight);
       await new Promise((r) => setTimeout(r, pty.delayMs));
       pty.inFlight--;
@@ -61,7 +63,7 @@ function setupDb(): Database.Database {
   db.exec(`CREATE TABLE agents (
     id TEXT PRIMARY KEY, cli_type TEXT, project_id TEXT, task_description TEXT, status TEXT,
     current_step TEXT, launched_in_shell INTEGER, pty_cols INTEGER, pty_rows INTEGER,
-    resume_command TEXT
+    resume_command TEXT, resumed_from TEXT
   )`);
   db.exec("CREATE TABLE projects (id TEXT PRIMARY KEY, path TEXT)");
   return db;
@@ -127,6 +129,22 @@ describe("reattachSidecarAgents output pipeline", () => {
     const { maps } = await reattach("shell");
     expect(maps.outputProcessors.size).toBe(0);
     expect(maps.titleTrackers.size).toBe(0);
+  });
+
+  it("rebuilds the model at the stored grid, else a resume's source grid, else the default", async () => {
+    const db = setupDb();
+    const insert = db.prepare(
+      `INSERT INTO agents (id, cli_type, project_id, status, pty_cols, pty_rows, resumed_from)
+       VALUES (?, 'claude-code', 'p1', 'running', ?, ?, ?)`,
+    );
+    insert.run("own", 177, 66, null);
+    insert.run("src", 150, 40, null);
+    insert.run("resumed", null, null, "src");
+    insert.run("fresh", null, null, null);
+    await reattachSidecarAgents(db, ["own", "resumed", "fresh"], emptyMaps(), new Map(), 1024);
+    expect(pty.sizes.get("own")).toEqual({ cols: 177, rows: 66 });
+    expect(pty.sizes.get("resumed")).toEqual({ cols: 150, rows: 40 });
+    expect(pty.sizes.get("fresh")).toEqual({ cols: 80, rows: 24 });
   });
 
   it("drops the whole pipeline when the PTY is dead", async () => {
