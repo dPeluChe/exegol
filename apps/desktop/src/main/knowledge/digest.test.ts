@@ -26,7 +26,7 @@ describe("computeDigest via trs ingest", () => {
     expect(trs.run).toHaveBeenCalledWith(
       "/bin/trs",
       ["ingest", "--print", "--budget", "32k", "/p"],
-      expect.anything(),
+      expect.objectContaining({ env: expect.objectContaining({ TRS_AGENT: "exegol" }) }),
     );
   });
 
