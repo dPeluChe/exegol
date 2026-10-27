@@ -47,7 +47,8 @@ async function generateDigestViaTrs(projectPath: string): Promise<string | null>
     const { stdout } = await execFileAsync(command, args, {
       windowsVerbatimArguments: verbatim,
       windowsHide: true,
-      env: childEnv(),
+      // Labels the call in `trs stats --by-agent`; never set in terminals, it would mask unhooked CLIs
+      env: { ...childEnv(), TRS_AGENT: "exegol" },
       timeout: 30_000,
       maxBuffer: 2 * 1024 * 1024,
     });

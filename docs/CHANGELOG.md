@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Fixed
+- Knowledge: the digest's `trs ingest` runs tagged `TRS_AGENT=exegol`, so `trs stats --by-agent` lists it as exegol instead of mixing it with the commands you type
 - The "What's new" dialog shows the update's download progress (a bar and the percent), as the title-bar button does, instead of only "Downloading"
 
 ## [0.5.28] — 2026-10-26 — Terminals look right after a restart and a GPU crash, less background work, smaller app
