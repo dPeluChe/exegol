@@ -70,6 +70,33 @@ function viewFor(
   }
 }
 
+/** `percent` undefined: found, no progress event yet */
+function DownloadProgress({ percent }: { percent?: number }) {
+  const indeterminate = percent === undefined;
+  return (
+    <div className="flex items-center gap-2 text-[11px] text-text-muted">
+      <div
+        role="progressbar"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent}
+        className="h-1 w-28 overflow-hidden rounded bg-bg-tertiary"
+      >
+        <div
+          className={cn(
+            "h-full bg-accent transition-[width]",
+            indeterminate && "w-1/3 animate-pulse",
+          )}
+          style={indeterminate ? undefined : { width: `${percent}%` }}
+        />
+      </div>
+      <span className="tabular-nums">
+        {indeterminate ? "Downloading" : `Downloading ${percent}%`}; it installs when you restart
+      </span>
+    </div>
+  );
+}
+
 /**
  * Title-bar update control: check now, see it download, restart to install. The updater only
  * checked 10s after launch and every 4h, so testing a release meant restarting the app.
@@ -128,11 +155,15 @@ export function UpdateButton() {
             >
               Restart to update
             </button>
-          ) : (
-            <span className="text-[11px] text-text-muted">
-              Downloading; it installs when you restart
+          ) : status === "error" ? (
+            <span className="text-[11px] text-error">
+              Update failed; retry from the update button
             </span>
-          )
+          ) : status === "available" || status === "downloading" ? (
+            <DownloadProgress
+              percent={status === "downloading" ? (info.percent ?? 0) : undefined}
+            />
+          ) : undefined
         }
       />
     </>
