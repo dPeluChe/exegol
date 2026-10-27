@@ -226,6 +226,16 @@ Checked by the user on the 0.5.15 build: status bar widgets, Ctrl+Tab switcher, 
 
 ## Active Backlog
 
+### T210: Compact project list with search and filters `added: 2026-10-27`
+**Priority**: P2 | **Effort**: S | **Source**: user, 2026-10-27 (screenshot of the projects view
+with 28 projects). `ProjectList.tsx` renders one large card per project in a 1-3 column grid
+(`ProjectList.tsx:222`), so only ~18 fit on screen and finding one means scrolling.
+- [ ] Compact card (one row: icon, name, folder, live/idle counts, last active) as a view toggle
+  beside the current card, choice persisted
+- [ ] Search box (name and folder), focused with Cmd+F on that view
+- [ ] Filters: with live agents, group, recently active; sort by last active or name
+- [ ] Keep keyboard order and the Cmd+n badges consistent with the sidebar
+
 ### T208: Database pane (SQLite and Postgres first) `added: 2026-10-13`
 **Priority**: P2 | **Effort**: L | **Source**: user idea 2026-10-13. Survey of the user's projects
 (2026-10-13): 51 SQLite files, 25 Postgres URLs in `.env*` (plus pgvector/timescale images), 5
