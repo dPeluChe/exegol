@@ -31,10 +31,22 @@ export function parseSize(text: string, label?: string): PageSize | null {
 
 export const isHttpUrl = (url: string) => /^https?:\/\//.test(url);
 
-/** What the user typed in an address bar, as a URL: "localhost:3000" gets http:// */
+const SEARCH_URL = "https://www.google.com/search?q=";
+
+/** One word with a dot, port or path, or localhost: a host, not words to search */
+const looksLikeHost = (text: string) =>
+  !/\s/.test(text) && (/[.:/]/.test(text) || /^localhost$/i.test(text));
+
+/**
+ * What the user typed in an address bar, as a URL: "localhost:3000" gets http://, "?telnyx" or
+ * words that are no host search Google, as Chrome's omnibox does
+ */
 export function toHttpUrl(input: string): string {
   const url = input.trim();
-  return !url || isHttpUrl(url) ? url : `http://${url}`;
+  if (!url || isHttpUrl(url)) return url;
+  const query = url.startsWith("?") ? url.slice(1).trim() : looksLikeHost(url) ? null : url;
+  if (query === null) return `http://${url}`;
+  return query ? SEARCH_URL + encodeURIComponent(query) : "";
 }
 
 /** What "Sizes" opens with: the size shown now first, then desktop, tablet and mobile */

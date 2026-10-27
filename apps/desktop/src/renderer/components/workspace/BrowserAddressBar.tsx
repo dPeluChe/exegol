@@ -239,7 +239,7 @@ export function BrowserAddressBar({
           if (e.key === "Enter") onNavigate();
         }}
         className="flex-1 bg-transparent text-[11px] text-text-primary outline-none placeholder:text-text-muted"
-        placeholder="http://localhost:3000"
+        placeholder="localhost:3000 or search"
         aria-label="URL"
         data-address-bar
       />

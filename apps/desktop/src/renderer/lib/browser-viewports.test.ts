@@ -30,5 +30,16 @@ describe("toHttpUrl", () => {
   it("adds http:// to a bare host, keeps a full URL", () => {
     expect(toHttpUrl(" localhost:3000/x ")).toBe("http://localhost:3000/x");
     expect(toHttpUrl("https://a.dev")).toBe("https://a.dev");
+    expect(toHttpUrl("example.com")).toBe("http://example.com");
+    expect(toHttpUrl("localhost")).toBe("http://localhost");
+    expect(toHttpUrl("192.168.1.5:8080")).toBe("http://192.168.1.5:8080");
+  });
+  it("searches ?words and words that are no host", () => {
+    const search = "https://www.google.com/search?q=";
+    expect(toHttpUrl("?telnyx ")).toBe(`${search}telnyx`);
+    expect(toHttpUrl("? node.js")).toBe(`${search}node.js`);
+    expect(toHttpUrl("telnyx")).toBe(`${search}telnyx`);
+    expect(toHttpUrl("what is node.js")).toBe(`${search}what%20is%20node.js`);
+    expect(toHttpUrl("?")).toBe("");
   });
 });
