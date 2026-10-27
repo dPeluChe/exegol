@@ -80,7 +80,10 @@ function usePaneUrl(pane: Pane, autoPort: number | undefined) {
     },
     [pane.id],
   );
-  const navigate = useCallback(() => goTo(toHttpUrl(urlInput)), [urlInput, goTo]);
+  const navigate = useCallback(() => {
+    const target = toHttpUrl(urlInput);
+    if (target) goTo(target);
+  }, [urlInput, goTo]);
   const navigateToPort = useCallback((port: number) => goTo(`http://localhost:${port}`), [goTo]);
   return {
     src: src ?? autoUrl,

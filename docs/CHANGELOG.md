@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- Browser panes search from the address bar: `?telnyx`, or words that are not an address, open a Google search; `localhost:3000`, `example.com` and full URLs still go straight there
+
 ### Fixed
 - A pane's "Add a browser beside" / "Add a terminal beside" menu (globe or terminal icon in its corner toolbar) closed when the pointer moved down to it, so To the right and Below could not be clicked. The toolbar's Float button now shows only when the pane has something to float, as in its right-click menu
 - Knowledge: the digest's `trs ingest` runs tagged `TRS_AGENT=exegol`, so `trs stats --by-agent` lists it as exegol instead of mixing it with the commands you type
