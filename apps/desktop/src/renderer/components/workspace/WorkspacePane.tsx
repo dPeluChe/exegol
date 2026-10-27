@@ -82,13 +82,13 @@ function PaneToolbar({
   );
 
   const showIdeButton = paneType === "terminal" || paneType === "files";
-  const showFloatButton = paneType === "terminal" || paneType === "browser";
+  const pane = panes[paneId];
+  // As the pane menu: a terminal with no session or a browser with no URL has nothing to float
+  const showFloatButton = pane !== undefined && canFloat(pane);
 
   const handleFloat = useCallback(() => {
-    const pane = panes[paneId];
-    if (!pane) return;
-    floatPane(paneId, pane, projectId, markPaneFloating);
-  }, [panes, paneId, markPaneFloating, projectId]);
+    if (pane) floatPane(paneId, pane, projectId, markPaneFloating);
+  }, [pane, paneId, markPaneFloating, projectId]);
 
   const handleOpenInIde = useCallback(() => {
     if (!projectId) return;
@@ -162,23 +162,26 @@ function PaneToolbar({
               )}
             </button>
             {addOpen && (
-              <div className="absolute right-0 top-6 z-20 w-28 rounded-md border border-border bg-bg-secondary py-1 shadow-lg">
-                {(
-                  [
-                    ["horizontal", Columns, "To the right"],
-                    ["vertical", Rows, "Below"],
-                  ] as const
-                ).map(([dir, Icon, label]) => (
-                  <button
-                    key={dir}
-                    type="button"
-                    onClick={() => addCompanion(dir)}
-                    className="flex w-full items-center gap-2 px-2 py-1 text-left text-[11px] text-text-secondary hover:bg-white/10"
-                  >
-                    <Icon className="h-3 w-3" />
-                    {label}
-                  </button>
-                ))}
+              // pt-1, not a top offset: a gap under the button let the pointer leave and close it
+              <div className="absolute right-0 top-full z-20 pt-1">
+                <div className="w-28 rounded-md border border-border bg-bg-secondary py-1 shadow-lg">
+                  {(
+                    [
+                      ["horizontal", Columns, "To the right"],
+                      ["vertical", Rows, "Below"],
+                    ] as const
+                  ).map(([dir, Icon, label]) => (
+                    <button
+                      key={dir}
+                      type="button"
+                      onClick={() => addCompanion(dir)}
+                      className="flex w-full items-center gap-2 px-2 py-1 text-left text-[11px] text-text-secondary hover:bg-white/10"
+                    >
+                      <Icon className="h-3 w-3" />
+                      {label}
+                    </button>
+                  ))}
+                </div>
               </div>
             )}
           </div>
