@@ -1,19 +1,20 @@
 // Dev only (not shipped): decodes kept dictation recordings with each speech model and scores
 // them against the text saved next to each clip. Usage in docs/GUIDES/DICTATION_BENCH.md.
 //   bun apps/desktop/scripts/dictation-bench.ts [--dir DIR] [--model DIR[=catalogId]]...
-//     [--no-installed] [--threads N] [--language en|es] [--vocab FILE] [--json out.json] [--save]
+//     [--no-installed] [--threads N] [--language en|es] [--vocab FILE] [--terms FILE]
+//     [--whole] [--corrected-only] [--json out.json] [--save]
 import {
   chmodSync,
   existsSync,
   mkdirSync,
   mkdtempSync,
-  readdirSync,
   readFileSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import {
+  cleanDictation,
   DEFAULT_DICTATION_SETTINGS,
   DICTATION_LANGUAGE_IDS,
   type DictationLanguage,
@@ -39,7 +40,12 @@ import {
   tailHasSpeech,
   WHISPER_MIN_PHRASE_MS,
 } from "../src/main/dictation/phrases";
-import { decodeWav } from "../src/main/dictation/recording-files";
+import {
+  decodeWav,
+  RECORDINGS_DIR,
+  type RecordingMeta,
+  recordingJsonPaths,
+} from "../src/main/dictation/recording-files";
 import {
   BENCH_RESULTS_DIR,
   BENCH_RESULTS_FILE,
@@ -55,6 +61,7 @@ import {
   localBenchModel,
   type ModelRow,
   summarizeModel,
+  termStats,
   wordErrorRate,
 } from "./dictation-bench-score";
 
@@ -65,7 +72,7 @@ const args = process.argv.slice(2);
 const flag = (name: string) => args.includes(name);
 const values = (name: string) =>
   args.flatMap((a, i) => (a === name && args[i + 1] ? [args[i + 1] as string] : []));
-const recordingsDir = resolve(values("--dir")[0] ?? join(EXEGOL_DIR, "dictation-audio"));
+const recordingsDir = resolve(values("--dir")[0] ?? RECORDINGS_DIR);
 const jsonOut = values("--json")[0];
 const threads = Number(values("--threads")[0] ?? 4);
 const language = (values("--language")[0] ?? "en") as DictationLanguage;
@@ -77,6 +84,15 @@ const vocabFile = values("--vocab")[0];
 const vocabTerms = vocabFile ? parseVocabulary(readFileSync(resolve(vocabFile), "utf8")) : [];
 const vocabScore = Number(values("--boost")[0] ?? DEFAULT_DICTATION_SETTINGS.vocabularyBoost);
 const vocabHash = vocabularyHash(vocabTerms, vocabScore);
+const termsFile = values("--terms")[0];
+const scoredTerms = termsFile
+  ? parseVocabulary(readFileSync(resolve(termsFile), "utf8"))
+  : vocabTerms;
+const whole = flag("--whole");
+if (whole && flag("--save")) {
+  console.error("--save keeps what the app does: not with --whole");
+  process.exit(1);
+}
 
 interface Clip {
   name: string;
@@ -121,34 +137,24 @@ function modelTargets(): ModelTarget[] {
 
 function loadClips(dir: string): Clip[] {
   const clips: Clip[] = [];
-  const walk = (current: string) => {
-    for (const e of readdirSync(current, { withFileTypes: true })) {
-      const path = join(current, e.name);
-      if (e.isDirectory()) walk(path);
-      if (!e.isFile() || !e.name.endsWith(".json")) continue;
-      const wav = path.replace(/\.json$/, ".wav");
-      if (!existsSync(wav)) continue;
-      const meta = JSON.parse(readFileSync(path, "utf8")) as {
-        text?: string;
-        reference?: string;
-        modelId?: string;
-      };
-      const audio = decodeWav(readFileSync(wav));
-      const reference = meta.reference ?? meta.text;
-      if (!audio || audio.sampleRate !== SAMPLE_RATE || typeof reference !== "string") {
-        console.error(`skipped ${path}: not a 16 kHz recording with text`);
-        continue;
-      }
-      clips.push({
-        name: path.slice(dir.length + 1),
-        samples: audio.samples,
-        reference,
-        corrected: typeof meta.reference === "string",
-        dictatedWith: meta.modelId ?? null,
-      });
+  for (const path of recordingJsonPaths(dir)) {
+    const meta = JSON.parse(readFileSync(path, "utf8")) as Partial<RecordingMeta>;
+    const corrected = typeof meta.reference === "string";
+    if (flag("--corrected-only") && !corrected) continue;
+    const audio = decodeWav(readFileSync(path.replace(/\.json$/, ".wav")));
+    const reference = meta.reference ?? meta.text;
+    if (!audio || audio.sampleRate !== SAMPLE_RATE || typeof reference !== "string") {
+      console.error(`skipped ${path}: not a 16 kHz recording with text`);
+      continue;
     }
-  };
-  if (existsSync(dir)) walk(dir);
+    clips.push({
+      name: path.slice(dir.length + 1),
+      samples: audio.samples,
+      reference,
+      corrected,
+      dictatedWith: meta.modelId ?? null,
+    });
+  }
   return clips.sort((a, b) => a.name.localeCompare(b.name));
 }
 
@@ -195,6 +201,7 @@ async function decoder(target: ModelTarget): Promise<(samples: Float32Array) => 
       };
       return (await decodeWithVocabulary(run, spec.hotwords ?? null, speechMs)).text;
     };
+    if (whole) return (samples) => decode(samples, Number.POSITIVE_INFINITY);
     return (samples) => decodeAsApp(samples, decode, minPhraseMs);
   }
   const recognizer = new sherpa.OnlineRecognizer(spec.config);
@@ -232,17 +239,20 @@ async function main(): Promise<void> {
     const results: ClipResult[] = [];
     for (const clip of clips) {
       const started = performance.now();
-      const hypothesis = await decode(clip.samples);
+      const decoded = await decode(clip.samples);
+      const decodeSec = (performance.now() - started) / 1000;
+      const hypothesis = cleanDictation(decoded, DEFAULT_DICTATION_SETTINGS).text;
       results.push({
         clip: clip.name,
         audioSec: clip.samples.length / SAMPLE_RATE,
-        decodeSec: (performance.now() - started) / 1000,
+        decodeSec,
         wer: wordErrorRate(clip.reference, hypothesis),
         cer: charErrorRate(clip.reference, hypothesis),
         reference: clip.reference,
         hypothesis,
         corrected: clip.corrected,
         dictatedWith: clip.dictatedWith,
+        terms: termStats(clip.reference, hypothesis, scoredTerms),
       });
     }
     rows.push(summarizeModel(target.label, results));

@@ -6,6 +6,7 @@ import {
   localBenchModel,
   normalizeText,
   summarizeModel,
+  termStats,
   wordErrorRate,
 } from "./dictation-bench-score";
 
@@ -14,6 +15,26 @@ describe("normalizeText", () => {
     expect(normalizeText("  Hola, ¿qué tal? Corre el Docker-Compose v2. ")).toBe(
       "hola qué tal corre el docker compose v2",
     );
+  });
+});
+
+describe("termStats", () => {
+  it("counts terms said, written and invented, multi-word ones and case included", () => {
+    expect(
+      termStats("Corre el worktree de Exegol", "corre el work tree de exegol", [
+        "worktree",
+        "Exegol",
+      ]),
+    ).toEqual({
+      expected: 2,
+      found: 1,
+      falseHits: 0,
+    });
+    expect(termStats("abre el repo", "abre el pull request", ["pull request"])).toEqual({
+      expected: 0,
+      found: 0,
+      falseHits: 1,
+    });
   });
 });
 
@@ -54,6 +75,7 @@ describe("summarizeModel", () => {
       hypothesis: "",
       corrected: false,
       dictatedWith: null,
+      terms: { expected: 0, found: 0, falseHits: 0 },
     });
     const row = summarizeModel("m", [clip(0.2, 10, 1), clip(0.4, 30, 3)]);
     expect(row.clips).toBe(2);
@@ -78,6 +100,7 @@ describe("localBenchModel", () => {
     hypothesis: "",
     corrected,
     dictatedWith,
+    terms: { expected: 0, found: 0, falseHits: 0 },
   });
 
   it("counts corrected and self-scored clips and marks mixed references as saved text", () => {
