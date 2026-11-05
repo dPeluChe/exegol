@@ -1,6 +1,7 @@
 import { LayoutGrid, Save, Trash2 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
+import { useDismiss } from "../../hooks/use-dismiss";
 import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
 import { LAYOUT_PRESETS, type LayoutPresetId } from "../../lib/layout-presets";
 import { fillLayoutSlots, slotAgentOf, spawnShellIntoPane } from "../../lib/spawn-shell";
@@ -32,27 +33,11 @@ export function LayoutPresets({ tabId }: LayoutPresetsProps) {
 
   const { projectId } = useProjectContext();
 
-  useEffect(() => {
-    if (!open) return;
-    const handleClick = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setOpen(false);
-        setSavingName(null);
-      }
-    };
-    const handleEsc = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        setOpen(false);
-        setSavingName(null);
-      }
-    };
-    window.addEventListener("mousedown", handleClick);
-    window.addEventListener("keydown", handleEsc);
-    return () => {
-      window.removeEventListener("mousedown", handleClick);
-      window.removeEventListener("keydown", handleEsc);
-    };
-  }, [open]);
+  const close = useCallback(() => {
+    setOpen(false);
+    setSavingName(null);
+  }, []);
+  useDismiss(menuRef, open, close);
 
   const handlePickBuiltIn = async (presetId: LayoutPresetId) => {
     if (!tabId) return;

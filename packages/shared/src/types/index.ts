@@ -10,7 +10,7 @@ export * from "./dictation";
 export * from "./dictation-punctuation";
 export * from "./dictation-repeats";
 export * from "./diff-comment";
-export * from "./github-issue";
+export * from "./github";
 export * from "./ide";
 export * from "./mcp";
 export * from "./memory";

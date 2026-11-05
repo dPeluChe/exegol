@@ -255,7 +255,7 @@ references in the research doc, section "Company and chat"). One PR per phase, i
   keeps their dots, and their sub-tabs fill the row. Project: Tasks, History, Context (Memory +
   Knowledge), Prompts & Skills, Automation (Pipelines, Parallel Runs, QA behind it). Monitor: Usage,
   Resources, Scoring with a Global | project switch. The pane toolbar does not change
-- [ ] Phase 2, GitHub in the bar: open PRs with CI state and issues of the active project (`gh`,
+- [x] Phase 2 (`feat/github-bar`), GitHub in the bar: open PRs with CI state and issues of the active project (`gh`,
   reuse `integrations/github/gh.ts`, cached 2 min); assign one to an open session (as a prompt, on
   the agent_send delivery path) or to a new tab with its own worktree; red dot when a CI failed;
   "Fix CI" sends the failed check's log
