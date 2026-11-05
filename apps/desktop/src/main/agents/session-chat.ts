@@ -1,7 +1,7 @@
 import { open, readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { Agent, ChatPage } from "@exegol/shared";
+import type { Agent, ChatPage, OlderChatPage } from "@exegol/shared";
 import type Database from "libsql";
 import { getAgent, getAgentCwd } from "../db/queries/agents";
 import { claudeProjectDir } from "../history/providers/claude-code";
@@ -18,6 +18,7 @@ import {
   parseClaudeLine,
   parseCodexLine,
   planRead,
+  readOlder,
   terminalTurns,
 } from "./session-transcript";
 
@@ -114,8 +115,17 @@ async function readTranscript(path: string, parse: LineParser, cursor: string | 
     const plan = planRead(cursor, file);
     const chunk = Buffer.alloc(plan.length);
     const { bytesRead } = await handle.read(chunk, 0, plan.length, plan.offset);
-    const { turns, nextOffset } = parseChunk(chunk.subarray(0, bytesRead), plan, parse);
-    return { turns, cursor: `${file.ino}:${nextOffset}`, reset: plan.reset };
+    const { turns, nextOffset, firstOffset } = parseChunk(
+      chunk.subarray(0, bytesRead),
+      plan,
+      parse,
+    );
+    return {
+      turns,
+      cursor: `${file.ino}:${nextOffset}`,
+      reset: plan.reset,
+      older: firstOffset > 0 ? `${file.ino}:${firstOffset}` : null,
+    };
   } finally {
     await handle.close();
   }
@@ -140,7 +150,13 @@ export function noteChatBoundary(agentId: string, cliType: string): void {
   pushTimers.set(agentId, timer);
 }
 
-const NOTHING: ChatPage = { turns: [], cursor: null, reset: true, fromTerminal: false };
+const NOTHING: ChatPage = {
+  turns: [],
+  cursor: null,
+  reset: true,
+  fromTerminal: false,
+  older: null,
+};
 
 /** Tailed by byte offset from `cursor`; a CLI with no transcript sends its terminal text whole */
 export async function chatTurns(
@@ -165,5 +181,19 @@ export async function chatTurns(
     turnMarks.get(agentId) ?? [],
     text.altScreen,
   );
-  return { turns, cursor: null, reset: true, fromTerminal: true };
+  return { turns, cursor: null, reset: true, fromTerminal: true, older: null };
+}
+
+/** What came before a page, walking the transcript back from the `older` it gave */
+export async function olderChatTurns(
+  db: Database.Database,
+  agentId: string,
+  before: string,
+): Promise<OlderChatPage> {
+  const nothing = { turns: [], older: null };
+  const agent = getAgent(db, agentId);
+  const provider = agent && PROVIDERS[agent.cliType];
+  const path = agent && provider ? await transcriptPath(db, agent, provider) : null;
+  if (!provider || !path) return nothing;
+  return readOlder(path, provider.parse, before).catch(() => nothing);
 }

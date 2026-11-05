@@ -1,8 +1,8 @@
 import type { DeskFacts, DoneSession } from "@exegol/shared";
 import { cn, ScrollArea } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
-import { memo, type ReactNode, useMemo, useState } from "react";
-import { Panel, PanelGroup } from "react-resizable-panels";
+import { memo, type ReactNode, useMemo, useRef, useState } from "react";
+import { type ImperativePanelHandle, Panel, PanelGroup } from "react-resizable-panels";
 import { useCliUpdates } from "../../../hooks/use-cli-updates";
 import { useCompanyKeys } from "../../../hooks/use-company-keys";
 import { useNow } from "../../../hooks/use-now";
@@ -26,9 +26,10 @@ import { useDeskActivityStore } from "../../../stores/desk-activity";
 import { useNotificationPrefsStore } from "../../../stores/notification-prefs";
 import { useWorkspaceStore } from "../../../stores/workspace";
 import { AgentIcon } from "../../common/AgentIcon";
+import { GitHubCounts } from "../../common/GitHubCounts";
 import { PanelDivider } from "../../common/PanelDivider";
 import type { ProjectMeta } from "../../common/ProjectChip";
-import { CompanySession } from "./CompanySession";
+import { CompanySession, type SessionView } from "./CompanySession";
 
 const DESK_STATE: Record<DeskState, { label: string; color: string; ring: string }> = {
   needs: {
@@ -49,6 +50,9 @@ const ROOM_SUMMARY: [DeskState, string][] = [
 ];
 
 const whereOf = (a: AgentState) => a.branchName ?? "repo root";
+
+// A mirror draws the session's whole grid: narrower than this it is too small to read
+const TERMINAL_MIN_PERCENT = 55;
 
 /** Leaf timer: only this line re-renders as time passes */
 function StateLine({ state, activitySince }: { state: DeskState; activitySince?: number }) {
@@ -172,9 +176,7 @@ function RoomCard({
           {meta?.name ?? projectId.slice(0, 12)}
         </h3>
         <span className="min-w-0 flex-1 truncate text-[10px] text-text-muted">{summary}</span>
-        {prs.length > 0 && (
-          <span className="shrink-0 text-[10px] text-text-muted">{prs.length} PR</span>
-        )}
+        <GitHubCounts prs={prs} issues={overview?.issues ?? []} />
         <button
           type="button"
           onClick={() => showProject(projectId)}
@@ -275,6 +277,22 @@ export function CompanySection({ projectMeta }: { projectMeta: Map<string, Proje
 
   useCompanyKeys({ pickNext, selected, live });
 
+  const sessionPanel = useRef<ImperativePanelHandle>(null);
+  const chatPercent = useRef<number | null>(null);
+  const [view, setView] = useState<SessionView>("chat");
+  const pickView = (next: SessionView) => {
+    setView(next);
+    const panel = sessionPanel.current;
+    if (!panel) return;
+    if (next === "terminal") {
+      chatPercent.current = panel.getSize();
+      if (panel.getSize() < TERMINAL_MIN_PERCENT) panel.resize(TERMINAL_MIN_PERCENT);
+    } else if (chatPercent.current !== null) {
+      panel.resize(chatPercent.current);
+      chatPercent.current = null;
+    }
+  };
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 p-4 pt-0">
       <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
@@ -315,11 +333,20 @@ export function CompanySection({ projectMeta }: { projectMeta: Map<string, Proje
           {selected && (
             <>
               <PanelDivider />
-              <Panel id="session" order={2} defaultSize={30} minSize={20} maxSize={70}>
+              <Panel
+                ref={sessionPanel}
+                id="session"
+                order={2}
+                defaultSize={30}
+                minSize={20}
+                maxSize={70}
+              >
                 <CompanySession
                   key={selected.id}
                   agent={selected}
                   where={`${projectMeta.get(selected.projectId)?.name ?? ""} · ${whereOf(selected)}`}
+                  picked={view}
+                  onPick={pickView}
                 />
               </Panel>
             </>

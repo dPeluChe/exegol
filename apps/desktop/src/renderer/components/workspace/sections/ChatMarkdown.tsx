@@ -1,5 +1,14 @@
-import { type ComponentType, createElement, type ReactNode } from "react";
+import {
+  type ComponentType,
+  createContext,
+  createElement,
+  type ReactNode,
+  useContext,
+} from "react";
 import { type Components, defaultRemarkPlugins, Streamdown } from "streamdown";
+import { isHttpUrl } from "../../../lib/browser-viewports";
+import { openTerminalFile, openTerminalUrl } from "../../terminal/terminal-link-actions";
+import { findFileMatches, type LinkMatch } from "../../terminal/terminal-links";
 
 interface MarkdownNode {
   type: string;
@@ -18,6 +27,67 @@ interface ElementProps {
   children?: ReactNode;
   href?: string;
   alt?: string;
+  src?: string;
+}
+
+const ChatAgent = createContext<string | null>(null);
+
+/** A whole path, as a CLI prints it. Main resolves and confines it, as for a terminal click */
+function fileMatch(text: string): LinkMatch | undefined {
+  const match = findFileMatches(text)[0];
+  return match?.index === 0 && match.length === text.length ? match : undefined;
+}
+
+const hostOf = (url: string) => (URL.canParse(url) ? new URL(url).host : url);
+
+/** http(s) opens in the browser, a path in the file window, anything else stays text. The host
+ *  shows beside a label that hides it: a link's text proves nothing */
+function ChatLink({
+  target,
+  children,
+  shown = String(children) === target,
+}: {
+  target: string;
+  children: ReactNode;
+  /** The label already is the address */
+  shown?: boolean;
+}) {
+  const agentId = useContext(ChatAgent);
+  const url = isHttpUrl(target);
+  const file = url ? undefined : fileMatch(target);
+  if (!agentId || (!url && !file)) {
+    return (
+      <span className="underline decoration-text-muted" title={target}>
+        {children}
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      title={target}
+      onClick={() =>
+        file ? openTerminalFile(agentId, file, "plain") : openTerminalUrl(agentId, target, "mod")
+      }
+      className="break-all text-left text-accent underline decoration-accent/40 hover:decoration-accent"
+    >
+      {children}
+      {url && !shown && <span className="text-text-muted"> ({hostOf(target)})</span>}
+    </button>
+  );
+}
+
+const CODE = "rounded bg-bg-primary px-1 py-px font-mono text-[11px]";
+
+function InlineCode({ children }: ElementProps) {
+  const text = typeof children === "string" ? children : "";
+  const code = <code className={CODE}>{children}</code>;
+  if (!isHttpUrl(text) && !fileMatch(text)) return code;
+  return (
+    <ChatLink target={text} shown>
+      {code}
+    </ChatLink>
+  );
 }
 
 // Only children pass through: href, src and any other attribute never reach the DOM
@@ -44,7 +114,7 @@ const COMPONENTS: Record<string, ComponentType<ElementProps>> = {
   hr: styled("hr", "my-2.5 border-border"),
   pre: styled("pre", "my-1.5 overflow-x-auto rounded bg-bg-primary p-2 text-[11px] leading-snug"),
   code: styled("code", "font-mono"),
-  inlineCode: styled("code", "rounded bg-bg-primary px-1 py-px font-mono text-[11px]"),
+  inlineCode: InlineCode,
   thead: styled("thead", "text-text-primary"),
   tbody: styled("tbody", ""),
   tr: styled("tr", ""),
@@ -55,27 +125,31 @@ const COMPONENTS: Record<string, ComponentType<ElementProps>> = {
       <table className="w-full border-collapse text-[11px]">{children}</table>
     </div>
   ),
-  a: ({ children, href }) => (
-    <span className="underline decoration-text-muted" title={href}>
-      {children}
+  a: ({ children, href }) => <ChatLink target={href ?? ""}>{children}</ChatLink>,
+  // Never loaded: a remote image reports whoever reads it. Its address stays one click away
+  img: ({ alt, src }) => (
+    <span className="text-text-muted">
+      {alt ? `${alt}: ` : "Image: "}
+      {src?.startsWith("data:") ? "embedded" : <ChatLink target={src ?? ""}>{src}</ChatLink>}
     </span>
   ),
-  img: ({ alt }) => <span className="text-text-muted">{alt || "image"}</span>,
 };
 
-/** Agent text is untrusted: formatted, but its HTML is text, links stay inert, nothing loads */
-export function ChatMarkdown({ text }: { text: string }) {
+/** Agent text is untrusted: formatted, but its HTML is text and nothing loads or runs by itself */
+export function ChatMarkdown({ text, agentId }: { text: string; agentId: string }) {
   return (
-    <Streamdown
-      mode="static"
-      parseIncompleteMarkdown={false}
-      controls={false}
-      components={COMPONENTS as Components}
-      remarkPlugins={REMARK_PLUGINS}
-      rehypePlugins={NO_REHYPE_PLUGINS}
-      className="min-w-0 break-words leading-relaxed"
-    >
-      {text}
-    </Streamdown>
+    <ChatAgent.Provider value={agentId}>
+      <Streamdown
+        mode="static"
+        parseIncompleteMarkdown={false}
+        controls={false}
+        components={COMPONENTS as Components}
+        remarkPlugins={REMARK_PLUGINS}
+        rehypePlugins={NO_REHYPE_PLUGINS}
+        className="min-w-0 break-words leading-relaxed"
+      >
+        {text}
+      </Streamdown>
+    </ChatAgent.Provider>
   );
 }

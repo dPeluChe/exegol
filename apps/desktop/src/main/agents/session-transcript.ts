@@ -1,10 +1,14 @@
-import type { SessionTurn } from "@exegol/shared";
+import { open } from "node:fs/promises";
+import type { OlderChatPage, SessionTurn } from "@exegol/shared";
 import { BOILERPLATE_PREFIXES } from "../history/providers/codex";
 
 /** One read of a transcript, and the first read's window: a session log reaches tens of MB */
 export const MAX_READ_BYTES = 2 * 1024 * 1024;
 const NEWLINE = 0x0a;
 const MAX_TURN_CHARS = 8000;
+const OLDER_MIN_TURNS = 40;
+// Tool results fill a log: a window can hold no turn at all
+const OLDER_MAX_READS = 5;
 
 export type LineParser = (line: string, id: string) => SessionTurn[];
 
@@ -30,26 +34,68 @@ export function planRead(
   return { offset: start, length: file.size - start, reset: true, dropFirstLine: start > 0 };
 }
 
+/** The window ending at `before` ("ino:offset", from a read's `older`). Null when spent or stale */
+export function planOlder(before: string, file: { ino: number; size: number }): ReadPlan | null {
+  const [ino, end] = before.split(":").map(Number);
+  if (ino !== file.ino || !end || end > file.size) return null;
+  const offset = Math.max(0, end - MAX_READ_BYTES);
+  return { offset, length: end - offset, reset: false, dropFirstLine: offset > 0 };
+}
+
 /** Whole lines only: a partial last line stays for the next read */
 export function parseChunk(
   chunk: Buffer,
   plan: Pick<ReadPlan, "offset" | "dropFirstLine">,
   parse: LineParser,
-): { turns: SessionTurn[]; nextOffset: number } {
+): { turns: SessionTurn[]; nextOffset: number; firstOffset: number } {
   const end = chunk.lastIndexOf(NEWLINE) + 1;
   // A single line over the cap would stall the tail for good: step past it
   if (end === 0) {
     const stuck = chunk.length >= MAX_READ_BYTES;
-    return { turns: [], nextOffset: plan.offset + (stuck ? chunk.length : 0) };
+    return {
+      turns: [],
+      nextOffset: plan.offset + (stuck ? chunk.length : 0),
+      firstOffset: plan.offset,
+    };
   }
   const turns: SessionTurn[] = [];
   let start = plan.dropFirstLine ? chunk.indexOf(NEWLINE) + 1 : 0;
+  const firstOffset = plan.offset + start;
   while (start < end) {
     const stop = chunk.indexOf(NEWLINE, start);
     turns.push(...parse(chunk.toString("utf8", start, stop), String(plan.offset + start)));
     start = stop + 1;
   }
-  return { turns, nextOffset: plan.offset + end };
+  return { turns, nextOffset: plan.offset + end, firstOffset };
+}
+
+/** Walks back from `before`, one window at a time, until there is a page to show */
+export async function readOlder(
+  path: string,
+  parse: LineParser,
+  before: string,
+): Promise<OlderChatPage> {
+  const handle = await open(path, "r");
+  try {
+    const file = await handle.stat();
+    let turns: SessionTurn[] = [];
+    let older: string | null = before;
+    for (let read = 0; older && read < OLDER_MAX_READS && turns.length < OLDER_MIN_TURNS; read++) {
+      const plan = planOlder(older, file);
+      if (!plan) return { turns, older: null };
+      const chunk = Buffer.alloc(plan.length);
+      const { bytesRead } = await handle.read(chunk, 0, plan.length, plan.offset);
+      const page = parseChunk(chunk.subarray(0, bytesRead), plan, parse);
+      turns = [...page.turns, ...turns];
+      // One line over the window has no start in it: step past it
+      const end = plan.offset + plan.length;
+      const first = page.firstOffset < end ? page.firstOffset : plan.offset;
+      older = first > 0 ? `${file.ino}:${first}` : null;
+    }
+    return { turns, older };
+  } finally {
+    await handle.close();
+  }
 }
 
 const secondsOf = (timestamp: unknown): number | null => {

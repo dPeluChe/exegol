@@ -1,5 +1,4 @@
 import { ExternalLink } from "lucide-react";
-import { useState } from "react";
 import { type AgentState, jumpToAgent, useAgentStore } from "../../../stores/agents";
 import { AgentIcon } from "../../common/AgentIcon";
 import { SegmentedTabs } from "../../common/SegmentedTabs";
@@ -9,7 +8,7 @@ import { ErrorBoundary, paneFallback } from "../../ErrorBoundary";
 import { MirrorFrame } from "../../terminal/MirrorFrame";
 import { CompanyChat } from "./CompanyChat";
 
-type SessionView = "chat" | "terminal";
+export type SessionView = "chat" | "terminal";
 
 const VIEWS: { id: SessionView; label: string }[] = [
   { id: "chat", label: "Chat" },
@@ -18,9 +17,18 @@ const VIEWS: { id: SessionView; label: string }[] = [
 const PANEL_ID = "company-session-panel";
 
 /** The selected desk: its turns as a chat, or its mirror. A plain shell has no turns */
-export function CompanySession({ agent, where }: { agent: AgentState; where: string }) {
+export function CompanySession({
+  agent,
+  where,
+  picked,
+  onPick,
+}: {
+  agent: AgentState;
+  where: string;
+  picked: SessionView;
+  onPick: (view: SessionView) => void;
+}) {
   const hasChat = agent.cliType !== "shell";
-  const [picked, setView] = useState<SessionView>("chat");
   const view = hasChat ? picked : "terminal";
   return (
     <aside className="flex h-full flex-col overflow-hidden rounded-lg border border-border bg-bg-secondary">
@@ -45,7 +53,7 @@ export function CompanySession({ agent, where }: { agent: AgentState; where: str
           <SegmentedTabs
             tabs={VIEWS}
             active={view}
-            onChange={setView}
+            onChange={onPick}
             compact
             label="Session view"
             panelId={PANEL_ID}
@@ -55,7 +63,7 @@ export function CompanySession({ agent, where }: { agent: AgentState; where: str
       {view === "chat" ? (
         <div id={PANEL_ID} role="tabpanel" className="min-h-0 flex-1 overflow-hidden">
           <ErrorBoundary fallback={paneFallback}>
-            <CompanyChat agent={agent} where={where} onTerminal={() => setView("terminal")} />
+            <CompanyChat agent={agent} where={where} onTerminal={() => onPick("terminal")} />
           </ErrorBoundary>
         </div>
       ) : (

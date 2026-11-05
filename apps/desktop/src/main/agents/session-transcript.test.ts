@@ -1,10 +1,16 @@
+import { mkdtemp, open, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
+  type LineParser,
   MAX_READ_BYTES,
   parseChunk,
   parseClaudeLine,
   parseCodexLine,
+  planOlder,
   planRead,
+  readOlder,
   terminalTurns,
 } from "./session-transcript";
 
@@ -31,6 +37,60 @@ describe("planRead", () => {
   it("opens a large file at its tail, past a fragment", () => {
     const big = { ino: 7, size: MAX_READ_BYTES + 10 };
     expect(planRead(undefined, big)).toMatchObject({ offset: 10, dropFirstLine: true });
+  });
+});
+
+describe("planOlder", () => {
+  it("ends the window at the line asked for, and refuses a spent or stale token", () => {
+    const file = { ino: 7, size: 100 };
+    expect(planOlder("7:40", file)).toMatchObject({ offset: 0, length: 40, dropFirstLine: false });
+    expect(planOlder("7:0", file)).toBeNull();
+    expect(planOlder("8:40", file)).toBeNull();
+    expect(planOlder("7:400", file)).toBeNull();
+  });
+});
+
+describe("readOlder", () => {
+  it("walks a large log back to its start with no line lost or repeated", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "exegol-transcript-"));
+    const path = join(dir, "log.jsonl");
+    const line = (i: number) => `${i} ${"x".repeat(100_000)}`;
+    await writeFile(path, `${Array.from({ length: 70 }, (_, i) => line(i)).join("\n")}\n`);
+    const parse: LineParser = (text) => [
+      { id: text.split(" ")[0] ?? "", role: "assistant", text: "t", at: null },
+    ];
+    const { ino, size } = await stat(path);
+
+    const start = Math.max(0, size - MAX_READ_BYTES);
+    const plan = { offset: start, dropFirstLine: true };
+    const tail = Buffer.alloc(size - start);
+    const handle = await open(path, "r");
+    await handle.read(tail, 0, tail.length, start);
+    await handle.close();
+    const first = parseChunk(tail, plan, parse);
+
+    let seen = first.turns.map((t) => t.id);
+    let older: string | null = `${ino}:${first.firstOffset}`;
+    while (older) {
+      const page = await readOlder(path, parse, older);
+      seen = [...page.turns.map((t) => t.id), ...seen];
+      older = page.older;
+    }
+    await rm(dir, { recursive: true });
+    expect(seen).toEqual(Array.from({ length: 70 }, (_, i) => String(i)));
+  });
+
+  it("steps past a line longer than the window", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "exegol-transcript-"));
+    const path = join(dir, "log.jsonl");
+    await writeFile(path, `a\n${"x".repeat(MAX_READ_BYTES + 10)}\nb\n`);
+    const { ino, size } = await stat(path);
+    const parse: LineParser = (text) =>
+      text.length < 5 ? [{ id: text, role: "assistant", text, at: null }] : [];
+    const page = await readOlder(path, parse, `${ino}:${size - 2}`);
+    await rm(dir, { recursive: true });
+    expect(page.turns.map((t) => t.id)).toEqual(["a"]);
+    expect(page.older).toBeNull();
   });
 });
 

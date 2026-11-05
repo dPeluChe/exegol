@@ -344,7 +344,11 @@ export type ChatPage = {
   reset: boolean;
   /** Read from the terminal: there was no transcript */
   fromTerminal: boolean;
+  /** Hand it to `agents.chatOlder` for what came before; null at the start. Only with `reset` */
+  older: string | null;
 };
+
+export type OlderChatPage = Pick<ChatPage, "turns" | "older">;
 
 /** How a message typed into a session opens, id included: the chat's way to recognize it */
 export const injectedHeaders = (messageId: string): [string, string] => [

@@ -15,7 +15,7 @@ import {
 } from "../../agents/follow-up-queue";
 import { hookCwdOf } from "../../agents/hook-cwd";
 import { setIdleExempt } from "../../agents/idle-exempt";
-import { chatTurns } from "../../agents/session-chat";
+import { chatTurns, olderChatTurns } from "../../agents/session-chat";
 import { broadcastShellClosed } from "../../agents/spawn-env";
 import { forgetAgentStatusWrites } from "../../agents/status-writes";
 import {
@@ -178,6 +178,9 @@ export const agentRouter = router({
   chatTurns: publicProcedure
     .input(z.object({ agentId: z.string(), cursor: z.string().max(64).optional() }))
     .query(({ ctx, input }) => chatTurns(ctx.db, input.agentId, input.cursor)),
+  chatOlder: publicProcedure
+    .input(z.object({ agentId: z.string(), before: z.string().max(64) }))
+    .query(({ ctx, input }) => olderChatTurns(ctx.db, input.agentId, input.before)),
   /** T200.4: the user's follow-up queue, typed at the agent's turn boundary (in memory) */
   followUps: publicProcedure
     .input(z.object({ id: z.string() }))

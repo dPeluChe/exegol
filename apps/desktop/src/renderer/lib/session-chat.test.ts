@@ -2,8 +2,8 @@ import type { AgentMessage, ChatPage, SessionTurn } from "@exegol/shared";
 import { describe, expect, it } from "vitest";
 import {
   appendChatPage,
-  MAX_CHAT_TURNS,
   mergeChat,
+  prependChatPage,
   type SessionBubble,
   toolsLine,
 } from "./session-chat";
@@ -33,16 +33,22 @@ describe("appendChatPage", () => {
     cursor: "1:2",
     reset,
     fromTerminal: false,
+    older: "1:0",
   });
 
-  it("appends a tail, replaces on reset and keeps the last turns", () => {
+  it("appends a tail and replaces on reset", () => {
     const first = appendChatPage(undefined, page([turn("a", "user", "x")], true));
     expect(appendChatPage(first, page([turn("b", "user", "y")], false)).turns).toHaveLength(2);
     expect(appendChatPage(first, page([turn("b", "user", "y")], true)).turns).toHaveLength(1);
-    const many = Array.from({ length: MAX_CHAT_TURNS + 5 }, (_, i) => turn(`${i}`, "user", "x"));
-    const capped = appendChatPage(first, page(many, false)).turns;
-    expect(capped).toHaveLength(MAX_CHAT_TURNS);
-    expect(capped.at(-1)?.id).toBe(`${MAX_CHAT_TURNS + 4}`);
+  });
+
+  it("prepends older turns, unless the history was replaced since asking", () => {
+    const held = appendChatPage(undefined, page([turn("b", "user", "y")], true));
+    const older = { turns: [turn("a", "user", "x")], older: null };
+    const joined = prependChatPage(held, older, "1:0");
+    expect(joined.turns.map((t) => t.id)).toEqual(["a", "b"]);
+    expect(joined.older).toBeNull();
+    expect(prependChatPage(held, older, "9:9")).toBe(held);
   });
 });
 
