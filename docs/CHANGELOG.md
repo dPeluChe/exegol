@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Browser camera menu: Copy full page, to paste the whole page into a chat or an issue
 - Token usage now imports from Claude Code and Codex logs in the background (every 30 min), with cache tokens, and models without a price are reported as unpriced instead of billed at the Sonnet default
 - Agent status from the CLI's own terminal reports (OSC 9;4 progress, OSC 7501 program status): Exegol answers the 7501 support query, so pi and Claude Code report working, waiting on you and done; hooks still take priority
 - New worktrees get the checkout's local `.env` files (patterns per project in Edit project, never overwriting), and a daily janitor frees node_modules and build output from Exegol worktrees idle for a day (Settings > General > Worktrees)
@@ -17,6 +18,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Browser panes search from the address bar: `?telnyx`, or words that are not an address, open a Google search; `localhost:3000`, `example.com` and full URLs still go straight there
 
 ### Fixed
+- Browser full-page screenshots no longer repeat the visible area (seen at device sizes such as 390x844) and include pages that scroll inside their own app shell; fixed and sticky bars appear once
 - A pane's "Add a browser beside" / "Add a terminal beside" menu (globe or terminal icon in its corner toolbar) closed when the pointer moved down to it, so To the right and Below could not be clicked. The toolbar's Float button now shows only when the pane has something to float, as in its right-click menu
 - Knowledge: the digest's `trs ingest` runs tagged `TRS_AGENT=exegol`, so `trs stats --by-agent` lists it as exegol instead of mixing it with the commands you type
 - The "What's new" dialog shows the update's download progress (a bar and the percent), as the title-bar button does, instead of only "Downloading"
