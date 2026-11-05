@@ -11,19 +11,6 @@ describe("slugifyBranchName", () => {
     expect(slugifyBranchName("Fix login bug")).toBe("exegol/fix-login-bug");
   });
 
-  it("should prefix with exegol/", () => {
-    const result = slugifyBranchName("some task");
-    expect(result).toMatch(/^exegol\//);
-  });
-
-  it("should convert to lowercase", () => {
-    expect(slugifyBranchName("FIX THE BUG")).toBe("exegol/fix-the-bug");
-  });
-
-  it("should replace spaces with hyphens", () => {
-    expect(slugifyBranchName("add new feature")).toBe("exegol/add-new-feature");
-  });
-
   it("should collapse multiple hyphens", () => {
     expect(slugifyBranchName("fix  --  bug")).toBe("exegol/fix-bug");
   });
@@ -41,10 +28,6 @@ describe("slugifyBranchName", () => {
 
   it("should not end with a hyphen", () => {
     expect(slugifyBranchName("task ")).not.toMatch(/-$/);
-  });
-
-  it("should handle single word", () => {
-    expect(slugifyBranchName("refactor")).toBe("exegol/refactor");
   });
 
   it("should handle already-clean input", () => {

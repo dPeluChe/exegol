@@ -443,9 +443,3 @@ export async function detectRunTargets(projectPath: string): Promise<RunTarget[]
   const ordered = [...sub.filter(runnable), ...sub.filter((t) => !runnable(t))];
   return [root, ...ordered.slice(0, MAX_SUBFOLDERS)];
 }
-
-/** Fresh detection: the cached scripts of the project and its subfolders are dropped first */
-export function refreshRunTargets(projectPath: string): Promise<RunTarget[]> {
-  invalidateScriptsCache(projectPath);
-  return detectRunTargets(projectPath);
-}

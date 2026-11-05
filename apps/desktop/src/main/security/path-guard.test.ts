@@ -25,10 +25,6 @@ describe("isPathInside", () => {
     expect(isPathInside(base, "/projects/myapp/src/index.ts")).toBe(true);
   });
 
-  it("allows a deeply nested child", () => {
-    expect(isPathInside(base, "/projects/myapp/a/b/c/d.ts")).toBe(true);
-  });
-
   it("blocks a path with the same prefix (prefix-confusion attack)", () => {
     // startsWith would incorrectly allow this
     expect(isPathInside(base, "/projects/myapp-evil")).toBe(false);
@@ -48,10 +44,6 @@ describe("isPathInside", () => {
     // resolve() normalizes these before relative() runs
     expect(isPathInside(base, resolve(base, "../../etc/passwd"))).toBe(false);
     expect(isPathInside(base, "/etc/passwd")).toBe(false);
-  });
-
-  it("blocks an absolute path that is unrelated", () => {
-    expect(isPathInside(base, "/home/user/.ssh/id_rsa")).toBe(false);
   });
 });
 
@@ -304,10 +296,9 @@ describe("assertSafePath", () => {
   it("refuses sensitive path with reason 'sensitive-path'", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "pg-assert-"));
     const bad = join(tmpDir, ".env.production");
-    await expect(assertSafePath(bad, { allowedBases: [tmpDir] })).rejects.toMatchObject({
-      name: "PathGuardError",
-      reason: "sensitive-path",
-    });
+    const err = await assertSafePath(bad, { allowedBases: [tmpDir] }).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(PathGuardError);
+    expect(err).toMatchObject({ name: "PathGuardError", reason: "sensitive-path", path: bad });
   });
 
   it("refuses path outside allowed bases with reason 'outside-allowed-bases'", async () => {
@@ -338,19 +329,5 @@ describe("assertSafePath", () => {
       name: "PathGuardError",
       reason: "sensitive-path",
     });
-  });
-
-  it("throws PathGuardError instances with a path field", async () => {
-    tmpDir = await mkdtemp(join(tmpdir(), "pg-assert-"));
-    const bad = join(tmpDir, ".env");
-    try {
-      await assertSafePath(bad, { allowedBases: [tmpDir] });
-      throw new Error("expected rejection");
-    } catch (err) {
-      expect(err).toBeInstanceOf(PathGuardError);
-      const e = err as PathGuardError;
-      expect(e.reason).toBe("sensitive-path");
-      expect(e.path).toBe(bad);
-    }
   });
 });

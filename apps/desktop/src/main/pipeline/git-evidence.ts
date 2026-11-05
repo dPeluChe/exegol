@@ -7,13 +7,18 @@ import { promisify } from "node:util";
 const execFileAsync = promisify(execFile);
 const MAX_DIFF_BYTES = 16 * 1024 * 1024;
 
-export async function git(cwd: string, args: string[], env = process.env): Promise<string> {
+export async function git(
+  cwd: string,
+  args: string[],
+  env = process.env,
+  maxBuffer = MAX_DIFF_BYTES,
+): Promise<string> {
   const { stdout } = await execFileAsync("git", args, {
     cwd,
     env,
     encoding: "utf-8",
     timeout: 30_000,
-    maxBuffer: MAX_DIFF_BYTES,
+    maxBuffer,
   });
   return stdout;
 }
@@ -44,22 +49,25 @@ export async function captureTree(cwd: string, ref?: string): Promise<string> {
   }
 }
 
-export async function captureGitDiff(cwd: string, baseRevision?: string | null): Promise<string> {
+export async function captureGitDiff(
+  cwd: string,
+  baseRevision?: string | null,
+  maxBytes = MAX_DIFF_BYTES,
+): Promise<string> {
   if (!baseRevision) return "(pipeline baseline unavailable; cannot determine changes)";
   try {
     const tree = await captureTree(cwd);
-    const diff = await git(cwd, [
-      "diff",
-      "--no-ext-diff",
-      "--no-textconv",
-      "--binary",
-      baseRevision,
-      tree,
-      "--",
-      ".",
-    ]);
+    const diff = await git(
+      cwd,
+      ["diff", "--no-ext-diff", "--no-textconv", "--binary", baseRevision, tree, "--", "."],
+      process.env,
+      maxBytes,
+    );
     return diff || "(no changes)";
-  } catch {
-    return "(failed to capture git diff; check repository availability or the 16 MiB diff limit)";
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === "ERR_CHILD_PROCESS_STDIO_MAXBUFFER") {
+      return "(git diff over the 16 MiB limit; evidence unavailable)";
+    }
+    return "(failed to capture git diff; check repository availability)";
   }
 }
