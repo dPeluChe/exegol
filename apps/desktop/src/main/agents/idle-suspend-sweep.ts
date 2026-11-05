@@ -126,7 +126,7 @@ async function processReason(
   return dirty === false ? null : dirty ? "uncommitted changes" : "worktree check failed";
 }
 
-const displayName = (s: LiveRow) =>
+export const displayName = (s: { alias: string | null; cliType: string }) =>
   s.alias ?? getProviderRegistry().get(s.cliType)?.name ?? s.cliType;
 
 type Outcome = "suspended" | "closed";

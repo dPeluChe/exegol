@@ -410,6 +410,7 @@
     "agent:status-changed",
     "agent:follow-ups",
     "agent:pr-watch",
+    "agent:stuck-turn",
     "agent:resume-missed",
     "agent:cli-self-updated",
     "agent:idle-suspended",

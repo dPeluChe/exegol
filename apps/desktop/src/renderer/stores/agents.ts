@@ -87,6 +87,10 @@ export function startAgentStatusPush(queryClient: QueryClient): void {
   const offPrWatch = window.api.onPrWatch(({ agentId, reason }) => {
     if (reason) useAgentStore.getState().addAttentionItem(agentId, { level: "info", reason });
   });
+  // "info": action_needed clears on the next running push, and a stuck turn is still running
+  const offStuckTurn = window.api.onStuckTurn(({ agentId, reason }) =>
+    useAgentStore.getState().addAttentionItem(agentId, { level: "info", reason }),
+  );
   const stopMcp = window.api.onMcpStatus((e) => queryClient.setQueryData(MCP_STATUS_KEY, e));
   const stopFollowUps = window.api.onFollowUps((e) =>
     queryClient.setQueryData(followUpsKey(e.agentId), e.items),
@@ -165,6 +169,7 @@ export function startAgentStatusPush(queryClient: QueryClient): void {
   pushCleanup = () => {
     stopRecovery();
     offPrWatch();
+    offStuckTurn();
     stopMcp();
     stopFollowUps();
     stopTurns();

@@ -47,6 +47,7 @@ import {
 } from "./spawn-env";
 import { stripAnsi, stripOscSequences } from "./status-parser";
 import { writeAgentStatus } from "./status-writes";
+import { noteStuckTurnStart } from "./stuck-turn-sweep";
 import {
   forgetTermStatus,
   noteHookSignal,
@@ -116,7 +117,10 @@ function applyAgentSignals(
     if (source === "hook") noteHookSignal(agent.id);
     const derived = deriveStatusFromSignal(sig.event);
     trackTurn(db, agent, maps, sig.event);
-    if (sig.event === "turn_started") noteTurnStarted(agent.id);
+    if (sig.event === "turn_started") {
+      noteTurnStarted(agent.id);
+      noteStuckTurnStart(agent.id);
+    }
 
     if (derived.status) signalStatus = derived.status;
     if (derived.turnStarted) turnStarted = derived.turnStarted;

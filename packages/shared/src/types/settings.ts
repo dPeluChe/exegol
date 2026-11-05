@@ -23,6 +23,11 @@ export type StatusBarWidgetSetting = {
 export const IDLE_SUSPEND_DAYS = [0, 1, 3, 7, 14] as const;
 export type IdleSuspendDays = (typeof IDLE_SUSPEND_DAYS)[number];
 
+/** Settings > General: alert when a turn runs longer than this many minutes; 0 = Off */
+export const STUCK_TURN_PRESETS = [0, 30, 60, 120, 240] as const;
+export const STUCK_TURN_MIN = 5;
+export const STUCK_TURN_MAX = 7 * 24 * 60;
+
 export type Settings = {
   defaultIde: IdeType;
   customIdePath: string | null;
@@ -41,6 +46,8 @@ export type Settings = {
   saveWorktreeWork: boolean;
   /** T205: no PTY output and no input for this many days suspends an agent or closes a shell */
   idleSuspendDays: IdleSuspendDays;
+  /** T200.10: a turn running longer than this (or silent 10 min) raises an attention item; 0 = Off */
+  stuckTurnAlertMinutes: number;
   /** T155.7: per-channel notification kill switches (NotificationMuteChannel ids) */
   mutedNotificationChannels: string[];
   /** Ollama server URL for local embeddings */
@@ -75,6 +82,7 @@ export const DEFAULT_SETTINGS: Settings = {
   toastsEnabled: true,
   saveWorktreeWork: true,
   idleSuspendDays: 7,
+  stuckTurnAlertMinutes: 0,
   mutedNotificationChannels: [],
   ollamaUrl: "http://localhost:11434",
   ollamaModel: "nomic-embed-text",
