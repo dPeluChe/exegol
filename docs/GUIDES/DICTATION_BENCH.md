@@ -23,9 +23,10 @@ For a fair comparison, correct the transcript: add a `"reference": "..."` field 
 
 `bun apps/desktop/scripts/dictation-review.ts` does that clip by clip, newest first: it plays the
 audio (macOS `afplay`), opens the saved text in `$EDITOR` (`--wait`-style editors work, for example
-`EDITOR="code --wait"`) and writes what you save as the `reference`. Empty text or an unchanged
-file with `--skip-unchanged` leaves the clip alone; Ctrl+C stops, and the next run goes on where
-this one ended. `--dir DIR` picks another folder, `--limit N` the number of clips.
+`EDITOR="code --wait"`) and writes what you save as the `reference`; save it empty to skip the
+clip. Quitting the editor with an error stops, and the next run goes on where this one ended.
+`--dir DIR` picks another folder, `--limit N` the number of clips. The retention keeps clips with a
+`reference`; Clear recordings still deletes them.
 
 Only the corrected clips make a model's score comparable; the rest are graded against what the
 dictating model wrote.
@@ -48,13 +49,13 @@ bun apps/desktop/scripts/dictation-bench.ts --dir ./clips --no-installed --model
 | `--vocab FILE` | Terms, one per line, applied to models that take a vocabulary (Parakeet, Qwen3-ASR); none by default |
 | `--boost N` | Hotword score with `--vocab` (default 2, the app's Normal) |
 | `--terms FILE` | Terms to score, one per line, without biasing any model (default the `--vocab` terms): adds term recall (`terms %`) and invented terms (`false`) |
-| `--mode phrases\|whole` | `phrases` cuts at pauses as the app does (default); `whole` decodes each clip in one pass. Streaming models ignore it |
-| `--clean` | Score the text after `cleanDictation`, as the app inserts it, instead of the raw decode |
+| `--whole` | Decode each clip in one pass, not by phrases as the app does; streaming models ignore it and `--save` refuses it |
 | `--corrected-only` | Only clips with a `reference`; WER against saved text mostly measures agreement with the dictating model |
 | `--json FILE` | Per-model rows plus every clip's reference and hypothesis |
 | `--save` | Merge the run's scores into `~/.exegol/dictation-bench/results.json` for Settings > Models |
 
 Configs come from `src/main/dictation/model-config.ts`, the same ones the app uses.
+Hypotheses are scored after `cleanDictation` with the default settings: the text the app inserts.
 
 ## 3. Read the table
 

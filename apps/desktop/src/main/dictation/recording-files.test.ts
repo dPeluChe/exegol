@@ -3,6 +3,7 @@ import {
   decodeWav,
   encodeWav,
   expiredRecordings,
+  hasReference,
   projectDirName,
   type RecordingFile,
   recordingBaseName,
@@ -75,6 +76,14 @@ describe("names", () => {
     expect(recordingStem("x.wav")).toBe("x");
     expect(recordingStem("x.json")).toBe("x");
     expect(recordingStem(".DS_Store")).toBeNull();
+  });
+});
+
+describe("hasReference", () => {
+  it("is true only for a meta with a reference", () => {
+    expect(hasReference('{"text":"a","reference":"b"}')).toBe(true);
+    expect(hasReference('{"text":"a"}')).toBe(false);
+    expect(hasReference("")).toBe(false);
   });
 });
 

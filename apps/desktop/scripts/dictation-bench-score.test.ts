@@ -75,6 +75,7 @@ describe("summarizeModel", () => {
       hypothesis: "",
       corrected: false,
       dictatedWith: null,
+      terms: { expected: 0, found: 0, falseHits: 0 },
     });
     const row = summarizeModel("m", [clip(0.2, 10, 1), clip(0.4, 30, 3)]);
     expect(row.clips).toBe(2);
@@ -99,6 +100,7 @@ describe("localBenchModel", () => {
     hypothesis: "",
     corrected,
     dictatedWith,
+    terms: { expected: 0, found: 0, falseHits: 0 },
   });
 
   it("counts corrected and self-scored clips and marks mixed references as saved text", () => {

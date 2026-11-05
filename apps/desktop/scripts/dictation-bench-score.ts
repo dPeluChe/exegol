@@ -89,8 +89,7 @@ export interface ClipResult {
   corrected: boolean;
   /** The model that dictated it (its `modelId`) */
   dictatedWith: string | null;
-  /** With --terms */
-  terms?: TermStats;
+  terms: TermStats;
 }
 
 export interface ModelRow {
@@ -111,7 +110,7 @@ export function summarizeModel(model: string, clips: readonly ClipResult[]): Mod
   const mean = (pick: (c: ClipResult) => number) => (clips.length ? sum(pick) / clips.length : 0);
   const audioSec = sum((c) => c.audioSec);
   const decodeSec = sum((c) => c.decodeSec);
-  const expected = sum((c) => c.terms?.expected ?? 0);
+  const expected = sum((c) => c.terms.expected);
   return {
     model,
     clips: clips.length,
@@ -120,8 +119,8 @@ export function summarizeModel(model: string, clips: readonly ClipResult[]): Mod
     audioSec,
     decodeSec,
     rtf: audioSec > 0 ? decodeSec / audioSec : 0,
-    termRecall: expected > 0 ? sum((c) => c.terms?.found ?? 0) / expected : null,
-    falseTerms: sum((c) => c.terms?.falseHits ?? 0),
+    termRecall: expected > 0 ? sum((c) => c.terms.found) / expected : null,
+    falseTerms: sum((c) => c.terms.falseHits),
   };
 }
 
