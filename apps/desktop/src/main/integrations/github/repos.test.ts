@@ -73,7 +73,11 @@ describe("project folders", () => {
     repo("outside/linked");
     mkdirSync(join(root, "z"));
     symlinkSync(join(root, "outside"), join(root, "z", "link"));
-    expect(await findRepoFolders(root)).toEqual(["api", "outside/linked", "a/b/c/d"]);
+    expect(await findRepoFolders(root)).toEqual([
+      "api",
+      join("outside", "linked"),
+      join("a", "b", "c", "d"),
+    ]);
   });
 
   it("the root wins when it has a GitHub remote, else the repos inside, one per repo", async () => {
