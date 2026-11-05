@@ -94,7 +94,7 @@ describe("recording while Exegol is in the background", () => {
     chordUp();
     expect(phase()).toBe("listening");
     feed(new Float32Array(16_000));
-    await new Promise((done) => setTimeout(done, 260));
+    await new Promise((done) => setTimeout(done, 60));
     await settle();
     expect(phase()).not.toBe("listening");
   });

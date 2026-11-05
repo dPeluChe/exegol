@@ -12,15 +12,6 @@ export interface VadState {
   heard: boolean;
 }
 
-/** Keys come up before the last word ends: hold-to-talk keeps listening this long */
-export const RELEASE_TAIL_MS = 200;
-const RELEASE_TAIL_MAX_MS = 600;
-const RELEASE_QUIET_MS = 150;
-
-/** A tail ends at its cap, or once the speaker has gone quiet */
-export const releaseTailDone = (elapsedMs: number, silenceMs: number): boolean =>
-  elapsedMs >= RELEASE_TAIL_MAX_MS || silenceMs >= RELEASE_QUIET_MS;
-
 export const VAD_START: VadState = { speechMs: 0, silenceMs: 0, heard: false };
 
 export function updateVad(
