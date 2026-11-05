@@ -32,10 +32,11 @@ import {
   sanitizeDictation,
   takesDictation,
 } from "./target";
-import { rms, updateVad, VAD_START, type VadState } from "./vad";
+import { RELEASE_TAIL_MS, releaseTailDone, rms, updateVad, VAD_START, type VadState } from "./vad";
 
 /** A press held at least this long is hold-to-talk (release stops); shorter toggles */
 const HOLD_MS = 350;
+const RELEASE_TICK_MS = 50;
 
 interface Run {
   settings: DictationSettings;
@@ -513,11 +514,23 @@ export function chordDown(): void {
   void startDictation();
 }
 
+/** Waits for the end of the last word; a press or a cancel meanwhile leaves `run` changed */
+function stopAfterTail(r: Run, waitedMs: number): void {
+  if (run !== r) return;
+  const over = waitedMs > 0 && releaseTailDone(waitedMs, r.vad.silenceMs);
+  if (r.paused || !r.vad.heard || over) {
+    void stopDictation("chord");
+    return;
+  }
+  const next = waitedMs === 0 ? RELEASE_TAIL_MS : RELEASE_TICK_MS;
+  setTimeout(() => stopAfterTail(r, waitedMs + next), next);
+}
+
 /** The shortcut came up: after a long press that was hold-to-talk, so stop */
 export function chordUp(): void {
   if (!holdCandidate) return;
   holdCandidate = false;
-  if (Date.now() - pressedAt >= HOLD_MS && run) void stopDictation("chord");
+  if (Date.now() - pressedAt >= HOLD_MS && run) stopAfterTail(run, 0);
 }
 
 /** Pause or resume a listening dictation: same session, target and text. The mic stays open so
