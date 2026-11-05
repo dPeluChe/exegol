@@ -52,10 +52,11 @@ cd packages/core-rust && cargo check && cargo test && cargo clippy
 
 ## Architecture
 
-### Dashboard + workspace (3 tabs + sub-tabs)
+### Dashboard + workspace (one top bar)
 - **Dashboard**: its own view (`activeView: "dashboard"`, sidebar button) overlaying the workspace, cross-project fleet + Watching (T194). No project is selected while it shows; picking one lands on its Agents tab. Panes stay mounted (same size) behind it. With sessions pinned it shows only Watching; "Show all agents" reveals the fleet
 - **Agents**: multi-pane workspace (terminal, browser, files, git, empty). The last 3 projects stay mounted (`mountedProjects`, in memory, LRU set by `switchProject` via `keepMounted`, emptied with no project shown, a deleted one dropped in `useDeleteProject`): `AgentsSection` renders one `ProjectLayer` per project (`mountedLayers`, sorted so the LRU never moves DOM), the hidden ones `invisible absolute inset-0` + `inert`, blurring what they held; one shown again sends `exegol:focus-pane` to the active pane if nothing has the focus. Pane components read their layer's `ProjectScope` (`usePaneProject`: id, project, `shown`), never `useProjectContext`; tab bar, switcher, hotkeys and sections stay on the active project. Browser panes mount only in the shown layer (`ScopedBrowserPane`), and pane polls (`diff.status`, `diff.gitState`, oplog) run only while `shown`. Docs: `docs/RESEARCH/KEEP_MOUNTED_PROJECTS_2026_10.md`
-- **Project**: Tasks | History | Prompts & Skills | Memory | Knowledge | Pipelines | Parallel Runs | QA Tests
+- **Top bar** (`WorkspaceTabs`, 40 px, sections in `lib/workspace-sections.ts`): the active project's layout tabs, LayoutPresets and the CLI launcher (`WorkspaceTabBar`, status of every session in a tab via `tabSignal`), then Project and Monitor. Those two replace the tabs with a "Tabs" chip keeping their dots plus their sections; clicking one again goes back. Same height everywhere, so panes never resize on a section change
+- **Project**: Tasks | History | Context (Memory, Knowledge) | Prompts & Skills | Automation (Pipelines, Parallel Runs, QA Tests). A group opens its first section and shows the others inline
 - **Monitor**: Resources & Tokens | Scoring
 
 ### Pane types
@@ -257,8 +258,8 @@ apps/desktop/src/
     windows/        floating (T84 PiP), settings (T120 standalone window), app-menu (macOS custom menu + Preferences entry + Cmd+W router, Reset Zoom on Cmd+Shift+0)
   renderer/
     components/
-      workspace/    WorkspaceView, WorkspaceTabs (3 main: Agents, Project, Monitor + sub-tabs; Dashboard is its own view), WorkspacePane (5 types),
-                    WorkspaceTabBar (quick launch + LayoutPresets dropdown), WorkspaceLayout,
+      workspace/    WorkspaceView, WorkspaceTabs (one bar: tabs or Project/Monitor sections; Dashboard is its own view), WorkspacePane (5 types),
+                    WorkspaceTabBar (tabs, LayoutPresets dropdown, quick launch), WorkspaceLayout,
                     GitPane (with SmartGitAction), LayoutPresets, SmartGitAction,
                     PaneContextMenu, sections/ (30 section components + pipeline/, tasks/), diff/
       settings/     SettingsPanel, GeneralSettings (Kbd components), CliSettings (cards grid,

@@ -2,6 +2,7 @@ import React, { lazy, Suspense } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { useSettings } from "../../hooks/use-trpc";
 import { shortcutsWith } from "../../lib/shortcuts";
+import type { WorkspaceSection } from "../../lib/workspace-sections";
 import { useAppStore } from "../../stores/app";
 import { ParallelSpawnModal } from "../agents/ParallelSpawnModal";
 import { SpawnAgentModal } from "../agents/SpawnAgentModal";
@@ -13,7 +14,7 @@ import {
   useShortcutsOverlay,
   useSpawnModalEvents,
 } from "./use-workspace-events";
-import { type WorkspaceSection, WorkspaceTabs } from "./WorkspaceTabs";
+import { WorkspaceTabs } from "./WorkspaceTabs";
 
 // ─── Shortcuts for the help overlay (Cmd+/) ────────────────────────────────
 
@@ -74,7 +75,7 @@ function SectionFallback() {
 export function WorkspaceView() {
   const { projectId } = useProjectContext();
   // Home = the fleet dashboard (Antonio 2026-08-11): land on the cross-project
-  // control center; the Agents tab stays mounted underneath for its terminals.
+  // control center; the agent tabs stay mounted underneath for its terminals.
   const onDashboard = useAppStore((s) => s.activeView === "dashboard");
   const activeSection = useAppStore((s) => s.workspaceSection);
   const setActiveSection = useAppStore((s) => s.setWorkspaceSection);

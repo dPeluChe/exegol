@@ -1,6 +1,6 @@
 import type { AgentCliType, AgentProvider } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import { useCallback, useState } from "react";
+import { memo, useCallback, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { useLaunchableProviders } from "../../hooks/use-providers";
 import { focusNewPane } from "../../lib/pane-focus";
@@ -15,7 +15,7 @@ import {
 } from "../../stores/workspace";
 import { AgentIcon } from "../common/AgentIcon";
 
-export function QuickLaunchBar() {
+export const QuickLaunchBar = memo(function QuickLaunchBar() {
   const { projectId } = useProjectContext();
   const [launching, setLaunching] = useState<string | null>(null);
   const updatePane = useWorkspaceStore((s) => s.updatePane);
@@ -118,7 +118,7 @@ export function QuickLaunchBar() {
   );
 
   return (
-    <div className="flex h-7 items-center gap-1.5 overflow-x-auto px-2">
+    <div className="flex h-full max-w-[35%] shrink-0 items-center gap-1 overflow-x-auto border-l border-border/40 px-1.5">
       {cliAgents.map((cli) => (
         <button
           type="button"
@@ -126,7 +126,7 @@ export function QuickLaunchBar() {
           disabled={launching === cli.id}
           onClick={() => handleLaunch(cli)}
           className={cn(
-            "group/cli relative flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-[9px] font-bold transition-all",
+            "group/cli relative flex h-6 min-w-6 shrink-0 items-center justify-center rounded-full px-1 text-[9px] font-bold transition-all",
             "bg-zinc-700 text-zinc-400 hover:text-white",
             launching === cli.id && "opacity-40",
           )}
@@ -150,4 +150,4 @@ export function QuickLaunchBar() {
       ))}
     </div>
   );
-}
+});

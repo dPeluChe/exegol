@@ -1,13 +1,48 @@
-import type { AgentActivityLevel } from "@exegol/shared";
 import { FolderTree, GitBranch, Globe, Terminal } from "lucide-react";
+import { needsYou } from "../../lib/agent-groups";
+import type { AgentState, AttentionItem } from "../../stores/agents";
 import { findFirstPaneId, type LayoutNode, type Pane } from "../../stores/workspace";
 
 // ─── T70: Activity dot for tab chrome ───────────────────────────────────────
 
-export const ACTIVITY_DOT_CLASS: Partial<Record<AgentActivityLevel, string>> = {
+const ACTIVITY_DOT_CLASS = {
   busy: "bg-success animate-status-pulse",
   idle: "bg-warning",
 };
+
+// ─── Tab status: every session in the tab counts, not only its first pane ───
+
+interface TabSignal {
+  needsYou: boolean;
+  /** Any unread item, "task completed" included: a dot, not the badge */
+  unread: boolean;
+  activity: keyof typeof ACTIVITY_DOT_CLASS | undefined;
+}
+
+export function tabSignal(
+  paneIds: string[],
+  panes: Record<string, Pane>,
+  agents: Record<string, Pick<AgentState, "status" | "activityLevel">>,
+  attention: Record<string, Pick<AttentionItem, "level" | "read">>,
+): TabSignal {
+  const signal: TabSignal = { needsYou: false, unread: false, activity: undefined };
+  for (const paneId of paneIds) {
+    const agentId = panes[paneId]?.agentId;
+    const agent = agentId ? agents[agentId] : undefined;
+    if (!agentId || !agent) continue;
+    const item = attention[agentId];
+    signal.needsYou ||= needsYou(agent, item);
+    signal.unread ||= item?.read === false;
+    if (agent.activityLevel === "busy") signal.activity = "busy";
+    else if (agent.activityLevel === "idle") signal.activity ??= "idle";
+  }
+  return signal;
+}
+
+export function tabDotClass({ needsYou, unread, activity }: TabSignal): string | null {
+  if (needsYou || unread) return "animate-pulse bg-amber-400";
+  return activity ? ACTIVITY_DOT_CLASS[activity] : null;
+}
 
 // ─── Tab auto-naming helpers ────────────────────────────────────────────────
 
@@ -31,7 +66,7 @@ function isAgentLabel(label: string, agent: { cliType: string; alias?: string | 
   );
 }
 
-/** Derive display name, icon, and primary agent ID from the tab's primary pane.
+/** Derive display name and icon from the tab's primary pane.
  *  An agent tab follows its session: the alias once it has one ("lupus"), else the CLI. */
 export function getTabMeta(
   tabLabel: string,
@@ -41,7 +76,6 @@ export function getTabMeta(
 ): {
   displayName: string;
   Icon: React.ComponentType<{ className?: string }> | null;
-  primaryAgentId: string | null;
   /** Set for an agent tab: the tab shows that CLI's icon, as the sidebar does */
   agentCliType: string | null;
 } {
@@ -58,21 +92,17 @@ export function getTabMeta(
     tabLabel === "Workspace" ||
     tabLabel === "Terminal" ||
     (!!agent && isAgentLabel(tabLabel, agent));
-  if (!isDefault) return { displayName: tabLabel, Icon, primaryAgentId, agentCliType };
+  if (!isDefault) return { displayName: tabLabel, Icon, agentCliType };
 
   if (agent)
     return {
       displayName: agent.alias ?? agent.cliType,
       Icon: Terminal,
-      primaryAgentId,
       agentCliType,
     };
-  if (firstPane?.type === "browser")
-    return { displayName: "Browser", Icon: Globe, primaryAgentId, agentCliType };
-  if (firstPane?.type === "git")
-    return { displayName: "Git", Icon: GitBranch, primaryAgentId, agentCliType };
-  if (firstPane?.type === "files")
-    return { displayName: "Files", Icon: FolderTree, primaryAgentId, agentCliType };
+  if (firstPane?.type === "browser") return { displayName: "Browser", Icon: Globe, agentCliType };
+  if (firstPane?.type === "git") return { displayName: "Git", Icon: GitBranch, agentCliType };
+  if (firstPane?.type === "files") return { displayName: "Files", Icon: FolderTree, agentCliType };
 
-  return { displayName: tabLabel, Icon, primaryAgentId, agentCliType };
+  return { displayName: tabLabel, Icon, agentCliType };
 }

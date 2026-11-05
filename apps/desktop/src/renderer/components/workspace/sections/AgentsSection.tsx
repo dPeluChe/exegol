@@ -10,7 +10,6 @@ import {
 } from "../../../stores/workspace";
 import { mountedLayers } from "../../../stores/workspace/helpers";
 import { WorkspaceLayout } from "../WorkspaceLayout";
-import { WorkspaceTabBar } from "../WorkspaceTabBar";
 
 // ─── All Tabs Layout (keep terminals alive across tab switches) ──────────────
 
@@ -117,13 +116,10 @@ export function AgentsSection() {
   if (!activeProjectId) return null;
 
   return (
-    <div className="flex h-full flex-col">
-      <WorkspaceTabBar />
-      <div className="relative flex-1 overflow-hidden">
-        {mountedLayers(mounted, activeProjectId).map((pid) => (
-          <ProjectLayer key={pid} projectId={pid} shown={pid === activeProjectId} />
-        ))}
-      </div>
+    <div className="relative h-full overflow-hidden">
+      {mountedLayers(mounted, activeProjectId).map((pid) => (
+        <ProjectLayer key={pid} projectId={pid} shown={pid === activeProjectId} />
+      ))}
     </div>
   );
 }

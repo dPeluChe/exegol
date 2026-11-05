@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
-import type { WorkspaceSection } from "../components/workspace/WorkspaceTabs";
+import type { WorkspaceSection } from "../lib/workspace-sections";
 
 /** "dashboard" is the cross-project view: no project is selected while it shows. */
 type ActiveView = "projects" | "workspace" | "dashboard";

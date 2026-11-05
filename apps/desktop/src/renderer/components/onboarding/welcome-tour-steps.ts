@@ -60,7 +60,7 @@ const MAC_STEPS: WelcomeTourStep[] = [
       "The git pane shows your changes and diffs.",
       "The Smart Git button picks the next step: commit, push, create or merge the PR.",
       "The oplog records agent operations so you can undo them.",
-      "Pipelines in the Project tab chain agents into multi-step runs.",
+      "Pipelines in Project chain agents into multi-step runs.",
     ],
   },
   {

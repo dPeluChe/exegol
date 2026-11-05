@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- One top bar: layout tabs, launcher, Project and Monitor share a single 40 px row, so terminals gain height; a tab shows "Needs you" for any session in it, and Project groups its sections into Context and Automation
 - Browser camera menu: Copy full page, to paste the whole page into a chat or an issue
 - Token usage now imports from Claude Code and Codex logs in the background (every 30 min), with cache tokens, and models without a price are reported as unpriced instead of billed at the Sonnet default
 - Agent status from the CLI's own terminal reports (OSC 9;4 progress, OSC 7501 program status): Exegol answers the 7501 support query, so pi and Claude Code report working, waiting on you and done; hooks still take priority
