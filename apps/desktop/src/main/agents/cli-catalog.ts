@@ -1,4 +1,4 @@
-/** Per-CLI facts (sources for the commands in docs/TASK_COMPLETED/2610.md) */
+/** Per-CLI facts (sources in docs/TASK_COMPLETED/2610.md, Grok and Cursor in 2611.md) */
 
 /** A command for every OS, or per OS; a missing OS has no native install (the docs say how) */
 type PerOs = string | { unix?: string; mac?: string; linux?: string; win?: string };
@@ -13,7 +13,7 @@ interface CliEntry {
   docs: string;
   deprecated?: string;
   /** Its newest release, when the registry numbers match its `--version` (agy, devin, droid,
-   *  kiro and goose have none we can read: they only get "restart to update") */
+   *  kiro, goose, grok and cursor have none we can read: they only get "restart to update") */
   latest?: { npm: string } | { pypi: string };
   /** Newer names of its binary (the provider's command is the first): Kilo Code 1.0 ships `kilo` */
   binaryAliases?: string[];
@@ -148,6 +148,24 @@ export const CLI_CATALOG: Partial<Record<string, CliEntry>> = {
     update: "droid update",
     docs: "https://docs.factory.ai/droid-cli/quickstart",
     standalone: [".factory/", ".local/bin/droid"],
+  },
+  grok: {
+    install: {
+      unix: CURL("https://x.ai/cli/install.sh"),
+      win: IRM("https://x.ai/cli/install.ps1"),
+    },
+    update: "grok update",
+    docs: "https://docs.x.ai/build/overview",
+    standalone: [".grok/"],
+  },
+  cursor: {
+    install: {
+      unix: "curl https://cursor.com/install -fsS | bash",
+      win: IRM("'https://cursor.com/install?win32=true'"),
+    },
+    update: "cursor-agent update",
+    docs: "https://cursor.com/docs/cli/installation",
+    standalone: [".local/share/cursor-agent/", ".local/bin/cursor-agent"],
   },
 };
 

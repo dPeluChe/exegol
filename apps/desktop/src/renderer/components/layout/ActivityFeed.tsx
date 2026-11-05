@@ -37,7 +37,7 @@ function ActivityItem({ activity, projectName }: { activity: Activity; projectNa
 
   // Clean up description: remove CLI prefix for readability
   const text = activity.description.replace(
-    /^(claude-code|codex|gemini|aider|goose|opencode|amp|kiro|kilocode|crush|shell|factory-droid)\s+agent\s+/i,
+    /^(claude-code|codex|gemini|aider|goose|opencode|amp|kiro|kilocode|crush|shell|factory-droid|grok|cursor)\s+agent\s+/i,
     "",
   );
   const desc = projectName ? `${projectName}: ${text}` : text;

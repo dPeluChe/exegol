@@ -7,6 +7,7 @@ import { devinHistory } from "./providers/devin";
 import { droidHistory } from "./providers/droid";
 import { geminiHistory } from "./providers/gemini";
 import { gooseHistory } from "./providers/goose";
+import { grokHistory } from "./providers/grok";
 import { kilocodeHistory } from "./providers/kilocode";
 import { opencodeHistory } from "./providers/opencode";
 import { type LocalHistoryProvider, type LocalSession, StoreUnavailable } from "./types";
@@ -27,6 +28,7 @@ const PROVIDERS: LocalHistoryProvider[] = [
   geminiHistory,
   devinHistory,
   kilocodeHistory,
+  grokHistory,
 ];
 
 /**
