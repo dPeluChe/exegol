@@ -2,7 +2,7 @@ import { type InterruptionLevel, LIVE_STATUSES } from "@exegol/shared";
 import type { AgentState, AttentionItem } from "../stores/agents";
 import type { DeskActivity } from "../stores/desk-activity";
 import { collectPaneIds } from "../stores/workspace/helpers";
-import type { ProjectWorkspace } from "../stores/workspace/types";
+import type { ProjectWorkspace, WorkspaceTab } from "../stores/workspace/types";
 import { agentGroup, needsYou } from "./agent-groups";
 import { isBusy } from "./sidebar-views";
 
@@ -113,4 +113,39 @@ export function besideBrowser(workspace: ProjectWorkspace | undefined): Set<stri
     for (const p of panes) if (p?.agentId) ids.add(p.agentId);
   }
   return ids;
+}
+
+/** What a shell runs right now */
+export function shellCommand(a: AgentState): string | null {
+  return a.cliType === "shell" && !a.suspended ? a.currentStep : null;
+}
+
+export interface DeskGroup {
+  /** null: sessions in no tab */
+  tabId: string | null;
+  label: string | null;
+  desks: AgentState[];
+}
+
+/** Desks by the tab holding them, tabs in the order of their most urgent desk */
+export function groupByTab(
+  desks: AgentState[],
+  workspace: ProjectWorkspace | undefined,
+): DeskGroup[] {
+  const tabOf = new Map<string, WorkspaceTab>();
+  for (const tab of workspace?.tabs ?? []) {
+    for (const id of collectPaneIds(tab.layout)) {
+      const agentId = workspace?.panes[id]?.agentId;
+      if (agentId) tabOf.set(agentId, tab);
+    }
+  }
+  const groups = new Map<string | null, DeskGroup>();
+  for (const desk of desks) {
+    const tab = tabOf.get(desk.id);
+    const tabId = tab?.id ?? null;
+    const group = groups.get(tabId) ?? { tabId, label: tab?.label ?? null, desks: [] };
+    group.desks.push(desk);
+    groups.set(tabId, group);
+  }
+  return [...groups.values()];
 }

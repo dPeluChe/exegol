@@ -1,6 +1,7 @@
 import type { DeskFacts, DoneSession } from "@exegol/shared";
 import { cn, ScrollArea } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
+import { Globe } from "lucide-react";
 import { memo, type ReactNode, useMemo, useRef, useState } from "react";
 import { type ImperativePanelHandle, Panel, PanelGroup } from "react-resizable-panels";
 import { useCliUpdates } from "../../../hooks/use-cli-updates";
@@ -14,8 +15,10 @@ import {
   type DeskState,
   deskActivity,
   deskState,
+  groupByTab,
   nextNeedsYou,
   type Room,
+  shellCommand,
   todayStrip,
 } from "../../../lib/company";
 import { formatTimeAgo } from "../../../lib/format";
@@ -99,6 +102,8 @@ const Desk = memo(function Desk({
   const state = deskState(agent, item);
   const activity = deskActivity(agent, item, lastActivity);
   const changed = facts?.changedFiles;
+  const shell = agent.cliType === "shell";
+  const command = shellCommand(agent);
   return (
     <button
       type="button"
@@ -106,28 +111,40 @@ const Desk = memo(function Desk({
       aria-pressed={selected}
       data-desk-id={agent.id}
       aria-label={`${sessionName(agent)}, ${agent.cliType}, ${DESK_STATE[state].label}`}
+      title={agent.branchName ?? undefined}
       className={cn(
-        "flex min-w-0 flex-col items-center gap-1 rounded-lg border bg-bg-tertiary/40 px-1.5 py-2 transition-colors hover:bg-bg-tertiary",
-        DESK_STATE[state].ring,
+        "flex min-w-0 items-center gap-2 rounded-md border px-2 py-1.5 text-left transition-colors hover:bg-bg-tertiary",
+        shell ? "border-transparent bg-bg-tertiary/20" : "bg-bg-tertiary/40",
+        !shell && DESK_STATE[state].ring,
         selected && "bg-accent/10 outline outline-1 outline-accent/60",
       )}
     >
-      <span className="h-3.5 text-[9px] uppercase tracking-wider text-text-muted">{activity}</span>
-      <AgentIcon provider={agent.cliType} size={22} />
-      <span className="h-1 w-10 rounded-sm bg-border" aria-hidden="true" />
-      <span className="max-w-full truncate text-[11px] text-text-primary">
-        {sessionName(agent)}
-      </span>
-      <span className="max-w-full truncate text-[10px] text-text-muted">{whereOf(agent)}</span>
-      <StateLine state={state} activitySince={agent.activitySince} />
-      <span className="flex min-h-[14px] flex-wrap justify-center gap-0.5">
-        {cliOutdated && <Tag>CLI update</Tag>}
-        {changed === 0 && <Tag>clean</Tag>}
-        {!!changed && <Tag tone="warn">±{changed}</Tag>}
-        {facts?.port && <Tag>:{facts.port}</Tag>}
-        {browser && <Tag>browser</Tag>}
-        {prNumber && <Tag>PR #{prNumber}</Tag>}
-        {facts?.linked && <Tag>link</Tag>}
+      <AgentIcon provider={agent.cliType} size={shell ? 14 : 20} />
+      <span className="flex min-w-0 flex-1 flex-col">
+        <span className="flex min-w-0 items-center gap-1">
+          <span className="min-w-0 flex-1 truncate text-[11px] text-text-primary">
+            {sessionName(agent)}
+          </span>
+          {cliOutdated && <Tag>update</Tag>}
+          {!!changed && <Tag tone="warn">±{changed}</Tag>}
+          {facts?.port && <Tag>:{facts.port}</Tag>}
+          {prNumber && <Tag>#{prNumber}</Tag>}
+          {facts?.linked && <Tag>link</Tag>}
+          {browser && (
+            <Globe
+              className="h-2.5 w-2.5 shrink-0 text-text-muted"
+              aria-label="Browser beside it"
+            />
+          )}
+        </span>
+        {command ? (
+          <span className="truncate text-[10px] text-green-400">{command}</span>
+        ) : (
+          <span className="truncate text-[10px] text-text-muted">
+            <StateLine state={state} activitySince={agent.activitySince} />
+            {activity && activity !== "question" && ` · ${activity}`}
+          </span>
+        )}
       </span>
     </button>
   );
@@ -161,9 +178,11 @@ function RoomCard({
     .map(([n, label]) => `${n} ${label}`)
     .join(", ");
   const prs = overview?.prs ?? [];
+  const groups = groupByTab(desks, workspace);
+  const framed = groups.length > 1;
 
   return (
-    <section className="flex flex-col gap-2 rounded-lg border border-border bg-bg-secondary p-2.5">
+    <section className="mb-2 flex break-inside-avoid flex-col gap-1.5 rounded-lg border border-border bg-bg-secondary p-2">
       <div className="flex items-center gap-2">
         <span
           className={cn("h-2.5 w-2.5 rounded-sm", !meta?.color && "bg-accent")}
@@ -183,20 +202,30 @@ function RoomCard({
           Open project
         </button>
       </div>
-      <div className="grid grid-cols-2 gap-2 rounded-md bg-bg-tertiary/20 p-1.5 @xl:grid-cols-3">
-        {desks.map((agent) => (
-          <Desk
-            key={agent.id}
-            agent={agent}
-            facts={deskFacts?.[agent.id]}
-            prNumber={prs.find((p) => p.branch === agent.branchName)?.number}
-            browser={browsers.has(agent.id)}
-            cliOutdated={outdated.has(agent.cliType)}
-            selected={agent.id === selectedId}
-            onSelect={onSelect}
-          />
-        ))}
-      </div>
+      {groups.map((group) => (
+        <div
+          key={group.tabId ?? "none"}
+          className={cn(framed && "rounded-md border border-dashed border-border/70 p-1")}
+        >
+          {framed && group.label && (
+            <p className="truncate px-1 pb-0.5 text-[9px] text-text-muted">{group.label}</p>
+          )}
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-1">
+            {group.desks.map((agent) => (
+              <Desk
+                key={agent.id}
+                agent={agent}
+                facts={deskFacts?.[agent.id]}
+                prNumber={prs.find((p) => p.branch === agent.branchName)?.number}
+                browser={browsers.has(agent.id)}
+                cliOutdated={outdated.has(agent.cliType)}
+                selected={agent.id === selectedId}
+                onSelect={onSelect}
+              />
+            ))}
+          </div>
+        </div>
+      ))}
     </section>
   );
 }
@@ -336,7 +365,7 @@ export function CompanySection({ projectMeta }: { projectMeta: Map<string, Proje
             {/* The container sits outside: Radix's scroll viewport sizes to its content */}
             <div className="@container h-full">
               <ScrollArea className="h-full">
-                <div className="grid grid-cols-1 gap-3 pr-1 @5xl:grid-cols-2">
+                <div className="columns-1 gap-2 pr-1 @5xl:columns-2 @[110rem]:columns-3">
                   {rooms.map((room) => (
                     <RoomCard
                       key={room.projectId}

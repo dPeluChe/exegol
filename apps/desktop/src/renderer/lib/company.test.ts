@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 import type { AgentState, AttentionItem } from "../stores/agents";
 import { toolActivity } from "../stores/desk-activity";
-import { buildRooms, deskActivity, deskState, nextNeedsYou, todayStrip } from "./company";
+import type { ProjectWorkspace } from "../stores/workspace/types";
+import {
+  buildRooms,
+  deskActivity,
+  deskState,
+  groupByTab,
+  nextNeedsYou,
+  todayStrip,
+} from "./company";
 
 const agent = (over: Partial<AgentState> & { id: string }) =>
   ({
@@ -123,6 +131,26 @@ describe("todayStrip", () => {
       { ...ctx, outdated: new Set(["claude-code"]) },
     );
     expect(ids(strip.canWait)).toEqual(["a"]);
+  });
+});
+
+describe("groupByTab", () => {
+  const tab = (id: string, paneId: string) => ({
+    id,
+    label: id.toUpperCase(),
+    layout: { type: "pane", paneId },
+  });
+  const workspace = {
+    tabs: [tab("t1", "p1"), tab("t2", "p2")],
+    panes: { p1: { agentId: "calm" }, p2: { agentId: "urgent" } },
+  } as unknown as ProjectWorkspace;
+
+  it("orders tabs by their first desk and keeps sessions in no tab apart", () => {
+    const desks = [agent({ id: "urgent" }), agent({ id: "calm" }), agent({ id: "loose" })];
+    const groups = groupByTab(desks, workspace);
+    expect(groups.map((g) => g.tabId)).toEqual(["t2", "t1", null]);
+    expect(groups[0]?.label).toBe("T2");
+    expect(groups[2]?.desks.map((d) => d.id)).toEqual(["loose"]);
   });
 });
 
