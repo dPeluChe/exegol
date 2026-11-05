@@ -160,7 +160,7 @@ export const CLI_CATALOG: Partial<Record<string, CliEntry>> = {
   },
   cursor: {
     install: {
-      unix: "curl https://cursor.com/install -fsS | bash",
+      unix: CURL("https://cursor.com/install"),
       win: IRM("'https://cursor.com/install?win32=true'"),
     },
     update: "cursor-agent update",

@@ -49,9 +49,17 @@ describe("grokHistory", () => {
     });
   });
 
-  it("skips sessions with no prompt and those older than since", async () => {
+  it("skips a session with no prompt", async () => {
+    writeSession(FOLDER, "empty", {
+      last_active_at: "2026-11-05T00:40:46.866260Z",
+      num_chat_messages: 0,
+    });
+
+    expect(await grokHistory.list([REPO], 0)).toEqual([]);
+  });
+
+  it("skips a session older than since", async () => {
     const at = "2026-11-05T00:40:46.866260Z";
-    writeSession(FOLDER, "empty", { last_active_at: at, num_chat_messages: 0 });
     writeSession(FOLDER, "old", { last_active_at: at, num_chat_messages: 2 });
 
     const after = Date.parse(at) / 1000 + 60;

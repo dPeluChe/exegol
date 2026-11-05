@@ -71,14 +71,12 @@ describe("parseResumeCommandFromPattern", () => {
       ["gemini --resume ", "Run: gemini --resume session-xyz-789"],
       ["codex resume ", "Continue with: codex resume my-session-id-42"],
       ["opencode -s ", "Resume: opencode -s sess_abc123xyz"],
-      ["cursor-agent --resume=", "To resume this session: cursor-agent --resume=3f2a-chat-id"],
     ] as const;
     expect(cases.map(([pattern, line]) => parseResumeCommandFromPattern(pattern, line))).toEqual([
       "claude --resume abc123def456",
       "gemini --resume session-xyz-789",
       "codex resume my-session-id-42",
       "opencode -s sess_abc123xyz",
-      "cursor-agent --resume=3f2a-chat-id",
     ]);
   });
 

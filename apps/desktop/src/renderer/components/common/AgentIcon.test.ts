@@ -2,7 +2,7 @@ import { AGENT_CLI_TYPES } from "@exegol/shared";
 import { describe, expect, it } from "vitest";
 import { hasAgentIcon } from "./AgentIcon";
 
-// No license for their marks that covers bundling them: both stay on the letters fallback
+// Grok and Cursor: no license for their marks covers bundling them, so they use letters
 const LETTERS_ONLY = new Set<string>(["shell", "custom", "grok", "cursor"]);
 
 describe("agent icons", () => {

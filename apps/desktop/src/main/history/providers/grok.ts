@@ -12,7 +12,6 @@ const summarySchema = z.object({
   session_summary: z.string().nullish(),
   head_branch: z.string().nullish(),
   created_at: z.string().nullish(),
-  updated_at: z.string().nullish(),
   last_active_at: z.string().nullish(),
   num_chat_messages: z.number().nullish(),
 });
@@ -20,7 +19,7 @@ const summarySchema = z.object({
 const sessionsRoot = () => join(homedir(), ".grok", "sessions");
 
 const seconds = (iso: string | null | undefined): number | null => {
-  const ms = iso ? Date.parse(iso) : Number.NaN;
+  const ms = Date.parse(iso ?? "");
   return Number.isNaN(ms) ? null : Math.floor(ms / 1000);
 };
 
@@ -71,7 +70,7 @@ async function readSession(
     const summary = parseJson(await readFile(join(dir, "summary.json"), "utf8"), summarySchema);
     // A session that never took a prompt has nothing to resume
     if (!summary?.num_chat_messages) return null;
-    const endedAt = seconds(summary.last_active_at ?? summary.updated_at);
+    const endedAt = seconds(summary.last_active_at);
     if (endedAt === null || endedAt < since) return null;
     const { size } = await stat(join(dir, "updates.jsonl"));
     return {
