@@ -343,4 +343,9 @@ export const wave3Migrations: Migration[] = [
     CREATE INDEX IF NOT EXISTS idx_agents_claude_session ON agents(claude_session_id);
     DELETE FROM settings WHERE key = 'token_usage_import';`,
   },
+  {
+    // The repo a worktree was cut from: not the project root in a workspace of repos. Null: the root
+    id: "w3_035_worktree_repo_path",
+    sql: "ALTER TABLE worktrees ADD COLUMN repo_path TEXT;",
+  },
 ];

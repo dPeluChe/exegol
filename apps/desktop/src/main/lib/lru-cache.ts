@@ -24,7 +24,6 @@ export class AsyncLruCache<K, V> {
       this.cache.set(key, hit);
       return hit.value;
     }
-    if (hit) this.cache.delete(key);
     const pending = this.inflight.get(key);
     if (pending) return pending;
     let promise: Promise<V> | undefined;
@@ -33,6 +32,7 @@ export class AsyncLruCache<K, V> {
         const value = await factory();
         // Invalidated while it ran: the value predates the change, so it is not kept
         if (this.inflight.get(key) === promise) {
+          this.cache.delete(key);
           this.cache.set(key, { value, at: Date.now() });
           if (this.cache.size > this.maxSize) {
             const oldest = this.cache.keys().next().value;
@@ -46,6 +46,11 @@ export class AsyncLruCache<K, V> {
     })();
     this.inflight.set(key, promise);
     return promise;
+  }
+
+  /** What the key last held, past its TTL too, and when: never computes or touches the order */
+  peek(key: K): { value: V; at: number } | undefined {
+    return this.cache.get(key);
   }
 
   invalidateWhere(predicate: (key: K) => boolean): void {

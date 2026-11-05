@@ -65,7 +65,7 @@ const loggedStatus = new Map<string, string>();
 const statusLogLimit = createLogLimiter(10_000);
 
 /** Shells and full-screen TUIs: their escape sequences and status-like text read as "failed"/"waiting_input" */
-const SKIP_PARSING = new Set(["shell", "crush", "opencode", "kiro"]);
+const SKIP_PARSING = new Set(["shell", "crush", "opencode", "kiro", "grok"]);
 
 /** Tail length (chars) of scrollback used as the attention notification body. */
 const ATTENTION_TAIL_CHARS = 240;

@@ -15,6 +15,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Company chat renders Markdown (tables, lists, code) and its panel resizes with a bar; rooms and sessions list what needs you first, then the most recent
 - Company chat: the selected session reads as a chat beside its terminal, with messages from other agents and their delivery state; type at the prompt or queue for the turn end, answer a question with its buttons (the input waits meanwhile), copy a summary. Claude Code and Codex read from their transcripts, other CLIs from terminal text
 - Company replaces the Dashboard home: a room per project, a desk per session with its state, activity and badges, a Today strip, P for the next one that needs you, Enter to open it in its layout. Watching and the full session list stay as modes
+- GitHub in the top bar works in workspaces whose root has no remote: PRs and issues of every repo inside, grouped by repo with a filter, and tasks run in that repo's folder and worktree; with nothing to show, the button says why (no gh, not logged in, no remote)
+- Hold-to-talk dictation keeps listening briefly after the key comes up, so the last word is not cut
+- Two new agent CLIs: Grok (`grok`, sessions listed and resumed by id) and Cursor (`cursor-agent`), with YOLO, model and install or update from Settings
 - Dictation bench: term recall, whole-clip mode, cleaned text and a clip review script (dev tools)
 - Sidebar: open PRs and a needs-you dot per project; Edit project sets how much a project may interrupt (All, Only what needs me, Nothing); Activity shows warnings and the resource meters; Prompts lives in Project
 - Monitor > Usage: Global or per project, by CLI, model and session, models without a price apart, and a monthly limit per CLI that warns at 80% and 100%; budgets now warn after each import, without opening the page
@@ -28,6 +31,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Browser panes search from the address bar: `?telnyx`, or words that are not an address, open a Google search; `localhost:3000`, `example.com` and full URLs still go straight there
 
 ### Fixed
+- Browser pane: a failed load with an unparsable URL no longer crashes the pane
 - Browser full-page screenshots no longer repeat the visible area (seen at device sizes such as 390x844) and include pages that scroll inside their own app shell; fixed and sticky bars appear once
 - A pane's "Add a browser beside" / "Add a terminal beside" menu (globe or terminal icon in its corner toolbar) closed when the pointer moved down to it, so To the right and Below could not be clicked. The toolbar's Float button now shows only when the pane has something to float, as in its right-click menu
 - Knowledge: the digest's `trs ingest` runs tagged `TRS_AGENT=exegol`, so `trs stats --by-agent` lists it as exegol instead of mixing it with the commands you type

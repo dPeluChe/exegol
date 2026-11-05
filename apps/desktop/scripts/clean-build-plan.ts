@@ -104,6 +104,7 @@ const TEST_TMP_PREFIXES = [
   "git-status-test",
   "global-skills",
   "goose",
+  "grok",
   "history",
   "housekeeping",
   "icon",

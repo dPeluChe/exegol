@@ -14,7 +14,7 @@ export function ProjectSignals({ projectId }: { projectId: string }) {
       return !!agent && needsYou(agent, item);
     }),
   );
-  // Each project polled costs two `gh` calls, so only those with a session running
+  // Each project polled costs `gh` calls (main caps them per poll), so only those with a session
   const live = useAgentStore((s) =>
     Object.values(s.agents).some((a) => a.projectId === projectId && isLiveSession(a)),
   );

@@ -104,6 +104,8 @@ muestra cuáles encuentra y cómo instalar los demás.
 | Kilo Code | `kilocode` o `kilo` | no | sí |
 | Crush | `crush` | no | no |
 | Factory Droid | `droid` | sí | sí |
+| Grok | `grok` | sí | no |
+| Cursor | `cursor-agent` | sí | no |
 | Terminal | tu `$SHELL` | no | no |
 
 Cualquier otro comando se agrega como CLI personalizado. Un CLI que escribes en una terminal

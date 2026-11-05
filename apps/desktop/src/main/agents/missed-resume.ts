@@ -18,6 +18,8 @@ const NO_SESSION_MESSAGES: Record<string, RegExp> = {
   devin: /no sessions to continue/i,
   // From the binary: "Error: No sessions found in current directory."
   "factory-droid": /no sessions found in current directory/i,
+  // From the bundle: `--continue` exits 1 with "No previous chats found."
+  cursor: /no previous chats found/i,
 };
 const GENERIC_NO_SESSION =
   /no (previous |saved )?(sessions?|conversations?|threads?) (found|to (continue|resume))/i;

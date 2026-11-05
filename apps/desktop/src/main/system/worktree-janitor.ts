@@ -19,21 +19,17 @@ import {
   ALWAYS_CHANGED,
   checkoutBlocker,
   type GitRunner,
+  inRegisteredProject,
   parseWorktreeList,
   pathKey,
+  repoOf,
   runGit,
   splitNul,
 } from "../lib/worktree-safety";
 import { isPathInside } from "../security/path-guard";
 import { getAllProcessCwds } from "./ports";
 import { duBytes } from "./storage";
-import {
-  inUse,
-  projectRepoKeys,
-  repoOf,
-  TRASH_PREFIX,
-  worktreeDirs,
-} from "./worktree-housekeeping";
+import { inUse, projectRepoKeys, TRASH_PREFIX, worktreeDirs } from "./worktree-housekeeping";
 
 const JANITOR_MARKS_KEY = "worktree_janitor_marks";
 
@@ -108,7 +104,7 @@ function managedWorktrees(db: Database.Database, roots: readonly string[]) {
   return worktreeDirs(roots).flatMap(({ path, name }) => {
     if (name.startsWith(TRASH_PREFIX) || repos.has(pathKey(path))) return [];
     const repo = repoOf(path);
-    return repo && repos.has(pathKey(repo)) ? [{ path, repo }] : [];
+    return repo && inRegisteredProject(repo, repos) ? [{ path, repo }] : [];
   });
 }
 

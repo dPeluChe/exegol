@@ -16,7 +16,7 @@ vi.mock("./worktrees", () => ({
 }));
 
 import { runMigrations } from "../db/migrations";
-import { findWorktreeHolding, resolveSpawnTarget } from "./spawn-target";
+import { findReusableWorktree, findWorktreeHolding, resolveSpawnTarget } from "./spawn-target";
 
 const project = { id: "p1", name: "proj", path: "/repo" } as Project;
 
@@ -52,6 +52,15 @@ describe("resolveSpawnTarget", () => {
     expect(
       resolveSpawnTarget(db, project, { useWorktree: true, branchName: "exegol/taken" }),
     ).toEqual({ cwd: "/root/exegol-taken", branchName: "exegol/taken", reused: true });
+  });
+
+  it("reuses only a worktree of the asked repo: repos in a project can share a branch", () => {
+    db.prepare(
+      `INSERT INTO worktrees (id, project_id, agent_id, path, repo_path, branch_name)
+       VALUES ('w1', 'p1', NULL, '/wt/web', '/w/web', 'github/pr-7')`,
+    ).run();
+    expect(findReusableWorktree(db, "p1", "github/pr-7", "/w/api")).toBeNull();
+    expect(findReusableWorktree(db, "p1", "github/pr-7", "/w/web")?.id).toBe("w1");
   });
 
   it("never reuses a worktree the housekeeping sweep is removing", () => {

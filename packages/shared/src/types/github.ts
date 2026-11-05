@@ -12,6 +12,9 @@ export type GitHubIssue = {
 
 export type GitHubCi = "failing" | "pending" | "passing" | "none";
 
+/** A repo of a project: `name` is owner/repo, `folder` is relative to the project ("" the root) */
+export type GitHubRepoRef = { name: string; folder: string };
+
 export type GitHubPr = {
   number: number;
   title: string;
@@ -19,11 +22,33 @@ export type GitHubPr = {
   branch: string;
   draft: boolean;
   ci: GitHubCi;
+  repo: GitHubRepoRef;
 };
 
-export type GitHubOpenIssue = Pick<GitHubIssue, "number" | "title" | "url" | "labels">;
+export type GitHubOpenIssue = Pick<GitHubIssue, "number" | "title" | "url" | "labels"> & {
+  repo: GitHubRepoRef;
+};
 
-export type GitHubOverview = { prs: GitHubPr[]; issues: GitHubOpenIssue[] };
+/** `pending`: not asked yet, opening the menu asks. `sessionIds`: live sessions working in it */
+export type GitHubRepoStatus = GitHubRepoRef & {
+  status: "ok" | "failed" | "pending";
+  sessionIds: string[];
+};
+
+export type GitHubUnavailable = "no-gh" | "not-logged-in" | "no-remote" | "unreachable";
+
+export type GitHubOverview = {
+  prs: GitHubPr[];
+  issues: GitHubOpenIssue[];
+  repos: GitHubRepoStatus[];
+  /** Why there is nothing to show; absent while any repo answers */
+  unavailable?: GitHubUnavailable;
+};
 
 /** A PR or issue to hand to a session; `fixCi` adds the failed check's log */
-export type GitHubTaskRef = { kind: "pr" | "issue"; number: number; fixCi?: boolean };
+export type GitHubTaskRef = {
+  kind: "pr" | "issue";
+  number: number;
+  fixCi?: boolean;
+  repo: GitHubRepoRef;
+};

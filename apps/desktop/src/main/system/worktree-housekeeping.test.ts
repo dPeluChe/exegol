@@ -10,7 +10,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { isAbsolute, join } from "node:path";
+import { dirname, isAbsolute, join } from "node:path";
 import Database from "libsql";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { runMigrations } from "../db/migrations";
@@ -101,6 +101,15 @@ describe("sweepOrphanWorktrees", () => {
     expect(await sweep()).toMatchObject({ removed: 1, kept: 0 });
     expect(existsSync(path)).toBe(false);
     expect(rowExists(id)).toBe(false);
+  });
+
+  it("removes one of a repo held inside a project, whose root is no repo", async () => {
+    const { db, repo, worktree, row, sweep } = setup();
+    db.prepare("UPDATE projects SET path = ?").run(dirname(repo));
+    const path = worktree("inside");
+    row("inside", path);
+    expect(await sweep()).toMatchObject({ removed: 1, kept: 0 });
+    expect(existsSync(path)).toBe(false);
   });
 
   it("keeps a worktree with uncommitted work", async () => {
@@ -207,6 +216,17 @@ describe("sweepOrphanWorktrees", () => {
     rmSync(path, { recursive: true });
     expect((await sweep()).droppedRows).toBe(1);
     expect(rowExists(id)).toBe(false);
+    expect(git(repo, "worktree", "list")).not.toContain(path);
+  });
+
+  it("prunes in the repo the worktree was cut from, not the project root", async () => {
+    const { db, repo, worktree, row, sweep } = setup();
+    const path = worktree("inner");
+    const id = row("inner", path);
+    db.prepare("UPDATE projects SET path = ? WHERE id = 'p1'").run(dirname(repo));
+    db.prepare("UPDATE worktrees SET repo_path = ? WHERE id = ?").run(repo, id);
+    rmSync(path, { recursive: true });
+    await sweep();
     expect(git(repo, "worktree", "list")).not.toContain(path);
   });
 

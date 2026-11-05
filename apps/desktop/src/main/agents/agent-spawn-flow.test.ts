@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runMigrations } from "../db/migrations";
 import { createAgent } from "../db/queries";
 import type { LocalSession } from "../history/types";
-import { beforeAgentPrefix, buildPtyInvocation } from "./agent-spawn-flow";
+import { beforeAgentPrefix, buildPtyInvocation, setupAgentCwd } from "./agent-spawn-flow";
 import type { AgentProviderRegistry } from "./registry";
 
 const mocks = vi.hoisted(() => ({
@@ -86,6 +86,23 @@ const session = (sessionId: string): LocalSession => ({
   endedAt: null,
   version: null,
   sizeBytes: 0,
+});
+
+describe("setupAgentCwd", () => {
+  it("falls back to the worktree's repo, not a project root that is no repo", () => {
+    const db = new Database(":memory:");
+    runMigrations(db);
+    db.prepare("INSERT INTO projects (id, name, path) VALUES ('p1', 'P', '/w')").run();
+    const config: AgentCreate = {
+      projectId: "p1",
+      cliType: "claude-code",
+      useWorktree: true,
+      worktreeRepo: "/w/api",
+    };
+    const agent = createAgent(db, config);
+    const project = { path: "/w", name: "P" };
+    expect(setupAgentCwd(db, agent, config, project, new Map(), new Map()).cwd).toBe("/w/api");
+  });
 });
 
 describe("buildPtyInvocation", () => {

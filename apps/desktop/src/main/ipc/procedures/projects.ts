@@ -392,7 +392,7 @@ export const projectRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const wt = ctx.db.prepare("SELECT * FROM worktrees WHERE id = ?").get(input.worktreeId) as
-        | { id: string; path: string; branch_name: string }
+        | { id: string; path: string; repo_path: string | null; branch_name: string }
         | undefined;
       if (!wt) return { success: false, message: "Worktree not found" };
 
@@ -405,14 +405,14 @@ export const projectRouter = router({
 
       // Run archive hook before deletion (T60: exegol.yaml)
       try {
-        await runArchiveHook(project.path, wt.path, wt.branch_name);
+        await runArchiveHook(wt.repo_path ?? project.path, wt.path, wt.branch_name);
       } catch {
         /* Non-fatal */
       }
 
       try {
         removeManagedWorktree(
-          project.path,
+          wt.repo_path ?? project.path,
           getWorktreeName(wt.branch_name),
           wt.path,
           input.force ?? false,
