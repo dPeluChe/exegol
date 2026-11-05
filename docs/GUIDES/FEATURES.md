@@ -63,8 +63,8 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
 
 ## Agents
 
-- **14 built-in CLIs**: Claude Code, Codex, Gemini, Antigravity, Devin, Aider, Goose, OpenCode,
-  Amp, Kiro, Kilo Code, Crush, Factory Droid and a plain shell, plus your own custom CLI.
+- **16 built-in CLIs**: Claude Code, Codex, Gemini, Antigravity, Devin, Aider, Goose, OpenCode,
+  Amp, Kiro, Kilo Code, Crush, Factory Droid, Grok, Cursor and a plain shell, plus your own custom CLI.
   Settings enables, configures or installs each one.
 - **Sessions that survive**: terminals run in a detached PTY process, so a reload, a crash or an
   update does not kill your agents; the app reattaches and replays the screen. If the terminals

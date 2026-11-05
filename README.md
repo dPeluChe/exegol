@@ -99,6 +99,8 @@ Settings > Agent CLIs shows which ones it finds and how to install the rest.
 | Kilo Code | `kilocode` or `kilo` | no | yes |
 | Crush | `crush` | no | no |
 | Factory Droid | `droid` | yes | yes |
+| Grok | `grok` | yes | no |
+| Cursor | `cursor-agent` | yes | no |
 | Terminal | your `$SHELL` | no | no |
 
 Add any other command as a custom CLI. A CLI typed in a plain terminal is picked up as an agent

@@ -67,6 +67,7 @@ function taskLine(text: string): string | null {
     .replace(/#+\s*/g, "")
     .replace(/\s+/g, " ")
     .trim();
-  const cliNames = /^(claude code|codex|devin|terminal|shell|antigravity|opencode|gemini)$/i;
+  const cliNames =
+    /^(claude code|codex|devin|terminal|shell|antigravity|opencode|gemini|grok|cursor)$/i;
   return clean && !cliNames.test(clean) ? clean : null;
 }
