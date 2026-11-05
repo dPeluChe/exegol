@@ -14,7 +14,8 @@ import { parseJson } from "../../lib/parse-json";
 import { checkRollupSchema, ciState, failingChecks } from "./checks";
 
 const LIST_LIMIT = "30";
-const CACHE_MS = 120_000;
+// Under the 2 min poll, or every other poll hits the cache and data refreshes at 4 min
+const CACHE_MS = 110_000;
 const GH_TIMEOUT_MS = 20_000;
 const GH_MAX_BUFFER = 5 * 1024 * 1024;
 const LOG_TIMEOUT_MS = 30_000;
@@ -93,7 +94,7 @@ export function parseOverview(
 }
 
 /** gh fails on a repo with issues turned off: no issues, not a repo that cannot be read */
-export const issuesDisabled = (err: { stderr?: unknown }) =>
+const issuesDisabled = (err: { stderr?: unknown }) =>
   /has disabled issues/.test(String(err.stderr ?? ""));
 
 /** gh exits 4 when it needs a login; a rejected GH_TOKEN comes back as a plain 401 */
@@ -102,23 +103,10 @@ export function isAuthFailure(err: { code?: unknown; stderr?: unknown }): boolea
 }
 
 const overviewCache = new AsyncLruCache<string, RepoResult>(256, CACHE_MS);
-// Outlives the cache: a repo not polled now still shows what it last said
-const lastResults = new Map<string, { at: number; result: RepoResult }>();
-const MAX_LAST_RESULTS = 256;
 // Sidebar polls start together on launch: app-wide, however many projects ask
 const ghSlot = createLimiter(8);
 
 const repoKey = ({ repo, folder }: Pick<GhTarget, "repo" | "folder">) => `${repo}\0${folder}`;
-
-function remember(key: string, result: RepoResult): RepoResult {
-  lastResults.delete(key);
-  lastResults.set(key, { at: Date.now(), result });
-  if (lastResults.size > MAX_LAST_RESULTS) {
-    const oldest = lastResults.keys().next().value;
-    if (oldest !== undefined) lastResults.delete(oldest);
-  }
-  return result;
-}
 
 /** Open PRs and issues of one repo. Cached: every view of the bar asks */
 function loadRepo(target: GhTarget): Promise<RepoResult> {
@@ -134,9 +122,8 @@ function loadRepo(target: GhTarget): Promise<RepoResult> {
         target,
       ),
     );
-  const key = repoKey(target);
   const ref = { name: target.repo, folder: target.folder };
-  return overviewCache.getOrCompute(key, () =>
+  return overviewCache.getOrCompute(repoKey(target), () =>
     Promise.all([
       list("pr", "number,title,url,headRefName,isDraft,statusCheckRollup"),
       list("issue", "number,title,url,labels").catch((err) => {
@@ -145,8 +132,7 @@ function loadRepo(target: GhTarget): Promise<RepoResult> {
       }),
     ])
       .then(([prs, issues]): RepoResult => parseOverview(prs, issues, ref) ?? { failed: "other" })
-      .catch((err): RepoResult => ({ failed: isAuthFailure(err) ? "auth" : "other" }))
-      .then((result) => remember(key, result)),
+      .catch((err): RepoResult => ({ failed: isAuthFailure(err) ? "auth" : "other" })),
   );
 }
 
@@ -212,14 +198,15 @@ export async function projectOverview(
   const due = dueRepos(targets, {
     full,
     hot: new Set(sessions.keys()),
-    lastAt: (t) => lastResults.get(repoKey(t))?.at,
+    lastAt: (t) => overviewCache.peek(repoKey(t))?.at,
     now: Date.now(),
   });
   await mapWithConcurrency(due, REPOS_AT_ONCE, loadRepo);
   return mergeOverview(
     targets.map((t) => ({
       ref: { name: t.repo, folder: t.folder },
-      result: lastResults.get(repoKey(t))?.result,
+      // Past its TTL too: a repo not polled now still shows what it last said
+      result: overviewCache.peek(repoKey(t))?.value,
       sessionIds: sessions.get(t.folder) ?? [],
     })),
   );

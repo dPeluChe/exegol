@@ -2,6 +2,7 @@ import type {
   GitHubOpenIssue,
   GitHubOverview,
   GitHubPr,
+  GitHubRepoRef,
   GitHubRepoStatus,
   GitHubUnavailable,
 } from "@exegol/shared";
@@ -12,6 +13,9 @@ export const UNAVAILABLE_TEXT: Record<GitHubUnavailable, { label: string; title:
   "no-remote": { label: "No remote", title: "No GitHub remote in this project" },
   unreachable: { label: "Offline", title: "GitHub did not answer" },
 };
+
+export const sameRepo = (a: GitHubRepoRef, b: GitHubRepoRef) =>
+  a.folder === b.folder && a.name === b.name;
 
 export type RepoGroup = { repo: GitHubRepoStatus; prs: GitHubPr[]; issues: GitHubOpenIssue[] };
 
@@ -24,7 +28,7 @@ export function groupByRepo(overview: GitHubOverview, filter: string): RepoGroup
   const hit = (text: string) => text.toLowerCase().includes(q);
   const groups = overview.repos.map((repo): RepoGroup => {
     const mine = <T extends GitHubPr | GitHubOpenIssue>(items: T[]) =>
-      items.filter((i) => i.repo.folder === repo.folder && i.repo.name === repo.name);
+      items.filter((i) => sameRepo(i.repo, repo));
     const prs = mine(overview.prs);
     const issues = mine(overview.issues);
     if (!q || hit(repo.name) || hit(repo.folder)) return { repo, prs, issues };

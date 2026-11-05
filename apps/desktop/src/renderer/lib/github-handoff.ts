@@ -30,7 +30,7 @@ export async function startTaskInNewTab(
 }
 
 export function taskLabel({ kind, number, fixCi, repo }: GitHubTaskRef): string {
-  const name = repo?.folder ? `${repo.folder} ` : "";
+  const name = repo.folder ? `${repo.folder} ` : "";
   if (fixCi) return `Fix CI on ${name}#${number}`;
   return `${name}${kind === "pr" ? "PR" : "Issue"} #${number}`;
 }

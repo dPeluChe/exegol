@@ -18,13 +18,14 @@ import {
   taskBranch,
 } from "../../integrations/github/overview";
 import {
+  forgetProjectRepos,
   type ProjectRepo,
   parseGitHubRemote,
   projectRepos,
   sessionsByRepo,
 } from "../../integrations/github/repos";
 import { logger } from "../../lib/logger";
-import { pathKey, repoOf } from "../../lib/worktree-safety";
+import { pathKey } from "../../lib/worktree-safety";
 import { getApiKey } from "../../security/keystore";
 import { publicProcedure, router } from "../trpc";
 
@@ -47,7 +48,7 @@ function buildGhEnv(db: Parameters<typeof getApiKey>[0]): Record<string, string 
 function resolveProjectRepo(
   db: Parameters<typeof getProject>[0],
   projectId: string,
-): { owner: string; repo: string; projectPath: string } {
+): { repoSlug: string; projectPath: string } {
   const project = getProject(db, projectId);
   if (!project) {
     throw new TRPCError({ code: "NOT_FOUND", message: `Project ${projectId} not found` });
@@ -58,14 +59,14 @@ function resolveProjectRepo(
       message: "Project has no git remote configured",
     });
   }
-  const [owner, repo] = parseGitHubRemote(project.gitRemote)?.split("/") ?? [];
-  if (!owner || !repo) {
+  const repoSlug = parseGitHubRemote(project.gitRemote);
+  if (!repoSlug) {
     throw new TRPCError({
       code: "PRECONDITION_FAILED",
       message: "Project remote is not a GitHub repo",
     });
   }
-  return { owner, repo, projectPath: project.path };
+  return { repoSlug, projectPath: project.path };
 }
 
 const targetOf = (repo: ProjectRepo, env: NodeJS.ProcessEnv): GhTarget => ({
@@ -80,14 +81,11 @@ function liveSessionsByRepo(
   projectId: string,
   repos: ProjectRepo[],
 ): Map<string, string[]> {
-  const sessions = listLiveProjectSessions(db, projectId).map(({ id, cwd, worktreePath }) => {
-    const worktreeRepo = worktreePath ? repoOf(worktreePath) : null;
-    return {
-      id,
-      cwd: pathKey(hookCwdOf(id) ?? cwd),
-      worktreeRepo: worktreeRepo ? pathKey(worktreeRepo) : null,
-    };
-  });
+  const sessions = listLiveProjectSessions(db, projectId).map(({ id, cwd, worktreeRepo }) => ({
+    id,
+    cwd: pathKey(hookCwdOf(id) ?? cwd),
+    worktreeRepo: worktreeRepo ? pathKey(worktreeRepo) : null,
+  }));
   return sessionsByRepo(
     sessions,
     repos.map((r) => ({ folder: r.folder, path: pathKey(r.path) })),
@@ -97,15 +95,14 @@ function liveSessionsByRepo(
 async function repoOfTask(
   db: Parameters<typeof getProject>[0],
   projectId: string,
-  ref: GitHubRepoRef | undefined,
+  ref: GitHubRepoRef,
 ): Promise<ProjectRepo> {
   const project = getProject(db, projectId);
   if (!project) {
     throw new TRPCError({ code: "NOT_FOUND", message: `Project ${projectId} not found` });
   }
   const repos = await projectRepos(project.path);
-  const only = repos.length === 1 ? repos[0] : undefined;
-  const repo = ref ? repos.find((r) => r.name === ref.name && r.folder === ref.folder) : only;
+  const repo = repos.find((r) => r.name === ref.name && r.folder === ref.folder);
   if (!repo) {
     throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Repo not found in this project" });
   }
@@ -117,7 +114,7 @@ const taskInput = z.object({
   kind: z.enum(["pr", "issue"]),
   number: z.number().int().positive(),
   fixCi: z.boolean().optional(),
-  repo: z.object({ name: z.string().max(200), folder: z.string().max(1000) }).optional(),
+  repo: z.object({ name: z.string().max(200), folder: z.string().max(1000) }),
 });
 
 async function taskText(
@@ -143,6 +140,7 @@ export const githubRouter = router({
     .query(async ({ ctx, input }) => {
       if (!(await detectGhCli())) return noOverview("no-gh");
       const project = getProject(ctx.db, input.projectId);
+      if (project && input.full) forgetProjectRepos(project.path);
       const repos = project ? await projectRepos(project.path) : [];
       if (repos.length === 0) return noOverview("no-remote");
       const env = buildGhEnv(ctx.db);
@@ -184,8 +182,7 @@ export const githubRouter = router({
   listIssues: publicProcedure
     .input(z.object({ projectId: z.string() }))
     .query(async ({ ctx, input }) => {
-      const { owner, repo, projectPath } = resolveProjectRepo(ctx.db, input.projectId);
-      const repoSlug = `${owner}/${repo}`;
+      const { repoSlug, projectPath } = resolveProjectRepo(ctx.db, input.projectId);
 
       try {
         const { stdout } = await execFileAsync(
@@ -253,8 +250,7 @@ export const githubRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const { owner, repo, projectPath } = resolveProjectRepo(ctx.db, input.projectId);
-      const repoSlug = `${owner}/${repo}`;
+      const { repoSlug, projectPath } = resolveProjectRepo(ctx.db, input.projectId);
       const action = input.state === "closed" ? "close" : "reopen";
 
       try {
@@ -287,8 +283,7 @@ export const githubRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const { owner, repo, projectPath } = resolveProjectRepo(ctx.db, input.projectId);
-      const repoSlug = `${owner}/${repo}`;
+      const { repoSlug, projectPath } = resolveProjectRepo(ctx.db, input.projectId);
 
       const args = ["issue", "edit", String(input.issueNumber), "--repo", repoSlug];
       for (const label of input.addLabels) {

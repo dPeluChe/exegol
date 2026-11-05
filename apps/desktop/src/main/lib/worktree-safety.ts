@@ -1,7 +1,8 @@
 import { execFile } from "node:child_process";
 import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
-import { dirname, isAbsolute, join, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { promisify } from "node:util";
+import { isPathInside } from "../security/path-guard";
 
 // No electron or logger imports: scripts/clean-build.ts uses this too.
 const execFileAsync = promisify(execFile);
@@ -81,9 +82,7 @@ export function repoOf(dir: string): string | null {
 /** A checkout key that is a registered project, or a repo held inside one */
 export function inRegisteredProject(repo: string, projectKeys: ReadonlySet<string>): boolean {
   const key = pathKey(repo);
-  if (projectKeys.has(key)) return true;
-  for (const project of projectKeys) if (key.startsWith(project + sep)) return true;
-  return false;
+  return [...projectKeys].some((project) => isPathInside(project, key));
 }
 
 export type GitRunner = (args: string[], cwd: string, timeoutMs?: number) => Promise<string>;

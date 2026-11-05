@@ -146,7 +146,7 @@ export async function sweepOrphanWorktrees(
   const busy = inUse(db);
   const rows = db
     .prepare(
-      `SELECT w.id, w.path, w.branch_name, w.created_at, p.path AS repo,
+      `SELECT w.id, w.path, w.branch_name, w.created_at, COALESCE(w.repo_path, p.path) AS repo,
               MAX(a.alias) AS alias,
               COUNT(a.id) AS agents, COUNT(a.archived_at) AS archived,
               MAX(a.archived_at) AS last_archived,

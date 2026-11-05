@@ -1,6 +1,6 @@
 import type { GitHubOverview, GitHubRepoStatus } from "@exegol/shared";
 import { describe, expect, it } from "vitest";
-import { groupByRepo, reposNotShown, sessionsInRepoFirst } from "./github-repos";
+import { groupByRepo, sessionsInRepoFirst } from "./github-repos";
 
 const status = (folder: string, extra?: Partial<GitHubRepoStatus>): GitHubRepoStatus => ({
   name: `o/${folder}`,
@@ -56,12 +56,5 @@ describe("sessionsInRepoFirst", () => {
   it("moves the repo's sessions up and keeps the order", () => {
     const sessions = [{ id: "a" }, { id: "b" }, { id: "c" }];
     expect(sessionsInRepoFirst(sessions, ["c", "b"]).map((s) => s.id)).toEqual(["b", "c", "a"]);
-  });
-});
-
-describe("reposNotShown", () => {
-  it("lists failures and counts what was not asked yet", () => {
-    const repos = [status("a", { status: "failed" }), status("b", { status: "pending" })];
-    expect(reposNotShown(repos)).toEqual({ failed: [repos[0]], pending: 1 });
   });
 });

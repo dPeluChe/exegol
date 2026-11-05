@@ -45,11 +45,10 @@ export type GitHubOverview = {
   unavailable?: GitHubUnavailable;
 };
 
-/** A PR or issue to hand to a session; `fixCi` adds the failed check's log. `repo` is required
- *  by main when the project holds more than one */
+/** A PR or issue to hand to a session; `fixCi` adds the failed check's log */
 export type GitHubTaskRef = {
   kind: "pr" | "issue";
   number: number;
   fixCi?: boolean;
-  repo?: GitHubRepoRef;
+  repo: GitHubRepoRef;
 };

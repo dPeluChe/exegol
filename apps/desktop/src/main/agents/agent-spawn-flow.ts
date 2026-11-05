@@ -10,7 +10,6 @@ import { childEnv } from "../lib/child-env";
 import { commandShape } from "../lib/command-shape";
 import { PermanentError } from "../lib/errors";
 import { logger } from "../lib/logger";
-import { repoOf } from "../lib/worktree-safety";
 import { loadLifecycleConfig } from "../lifecycle/loader";
 import {
   resolveMcpShimPath,
@@ -86,7 +85,7 @@ function joinWorktree(
     dbId: wt.id,
     worktreeName: getWorktreeName(wt.branchName),
     worktreePath: wt.path,
-    repoPath: repoOf(wt.path) ?? repoPath,
+    repoPath: wt.repoPath ?? repoPath,
   });
 }
 
@@ -169,6 +168,7 @@ export function setupAgentCwd(
       projectId: agent.projectId,
       agentId: agent.id,
       path: wtInfo.path,
+      repoPath,
       branchName: wtInfo.branchName,
       autoCleanup: true,
     });

@@ -20,6 +20,7 @@ import { startTaskInNewTab, taskLabel } from "../../lib/github-handoff";
 import {
   groupByRepo,
   reposNotShown,
+  sameRepo,
   sessionsInRepoFirst,
   UNAVAILABLE_TEXT,
 } from "../../lib/github-repos";
@@ -108,7 +109,7 @@ export function GitHubMenu() {
               onDone={close}
             />
           ) : (
-            <TaskList overview={data} loading={loadingAll} onPick={setMenu} />
+            <TaskList overview={data} manyRepos={manyRepos} loading={loadingAll} onPick={setMenu} />
           )}
         </div>
       )}
@@ -117,20 +118,22 @@ export function GitHubMenu() {
 }
 
 function sessionsOfRepo(overview: GitHubOverview, { repo }: GitHubTaskRef): string[] {
-  const held = overview.repos.find((r) => r.folder === repo?.folder && r.name === repo.name);
+  const held = overview.repos.find((r) => sameRepo(r, repo));
   return held?.sessionIds ?? [];
 }
 
 function TaskList({
   overview,
+  manyRepos,
   loading,
   onPick,
 }: {
   overview: GitHubOverview;
+  manyRepos: boolean;
   loading: boolean;
   onPick: (task: GitHubTaskRef) => void;
 }) {
-  if (overview.repos.length > 1) {
+  if (manyRepos) {
     return <RepoGroups overview={overview} loading={loading} onPick={onPick} />;
   }
   return (
@@ -310,7 +313,7 @@ function TargetPicker({
   const clis = useLaunchableProviders().filter(takesTask);
   const [busy, setBusy] = useState(false);
   const label = taskLabel(task);
-  const repoName = task.repo?.folder || task.repo?.name;
+  const repoName = task.repo.folder || task.repo.name;
 
   const run = async (action: () => Promise<void>) => {
     setBusy(true);

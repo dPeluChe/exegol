@@ -4,7 +4,7 @@ import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
 
 const overviewKey = (projectId: string | null) => ["github-overview", projectId];
 
-// main caches it 2 min and picks which repos to ask; `unavailable` asks less, it rarely changes
+// main caches it under 2 min and picks which repos to ask; `unavailable` asks less, it rarely changes
 export function useGitHubOverview(projectId: string | null) {
   return useQuery({
     queryKey: overviewKey(projectId),
@@ -14,7 +14,7 @@ export function useGitHubOverview(projectId: string | null) {
   });
 }
 
-/** Every repo of the project, while the menu is open; the answer feeds the sidebar and the bar */
+/** Every repo of the project, once per menu open; the answer feeds the sidebar and the bar */
 export function useFullGitHubOverview(projectId: string | null, enabled: boolean) {
   const queryClient = useQueryClient();
   return useQuery({
@@ -25,7 +25,6 @@ export function useFullGitHubOverview(projectId: string | null, enabled: boolean
       return full;
     },
     enabled: enabled && !!projectId,
-    refetchInterval: enabled ? 120_000 : false,
   });
 }
 

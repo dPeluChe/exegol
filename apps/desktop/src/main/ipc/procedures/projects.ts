@@ -48,7 +48,6 @@ import { runArchiveHook } from "../../hooks/project-hooks";
 import { openInIde, resolveIde } from "../../ide/opener";
 import { runNative } from "../../lib/concurrency";
 import { logger } from "../../lib/logger";
-import { repoOf } from "../../lib/worktree-safety";
 import { isPathAllowed } from "../../security/path-guard";
 import {
   adoptDetectedIcon,
@@ -393,7 +392,7 @@ export const projectRouter = router({
     )
     .mutation(async ({ ctx, input }) => {
       const wt = ctx.db.prepare("SELECT * FROM worktrees WHERE id = ?").get(input.worktreeId) as
-        | { id: string; path: string; branch_name: string }
+        | { id: string; path: string; repo_path: string | null; branch_name: string }
         | undefined;
       if (!wt) return { success: false, message: "Worktree not found" };
 
@@ -406,14 +405,14 @@ export const projectRouter = router({
 
       // Run archive hook before deletion (T60: exegol.yaml)
       try {
-        await runArchiveHook(project.path, wt.path, wt.branch_name);
+        await runArchiveHook(wt.repo_path ?? project.path, wt.path, wt.branch_name);
       } catch {
         /* Non-fatal */
       }
 
       try {
         removeManagedWorktree(
-          repoOf(wt.path) ?? project.path,
+          wt.repo_path ?? project.path,
           getWorktreeName(wt.branch_name),
           wt.path,
           input.force ?? false,

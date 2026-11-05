@@ -219,6 +219,17 @@ describe("sweepOrphanWorktrees", () => {
     expect(git(repo, "worktree", "list")).not.toContain(path);
   });
 
+  it("prunes in the repo the worktree was cut from, not the project root", async () => {
+    const { db, repo, worktree, row, sweep } = setup();
+    const path = worktree("inner");
+    const id = row("inner", path);
+    db.prepare("UPDATE projects SET path = ? WHERE id = 'p1'").run(dirname(repo));
+    db.prepare("UPDATE worktrees SET repo_path = ? WHERE id = ?").run(repo, id);
+    rmSync(path, { recursive: true });
+    await sweep();
+    expect(git(repo, "worktree", "list")).not.toContain(path);
+  });
+
   it("removes a clean, pushed folder with no row; keeps unpushed ones, plain folders, and finishes a trash", async () => {
     const { wtRoot, worktree, sweep } = setup();
     const clean = worktree("norow");

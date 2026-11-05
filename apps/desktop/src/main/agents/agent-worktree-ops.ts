@@ -10,7 +10,6 @@ import { getAppSettings } from "../db/queries/settings";
 import { invalidateProjectDiff } from "../ipc/procedures/diff-helpers";
 import { runNative } from "../lib/concurrency";
 import { logger } from "../lib/logger";
-import { repoOf } from "../lib/worktree-safety";
 import { loadLifecycleConfig, runLifecycleScript } from "../lifecycle/loader";
 import { coreRust } from "./spawn-env";
 import { announceSave, saveWorktreeWork } from "./worktree-save";
@@ -41,7 +40,7 @@ export function hydrateTrackedWorktree(
     dbId: wt.id,
     worktreeName: getWorktreeName(wt.branchName),
     worktreePath: wt.path,
-    repoPath: repoOf(wt.path) ?? project.path,
+    repoPath: wt.repoPath ?? project.path,
   });
 }
 

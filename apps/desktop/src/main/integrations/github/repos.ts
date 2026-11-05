@@ -9,7 +9,7 @@ const MAX_DEPTH = 4;
 const MAX_DIRS = 2000;
 const MAX_REPOS = 60;
 const FS_CONCURRENCY = 8;
-const SCAN_TTL_MS = 5 * 60_000;
+const SCAN_TTL_MS = 30 * 60_000;
 
 export interface ProjectRepo {
   /** owner/repo */
@@ -109,6 +109,11 @@ const reposCache = new AsyncLruCache<string, ProjectRepo[]>(64, SCAN_TTL_MS);
  *  Read from disk: `projects.git_remote` is set once at import and misses later remotes */
 export function projectRepos(projectPath: string): Promise<ProjectRepo[]> {
   return reposCache.getOrCompute(projectPath, () => discover(projectPath));
+}
+
+/** The menu opened: the next read walks the disk again, background polls need not */
+export function forgetProjectRepos(projectPath: string): void {
+  reposCache.invalidateWhere((key) => key === projectPath);
 }
 
 export interface SessionFolder {

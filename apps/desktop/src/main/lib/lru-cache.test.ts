@@ -57,4 +57,17 @@ describe("AsyncLruCache", () => {
     expect(await second).toBe(2);
     expect(await cache.getOrCompute("k", async () => 9)).toBe(2);
   });
+
+  it("peek keeps an expired value until its replacement lands", async () => {
+    vi.useFakeTimers();
+    const cache = new AsyncLruCache<string, number>(4, 1_000);
+    await cache.getOrCompute("k", async () => 1);
+    vi.advanceTimersByTime(2_000);
+    const next = deferred<number>();
+    const refresh = cache.getOrCompute("k", () => next.promise);
+    expect(cache.peek("k")?.value).toBe(1);
+    next.resolve(2);
+    await refresh;
+    expect(cache.peek("k")?.value).toBe(2);
+  });
 });
