@@ -647,6 +647,15 @@ exchange-bus MVP only, no headless council executions. Absorbs:
 - [ ] Raw capture test: `capture.ts` turns on echo cancellation, noise suppression and auto gain. Record raw and processed pairs behind a dev flag; `SPEECH_RMS` assumes auto gain
 - Skipped, with reasons in `docs/TASK_COMPLETED/2611.md`: Metal/GGUF, CoreML, more threads, LLM refiner, full pass at stop
 
+### T216: Follow-ups from Grok, Cursor and GitHub sub repos `added: 2026-11-05`
+
+- [ ] One trait table for TUI CLIs in `packages/shared/src/types/agent.ts`: `SKIP_PARSING`, `INTERACTIVE_CLI_TYPES` and `CANVAS_ONLY_CLI_TYPES` are kept by hand
+- [ ] Grok and Cursor, once tried in a live session: release source, interrupt key, model roles, Cursor history, MCP
+- [ ] GitHub token in Settings: `apikey_github` is read but nothing saves it, and PR watch and agents never get `GH_TOKEN`
+- [ ] `listIssues` (Tasks section) reads only the root remote
+- [ ] One `gh api graphql` query per poll instead of two `gh` processes per repo
+- [ ] Inner repos: a new session from an ended pane whose worktree row is gone starts at the project root; `beforeAgent` reads the root while teardown reads the repo
+
 ### T215: Voice orchestrator, one conversation over every project `added: 2026-11-05`
 **Priority**: P3 | **Effort**: L | **Source**: Antonio, after the dictation review
 Talk to Exegol one to one and let it route work to each project and session. An always-open mic makes sense here, not for dictation, and only with a local wake word or push to talk, a visible listening state, and nothing stored or sent before it. Builds on Company (who is doing what) and agent messages (delivery at turn boundaries). Open: what routes the request, and how a wrong target is caught before it reaches an agent.
