@@ -3,7 +3,7 @@ import { Button, cn, Input } from "@exegol/ui";
 import { useState } from "react";
 import { useBudgetStatus, useUpsertBudget } from "../../../hooks/use-trpc";
 import { formatCost, formatTokens } from "../../../lib/format";
-import { thresholdBarColor, thresholdColor } from "./resource-format";
+import { limitBarColor, limitTextColor } from "./resource-format";
 
 function formatByType(value: number, limitType: BudgetLimitType): string {
   return limitType === "dollars" ? formatCost(value) : formatTokens(value);
@@ -110,11 +110,11 @@ function BudgetRow({ projectId, period }: { projectId: string; period: BudgetPer
           </p>
           <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-bg-tertiary">
             <div
-              className={cn("h-full rounded-full transition-all", thresholdBarColor(percent))}
+              className={cn("h-full rounded-full transition-all", limitBarColor(percent))}
               style={{ width: `${Math.min(percent, 100)}%` }}
             />
           </div>
-          <p className={cn("mt-1 text-[10px]", thresholdColor(percent))}>
+          <p className={cn("mt-1 text-[10px]", limitTextColor(percent))}>
             {percent.toFixed(0)}% used
             {status.budget.hardStop && percent >= 100 ? " · scheduled runs blocked" : ""}
           </p>

@@ -87,12 +87,10 @@
       "updateModelCatalog"
     ],
     "tokenUsage": [
-      "agentCosts",
-      "dailyTrend",
-      "history",
-      "modelBreakdown",
+      "limits",
       "pipelineRunCost",
       "scan",
+      "setLimit",
       "summary",
       "usage"
     ],
@@ -470,6 +468,7 @@
     "files-preview:link",
     "agent:turn-changes",
     "models:progress",
+    "tokenUsage:updated",
     "dictation:audio",
     "dictation:mark-browser",
     "dictation:insert-browser",

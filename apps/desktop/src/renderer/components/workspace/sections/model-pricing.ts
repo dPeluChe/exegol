@@ -25,15 +25,6 @@ export function useUpdateModelCatalog() {
   });
 }
 
-export function getModelPrice(model: string, catalog: ModelCatalog | undefined): ModelPrice | null {
-  if (!catalog) return null;
-  if (catalog[model]) return catalog[model];
-  for (const [key, val] of Object.entries(catalog)) {
-    if (model.startsWith(key) || key.startsWith(model)) return val;
-  }
-  return null;
-}
-
 /**
  * Look up max context window for a model via tokenlens registry.
  * Returns combined/total token cap when available, falling back to maxInput.

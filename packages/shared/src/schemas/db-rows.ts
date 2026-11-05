@@ -138,18 +138,6 @@ export const scheduledRunRowSchema = z.object({
   ended_at: optNum,
 });
 
-export const tokenUsageRowSchema = z.object({
-  id: z.string(),
-  agent_id: z.string().nullable(),
-  provider: z.string(),
-  model: z.string(),
-  input_tokens: z.number(),
-  output_tokens: z.number(),
-  estimated_cost_usd: z.number(),
-  tool_call_count: z.number(),
-  recorded_at: z.number(),
-});
-
 export const activityRowSchema = z.object({
   id: z.string(),
   project_id: z.string(),

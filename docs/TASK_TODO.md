@@ -259,9 +259,13 @@ references in the research doc, section "Company and chat"). One PR per phase, i
   reuse `integrations/github/gh.ts`, cached 2 min); assign one to an open session (as a prompt, on
   the agent_send delivery path) or to a new tab with its own worktree; red dot when a CI failed;
   "Fix CI" sends the failed check's log
-- [ ] Phase 3, Monitor > Usage on `tokenUsage.usage` (#466): Global | project; by project, session,
-  CLI and model; unpriced shown apart; monthly limit per CLI that runs on an API key (makes Budgets
-  real), warning at 80% as an attention item
+- [x] Phase 3 (`feat/usage-page`), Monitor > Usage on `tokenUsage.usage` (#466): Global | project; by project, session,
+  CLI and model; unpriced shown apart; monthly limit per CLI (every CLI, not only API-key ones; makes
+  Budgets real), warning at 80% and 100% through the notification bus and the page's bar. In-app
+  delivery comes with phase 6's Activity feed (a renderer bus channel, also for `resource:warning`)
+- [ ] Usage follow-ups: merge `usage_limits` (setting) into `budgets` (needs a table rebuild, the
+  project column is NOT NULL; 0 budget rows in the real DB today); `budgets.hardStop` has no effect
+  while `BudgetsCard` shows "scheduled runs blocked"; budget windows are UTC, usage days are local
 - [ ] Phase 4, Company replaces the Dashboard (Cmd+1): one room per project with live sessions,
   a desk per session (state, activity label from the hook's tool name: edits, command, browser,
   thinking, question, message; badges: CLI update, worktree clean or changed files, dev server

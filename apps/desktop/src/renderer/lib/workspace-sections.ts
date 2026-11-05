@@ -20,10 +20,8 @@ const SECTIONS = {
     },
   ],
   monitor: [
-    {
-      label: "Resources & Tokens",
-      sections: [{ id: "resources-tokens", label: "Resources & Tokens" }],
-    },
+    { label: "Usage", sections: [{ id: "usage", label: "Usage" }] },
+    { label: "Resources", sections: [{ id: "resources-tokens", label: "Resources" }] },
     { label: "Scoring", sections: [{ id: "scoring", label: "Scoring" }] },
   ],
 } as const;

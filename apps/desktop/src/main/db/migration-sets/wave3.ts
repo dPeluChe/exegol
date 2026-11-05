@@ -336,4 +336,11 @@ export const wave3Migrations: Migration[] = [
     ALTER TABLE token_usage ADD COLUMN cost_source TEXT NOT NULL DEFAULT 'priced'
       CHECK (cost_source IN ('priced', 'reported', 'unpriced'));`,
   },
+  {
+    // Usage by session; clearing the import state rescans the window to fill existing rows
+    id: "w3_034_token_usage_session",
+    sql: `ALTER TABLE token_usage ADD COLUMN session_id TEXT;
+    CREATE INDEX IF NOT EXISTS idx_agents_claude_session ON agents(claude_session_id);
+    DELETE FROM settings WHERE key = 'token_usage_import';`,
+  },
 ];

@@ -106,5 +106,7 @@ describe("import into the app-wide ledger", () => {
       unpriced: { records: 1, tokens: 105 },
     });
     expect(listUsageRows(db, at + 1, at + 10)).toEqual([]);
+    const inP2 = listUsageRows(db, at - 10, at + 10, "p2").map((r) => r.projectId);
+    expect([...new Set(inP2)]).toEqual(["p2"]);
   });
 });

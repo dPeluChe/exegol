@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ParsedTokenEntry } from "../../tokens/log-parser";
 import { runMigrations } from "../migrations";
 import { getBudgetUsage } from "./budgets";
-import { getProjectTokenUsageSummary, importScannedTokenUsage } from "./token-usage";
+import { importScannedTokenUsage } from "./token-usage";
 
 // Midday UTC: "an hour ago" must fall inside the daily budget's UTC day
 const NOW_MS = Date.UTC(2026, 9, 5, 12);
@@ -52,8 +52,6 @@ describe("importScannedTokenUsage", () => {
       skipped: 2,
     });
 
-    const summary = getProjectTokenUsageSummary(db, "p1", now - 86400);
-    expect(summary).toMatchObject({ totalInputTokens: 30, totalOutputTokens: 12, totalCostUsd: 1 });
     expect(getBudgetUsage(db, "p1", "daily")).toMatchObject({ tokens: 42, costUsd: 1 });
     const row = db.prepare("SELECT agent_id, project_id, recorded_at FROM token_usage").get();
     expect(row).toMatchObject({ agent_id: null, project_id: "p1", recorded_at: now - 3600 });
