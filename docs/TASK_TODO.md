@@ -239,7 +239,6 @@ tRPC calls resolve; no section has a renderer test (backend tests exist for most
   `skills.getEnabledForSpawn` unused; `SpawnOptions.tsx` lists every available skill)
 - [ ] Fix: Budgets are stored but nothing checks or warns (`hardStop` unused, no `budget:warning`
   emitter although CLAUDE.md names one; `budgets.delete` has no UI)
-- [ ] Token Usage imports only on a manual "Scan Logs"; import automatically
 - [ ] App-wide by nature, today inside a project: system metrics + PTY memory, dev servers of all
   projects, model price table, the Skills library, the scheduler (no UI at all)
 - [ ] Need both views: Token Usage + Budgets, Scoring (compare CLIs across projects)
@@ -247,8 +246,39 @@ tRPC calls resolve; no section has a renderer test (backend tests exist for most
   Prompts. Decide keep, hide or remove
 - [ ] Command Palette has no "Go to <section>" entries; `ToggleButton` duplicated in
   `PromptsSkillsSection` and `ResourcesTokensSection`
-- [ ] Global screen models to compare: openchamber Overview, bernstein Fleet, superset views
-  (research doc, section 1); usage limits and the usage page (section 2)
+
+Design approved 2026-11-05 (prototype artifact "Exegol: nueva estructura de vistas", 4 boards;
+references in the research doc, section "Company and chat"). One PR per phase, in this order:
+- [ ] Phase 1, one top bar (40 px) instead of three rows: the active project's layout tabs take the
+  row (status dot, layout name, "te espera" badge), CLI launcher on their right, then small GitHub,
+  Project and Monitor buttons. Opening Project or Monitor swaps the tabs for a "‹ Tabs" chip that
+  keeps their dots, and their sub-tabs fill the row. Project: Tasks, History, Context (Memory +
+  Knowledge), Prompts & Skills, Automation (Pipelines, Parallel Runs, QA behind it). Monitor: Usage,
+  Resources, Scoring with a Global | project switch. The pane toolbar does not change
+- [ ] Phase 2, GitHub in the bar: open PRs with CI state and issues of the active project (`gh`,
+  reuse `integrations/github/gh.ts`, cached 2 min); assign one to an open session (as a prompt, on
+  the agent_send delivery path) or to a new tab with its own worktree; red dot when a CI failed;
+  "Fix CI" sends the failed check's log
+- [ ] Phase 3, Monitor > Usage on `tokenUsage.usage` (#466): Global | project; by project, session,
+  CLI and model; unpriced shown apart; monthly limit per CLI that runs on an API key (makes Budgets
+  real), warning at 80% as an attention item
+- [ ] Phase 4, Company replaces the Dashboard (Cmd+1): one room per project with live sessions,
+  a desk per session (state, activity label from the hook's tool name: edits, command, browser,
+  thinking, question, message; badges: CLI update, worktree clean or changed files, dev server
+  port, browser pane, PR, agent link), a "Today" strip (needs you, stuck, can wait, done), P jumps to
+  the next one that needs you, "Open project" and "Open in its layout"; Watching (pins) stays as a
+  mode. No emojis in the UI
+- [ ] Phase 5, chat panel per session: bubbles are turns, from the Claude transcript
+  (`~/.claude/projects/*.jsonl`) and the Codex rollout, tailed by byte offset; other CLIs get the
+  terminal text between turn boundaries. Input goes to the PTY as typed (bracketed paste + Enter)
+  when the CLI is at its prompt, and waits for the turn end when it is busy (same boundary rule as
+  agent_send); a question shows its options and each sends only its key; agent_send messages appear
+  as "other agent" bubbles with their delivery state; Copy summary
+- [ ] Phase 6, sidebar: PR badge and a needs-you dot per project; interruption level per project
+  (All, Only what needs me, Nothing) replacing mute for notifications, sound and the Today strip;
+  Activity becomes the event feed and absorbs Resources; Prompts moves to Project
+- [ ] Later, rooms as group chats (bloks model: @mention wakes an agent, max hops per human
+  message, held mentions shown, not dropped)
 
 ### T211: Browser panes keep no disk cache by default `added: 2026-11-04`
 **Priority**: P2 | **Effort**: S | **Source**: user, 2026-11-04. Each project's browser pane uses

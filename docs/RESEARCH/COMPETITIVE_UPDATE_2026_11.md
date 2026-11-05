@@ -82,3 +82,33 @@ per-project drill-down that remembers where you came from.
 5. OSC 9;4 and OSC 7501 status.
 6. `.env` copy into worktrees + idle shedding (paseo, reliant), with the worktree hygiene round.
 7. "Turn ran too long" alert and needs-input vs finished notifications (traycer, orca).
+
+## Company and chat references (2026-11-05)
+
+Cloned for the redesign (T213 phases 4 and 5), under the spark `exegol` tag: pixel-agents
+(MIT), NosytLabs/agent-office (MIT), bloks (custom license, ideas only). claudecodeui was read
+and dropped (AGPL, runs Claude through the SDK, not a PTY). Read for ideas only: harishkotra and
+ajsahni agent-office (license forbids reuse), AionUi, agency-agents.
+
+None of them sends chat input into a live interactive PTY: Exegol has to map the CLI menus to keys
+itself; hooks still give a reliable "permission pending" signal.
+
+- Turns from transcripts: pixel-agents `server/src/fileWatcher.ts` polls `~/.claude/projects/*.jsonl`
+  every 500 ms with a byte offset and a partial-line buffer (dropped `fs.watch`, unreliable on
+  macOS); `transcriptParser.ts` per line; `hookEventHandler.ts` normalizes hooks (`Stop` done,
+  `Notification(idle_prompt)` waiting, `PermissionRequest` permission); `timerManager.ts` guesses a
+  permission prompt when a tool stays open 7 s without hooks
+- Activity labels: agent-office `claude/hook.py` `ACTIVITY` (Bash running, Read/Grep reading,
+  Edit/Write typing, Web browsing, Task delegating); Codex the same in `codex/hook.py`
+- Desk states: agent-office `state_model.py` (working or thinking with no event for 300 s shows
+  idle, stale after 1800 s unless a prompt is pending, done fades after 120 s); `web/js/attention.js`
+  `nextWaitingAgent` for the "next one that needs you" key and the count in the title
+- Busy signal for free: Claude Code writes `~/.claude/sessions/<pid>.json` with `status: "busy"`;
+  check the pid is alive (seen in claudecodeui `claude-cli-liveness.service.ts`)
+- Input mid-turn: bloks keeps stream-json stdin open to steer a running turn (headless only);
+  claudecodeui refuses and queues on the client. For a PTY, queue until the turn boundary
+- Rooms: bloks `relayMentions` (an @Name in a reply wakes that member, queued if busy),
+  `room-hops.ts` `MAX_AGENT_HOPS = 3` per human message with a visible held notice,
+  `room-route.ts` `pickAnswerers` (cheap model picks up to 3 by role, lead on timeout)
+- Interruption level per workspace (all, only what needs me, nothing) and usage per agent and engine
+  with a monthly limit: bloks
