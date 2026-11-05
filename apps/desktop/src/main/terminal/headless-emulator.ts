@@ -209,6 +209,17 @@ export class HeadlessEmulator {
     return lines;
   }
 
+  /** The last rows of the active buffer as plain text; `total` numbers its rows from the top */
+  textLines(max: number): { lines: string[]; total: number; altScreen: boolean } {
+    const buffer = this.terminal.buffer.active;
+    const total = buffer.length;
+    const lines: string[] = [];
+    for (let i = Math.max(0, total - max); i < total; i++) {
+      lines.push(buffer.getLine(i)?.translateToString(true) ?? "");
+    }
+    return { lines, total, altScreen: buffer.type === "alternate" };
+  }
+
   /** Clear Terminal: drop the scrollback and screen, as the view's xterm does */
   clear(): void {
     this._revision++;

@@ -383,6 +383,7 @@ export function CompanySection({
           </ScrollArea>
           {selected && (
             <CompanySession
+              key={selected.id}
               agent={selected}
               where={`${projectMeta.get(selected.projectId)?.name ?? ""} · ${whereOf(selected)}`}
             />

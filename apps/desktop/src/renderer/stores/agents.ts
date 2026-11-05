@@ -102,7 +102,10 @@ export function startAgentStatusPush(queryClient: QueryClient): void {
     useAgentStore.getState().addAttentionItem(agentId, { level: "info", reason, stuck: true }),
   );
   const offActivity = window.api.onAgentActivity(({ agentId, tool }) =>
-    useAgentStore.setState((s) => ({ activityTools: { ...s.activityTools, [agentId]: tool } })),
+    useAgentStore.setState((s) => {
+      const { [agentId]: _old, ...rest } = s.activityTools;
+      return { activityTools: tool ? { ...rest, [agentId]: tool } : rest };
+    }),
   );
   const stopMcp = window.api.onMcpStatus((e) => queryClient.setQueryData(MCP_STATUS_KEY, e));
   const stopFollowUps = window.api.onFollowUps((e) =>
@@ -531,8 +534,9 @@ export const useAgentStore = create<AgentStore>()(
         useWatchStore.getState().unwatch(id);
         set((state) => {
           const { [id]: _, ...rest } = state.agents;
+          const { [id]: _tool, ...activityTools } = state.activityTools;
           const focusedAgentId = state.focusedAgentId === id ? null : state.focusedAgentId;
-          return { agents: rest, focusedAgentId };
+          return { agents: rest, focusedAgentId, activityTools };
         });
       },
 

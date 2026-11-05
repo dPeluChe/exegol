@@ -229,6 +229,7 @@ contextBridge.exposeInMainWorld("api", {
   /** T200.10: a turn ran past the alert limit or went silent (attention item) */
   onStuckTurn: (callback: (event: unknown) => void) => listen("agent:stuck-turn", callback),
   onAgentActivity: (callback: (event: unknown) => void) => listen("agent:activity", callback),
+  onChatUpdated: (callback: (event: unknown) => void) => listen("agent:chat-updated", callback),
   /** A session's CLI updated itself and exited: the pane offers Restart session */
   onCliSelfUpdated: (callback: (event: unknown) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);

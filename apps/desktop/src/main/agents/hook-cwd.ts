@@ -14,4 +14,18 @@ export function noteHookCwd(agentId: string, cwd: string | undefined): void {
   }
 }
 
+const sessions = new Map<string, string>();
+
+/** Its session id as the CLI said it: Codex's is stored only once it exits */
+export function noteHookSession(agentId: string, sessionId: string): void {
+  sessions.delete(agentId);
+  sessions.set(agentId, sessionId);
+  if (sessions.size > MAX_AGENTS) {
+    const oldest = sessions.keys().next().value;
+    if (oldest !== undefined) sessions.delete(oldest);
+  }
+}
+
+export const hookSessionOf = (agentId: string): string | null => sessions.get(agentId) ?? null;
+
 export const hookCwdOf = (agentId: string): string | null => folders.get(agentId) ?? null;

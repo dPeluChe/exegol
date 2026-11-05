@@ -105,7 +105,10 @@ interface Window {
       callback: (event: { agentId: string; projectId: string; reason?: string }) => void,
     ) => () => void;
     /** The last tool of a turn, from the hook's name; never its input */
-    onAgentActivity: (callback: (event: { agentId: string; tool: string }) => void) => () => void;
+    onAgentActivity: (
+      callback: (event: { agentId: string; tool: string | null }) => void,
+    ) => () => void;
+    onChatUpdated: (callback: (event: { agentId: string }) => void) => () => void;
     onStuckTurn: (
       callback: (event: { agentId: string; projectId: string; reason: string }) => void,
     ) => () => void;

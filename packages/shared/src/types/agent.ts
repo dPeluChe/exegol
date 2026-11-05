@@ -327,6 +327,35 @@ export interface ScreenDialog {
   fingerprint: string;
 }
 
+/** One bubble of a session's chat: never a tool's input or result */
+export type ChatTurn = {
+  id: string;
+  role: "user" | "assistant" | "tool";
+  text: string;
+  /** Unix seconds; null for terminal text */
+  at: number | null;
+};
+
+export type ChatPeerMessage = {
+  id: string;
+  /** Received by this session, else sent by it */
+  incoming: boolean;
+  peer: string;
+  text: string;
+  at: number;
+  delivery: MessageDeliveryState | null;
+};
+
+export type ChatPage = {
+  turns: ChatTurn[];
+  /** Hand it back for what came after; null when a page is the whole text */
+  cursor: string | null;
+  /** `turns` replaces what the reader holds */
+  reset: boolean;
+  source: "transcript" | "terminal" | "none";
+  peers: ChatPeerMessage[];
+};
+
 /** A prompt the user queued for an agent's next turn boundary (T200.4) */
 export interface FollowUpItem {
   id: string;

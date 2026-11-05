@@ -5,16 +5,21 @@ import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 import { toastError } from "../../stores/toasts";
 
+/** The numbered dialog on the agent's screen */
+export function useScreenDialog(agentId: string, enabled: boolean) {
+  return useQuery({
+    queryKey: ["screenDialog", agentId],
+    queryFn: () => trpcInvoke<ScreenDialog | null>("agents.screenDialog", { id: agentId }),
+    enabled,
+    refetchInterval: 2_000,
+  }).data;
+}
+
 /** The question an agent waits on, read from its screen, answered without opening the pane */
 export function AgentQuestion({ agentId, enabled }: { agentId: string; enabled: boolean }) {
   const queryClient = useQueryClient();
   const queryKey = ["screenDialog", agentId];
-  const { data: dialog } = useQuery({
-    queryKey,
-    queryFn: () => trpcInvoke<ScreenDialog | null>("agents.screenDialog", { id: agentId }),
-    enabled,
-    refetchInterval: 2_000,
-  });
+  const dialog = useScreenDialog(agentId, enabled);
   const answer = useMutation({
     mutationFn: (key: string) =>
       trpcMutate("agents.answerDialog", {

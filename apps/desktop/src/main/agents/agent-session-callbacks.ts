@@ -33,11 +33,12 @@ import {
 import type { OutputProcessor } from "./agent-output-processor";
 import { handleParallelAgentExit } from "./agent-parallel-orchestration";
 import { detectCliSelfUpdate } from "./cli-self-update";
-import { noteHookCwd } from "./hook-cwd";
-import { noteHookTool } from "./hook-tool";
+import { noteHookCwd, noteHookSession } from "./hook-cwd";
+import { clearHookTool, noteHookTool } from "./hook-tool";
 import { handleLostSession } from "./lost-session-exit";
 import { detachOutputPipeline } from "./output-pipeline";
 import { noteSessionActivity } from "./session-activity";
+import { noteChatBoundary } from "./session-chat";
 import {
   type AgentContext,
   broadcastAgentStatus,
@@ -207,7 +208,9 @@ function trackTurn(
   maps: SessionMaps,
   event: AgentSignalType,
 ): void {
+  if (event === "turn_started" || event === "finished") noteChatBoundary(agent.id);
   if (event === "turn_started") {
+    clearHookTool(agent.id);
     try {
       const cwd = maps.initialSnapshots.get(agent.id)?.cwd ?? getAgentCwd(db, agent.id);
       if (cwd) startTurn(agent.id, cwd);
@@ -261,7 +264,10 @@ export function dispatchAgentFileEvent(
   event: { type: string; agentId: string; sessionId?: string; cwd?: string; tool?: string },
 ): void {
   // Before the OSC short-circuit: OSC carries no session id, folder or tool, hooks do
-  if (event.sessionId) storeHookSessionId(db, event.agentId, event.sessionId);
+  if (event.sessionId) {
+    storeHookSessionId(db, event.agentId, event.sessionId);
+    noteHookSession(event.agentId, event.sessionId);
+  }
   noteHookCwd(event.agentId, event.cwd);
   if (event.type === "tool_use") noteHookTool(event.agentId, event.tool);
   if (oscDeliveredAgents.has(event.agentId)) return;

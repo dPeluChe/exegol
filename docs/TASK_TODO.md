@@ -266,18 +266,20 @@ references in the research doc, section "Company and chat"). One PR per phase, i
 - [ ] Usage follow-ups: merge `usage_limits` (setting) into `budgets` (needs a table rebuild, the
   project column is NOT NULL; 0 budget rows in the real DB today); `budgets.hardStop` has no effect
   while `BudgetsCard` shows "scheduled runs blocked"; budget windows are UTC, usage days are local
-- [ ] Phase 4, Company replaces the Dashboard (Cmd+1): one room per project with live sessions,
+- [x] Phase 4, Company replaces the Dashboard (Cmd+1): one room per project with live sessions,
   a desk per session (state, activity label from the hook's tool name: edits, command, browser,
   thinking, question, message; badges: CLI update, worktree clean or changed files, dev server
   port, browser pane, PR, agent link), a "Today" strip (needs you, stuck, can wait, done), P jumps to
   the next one that needs you, "Open project" and "Open in its layout"; Watching (pins) stays as a
   mode. No emojis in the UI
-- [ ] Phase 5, chat panel per session: bubbles are turns, from the Claude transcript
+- [x] Phase 5, chat panel per session: bubbles are turns, from the Claude transcript
   (`~/.claude/projects/*.jsonl`) and the Codex rollout, tailed by byte offset; other CLIs get the
   terminal text between turn boundaries. Input goes to the PTY as typed (bracketed paste + Enter)
   when the CLI is at its prompt, and waits for the turn end when it is busy (same boundary rule as
   agent_send); a question shows its options and each sends only its key; agent_send messages appear
   as "other agent" bubbles with their delivery state; Copy summary
+  Done with deviations: capped to the last 200 turns, not virtualized; Send to another agent left out
+  (no existing path); a peer message typed into the session shows once, as the peer's. See 2611.md
 - [x] Phase 6 (`feat/project-signals`), sidebar: PR badge and a needs-you dot per project; interruption
   level per project (All, Only what needs me, Nothing) for notifications, toasts and attention items,
   the Today strip reads it in phase 4; a session's own mute stays; Activity is the event feed (warnings
