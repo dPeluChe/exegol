@@ -39,6 +39,7 @@ export function createWorktree(
     projectId: string;
     agentId: string | null;
     path: string;
+    repoPath?: string;
     branchName: string;
     autoCleanup?: boolean;
   },
@@ -46,9 +47,17 @@ export function createWorktree(
   const id = nanoid();
 
   db.prepare(
-    `INSERT INTO worktrees (id, project_id, agent_id, path, branch_name, auto_cleanup)
-     VALUES (?, ?, ?, ?, ?, ?)`,
-  ).run(id, data.projectId, data.agentId, data.path, data.branchName, data.autoCleanup ? 1 : 0);
+    `INSERT INTO worktrees (id, project_id, agent_id, path, repo_path, branch_name, auto_cleanup)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+  ).run(
+    id,
+    data.projectId,
+    data.agentId,
+    data.path,
+    data.repoPath ?? null,
+    data.branchName,
+    data.autoCleanup ? 1 : 0,
+  );
 
   const row = db.prepare("SELECT * FROM worktrees WHERE id = ?").get(id);
   return mapWorktreeRow(row as Record<string, unknown>);

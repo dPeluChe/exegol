@@ -22,15 +22,20 @@ export function requestedBranchFor(
   return branchName?.trim() || slugifyBranchName(taskDescription);
 }
 
-/** A worktree already on that branch is reused as-is — no suffix, no new branch. */
+/** A worktree already on that branch is reused as-is — no suffix, no new branch. `repo`: only one
+ *  of that repo, since repos inside a project can share a branch name */
 export function findReusableWorktree(
   db: Database.Database,
   projectId: string,
   branchName: string,
+  repo?: string,
 ): Worktree | null {
   return (
     listWorktrees(db, projectId).find(
-      (w) => w.branchName === branchName && !removingWorktrees.has(w.path),
+      (w) =>
+        w.branchName === branchName &&
+        !removingWorktrees.has(w.path) &&
+        (!repo || w.repoPath === repo),
     ) ?? null
   );
 }

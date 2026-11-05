@@ -361,7 +361,7 @@ export interface RunTarget {
   scripts: DetectedScript[];
 }
 
-const SKIP_DIRS = new Set([
+export const SKIP_DIRS: ReadonlySet<string> = new Set([
   "node_modules",
   "dist",
   "build",

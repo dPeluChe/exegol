@@ -148,6 +148,7 @@ export function mapWorktreeRow(row: Record<string, unknown>): Worktree {
     projectId: r.project_id,
     agentId: r.agent_id,
     path: r.path,
+    repoPath: r.repo_path,
     branchName: r.branch_name,
     autoCleanup: r.auto_cleanup,
     diskUsageBytes: r.disk_usage_bytes,

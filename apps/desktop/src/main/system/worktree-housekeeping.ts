@@ -1,4 +1,4 @@
-import { lstatSync, readdirSync, readFileSync } from "node:fs";
+import { lstatSync, readdirSync } from "node:fs";
 import { rename, rm } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
 import type Database from "libsql";
@@ -9,9 +9,11 @@ import { countLiveAgentsInWorktree } from "../db/queries/agents";
 import { getAppSettings } from "../db/queries/settings";
 import {
   type GitRunner,
+  inRegisteredProject,
   isLockedOrUnknown,
   pathKey,
   pruneWorktrees,
+  repoOf,
   runGit,
   worktreeSafety,
 } from "../lib/worktree-safety";
@@ -94,16 +96,6 @@ export function worktreeDirs(roots: readonly string[]): { path: string; name: st
   return out;
 }
 
-/** The repo of a worktree, from its own `.git` file (`gitdir: <repo>/.git/worktrees/<name>`) */
-export function repoOf(dir: string): string | null {
-  const file = join(dir, ".git");
-  if (!lstatSync(file, { throwIfNoEntry: false })?.isFile()) return null;
-  const m = /^gitdir:\s*(.+?)\/?\s*$/m.exec(readFileSync(file, "utf-8"));
-  const gitdir = m?.[1];
-  if (!gitdir || !/\/\.git\/worktrees\/[^/]+$/.test(gitdir)) return null;
-  return dirname(dirname(dirname(gitdir)));
-}
-
 /**
  * Registered project, not locked, safe by worktreeSafety. Then it is taken out of spawn's reach
  * (removingWorktrees), re-checked, moved to a trash sibling on the same volume, its registration
@@ -117,7 +109,7 @@ async function removeIfSafe(
   save: Omit<SaveTarget, "dir"> | null,
 ): Promise<boolean> {
   const repo = repoOf(path);
-  if (!repo || !repos.has(pathKey(repo))) return false;
+  if (!repo || !inRegisteredProject(repo, repos)) return false;
   if (await isLockedOrUnknown(repo, path, git)) return false;
   // Dirty or unpushed work goes to its branch's remote first, then the rule is checked again
   if (save && stillFree()) announceSave(await saveWorktreeWork({ dir: path, ...save }, git), save);
@@ -154,7 +146,7 @@ export async function sweepOrphanWorktrees(
   const busy = inUse(db);
   const rows = db
     .prepare(
-      `SELECT w.id, w.path, w.branch_name, w.created_at, p.path AS repo,
+      `SELECT w.id, w.path, w.branch_name, w.created_at, COALESCE(w.repo_path, p.path) AS repo,
               MAX(a.alias) AS alias,
               COUNT(a.id) AS agents, COUNT(a.archived_at) AS archived,
               MAX(a.archived_at) AS last_archived,

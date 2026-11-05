@@ -94,6 +94,7 @@ export const worktreeRowSchema = z.object({
   project_id: z.string(),
   agent_id: optStr,
   path: z.string(),
+  repo_path: optStr,
   branch_name: z.string(),
   auto_cleanup: sqlBool,
   disk_usage_bytes: z.number(),

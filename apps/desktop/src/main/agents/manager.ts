@@ -164,6 +164,7 @@ export class AgentManager {
       command: cliConfig.command,
       projectPath: project.path,
       useWorktree: config.useWorktree,
+      worktreeRepo: config.worktreeRepo,
       coreRustLoaded: !!coreRust,
     });
     for (const w of preflight.warnings) {

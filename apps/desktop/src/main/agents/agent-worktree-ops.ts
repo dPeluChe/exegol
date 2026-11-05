@@ -40,7 +40,7 @@ export function hydrateTrackedWorktree(
     dbId: wt.id,
     worktreeName: getWorktreeName(wt.branchName),
     worktreePath: wt.path,
-    repoPath: project.path,
+    repoPath: wt.repoPath ?? project.path,
   });
 }
 

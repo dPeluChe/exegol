@@ -1,7 +1,8 @@
 import { execFile } from "node:child_process";
-import { existsSync, realpathSync } from "node:fs";
-import { isAbsolute, join, resolve } from "node:path";
+import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
+import { dirname, isAbsolute, join, resolve } from "node:path";
 import { promisify } from "node:util";
+import { isPathInside } from "../security/path-guard";
 
 // No electron or logger imports: scripts/clean-build.ts uses this too.
 const execFileAsync = promisify(execFile);
@@ -66,6 +67,22 @@ export function pathKey(p: string, platform: NodeJS.Platform = process.platform)
   } catch {
     return win ? resolve(p).toLowerCase() : resolve(p);
   }
+}
+
+/** The repo of a worktree, from its own `.git` file (`gitdir: <repo>/.git/worktrees/<name>`) */
+export function repoOf(dir: string): string | null {
+  const file = join(dir, ".git");
+  if (!lstatSync(file, { throwIfNoEntry: false })?.isFile()) return null;
+  const m = /^gitdir:\s*(.+?)\/?\s*$/m.exec(readFileSync(file, "utf-8"));
+  const gitdir = m?.[1];
+  if (!gitdir || !/\/\.git\/worktrees\/[^/]+$/.test(gitdir)) return null;
+  return dirname(dirname(dirname(gitdir)));
+}
+
+/** A checkout key that is a registered project, or a repo held inside one */
+export function inRegisteredProject(repo: string, projectKeys: ReadonlySet<string>): boolean {
+  const key = pathKey(repo);
+  return [...projectKeys].some((project) => isPathInside(project, key));
 }
 
 export type GitRunner = (args: string[], cwd: string, timeoutMs?: number) => Promise<string>;

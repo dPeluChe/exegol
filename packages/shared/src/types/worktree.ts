@@ -3,6 +3,8 @@ export type Worktree = {
   projectId: string;
   agentId: string | null;
   path: string;
+  /** The repo it was cut from; null means the project root */
+  repoPath: string | null;
   branchName: string;
   autoCleanup: boolean;
   diskUsageBytes: number;
