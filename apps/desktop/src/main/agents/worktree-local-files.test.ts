@@ -64,7 +64,7 @@ describe("copyLocalFiles", () => {
 
     expect(r).toEqual({ copied: 3, skipped: 0 });
     expect(readFileSync(join(wt, ".env"), "utf-8")).toBe("SECRET=1");
-    expect(statSync(join(wt, ".env")).mode & 0o777).toBe(0o600);
+    if (process.platform !== "win32") expect(statSync(join(wt, ".env")).mode & 0o777).toBe(0o600);
     expect(existsSync(join(wt, ".env.local"))).toBe(true);
     expect(existsSync(join(wt, "apps/web/.env.local"))).toBe(true);
     expect(existsSync(join(wt, ".env.example"))).toBe(false);
