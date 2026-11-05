@@ -4,10 +4,10 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   detectRunTargets,
+  invalidateScriptsCache,
   parseCustomActions,
   parseJustRecipes,
   parseMakeTargets,
-  refreshRunTargets,
 } from "./scripts";
 
 // These parsers decide what the launcher offers to RUN, so a false positive is
@@ -125,7 +125,7 @@ describe("detectRunTargets in a workspace of many repos", () => {
   });
 });
 
-describe("refreshRunTargets", () => {
+describe("invalidateScriptsCache", () => {
   it("drops the cached scripts so a new folder and a new script show up", async () => {
     const root = mkdtempSync(join(tmpdir(), "exegol-run-refresh-"));
     mkdirSync(join(root, "api", ".git"), { recursive: true });
@@ -140,7 +140,8 @@ describe("refreshRunTargets", () => {
     // Cached within the TTL: the new script is not seen yet
     expect((await detectRunTargets(root)).find((t) => t.rel === "api")?.scripts).toHaveLength(1);
 
-    const fresh = await refreshRunTargets(root);
+    invalidateScriptsCache(root);
+    const fresh = await detectRunTargets(root);
     expect(fresh.map((t) => t.rel)).toEqual(["", "api", "web"]);
     expect(fresh.find((t) => t.rel === "api")?.scripts.map((s) => s.name)).toEqual([
       "dev",

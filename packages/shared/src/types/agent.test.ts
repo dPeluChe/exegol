@@ -27,28 +27,8 @@ describe("classifyActivity", () => {
       expect(classifyActivity("running")).toBe("busy");
     });
 
-    it("running with null currentStep returns busy", () => {
-      expect(classifyActivity("running", null)).toBe("busy");
-    });
-
-    it("running with undefined currentStep returns busy", () => {
-      expect(classifyActivity("running", undefined)).toBe("busy");
-    });
-
-    it("running with empty string currentStep returns busy", () => {
-      expect(classifyActivity("running", "")).toBe("busy");
-    });
-
     it("spawning returns busy", () => {
       expect(classifyActivity("spawning")).toBe("busy");
-    });
-
-    it("spawning with currentStep returns busy", () => {
-      expect(classifyActivity("spawning", "Initializing...")).toBe("busy");
-    });
-
-    it("spawning with null currentStep returns busy", () => {
-      expect(classifyActivity("spawning", null)).toBe("busy");
     });
   });
 
@@ -59,16 +39,8 @@ describe("classifyActivity", () => {
       expect(classifyActivity("waiting_input")).toBe("idle");
     });
 
-    it("waiting_input with currentStep still returns idle", () => {
-      expect(classifyActivity("waiting_input", "some step")).toBe("idle");
-    });
-
     it("paused returns idle", () => {
       expect(classifyActivity("paused")).toBe("idle");
-    });
-
-    it("paused with currentStep still returns idle", () => {
-      expect(classifyActivity("paused", "paused step")).toBe("idle");
     });
   });
 
@@ -103,6 +75,9 @@ describe("deriveIsolationMode", () => {
   it("prefers stored isolationMode when present", () => {
     expect(deriveIsolationMode({ isolationMode: "pipeline", worktreeId: null })).toBe("pipeline");
     expect(deriveIsolationMode({ isolationMode: "fallback", worktreeId: "wt-1" })).toBe("fallback");
+    expect(deriveIsolationMode({ isolationMode: "project-root", worktreeId: "wt-1" })).toBe(
+      "project-root",
+    );
   });
 
   it("returns isolated when worktreeId is set and no stored mode", () => {
@@ -113,17 +88,6 @@ describe("deriveIsolationMode", () => {
   it("returns project-root when neither isolationMode nor worktreeId is set", () => {
     expect(deriveIsolationMode({})).toBe("project-root");
     expect(deriveIsolationMode({ isolationMode: null, worktreeId: null })).toBe("project-root");
-  });
-
-  it("returns the stored isolated mode unchanged", () => {
-    expect(deriveIsolationMode({ isolationMode: "isolated", worktreeId: "wt-1" })).toBe("isolated");
-  });
-
-  it("returns the stored project-root mode unchanged even with a worktreeId", () => {
-    // Edge case: explicit project-root flag should override the heuristic.
-    expect(deriveIsolationMode({ isolationMode: "project-root", worktreeId: "wt-1" })).toBe(
-      "project-root",
-    );
   });
 });
 

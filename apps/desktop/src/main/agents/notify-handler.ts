@@ -8,7 +8,7 @@ import { getEventsDir } from "./wrappers";
 
 // ─── Structured event types ────────────────────────────────────────────────
 
-export type AgentEventType =
+type AgentEventType =
   | "task_complete"
   | "task_failed"
   | "permission_needed"
@@ -17,7 +17,7 @@ export type AgentEventType =
   | "session_start"
   | "stop";
 
-export interface AgentEvent {
+interface AgentEvent {
   type: AgentEventType;
   agentId: string;
   ts: number;
@@ -72,11 +72,6 @@ export function startNotifyHandler(onEvent: EventCallback): void {
   } catch (err) {
     logger.warn("[NotifyHandler] Failed to start event watcher:", err);
   }
-}
-
-/** Emit an event programmatically (from agent lifecycle callbacks) */
-export function emitAgentEvent(event: AgentEvent): void {
-  callback?.(event);
 }
 
 /** Stop watching */

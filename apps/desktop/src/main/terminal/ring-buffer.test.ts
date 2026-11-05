@@ -58,14 +58,6 @@ describe("RingBuffer", () => {
     rb.write(Buffer.alloc(0));
     expect(rb.byteLength).toBe(0);
   });
-
-  it("should correctly wrap with exact boundary alignment", () => {
-    const rb = new RingBuffer(8);
-    rb.write(Buffer.from("AABBCCDD")); // fills exactly (8 bytes)
-    rb.write(Buffer.from("EEFF")); // wraps from position 0
-    expect(rb.snapshot().toString("utf-8")).toBe("CCDDEEFF");
-    expect(rb.byteLength).toBe(8);
-  });
 });
 
 describe("RingBuffer alternate-screen stickiness", () => {

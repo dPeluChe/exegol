@@ -84,20 +84,17 @@ describe("extractFromScrollback — preferences", () => {
 // ─── Deduplication ──────────────────────────────────────────────────────
 
 describe("extractFromScrollback — deduplication", () => {
-  it("should deduplicate similar errors and cap per category", () => {
-    // All 4 lines match the error rule with similar structure.
-    // Dedup should reduce them, but the per-rule cap may not stop across lines.
+  it("should keep one of two near-identical errors and a different one", () => {
     const scrollback = [
-      "error: cannot find module 'foo'",
-      "error: cannot find module 'bar'",
-      "error: cannot find module 'baz'",
-      "error: cannot find module 'qux'",
+      "error: cannot find module 'foo' in the current workspace package root folder",
+      "error: cannot find module 'bar' in the current workspace package root folder",
+      "error: disk quota exceeded on the build volume",
     ].join("\n");
-    const results = extractFromScrollback(scrollback);
-    const errors = results.filter((r) => r.category === "error");
-    // Deduplication (Jaccard > 0.8) should reduce count significantly
-    expect(errors.length).toBeGreaterThanOrEqual(1);
-    expect(errors.length).toBeLessThanOrEqual(4);
+    const errors = extractFromScrollback(scrollback).filter((r) => r.category === "error");
+    expect(errors.map((r) => r.content)).toEqual([
+      "error: cannot find module 'foo' in the current workspace package root folder",
+      "error: disk quota exceeded on the build volume",
+    ]);
   });
 });
 

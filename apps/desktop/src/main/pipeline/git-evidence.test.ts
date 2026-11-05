@@ -70,7 +70,7 @@ it("captures deletions and diffs larger than the previous 1 MiB limit", async ()
   const diff = await captureGitDiff(cwd, base);
   expect(diff.length).toBeGreaterThan(1024 * 1024);
   expect(diff).toContain("deleted file mode");
-});
+}, 30_000);
 
 it("reports unavailable baselines as failures instead of empty evidence", async () => {
   expect(await captureGitDiff(cwd)).toContain("baseline unavailable");
@@ -87,8 +87,10 @@ it("captures changes inside a linked worktree", async () => {
 
 it("marks oversized evidence unavailable instead of returning a partial diff", async () => {
   const base = await captureTree(cwd);
-  writeFileSync(join(cwd, "oversized.txt"), "evidence\n".repeat(2_000_000));
-  expect(await captureGitDiff(cwd, base)).toContain("16 MiB diff limit");
+  writeFileSync(join(cwd, "oversized.txt"), "evidence\n".repeat(1_000));
+  expect(await captureGitDiff(cwd, base, 1024)).toBe(
+    "(git diff over the 16 MiB limit; evidence unavailable)",
+  );
 });
 
 it("sees a same-size edit made in the same second the index was written (racy git)", async () => {

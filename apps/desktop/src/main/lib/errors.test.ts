@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   ExegolError,
-  isPermanent,
   isTransient,
   PermanentError,
   TimeoutError,
@@ -49,16 +48,6 @@ describe("Error hierarchy", () => {
     expect(err.name).toBe("TimeoutError");
   });
 
-  it("PermanentError is not a TransientError", () => {
-    const err = new PermanentError("fatal");
-    expect(err).not.toBeInstanceOf(TransientError);
-  });
-
-  it("TransientError is not a PermanentError", () => {
-    const err = new TransientError("retry me");
-    expect(err).not.toBeInstanceOf(PermanentError);
-  });
-
   it("preserves cause through the hierarchy", () => {
     const original = new TypeError("connection reset");
     const transient = new TransientError("fetch failed", "NET", original);
@@ -79,39 +68,11 @@ describe("Error hierarchy", () => {
 
 // ─── Type Guards ───────────────────────────────────────────────────────────
 
-describe("isTransient / isPermanent helpers", () => {
-  it("isTransient returns true for TransientError", () => {
-    expect(isTransient(new TransientError("net"))).toBe(true);
-  });
-
-  it("isTransient returns true for TimeoutError", () => {
-    expect(isTransient(new TimeoutError("timeout"))).toBe(true);
-  });
-
-  it("isTransient returns false for PermanentError", () => {
-    expect(isTransient(new PermanentError("perm"))).toBe(false);
-  });
-
-  it("isTransient returns false for plain Error", () => {
-    expect(isTransient(new Error("plain"))).toBe(false);
-  });
-
+describe("isTransient", () => {
   it("isTransient returns false for non-errors", () => {
     expect(isTransient("string")).toBe(false);
     expect(isTransient(null)).toBe(false);
     expect(isTransient(undefined)).toBe(false);
-  });
-
-  it("isPermanent returns true for PermanentError", () => {
-    expect(isPermanent(new PermanentError("perm"))).toBe(true);
-  });
-
-  it("isPermanent returns false for TransientError", () => {
-    expect(isPermanent(new TransientError("net"))).toBe(false);
-  });
-
-  it("isPermanent returns false for plain Error", () => {
-    expect(isPermanent(new Error("plain"))).toBe(false);
   });
 });
 

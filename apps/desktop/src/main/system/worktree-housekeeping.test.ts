@@ -12,11 +12,14 @@ import {
 import { tmpdir } from "node:os";
 import { isAbsolute, join } from "node:path";
 import Database from "libsql";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { runMigrations } from "../db/migrations";
 import { createParallelRun } from "../db/queries/parallel-runs";
 import { createWorktree } from "../db/queries/worktrees";
 import { sweepOrphanWorktrees } from "./worktree-housekeeping";
+
+// Each test builds a bare origin, a repo and worktrees with real git: too slow for 5 s under load
+vi.setConfig({ testTimeout: 30_000 });
 
 const NOW = Date.now();
 const OLD_S = Math.floor((NOW - 3 * 24 * 60 * 60 * 1000) / 1000);

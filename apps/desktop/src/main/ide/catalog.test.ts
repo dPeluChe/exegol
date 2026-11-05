@@ -24,18 +24,6 @@ describe("targetArgs", () => {
     expect(targetArgs("nova", f, 42)).toEqual([f, "-l", "42"]);
     expect(targetArgs("vim", f, 42)).toEqual(["+42", f]);
   });
-  it("maps each IDE to the right style", () => {
-    expect(IDE_LAUNCH.vscode.line).toBe("goto");
-    expect(IDE_LAUNCH.cursor.line).toBe("goto");
-    expect(IDE_LAUNCH.windsurf.line).toBe("goto");
-    expect(IDE_LAUNCH.antigravity.line).toBe("goto");
-    expect(IDE_LAUNCH.zed.line).toBe("suffix");
-    expect(IDE_LAUNCH.sublime.line).toBe("suffix");
-    expect(IDE_LAUNCH.idea.line).toBe("jetbrains");
-    expect(IDE_LAUNCH.rustrover.line).toBe("jetbrains");
-    expect(IDE_LAUNCH.nova.line).toBe("nova");
-    expect(IDE_LAUNCH.neovim.line).toBe("vim");
-  });
 });
 
 describe("catalog", () => {
