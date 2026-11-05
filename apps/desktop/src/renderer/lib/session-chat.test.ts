@@ -1,42 +1,38 @@
-import type { ChatPage, ChatPeerMessage, ChatTurn } from "@exegol/shared";
+import type { AgentMessage, ChatPage, SessionTurn } from "@exegol/shared";
 import { describe, expect, it } from "vitest";
 import {
   appendChatPage,
-  type ChatBubble,
   MAX_CHAT_TURNS,
   mergeChat,
-  sendDecision,
+  type SessionBubble,
   toolsLine,
 } from "./session-chat";
 
 const turn = (
   id: string,
-  role: ChatTurn["role"],
+  role: SessionTurn["role"],
   text: string,
   at: number | null = 10,
-): ChatTurn => ({
+): SessionTurn => ({ id, role, text, at });
+const SELF = "me";
+const peer = (id: string, createdAt: number, incoming = true): AgentMessage => ({
   id,
-  role,
-  text,
-  at,
+  fromAgentId: incoming ? "scout" : SELF,
+  toAgentId: incoming ? SELF : "scout",
+  type: "text",
+  content: "hello",
+  createdAt,
+  readAt: null,
+  deliveryState: "delivered",
 });
-const peer = (id: string, at: number, text = "hello", incoming = true): ChatPeerMessage => ({
-  id,
-  incoming,
-  peer: "Scout",
-  text,
-  at,
-  delivery: "delivered",
-});
-const ids = (bubbles: ChatBubble[]) => bubbles.map((b) => b.id);
+const ids = (bubbles: SessionBubble[]) => bubbles.map((b) => b.id);
 
 describe("appendChatPage", () => {
-  const page = (turns: ChatTurn[], reset: boolean): ChatPage => ({
+  const page = (turns: SessionTurn[], reset: boolean): ChatPage => ({
     turns,
     cursor: "1:2",
     reset,
-    source: "transcript",
-    peers: [],
+    fromTerminal: false,
   });
 
   it("appends a tail, replaces on reset and keeps the last turns", () => {
@@ -55,21 +51,30 @@ describe("mergeChat", () => {
     const bubbles = mergeChat(
       [turn("a", "user", "one", 10), turn("b", "assistant", "two", 30)],
       [peer("p", 20), peer("q", 40)],
+      SELF,
     );
     expect(ids(bubbles)).toEqual(["a", "peer:p", "b", "peer:q"]);
   });
 
-  it("shows a typed peer message once, even wrapped", () => {
-    const bubbles = mergeChat(
-      [turn("a", "user", "[from Scout] hello there", 30)],
-      [peer("p", 20, "hello there")],
-    );
-    expect(ids(bubbles)).toEqual(["peer:p"]);
+  it("shows a typed peer message once, by its header, short body or pointer", () => {
+    const short = turn("a", "user", '[Exegol message p from agent "Scout" (id s)]\nok', 30);
+    const pointer = turn("b", "user", '[Exegol notice q from "CI": x]\nThe body is 9000', 30);
+    expect(ids(mergeChat([short, pointer], [peer("p", 20), peer("q", 21)], SELF))).toEqual([
+      "peer:p",
+      "peer:q",
+    ]);
   });
 
-  it("leaves a turn alone when the same text was only sent out", () => {
-    const bubbles = mergeChat([turn("a", "user", "hello", 30)], [peer("p", 20, "hello", false)]);
-    expect(ids(bubbles)).toEqual(["peer:p", "a"]);
+  it("keeps a turn that only repeats a message's text, or quotes its header later", () => {
+    const quoted = turn("a", "user", "see [Exegol message p from x", 30);
+    expect(ids(mergeChat([turn("b", "user", "hello", 30), quoted], [peer("p", 20)], SELF))).toEqual(
+      ["peer:p", "b", "a"],
+    );
+  });
+
+  it("leaves a turn alone when the message was sent out", () => {
+    const typed = turn("a", "user", "[Exegol message p from x", 30);
+    expect(ids(mergeChat([typed], [peer("p", 20, false)], SELF))).toEqual(["peer:p", "a"]);
   });
 
   it("joins consecutive tools into one line and keeps peers after terminal text", () => {
@@ -80,6 +85,7 @@ describe("mergeChat", () => {
         turn("c", "assistant", "x", null),
       ],
       [peer("p", 5)],
+      SELF,
     );
     expect(bubbles[0]).toMatchObject({ kind: "tools", names: ["Read", "Read"] });
     expect(ids(bubbles)).toEqual(["a", "c", "peer:p"]);
@@ -89,21 +95,5 @@ describe("mergeChat", () => {
 describe("toolsLine", () => {
   it("counts repeats in the order first used", () => {
     expect(toolsLine(["Read", "Bash", "Read"])).toBe("Read x2, Bash");
-  });
-});
-
-describe("sendDecision", () => {
-  const base = { accepts: true, asks: false };
-
-  it("sends at the prompt and queues while busy", () => {
-    expect(sendDecision({ ...base, status: "waiting_input" })).toBe("send");
-    expect(sendDecision({ ...base, status: "running" })).toBe("queue");
-  });
-
-  it("never sends over a question or to an ended session", () => {
-    expect(sendDecision({ ...base, status: "waiting_input", asks: true })).toBe("question");
-    expect(sendDecision({ ...base, status: "completed", accepts: false, asks: true })).toBe(
-      "closed",
-    );
   });
 });

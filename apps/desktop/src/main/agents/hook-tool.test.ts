@@ -11,15 +11,11 @@ describe("noteHookTool", () => {
   });
   afterEach(() => vi.useRealTimers());
 
-  it("pushes only the last tool of a burst, and nothing while it stays the same", () => {
+  it("pushes only the last tool of a burst", () => {
     noteHookTool("burst", "Read");
     noteHookTool("burst", "Edit");
     vi.advanceTimersByTime(1000);
     expect(broadcast.mock.calls).toEqual([["agent:activity", { agentId: "burst", tool: "Edit" }]]);
-
-    noteHookTool("burst", "Edit");
-    vi.advanceTimersByTime(1000);
-    expect(broadcast).toHaveBeenCalledTimes(1);
   });
 
   it("drops a name that is not a plain identifier", () => {

@@ -1,87 +1,61 @@
-import type { DeskFacts, GitHubPr } from "@exegol/shared";
+import type { DeskFacts, DoneSession } from "@exegol/shared";
 import { cn, ScrollArea } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
-import { type ReactNode, useMemo, useState } from "react";
+import { memo, type ReactNode, useMemo, useState } from "react";
 import { useCliUpdates } from "../../../hooks/use-cli-updates";
-import { useLatest } from "../../../hooks/use-latest";
-import { useMountEffect } from "../../../hooks/use-mount-effect";
+import { useCompanyKeys } from "../../../hooks/use-company-keys";
 import { useNow } from "../../../hooks/use-now";
 import { useGitHubOverview } from "../../../hooks/use-trpc-github";
+import { sessionName } from "../../../lib/agent-label";
 import {
+  besideBrowser,
   buildRooms,
-  type DeskActivity,
   type DeskState,
   deskActivity,
   deskState,
   nextNeedsYou,
+  type Room,
   todayStrip,
 } from "../../../lib/company";
-import { isTextField } from "../../../lib/ended-session";
+import { formatTimeAgo } from "../../../lib/format";
 import { trpcInvoke } from "../../../lib/trpc-client";
-import {
-  type AgentState,
-  type AttentionItem,
-  jumpToAgent,
-  showProject,
-  useAgentStore,
-} from "../../../stores/agents";
+import { type AgentState, showProject, useAgentStore } from "../../../stores/agents";
 import { useAppStore } from "../../../stores/app";
+import { useDeskActivityStore } from "../../../stores/desk-activity";
 import { useNotificationPrefsStore } from "../../../stores/notification-prefs";
-import { collectPaneIds, useWorkspaceStore } from "../../../stores/workspace";
+import { useWorkspaceStore } from "../../../stores/workspace";
 import { AgentIcon } from "../../common/AgentIcon";
 import type { ProjectMeta } from "../../common/ProjectChip";
 import { CompanySession } from "./CompanySession";
 
-const STATE_LABEL: Record<DeskState, string> = {
-  needs: "needs you",
-  stuck: "stuck",
-  working: "working",
-  idle: "waiting",
-  suspended: "suspended",
+const DESK_STATE: Record<DeskState, { label: string; color: string; ring: string }> = {
+  needs: {
+    label: "needs you",
+    color: "text-amber-400",
+    ring: "border-amber-400/60 motion-safe:animate-pulse",
+  },
+  stuck: { label: "stuck", color: "text-error", ring: "border-error/60" },
+  working: { label: "working", color: "text-green-400", ring: "border-green-500/40" },
+  idle: { label: "waiting", color: "text-text-muted", ring: "border-border" },
+  suspended: { label: "suspended", color: "text-text-muted", ring: "border-border opacity-60" },
 };
 
-const STATE_COLOR: Record<DeskState, string> = {
-  needs: "text-amber-400",
-  stuck: "text-error",
-  working: "text-green-400",
-  idle: "text-text-muted",
-  suspended: "text-text-muted",
-};
+const ROOM_SUMMARY: [DeskState, string][] = [
+  ["needs", "need you"],
+  ["working", "working"],
+  ["stuck", "stuck"],
+];
 
-const DESK_RING: Record<DeskState, string> = {
-  needs: "border-amber-400/60 motion-safe:animate-pulse",
-  stuck: "border-error/60",
-  working: "border-green-500/40",
-  idle: "border-border",
-  suspended: "border-border opacity-60",
-};
-
-const ACTIVITY_LABEL: Record<DeskActivity, string> = {
-  edits: "EDITS",
-  command: "COMMAND",
-  browser: "BROWSER",
-  thinking: "THINKING",
-  question: "QUESTION",
-  message: "MESSAGE",
-};
-
-const sessionName = (a: AgentState) => a.alias || a.taskDescription.slice(0, 40) || a.cliType;
 const whereOf = (a: AgentState) => a.branchName ?? "repo root";
-
-function since(ms: number | undefined, now: number): string {
-  if (!ms) return "";
-  const minutes = Math.floor((now - ms) / 60_000);
-  if (minutes < 1) return "";
-  return minutes < 60 ? ` ${minutes}m` : ` ${Math.floor(minutes / 60)}h`;
-}
 
 /** Leaf timer: only this line re-renders as time passes */
 function StateLine({ state, activitySince }: { state: DeskState; activitySince?: number }) {
-  const now = useNow();
+  useNow();
+  const ago = activitySince && state !== "suspended" ? formatTimeAgo(activitySince / 1000) : "";
   return (
-    <span className={cn("text-[10px]", STATE_COLOR[state])}>
-      {STATE_LABEL[state]}
-      {state === "suspended" ? "" : since(activitySince, now)}
+    <span className={cn("text-[10px]", DESK_STATE[state].color)}>
+      {DESK_STATE[state].label}
+      {ago && ago !== "now" ? ` ${ago}` : ""}
     </span>
   );
 }
@@ -99,46 +73,43 @@ function Tag({ children, tone = "muted" }: { children: ReactNode; tone?: "muted"
   );
 }
 
-function Desk({
+// Memo: a push about one session redraws its own desk, not the room
+const Desk = memo(function Desk({
   agent,
-  item,
-  tool,
   facts,
-  pr,
+  prNumber,
   browser,
   cliOutdated,
   selected,
   onSelect,
 }: {
   agent: AgentState;
-  item: AttentionItem | undefined;
-  tool: string | undefined;
   facts: DeskFacts | undefined;
-  pr: GitHubPr | undefined;
+  prNumber: number | undefined;
   browser: boolean;
   cliOutdated: boolean;
   selected: boolean;
-  onSelect: () => void;
+  onSelect: (id: string) => void;
 }) {
+  const item = useAgentStore((s) => s.attentionItems[agent.id]);
+  const lastActivity = useDeskActivityStore((s) => s.activity[agent.id]);
   const state = deskState(agent, item);
-  const activity = deskActivity(agent, item, tool);
+  const activity = deskActivity(agent, item, lastActivity);
   const changed = facts?.changedFiles;
   return (
     <button
       type="button"
-      onClick={onSelect}
+      onClick={() => onSelect(agent.id)}
       aria-pressed={selected}
       data-desk-id={agent.id}
-      aria-label={`${sessionName(agent)}, ${agent.cliType}, ${STATE_LABEL[state]}`}
+      aria-label={`${sessionName(agent)}, ${agent.cliType}, ${DESK_STATE[state].label}`}
       className={cn(
         "flex min-w-0 flex-col items-center gap-1 rounded-lg border bg-bg-tertiary/40 px-1.5 py-2 transition-colors hover:bg-bg-tertiary",
-        DESK_RING[state],
+        DESK_STATE[state].ring,
         selected && "bg-accent/10 outline outline-1 outline-accent/60",
       )}
     >
-      <span className="h-3.5 text-[9px] tracking-wider text-text-muted">
-        {activity ? ACTIVITY_LABEL[activity] : ""}
-      </span>
+      <span className="h-3.5 text-[9px] uppercase tracking-wider text-text-muted">{activity}</span>
       <AgentIcon provider={agent.cliType} size={22} />
       <span className="h-1 w-10 rounded-sm bg-border" aria-hidden="true" />
       <span className="max-w-full truncate text-[11px] text-text-primary">
@@ -152,51 +123,39 @@ function Desk({
         {!!changed && <Tag tone="warn">±{changed}</Tag>}
         {facts?.port && <Tag>:{facts.port}</Tag>}
         {browser && <Tag>browser</Tag>}
-        {pr && <Tag>PR #{pr.number}</Tag>}
-        {!!facts?.linkedTo.length && <Tag>link</Tag>}
+        {prNumber && <Tag>PR #{prNumber}</Tag>}
+        {facts?.linked && <Tag>link</Tag>}
       </span>
     </button>
   );
-}
+});
 
 function RoomCard({
-  projectId,
+  room,
   meta,
-  desks,
   deskFacts,
   outdated,
   selectedId,
   onSelect,
 }: {
-  projectId: string;
+  room: Room;
   meta: ProjectMeta | undefined;
-  desks: AgentState[];
   deskFacts: Record<string, DeskFacts> | undefined;
   outdated: ReadonlySet<string>;
   selectedId: string | null;
   onSelect: (id: string) => void;
 }) {
+  const { projectId, desks } = room;
   const attention = useAgentStore((s) => s.attentionItems);
-  const tools = useAgentStore((s) => s.activityTools);
   const { data: overview } = useGitHubOverview(projectId);
   const workspace = useWorkspaceStore((s) => s.projectWorkspaces[projectId]);
-  const besideBrowser = useMemo(() => {
-    const ids = new Set<string>();
-    for (const tab of workspace?.tabs ?? []) {
-      const panes = collectPaneIds(tab.layout).map((id) => workspace?.panes[id]);
-      if (!panes.some((p) => p?.type === "browser")) continue;
-      for (const p of panes) if (p?.agentId) ids.add(p.agentId);
-    }
-    return ids;
-  }, [workspace]);
+  const browsers = useMemo(() => besideBrowser(workspace), [workspace]);
   const states = desks.map((a) => deskState(a, attention[a.id]));
-  const count = (state: DeskState) => states.filter((s) => s === state).length;
-  const summary = [
-    count("needs") && `${count("needs")} need you`,
-    count("working") && `${count("working")} working`,
-    count("stuck") && `${count("stuck")} stuck`,
-  ]
-    .filter(Boolean)
+  const summary = ROOM_SUMMARY.map(
+    ([state, label]) => [states.filter((s) => s === state).length, label] as const,
+  )
+    .filter(([n]) => n > 0)
+    .map(([n, label]) => `${n} ${label}`)
     .join(", ");
   const prs = overview?.prs ?? [];
 
@@ -210,17 +169,14 @@ function RoomCard({
         <h3 className="min-w-0 truncate text-xs font-semibold text-text-primary">
           {meta?.name ?? projectId.slice(0, 12)}
         </h3>
-        <span className="truncate text-[10px] text-text-muted">{summary}</span>
+        <span className="min-w-0 flex-1 truncate text-[10px] text-text-muted">{summary}</span>
         {prs.length > 0 && (
-          <span className="ml-auto shrink-0 text-[10px] text-text-muted">{prs.length} PR</span>
+          <span className="shrink-0 text-[10px] text-text-muted">{prs.length} PR</span>
         )}
         <button
           type="button"
           onClick={() => showProject(projectId)}
-          className={cn(
-            "shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] text-text-secondary hover:border-accent/40",
-            prs.length === 0 && "ml-auto",
-          )}
+          className="shrink-0 rounded border border-border px-1.5 py-0.5 text-[10px] text-text-secondary hover:border-accent/40"
           title="Go to this project and its layouts"
         >
           Open project
@@ -231,14 +187,12 @@ function RoomCard({
           <Desk
             key={agent.id}
             agent={agent}
-            item={attention[agent.id]}
-            tool={tools[agent.id]}
             facts={deskFacts?.[agent.id]}
-            pr={agent.branchName ? prs.find((p) => p.branch === agent.branchName) : undefined}
-            browser={besideBrowser.has(agent.id)}
+            prNumber={prs.find((p) => p.branch === agent.branchName)?.number}
+            browser={browsers.has(agent.id)}
             cliOutdated={outdated.has(agent.cliType)}
             selected={agent.id === selectedId}
-            onSelect={() => onSelect(agent.id)}
+            onSelect={onSelect}
           />
         ))}
       </div>
@@ -254,7 +208,7 @@ function TodayCard({
 }: {
   label: string;
   tone: string;
-  agents: AgentState[];
+  agents: Pick<AgentState, "alias" | "taskDescription" | "cliType">[];
   onClick?: () => void;
 }) {
   const body = (
@@ -278,20 +232,9 @@ function TodayCard({
   );
 }
 
-/** A key may act unless the user is typing, the mirror's own textarea included, or a dialog is up */
-function companyKeysAllowed(active: HTMLElement | null): boolean {
-  if (document.querySelector('[role="dialog"]')) return false;
-  return !active || active === document.body || !isTextField(active);
-}
-
 /** Cross-project offices: a room per project with live sessions, a desk per session */
-export function CompanySection({
-  agents,
-  projectMeta,
-}: {
-  agents: AgentState[];
-  projectMeta: Map<string, ProjectMeta>;
-}) {
+export function CompanySection({ projectMeta }: { projectMeta: Map<string, ProjectMeta> }) {
+  const agents = useAgentStore((s) => s.agents);
   const attention = useAgentStore((s) => s.attentionItems);
   const levelOf = useNotificationPrefsStore((s) => s.levelOf);
   // Subscribed for its changes: `levelOf` itself is one stable function
@@ -302,16 +245,20 @@ export function CompanySection({
     [cliUpdates],
   );
   const [seenAt] = useState(() => useAppStore.getState().companySeenAt);
-  useMountEffect(() => () => useAppStore.getState().setCompanySeenAt(Date.now()));
+  const { data: done = [] } = useQuery({
+    queryKey: ["agents", "doneSince", seenAt],
+    queryFn: () => trpcInvoke<DoneSession[]>("agents.doneSince", { since: seenAt }),
+    refetchInterval: 30_000,
+  });
 
   const { data: deskFacts } = useQuery({
     queryKey: ["agents", "deskFacts"],
     queryFn: () => trpcInvoke<Record<string, DeskFacts>>("agents.deskFacts"),
-    refetchInterval: 15_000,
+    refetchInterval: 60_000,
   });
 
-  const rooms = useMemo(() => buildRooms(agents), [agents]);
-  const today = todayStrip(agents, attention, { levelOf, outdated, since: seenAt });
+  const rooms = buildRooms(Object.values(agents));
+  const today = todayStrip(Object.values(agents), attention, { levelOf, outdated });
   const [pickedId, setPickedId] = useState<string | null>(null);
   const live = rooms.flatMap((r) => r.desks);
   const selected =
@@ -324,29 +271,7 @@ export function CompanySection({
     if (next) setPickedId(next);
   };
 
-  const keys = useLatest({ pickNext, selected, live });
-  useMountEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.metaKey || e.ctrlKey || e.altKey) return;
-      const active = document.activeElement as HTMLElement | null;
-      if (!companyKeysAllowed(active)) return;
-      const { pickNext, selected, live } = keys.current;
-      if (e.key.toLowerCase() === "p") {
-        pickNext();
-      } else if (e.key === "Enter") {
-        // A desk in focus is the one meant; any other button keeps its own Enter
-        const deskId = active?.dataset.deskId;
-        if (!deskId && active?.closest("button, a")) return;
-        const target = live.find((a) => a.id === deskId) ?? selected;
-        if (!target) return;
-        jumpToAgent(target.id, target.projectId);
-      } else return;
-      e.preventDefault();
-      e.stopPropagation();
-    };
-    window.addEventListener("keydown", onKeyDown, true);
-    return () => window.removeEventListener("keydown", onKeyDown, true);
-  });
+  useCompanyKeys({ pickNext, selected, live });
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 p-4 pt-0">
@@ -359,7 +284,7 @@ export function CompanySection({
         />
         <TodayCard label="Stuck" tone="text-error" agents={today.stuck} />
         <TodayCard label="Can wait" tone="text-accent" agents={today.canWait} />
-        <TodayCard label="Done since you left" tone="text-green-400" agents={today.done} />
+        <TodayCard label="Done since you left" tone="text-green-400" agents={done} />
       </div>
       {rooms.length === 0 ? (
         <p className="py-8 text-center text-xs text-text-muted">No live sessions right now.</p>
@@ -370,9 +295,8 @@ export function CompanySection({
               {rooms.map((room) => (
                 <RoomCard
                   key={room.projectId}
-                  projectId={room.projectId}
+                  room={room}
                   meta={projectMeta.get(room.projectId)}
-                  desks={room.desks}
                   deskFacts={deskFacts}
                   outdated={outdated}
                   selectedId={selected?.id ?? null}

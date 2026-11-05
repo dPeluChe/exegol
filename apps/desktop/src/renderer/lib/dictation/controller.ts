@@ -77,10 +77,8 @@ const toast = useToastStore.getState;
 
 /** Dashboard: the session whose mirror has the focus, Watching's or Company's, and its pane */
 function focusedMirror(): FocusSnapshot["mirror"] {
-  const card = document.activeElement?.closest<HTMLElement>(
-    "[data-mirror-agent-id],[data-dictation-agent-id]",
-  );
-  const agentId = card?.dataset.mirrorAgentId ?? card?.dataset.dictationAgentId;
+  const agentId =
+    document.activeElement?.closest<HTMLElement>("[data-mirror-agent-id]")?.dataset.mirrorAgentId;
   const agent = agentId ? useAgentStore.getState().agents[agentId] : undefined;
   if (!agentId || !agent) return undefined;
   return {

@@ -37,6 +37,7 @@ import { noteHookCwd, noteHookSession } from "./hook-cwd";
 import { clearHookTool, noteHookTool } from "./hook-tool";
 import { handleLostSession } from "./lost-session-exit";
 import { detachOutputPipeline } from "./output-pipeline";
+import { SESSION_ID_RE } from "./provider-session-id";
 import { noteSessionActivity } from "./session-activity";
 import { noteChatBoundary } from "./session-chat";
 import {
@@ -208,7 +209,7 @@ function trackTurn(
   maps: SessionMaps,
   event: AgentSignalType,
 ): void {
-  if (event === "turn_started" || event === "finished") noteChatBoundary(agent.id);
+  if (event === "turn_started" || event === "finished") noteChatBoundary(agent.id, agent.cliType);
   if (event === "turn_started") {
     clearHookTool(agent.id);
     try {
@@ -236,8 +237,6 @@ const FILE_EVENT_SIGNALS: Record<string, string> = {
 };
 
 const TERMINAL_STATUSES = new Set(["completed", "failed", "stopped", "crashed"]);
-
-const SESSION_ID_RE = /^[A-Za-z0-9-]{8,64}$/;
 
 /**
  * Keep the latest Claude session id for resume. The startup-banner parse this

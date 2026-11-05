@@ -33,7 +33,7 @@ interface SessionMeta {
  */
 const TITLE_SCAN_BYTES = 128 * 1024;
 
-const BOILERPLATE_PREFIXES = [
+export const BOILERPLATE_PREFIXES = [
   "# AGENTS.md instructions",
   "<permissions instructions",
   "The following is the Codex agent history",

@@ -4,7 +4,7 @@ import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { getNotificationBus } from "../notifications/bus";
 import { getPtyHost } from "../terminal/pty-host";
-import { isAgentAwaitingApproval, msSinceAgentOutput } from "./agent-messaging";
+import { msSinceAgentOutput, needsUser } from "./agent-messaging";
 import { displayName } from "./idle-suspend-sweep";
 import { getAgentManager } from "./manager";
 import { firstAlert, type StuckContext, stuckTitle, stuckVerdict } from "./stuck-turn";
@@ -72,7 +72,7 @@ export function checkStuckTurns(db: Database.Database, now = Date.now()): void {
     since,
     turnStartedAt: (id) => turnStarts.get(id),
     msSinceOutput: msSinceAgentOutput,
-    needsUser: (id) => isAgentAwaitingApproval(id) || host.screenDialog(id) != null,
+    needsUser,
   };
   for (const s of live) {
     const verdict = stuckVerdict(s, ctx);

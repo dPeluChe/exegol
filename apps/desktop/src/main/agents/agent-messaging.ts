@@ -28,6 +28,7 @@ import {
 import { getProject } from "../db/queries/projects";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
+import { getPtyHost } from "../terminal/pty-host";
 import {
   forgetAgentInjectionState,
   injectNow,
@@ -165,6 +166,11 @@ export function setAgentAwaitingApproval(agentId: string, awaiting: boolean): vo
 
 export function isAgentAwaitingApproval(agentId: string): boolean {
   return agentsAwaitingApproval.has(agentId);
+}
+
+/** A hook-reported approval or a dialog on its screen (CLIs with no hook for it): Enter answers it */
+export function needsUser(agentId: string): boolean {
+  return agentsAwaitingApproval.has(agentId) || getPtyHost().screenDialog(agentId) != null;
 }
 
 /**
@@ -342,7 +348,7 @@ export function enqueue(
 
 /**
  * Target at its prompt → inject immediately; otherwise queue for the boundary.
- * NEVER inject while it's on a permission dialog (see agentsAwaitingApproval).
+ * NEVER inject while it's on a permission dialog or a question (see needsUser).
  * User follow-ups go ahead of agent messages, and wait their turn behind earlier ones.
  */
 function route(
@@ -355,8 +361,8 @@ function route(
   const { toAgentId } = pending;
   const atIdlePrompt =
     (targetStatus === "waiting_input" || targetStatus === "idle") &&
-    !agentsAwaitingApproval.has(toAgentId) &&
-    !(pending.onDelivered && !first && queue.some((p) => p.onDelivered));
+    !(pending.onDelivered && !first && queue.some((p) => p.onDelivered)) &&
+    !needsUser(toAgentId);
   if (atIdlePrompt && injectNow(pending)) {
     if (!pending.onDelivered) setOutcome(db, pending.messageId, "delivered");
     return true;
@@ -424,6 +430,8 @@ export function deliverPendingAgentMessages(db: Database.Database, agentId: stri
   // Not redundant with the shift below: it narrows `queue` for the rest of the
   // function, which reads its length after draining one message.
   if (!queue?.length) return;
+  // A boundary can land on a dialog: the sweep tries again once it is gone
+  if (needsUser(agentId)) return;
   const next = queue.shift();
   if (!next) return;
   if (!injectNow(next)) {
@@ -496,7 +504,7 @@ function sweepQuietAgents(): void {
     const announces = boundarySignalling.has(agentId);
     if (quietFor < (announces ? BOUNDARY_STALL_MS : QUIET_MS)) continue;
     if (isEchoingInjection(agentId)) continue;
-    if (agentsAwaitingApproval.has(agentId)) continue;
+    if (needsUser(agentId)) continue;
     if (announces) {
       logger.warn(
         `[AgentMsg] ${agentId} announces turn boundaries but none arrived in ${BOUNDARY_STALL_MS / 1000}s — delivering anyway`,

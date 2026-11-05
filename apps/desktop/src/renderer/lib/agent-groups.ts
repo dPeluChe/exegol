@@ -19,7 +19,7 @@ export function needsYou(
 }
 
 /** Working: busy. Everything else live that does not need you is waiting */
-function agentGroup(a: Grouped, item: AttentionItem | undefined): AgentGroup {
+export function agentGroup(a: Grouped, item: AttentionItem | undefined): AgentGroup {
   if (needsYou(a, item)) return "needYou";
   return a.activityLevel === "busy" ? "working" : "waiting";
 }

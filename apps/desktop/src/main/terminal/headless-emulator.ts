@@ -209,6 +209,10 @@ export class HeadlessEmulator {
     return lines;
   }
 
+  get lineCount(): number {
+    return this.terminal.buffer.active.length;
+  }
+
   /** The last rows of the active buffer as plain text; `total` numbers its rows from the top */
   textLines(max: number): { lines: string[]; total: number; altScreen: boolean } {
     const buffer = this.terminal.buffer.active;

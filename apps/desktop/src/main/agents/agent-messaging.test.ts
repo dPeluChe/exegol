@@ -5,6 +5,7 @@ import { runMigrations } from "../db/migrations";
 const ptyMock = vi.hoisted(() => ({
   writes: [] as Array<{ id: string; data: string }>,
   alive: new Set<string>(),
+  dialogs: new Set<string>(),
 }));
 
 // Only the 2s quiescence sweep reaches for the ambient db; every other path
@@ -16,6 +17,7 @@ vi.mock("../terminal/pty-host", () => ({
   getPtyHost: () => ({
     isAlive: (id: string) => ptyMock.alive.has(id),
     write: (id: string, data: string) => ptyMock.writes.push({ id, data }),
+    screenDialog: (id: string) => (ptyMock.dialogs.has(id) ? {} : null),
   }),
 }));
 
@@ -272,6 +274,22 @@ describe("sendAgentMessage", () => {
 
     // Once the dialog is gone, the normal boundary delivers it.
     setAgentAwaitingApproval("a2", false);
+    deliverPendingAgentMessages(db, "a2");
+    expect(ptyMock.writes).toHaveLength(1);
+  });
+
+  it("holds anything queued while a dialog is on screen, with no hook having said so", () => {
+    insertAgent(db, "a1", "running");
+    insertAgent(db, "a2", "waiting_input");
+    ptyMock.alive.add("a2");
+    ptyMock.dialogs.add("a2");
+
+    const res = sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "a2", text: "go ahead" });
+    expect(res.delivered).toBe(false);
+    deliverPendingAgentMessages(db, "a2");
+    expect(ptyMock.writes).toHaveLength(0);
+
+    ptyMock.dialogs.delete("a2");
     deliverPendingAgentMessages(db, "a2");
     expect(ptyMock.writes).toHaveLength(1);
   });

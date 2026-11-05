@@ -1,11 +1,12 @@
-import type { ChatTurn } from "@exegol/shared";
+import type { SessionTurn } from "@exegol/shared";
+import { BOILERPLATE_PREFIXES } from "../history/providers/codex";
 
 /** One read of a transcript, and the first read's window: a session log reaches tens of MB */
 export const MAX_READ_BYTES = 2 * 1024 * 1024;
 const NEWLINE = 0x0a;
 const MAX_TURN_CHARS = 8000;
 
-export type LineParser = (line: string, id: string) => ChatTurn[];
+export type LineParser = (line: string, id: string) => SessionTurn[];
 
 export interface ReadPlan {
   offset: number;
@@ -34,14 +35,14 @@ export function parseChunk(
   chunk: Buffer,
   plan: Pick<ReadPlan, "offset" | "dropFirstLine">,
   parse: LineParser,
-): { turns: ChatTurn[]; nextOffset: number } {
+): { turns: SessionTurn[]; nextOffset: number } {
   const end = chunk.lastIndexOf(NEWLINE) + 1;
   // A single line over the cap would stall the tail for good: step past it
   if (end === 0) {
     const stuck = chunk.length >= MAX_READ_BYTES;
     return { turns: [], nextOffset: plan.offset + (stuck ? chunk.length : 0) };
   }
-  const turns: ChatTurn[] = [];
+  const turns: SessionTurn[] = [];
   let start = plan.dropFirstLine ? chunk.indexOf(NEWLINE) + 1 : 0;
   while (start < end) {
     const stop = chunk.indexOf(NEWLINE, start);
@@ -65,7 +66,7 @@ function jsonLine(line: string): Record<string, unknown> | null {
   }
 }
 
-const textTurn = (id: string, role: ChatTurn["role"], text: string, at: number | null) => {
+const textTurn = (id: string, role: SessionTurn["role"], text: string, at: number | null) => {
   const clean = text.trim().slice(0, MAX_TURN_CHARS);
   return clean ? [{ id, role, text: clean, at }] : [];
 };
@@ -92,7 +93,7 @@ export const parseClaudeLine: LineParser = (line, id) => {
       : Array.isArray(content)
         ? content
         : [];
-  return blocks.flatMap((b, i): ChatTurn[] => {
+  return blocks.flatMap((b, i): SessionTurn[] => {
     const turnId = `${id}:${i}`;
     if (b.type === "tool_use" && d.type === "assistant") {
       return textTurn(turnId, "tool", b.name ?? "", at);
@@ -102,10 +103,6 @@ export const parseClaudeLine: LineParser = (line, id) => {
     return textTurn(turnId, d.type === "user" ? "user" : "assistant", b.text, at);
   });
 };
-
-// codex's own framing around what the person typed, as in history/providers/codex.ts
-const CODEX_SCAFFOLD =
-  /^(# AGENTS\.md instructions|<permissions instructions|<user_instructions|<environment_context|The following is the Codex agent history)/;
 
 export const parseCodexLine: LineParser = (line, id) => {
   const d = jsonLine(line);
@@ -122,7 +119,8 @@ export const parseCodexLine: LineParser = (line, id) => {
   }
   if (p?.type !== "message" || (p.role !== "user" && p.role !== "assistant")) return [];
   const text = (p.content ?? []).map((c) => c.text ?? "").join("");
-  if (p.role === "user" && CODEX_SCAFFOLD.test(text.trimStart())) return [];
+  const typed = text.trimStart();
+  if (p.role === "user" && BOILERPLATE_PREFIXES.some((b) => typed.startsWith(b))) return [];
   return textTurn(id, p.role, text, at);
 };
 
@@ -132,7 +130,7 @@ const EDGES = /^[\s│|]+|[\s│|]+$/g;
 function plainText(lines: string[]): string {
   return lines
     .filter((l) => !CHROME.test(l) || !l.trim())
-    .map((l) => (l.trim() ? l.replace(EDGES, "") : ""))
+    .map((l) => l.replace(EDGES, ""))
     .join("\n")
     .replace(/\n{3,}/g, "\n\n");
 }
@@ -144,7 +142,7 @@ export function terminalTurns(
   first: number,
   marks: number[],
   altScreen: boolean,
-): ChatTurn[] {
+): SessionTurn[] {
   const cuts = altScreen ? [] : marks.filter((m) => m > first && m < first + lines.length);
   const bounds = [first, ...cuts, first + lines.length];
   return bounds.slice(0, -1).flatMap((from, i) => {

@@ -36,10 +36,10 @@ import { FilterChip } from "../../common/FilterChip";
 import { ProjectChip, type ProjectMeta } from "../../common/ProjectChip";
 import { SessionAlias } from "../../common/SessionAlias";
 import { StatusDot } from "../../common/StatusDot";
-import { ErrorBoundary, paneFallback } from "../../ErrorBoundary";
 import { CliUpdateControl } from "../../terminal/CliUpdateControl";
 import { FollowUpControl } from "../../terminal/FollowUpControl";
-import { TerminalInstance, type TerminalInstanceHandle } from "../../terminal/TerminalInstance";
+import { MirrorFrame } from "../../terminal/MirrorFrame";
+import type { TerminalInstanceHandle } from "../../terminal/TerminalInstance";
 import { WatchCardMenu } from "./DashboardMenus";
 import { WatchGoneCard, WatchGoneStrip } from "./WatchGoneStrip";
 
@@ -337,6 +337,7 @@ const WatchCard = memo(function WatchCard({
       onCollapse={collapse}
     >
       <div
+        data-watching-card
         style={{ height: FULL_HEIGHT }}
         className={cn(
           "flex min-w-0 flex-1 flex-col rounded-xl border bg-bg-secondary/40",
@@ -408,30 +409,18 @@ const WatchCard = memo(function WatchCard({
         {live ? (
           // Focusing the mirror keeps it open after the question is answered and
           // clears the attention badge, as reading it in its pane would.
-          <div
+          <MirrorFrame
+            agent={agent}
+            terminalRef={terminalRef}
+            cardFont={cardFont}
+            menuOnRightButton
             className="mx-2 mb-2 min-h-0 flex-1 overflow-hidden rounded-md border border-border bg-black/40 p-1"
-            data-mirror-agent-id={agent.id}
-            // Our menu takes the right button: a TUI tracking the mouse must not get the press
-            onMouseDownCapture={(e) => {
-              if (e.button === 2) e.stopPropagation();
-            }}
             onFocusCapture={() => {
               rememberMirrorFocus(agent.id);
               if (!openedByUser) toggleOpen(agent.id);
               if (needsInput) useAgentStore.getState().markAttentionRead(agent.id);
             }}
-          >
-            <ErrorBoundary fallback={paneFallback}>
-              <TerminalInstance
-                ref={terminalRef}
-                key={`mirror-${agent.id}`}
-                agentId={agent.id}
-                cliType={agent.cliType}
-                mirror
-                cardFont={cardFont}
-              />
-            </ErrorBoundary>
-          </div>
+          />
         ) : (
           <div className="mx-3 mb-2 flex items-center gap-2 text-[11px] text-text-muted">
             <span>Session ended ({agent.status}).</span>

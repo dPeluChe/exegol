@@ -3,9 +3,10 @@ import { useState } from "react";
 import { type AgentState, jumpToAgent, useAgentStore } from "../../../stores/agents";
 import { AgentIcon } from "../../common/AgentIcon";
 import { SegmentedTabs } from "../../common/SegmentedTabs";
+import { SessionAlias } from "../../common/SessionAlias";
 import { WatchToggle } from "../../common/WatchToggle";
 import { ErrorBoundary, paneFallback } from "../../ErrorBoundary";
-import { TerminalInstance } from "../../terminal/TerminalInstance";
+import { MirrorFrame } from "../../terminal/MirrorFrame";
 import { CompanyChat } from "./CompanyChat";
 
 type SessionView = "chat" | "terminal";
@@ -26,9 +27,7 @@ export function CompanySession({ agent, where }: { agent: AgentState; where: str
       <div className="flex items-center gap-2 border-b border-border px-3 py-2">
         <AgentIcon provider={agent.cliType} size={16} />
         <div className="min-w-0 flex-1">
-          <p className="truncate text-xs font-medium text-text-primary">
-            {agent.alias ?? agent.cliType}
-          </p>
+          <SessionAlias agent={agent} textClassName="text-xs font-medium" />
           <p className="truncate text-[10px] text-text-muted">{where}</p>
         </div>
         <WatchToggle agentId={agent.id} className="text-[10px]" />
@@ -60,26 +59,13 @@ export function CompanySession({ agent, where }: { agent: AgentState; where: str
           </ErrorBoundary>
         </div>
       ) : (
-        <div
+        <MirrorFrame
+          agent={agent}
           id={PANEL_ID}
           role={hasChat ? "tabpanel" : undefined}
-          data-dictation-agent-id={agent.id}
           className="min-h-0 flex-1 overflow-hidden bg-black/40 p-1"
-          // Our keys stay on Company until a click: no `data-mirror-agent-id`, Cmd+1 leaves this alone
-          onMouseDownCapture={(e) => {
-            if (e.button === 2) e.stopPropagation();
-          }}
           onFocusCapture={() => useAgentStore.getState().markAttentionRead(agent.id)}
-        >
-          <ErrorBoundary fallback={paneFallback}>
-            <TerminalInstance
-              key={`company-${agent.id}`}
-              agentId={agent.id}
-              cliType={agent.cliType}
-              mirror
-            />
-          </ErrorBoundary>
-        </div>
+        />
       )}
     </aside>
   );

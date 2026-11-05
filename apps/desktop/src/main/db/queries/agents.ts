@@ -3,6 +3,7 @@ import {
   type AgentCreate,
   type AgentStatus,
   agentRowSchema,
+  type DoneSession,
   type HistoryEntry,
   LIVE_STATUSES,
 } from "@exegol/shared";
@@ -709,16 +710,30 @@ export function listLiveAgentFolderRows(
 
 /** Distinct folders live agents work in (`AGENT_FOLDER_SQL`) */
 export function listLiveAgentFolders(db: Database.Database): string[] {
+  return [...new Set(listLiveAgentFolderRows(db).flatMap((r) => (r.cwd ? [r.cwd] : [])))];
+}
+
+/** Sessions that finished on their own after `sinceMs`: a crash or a stop is not done */
+export function listCompletedSince(db: Database.Database, sinceMs: number): DoneSession[] {
   const rows = db
     .prepare(
-      `SELECT DISTINCT ${AGENT_FOLDER_SQL} AS cwd
-       FROM agents a
-       LEFT JOIN worktrees w ON w.id = a.worktree_id
-       JOIN projects p ON p.id = a.project_id
-       WHERE a.status IN (${liveIn()})`,
+      `SELECT id, alias, task_description, cli_type FROM agents
+       WHERE status = 'completed' AND status_changed_at > ? AND archived_at IS NULL
+         AND cli_type != 'shell'
+       ORDER BY status_changed_at DESC LIMIT 50`,
     )
-    .all(...LIVE_STATUSES) as { cwd: string | null }[];
-  return rows.flatMap((r) => (r.cwd ? [r.cwd] : []));
+    .all(sinceMs) as {
+    id: string;
+    alias: string | null;
+    task_description: string;
+    cli_type: DoneSession["cliType"];
+  }[];
+  return rows.map((r) => ({
+    id: r.id,
+    alias: r.alias,
+    taskDescription: r.task_description,
+    cliType: r.cli_type,
+  }));
 }
 
 /** Worktree paths a live agent, or one of `agentIds` (a race awaiting its pick), is bound to */

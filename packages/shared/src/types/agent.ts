@@ -328,7 +328,7 @@ export interface ScreenDialog {
 }
 
 /** One bubble of a session's chat: never a tool's input or result */
-export type ChatTurn = {
+export type SessionTurn = {
   id: string;
   role: "user" | "assistant" | "tool";
   text: string;
@@ -336,25 +336,21 @@ export type ChatTurn = {
   at: number | null;
 };
 
-export type ChatPeerMessage = {
-  id: string;
-  /** Received by this session, else sent by it */
-  incoming: boolean;
-  peer: string;
-  text: string;
-  at: number;
-  delivery: MessageDeliveryState | null;
-};
-
 export type ChatPage = {
-  turns: ChatTurn[];
+  turns: SessionTurn[];
   /** Hand it back for what came after; null when a page is the whole text */
   cursor: string | null;
   /** `turns` replaces what the reader holds */
   reset: boolean;
-  source: "transcript" | "terminal" | "none";
-  peers: ChatPeerMessage[];
+  /** Read from the terminal: there was no transcript */
+  fromTerminal: boolean;
 };
+
+/** How a message typed into a session opens, id included: the chat's way to recognize it */
+export const injectedHeaders = (messageId: string): [string, string] => [
+  `[Exegol message ${messageId} `,
+  `[Exegol notice ${messageId} `,
+];
 
 /** A prompt the user queued for an agent's next turn boundary (T200.4) */
 export interface FollowUpItem {
@@ -401,16 +397,19 @@ export interface PlanUsage {
   stale: boolean;
 }
 
-/** A CLI's installed version against its newest release (Doctor's cliUpdates) */
 /** What a Company desk shows that the agent row does not hold */
 export interface DeskFacts {
   /** Changed files in its folder; null when that is not a git repo */
   changedFiles: number | null;
   port: number | null;
-  /** Agents linked with it, either direction */
-  linkedTo: string[];
+  /** Linked with another agent, either direction */
+  linked: boolean;
 }
 
+/** A session that finished on its own, for Company's Done since you left */
+export type DoneSession = Pick<Agent, "id" | "alias" | "taskDescription" | "cliType">;
+
+/** A CLI's installed version against its newest release (Doctor's cliUpdates) */
 export interface CliUpdateStatus {
   cliType: string;
   installed: string | null;

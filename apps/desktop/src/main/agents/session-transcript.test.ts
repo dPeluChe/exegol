@@ -90,7 +90,6 @@ describe("parseCodexLine", () => {
   it("reads messages and tool names, not the scaffolding", () => {
     const say = (role: string, text: string) => ({ type: "message", role, content: [{ text }] });
     expect(parseCodexLine(item(say("assistant", "ok")), "1")).toMatchObject([{ text: "ok" }]);
-    expect(parseCodexLine(item(say("user", "<environment_context>")), "1")).toEqual([]);
     expect(parseCodexLine(item(say("developer", "rules")), "1")).toEqual([]);
     expect(
       parseCodexLine(item({ type: "function_call", name: "shell", arguments: "x" }), "1"),

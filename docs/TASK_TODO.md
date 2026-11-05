@@ -280,6 +280,10 @@ references in the research doc, section "Company and chat"). One PR per phase, i
   as "other agent" bubbles with their delivery state; Copy summary
   Done with deviations: capped to the last 200 turns, not virtualized; Send to another agent left out
   (no existing path); a peer message typed into the session shows once, as the peer's. See 2611.md
+- [ ] Company chat follow-ups: `terminalTurns` and `parseTerminalToChat` stay apart for now (one cuts
+  by turn boundary, the other guesses roles from prompts) and could share a base; xterm
+  `registerMarker` for turn boundaries, so they survive a full scrollback; persist the Codex hook
+  session id (`storeHookSessionId` for every CLI), so a Codex chat works before its next event
 - [x] Phase 6 (`feat/project-signals`), sidebar: PR badge and a needs-you dot per project; interruption
   level per project (All, Only what needs me, Nothing) for notifications, toasts and attention items,
   the Today strip reads it in phase 4; a session's own mute stays; Activity is the event feed (warnings

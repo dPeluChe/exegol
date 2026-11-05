@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AgentState, AttentionItem } from "../stores/agents";
+import { toolActivity } from "../stores/desk-activity";
 import { buildRooms, deskActivity, deskState, nextNeedsYou, todayStrip } from "./company";
 
 const agent = (over: Partial<AgentState> & { id: string }) =>
@@ -12,12 +13,17 @@ const agent = (over: Partial<AgentState> & { id: string }) =>
     ...over,
   }) as AgentState;
 const question = { level: "action_needed", read: false } as AttentionItem;
-const stuck = { level: "info", read: false, stuck: true } as AttentionItem;
+const stuck = { level: "info", read: false, stuck: true, timestamp: 100 } as AttentionItem;
 
 describe("deskState", () => {
   it("drops a stuck mark once the turn is over", () => {
     expect(deskState(agent({ id: "a", activityLevel: "busy" }), stuck)).toBe("stuck");
     expect(deskState(agent({ id: "a", activityLevel: "idle" }), stuck)).toBe("idle");
+  });
+
+  it("ignores a stuck mark from an earlier turn", () => {
+    const later = agent({ id: "a", activityLevel: "busy", activitySince: 200 });
+    expect(deskState(later, stuck)).toBe("working");
   });
 
   it("puts a suspended session before anything it left pending", () => {
@@ -29,17 +35,17 @@ describe("deskActivity", () => {
   const busy = agent({ id: "a", activityLevel: "busy" });
 
   it("names what the last tool did", () => {
-    expect(deskActivity(busy, undefined, "Edit")).toBe("edits");
-    expect(deskActivity(busy, undefined, "Bash")).toBe("command");
-    expect(deskActivity(busy, undefined, "mcp__exegol__browser_click")).toBe("browser");
-    expect(deskActivity(busy, undefined, "mcp__exegol__agent_send")).toBe("message");
-    expect(deskActivity(busy, undefined, "Read")).toBe("thinking");
+    expect(toolActivity("Edit")).toBe("edits");
+    expect(toolActivity("Bash")).toBe("command");
+    expect(toolActivity("mcp__exegol__browser_click")).toBe("browser");
+    expect(toolActivity("mcp__exegol__agent_send")).toBe("message");
+    expect(toolActivity("Read")).toBe("thinking");
   });
 
   it("is thinking with no hook, a question wins, and an idle session shows nothing", () => {
     expect(deskActivity(busy, undefined, undefined)).toBe("thinking");
-    expect(deskActivity(busy, question, "Edit")).toBe("question");
-    expect(deskActivity(agent({ id: "a" }), undefined, "Edit")).toBeNull();
+    expect(deskActivity(busy, question, "edits")).toBe("question");
+    expect(deskActivity(agent({ id: "a" }), undefined, "edits")).toBeNull();
   });
 });
 
@@ -57,7 +63,7 @@ describe("buildRooms", () => {
 });
 
 describe("todayStrip", () => {
-  const ctx = { levelOf: () => "all" as const, outdated: new Set<string>(), since: 100 };
+  const ctx = { levelOf: () => "all" as const, outdated: new Set<string>() };
   const ids = (list: AgentState[]) => list.map((a) => a.id);
 
   it("sorts each session into one bucket", () => {
@@ -67,8 +73,7 @@ describe("todayStrip", () => {
         agent({ id: "stuck", activityLevel: "busy" }),
         agent({ id: "pr" }),
         agent({ id: "quiet" }),
-        agent({ id: "new", status: "completed", activitySince: 200 }),
-        agent({ id: "old", status: "completed", activitySince: 50 }),
+        agent({ id: "ended", status: "completed" }),
       ],
       {
         needs: question,
@@ -80,7 +85,6 @@ describe("todayStrip", () => {
     expect(ids(strip.needs)).toEqual(["needs"]);
     expect(ids(strip.stuck)).toEqual(["stuck"]);
     expect(ids(strip.canWait)).toEqual(["pr"]);
-    expect(ids(strip.done)).toEqual(["new"]);
   });
 
   it("follows the project's interruption level", () => {

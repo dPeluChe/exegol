@@ -20,6 +20,7 @@ import {
 } from "lucide-react";
 import { memo, useCallback, useMemo, useState } from "react";
 import { useFleetSync } from "../../../hooks/use-fleet-sync";
+import { useMountEffect } from "../../../hooks/use-mount-effect";
 import { useNow } from "../../../hooks/use-now";
 import { submitToAgent } from "../../../lib/agent-input";
 import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
@@ -128,49 +129,39 @@ type DashboardMode = "company" | "watching" | "all";
 
 // ─── Component ──────────────────────────────────────────────────────────
 
+const MODE_TABS: { id: DashboardMode; label: string }[] = [
+  { id: "company", label: "Company" },
+  { id: "watching", label: "Watching" },
+  { id: "all", label: "All sessions" },
+];
+
+const GROUP_TITLES: Record<string, string> = {
+  needs: "Needs attention",
+  working: "Working",
+  idle: "Idle — at prompt",
+  recent: "Recent",
+};
+
 export function AgentDashboard() {
   const storeAgents = useAgentStore((s) => s.agents);
   const attentionItems = useAgentStore((s) => s.attentionItems);
   const [groupBy, setGroupBy] = useState<GroupBy>("state");
-  // With sessions pinned, the dashboard is for watching them; the full fleet is
-  // already in the sidebar's Agents list, so it waits behind a toggle
+  // Pinned sessions open it on Watching
   const watchingCount = useWatchStore((s) => s.watched.length);
   const [mode, setMode] = useState<DashboardMode>(watchingCount > 0 ? "watching" : "company");
 
+  // Closing the dashboard is what "left" means; Company reads the last stamp as it mounts
+  useMountEffect(() => {
+    const stamp = () => useAppStore.getState().setCompanySeenAt(Date.now());
+    window.addEventListener("pagehide", stamp);
+    return () => {
+      window.removeEventListener("pagehide", stamp);
+      stamp();
+    };
+  });
+
   // The fleet is hydrated into the store app-wide (useFleetSync); same query, same cache
   const activeRows = useFleetSync<ActiveAgent>();
-
-  const queryClient = useQueryClient();
-  const [archiving, setArchiving] = useState(false);
-  const archiveEnded = useCallback(async () => {
-    setArchiving(true);
-    try {
-      await trpcMutate("agents.archiveEnded", {});
-      // The dashboard renders from the store, so the rows must leave the VIEW
-      // too — but flagged rather than removed, or every ended agent's open
-      // terminal pane is treated as stale and reset to the launcher.
-      const store = useAgentStore.getState();
-      for (const a of Object.values(store.agents)) {
-        if (!LIVE_STATUSES.has(a.status)) store.markArchived(a.id);
-      }
-      queryClient.invalidateQueries({ queryKey: ["recentSessions"] });
-    } finally {
-      setArchiving(false);
-    }
-  }, [queryClient]);
-
-  /** One card at a time: "Archive all" is the bulk broom, this is the shrug at a
-   *  single finished session you have already read. */
-  const archiveOne = useCallback(
-    async (agentId: string) => {
-      await trpcMutate("agents.archive", { id: agentId });
-      // Flagged, not removed: a removed row makes an open terminal pane look
-      // stale and WorkspacePane converts it to empty, losing the transcript.
-      useAgentStore.getState().markArchived(agentId);
-      queryClient.invalidateQueries({ queryKey: ["recentSessions"] });
-    },
-    [queryClient],
-  );
 
   const { data: projects } = useQuery({
     queryKey: ["projects"],
@@ -190,80 +181,26 @@ export function AgentDashboard() {
     return m;
   }, [projects, activeRows]);
 
-  const { groups, total, runningCount, unreadCount } = useMemo(() => {
-    const all = Object.values(storeAgents)
-      .filter((a) => !a.archived)
-      .sort((a, b) => {
-        const aActive = LIVE_STATUSES.has(a.status) ? 0 : 1;
-        const bActive = LIVE_STATUSES.has(b.status) ? 0 : 1;
-        if (aActive !== bActive) return aActive - bActive;
-        return (b.startedAt ?? 0) - (a.startedAt ?? 0);
-      });
-    const unread = (id: string) => {
-      const item = attentionItems[id];
-      return !!item && !item.read;
-    };
-
-    let running = 0;
-    let unreadTotal = 0;
-    const buckets: Record<string, AgentState[]> = { needs: [], working: [], idle: [], recent: [] };
-    const byProject = new Map<string, AgentState[]>();
-
-    for (const a of all) {
-      if (a.status === "running") running++;
-      const isUnread = unread(a.id);
-      if (isUnread) unreadTotal++;
-      if (groupBy === "state") {
-        const key = isUnread
-          ? "needs"
-          : isWorking(a)
-            ? "working"
-            : LIVE_STATUSES.has(a.status)
-              ? "idle"
-              : "recent";
-        buckets[key]?.push(a);
-      } else {
-        const list = byProject.get(a.projectId) ?? [];
-        list.push(a);
-        byProject.set(a.projectId, list);
-      }
-    }
-
-    const result: Array<{
-      key: string;
-      title: string;
-      color: string | null;
-      agents: AgentState[];
-      unread: Set<string>;
-    }> = [];
-    const unreadSet = new Set(all.filter((a) => unread(a.id)).map((a) => a.id));
-    if (groupBy === "state") {
-      const titles: Record<string, string> = {
-        needs: "Needs attention",
-        working: "Working",
-        idle: "Idle — at prompt",
-        recent: "Recent",
-      };
-      for (const key of ["needs", "working", "idle", "recent"]) {
-        const agents = buckets[key] ?? [];
-        if (agents.length) {
-          result.push({ key, title: titles[key] ?? key, color: null, agents, unread: unreadSet });
-        }
-      }
-    } else {
-      for (const [projectId, agents] of byProject) {
-        const meta = projectMeta.get(projectId);
-        result.push({
-          key: projectId,
-          title: meta?.name ?? projectId.slice(0, 12),
-          color: meta?.color ?? null,
-          agents,
-          unread: unreadSet,
-        });
-      }
-    }
-    return { groups: result, total: all.length, runningCount: running, unreadCount: unreadTotal };
-  }, [storeAgents, attentionItems, groupBy, projectMeta]);
+  const all = useMemo(
+    () =>
+      Object.values(storeAgents)
+        .filter((a) => !a.archived)
+        .sort((a, b) => {
+          const aActive = LIVE_STATUSES.has(a.status) ? 0 : 1;
+          const bActive = LIVE_STATUSES.has(b.status) ? 0 : 1;
+          if (aActive !== bActive) return aActive - bActive;
+          return (b.startedAt ?? 0) - (a.startedAt ?? 0);
+        }),
+    [storeAgents],
+  );
+  const unread = useMemo(
+    () =>
+      new Set(
+        all.filter((a) => attentionItems[a.id] && !attentionItems[a.id]?.read).map((a) => a.id),
+      ),
+    [all, attentionItems],
+  );
+  const runningCount = all.filter((a) => a.status === "running").length;
 
   const navigateToAgent = useCallback((agent: AgentState) => {
     jumpToAgent(agent.id, agent.projectId);
@@ -275,7 +212,7 @@ export function AgentDashboard() {
     window.dispatchEvent(new CustomEvent("exegol:spawn-agent"));
   };
 
-  if (total === 0) {
+  if (all.length === 0) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4 bg-bg-primary p-8">
         <Cpu className="h-10 w-10 text-text-muted/30" />
@@ -312,130 +249,214 @@ export function AgentDashboard() {
     );
   }
 
-  const modeTabs: { id: DashboardMode; label: string }[] = [
-    { id: "company", label: "Company" },
-    { id: "watching", label: "Watching" },
-    { id: "all", label: "All sessions" },
-  ];
-  const header = (
-    <div className="flex items-center gap-4 p-4 pb-3 text-xs text-text-muted">
-      <SegmentedTabs tabs={modeTabs} active={mode} onChange={setMode} label="Dashboard view" />
-      <span className="flex items-center gap-1.5">
-        <Cpu className="h-3.5 w-3.5" />
-        <span className="font-medium text-text-primary">{total}</span> agents
-      </span>
-      <span className="flex items-center gap-1.5">
-        <span className="h-2 w-2 rounded-full bg-green-500" />
-        {runningCount} running
-      </span>
-      <span className="flex items-center gap-1.5">
-        <span className="h-2 w-2 rounded-full bg-amber-500" />
-        {unreadCount} need attention
-      </span>
-      {mode === "company" && (
-        <span className="ml-auto">P next that needs you, Enter opens it in its layout</span>
-      )}
-      {mode === "all" && (
-        <div className="ml-auto flex items-center gap-1">
-          <FilterChip active={groupBy === "state"} onClick={() => setGroupBy("state")}>
-            By state
-          </FilterChip>
-          <FilterChip active={groupBy === "project"} onClick={() => setGroupBy("project")}>
-            By project
-          </FilterChip>
-        </div>
-      )}
-    </div>
-  );
-
-  if (mode === "company") {
-    return (
-      <div className="flex h-full flex-col">
-        {header}
-        <CompanySection agents={Object.values(storeAgents)} projectMeta={projectMeta} />
-      </div>
-    );
-  }
-
   return (
     <div className="flex h-full flex-col">
-      {header}
-      <ScrollArea className="min-h-0 flex-1">
-        <div className="space-y-6 p-4 pt-0">
-          {mode === "watching" &&
-            (watchingCount > 0 ? (
+      <div className="flex items-center gap-4 p-4 pb-3 text-xs text-text-muted">
+        <SegmentedTabs tabs={MODE_TABS} active={mode} onChange={setMode} label="Dashboard view" />
+        <span className="flex items-center gap-1.5">
+          <Cpu className="h-3.5 w-3.5" />
+          <span className="font-medium text-text-primary">{all.length}</span> agents
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-green-500" />
+          {runningCount} running
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-amber-500" />
+          {unread.size} need attention
+        </span>
+        {mode === "company" && (
+          <span className="ml-auto">P next that needs you, Enter opens it in its layout</span>
+        )}
+        {mode === "all" && (
+          <div className="ml-auto flex items-center gap-1">
+            <FilterChip active={groupBy === "state"} onClick={() => setGroupBy("state")}>
+              By state
+            </FilterChip>
+            <FilterChip active={groupBy === "project"} onClick={() => setGroupBy("project")}>
+              By project
+            </FilterChip>
+          </div>
+        )}
+      </div>
+      {mode === "company" ? (
+        <CompanySection projectMeta={projectMeta} />
+      ) : (
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="space-y-6 p-4 pt-0">
+            {mode === "all" ? (
+              <FleetGroups
+                agents={all}
+                unread={unread}
+                groupBy={groupBy}
+                projectMeta={projectMeta}
+                onOpenAgent={navigateToAgent}
+              />
+            ) : watchingCount > 0 ? (
               <WatchingSection projectMeta={projectMeta} onOpenAgent={navigateToAgent} />
             ) : (
               <p className="py-8 text-center text-xs text-text-muted">
                 No pinned sessions. Use Watch on a session to keep its terminal here.
               </p>
-            ))}
+            )}
+          </div>
+        </ScrollArea>
+      )}
+    </div>
+  );
+}
 
-          {mode === "all" && (
-            <>
-              <WorktreesCard />
+interface FleetGroup {
+  key: string;
+  title: string;
+  color: string | null;
+  agents: AgentState[];
+}
 
-              {groups.map((group) => (
-                <div key={group.key}>
-                  <h3 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
-                    <span
-                      className={cn("h-1.5 w-1.5 rounded-full", !group.color && "bg-accent")}
-                      style={group.color ? { backgroundColor: group.color } : undefined}
-                    />
-                    {group.title}
-                    <span className="font-normal">({group.agents.length})</span>
-                    {/* Ended sessions pile up forever — a list you cannot clear is a
-                  list you stop reading. Archive keeps the row (scoring, oplog,
-                  resume handle); it only leaves the view. */}
-                    {group.key === "recent" && (
-                      <button
-                        type="button"
-                        onClick={archiveEnded}
-                        disabled={archiving}
-                        className="ml-auto flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] font-normal normal-case tracking-normal text-text-muted transition-colors hover:border-accent/40 hover:text-text-secondary disabled:opacity-50"
-                      >
-                        <Archive className="h-3 w-3" />
-                        Archive all
-                      </button>
-                    )}
-                  </h3>
-                  {group.key === "recent" ? (
-                    <RecentByDay
-                      agents={group.agents}
-                      renderCard={(agent) => (
-                        <AgentCard
-                          key={agent.id}
-                          agent={agent}
-                          projectMeta={projectMeta.get(agent.projectId)}
-                          hasUnread={group.unread.has(agent.id)}
-                          onOpenAgent={navigateToAgent}
-                          onArchiveAgent={archiveOne}
-                        />
-                      )}
-                    />
-                  ) : (
-                    <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                      {group.agents.map((agent) => (
-                        <AgentCard
-                          key={agent.id}
-                          agent={agent}
-                          projectMeta={
-                            groupBy === "state" ? projectMeta.get(agent.projectId) : undefined
-                          }
-                          hasUnread={group.unread.has(agent.id)}
-                          onOpenAgent={navigateToAgent}
-                          onArchiveAgent={LIVE_STATUSES.has(agent.status) ? undefined : archiveOne}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </div>
+function groupFleet(
+  agents: AgentState[],
+  unread: ReadonlySet<string>,
+  groupBy: GroupBy,
+  projectMeta: Map<string, ProjectMeta>,
+): FleetGroup[] {
+  if (groupBy === "state") {
+    const buckets: Record<string, AgentState[]> = { needs: [], working: [], idle: [], recent: [] };
+    for (const a of agents) {
+      const key = unread.has(a.id)
+        ? "needs"
+        : isWorking(a)
+          ? "working"
+          : LIVE_STATUSES.has(a.status)
+            ? "idle"
+            : "recent";
+      buckets[key]?.push(a);
+    }
+    return Object.entries(buckets)
+      .filter(([, list]) => list.length > 0)
+      .map(([key, list]) => ({ key, title: GROUP_TITLES[key] ?? key, color: null, agents: list }));
+  }
+  const byProject = new Map<string, AgentState[]>();
+  for (const a of agents) byProject.set(a.projectId, [...(byProject.get(a.projectId) ?? []), a]);
+  return [...byProject].map(([projectId, list]) => {
+    const meta = projectMeta.get(projectId);
+    return {
+      key: projectId,
+      title: meta?.name ?? projectId.slice(0, 12),
+      color: meta?.color ?? null,
+      agents: list,
+    };
+  });
+}
+
+function FleetGroups({
+  agents,
+  unread,
+  groupBy,
+  projectMeta,
+  onOpenAgent,
+}: {
+  agents: AgentState[];
+  unread: ReadonlySet<string>;
+  groupBy: GroupBy;
+  projectMeta: Map<string, ProjectMeta>;
+  onOpenAgent: (agent: AgentState) => void;
+}) {
+  const queryClient = useQueryClient();
+  const [archiving, setArchiving] = useState(false);
+  const archiveEnded = useCallback(async () => {
+    setArchiving(true);
+    try {
+      await trpcMutate("agents.archiveEnded", {});
+      // The dashboard renders from the store, so the rows must leave the VIEW
+      // too — but flagged rather than removed, or every ended agent's open
+      // terminal pane is treated as stale and reset to the launcher.
+      const store = useAgentStore.getState();
+      for (const a of Object.values(store.agents)) {
+        if (!LIVE_STATUSES.has(a.status)) store.markArchived(a.id);
+      }
+      queryClient.invalidateQueries({ queryKey: ["recentSessions"] });
+    } finally {
+      setArchiving(false);
+    }
+  }, [queryClient]);
+
+  /** One card at a time: "Archive all" is the bulk broom, this is the shrug at a
+   *  single finished session you have already read. */
+  const archiveOne = useCallback(
+    async (agentId: string) => {
+      await trpcMutate("agents.archive", { id: agentId });
+      // Flagged, not removed: a removed row makes an open terminal pane look
+      // stale and WorkspacePane converts it to empty, losing the transcript.
+      useAgentStore.getState().markArchived(agentId);
+      queryClient.invalidateQueries({ queryKey: ["recentSessions"] });
+    },
+    [queryClient],
+  );
+
+  const groups = useMemo(
+    () => groupFleet(agents, unread, groupBy, projectMeta),
+    [agents, unread, groupBy, projectMeta],
+  );
+
+  return (
+    <>
+      <WorktreesCard />
+
+      {groups.map((group) => (
+        <div key={group.key}>
+          <h3 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
+            <span
+              className={cn("h-1.5 w-1.5 rounded-full", !group.color && "bg-accent")}
+              style={group.color ? { backgroundColor: group.color } : undefined}
+            />
+            {group.title}
+            <span className="font-normal">({group.agents.length})</span>
+            {/* Ended sessions pile up forever — a list you cannot clear is a
+          list you stop reading. Archive keeps the row (scoring, oplog,
+          resume handle); it only leaves the view. */}
+            {group.key === "recent" && (
+              <button
+                type="button"
+                onClick={archiveEnded}
+                disabled={archiving}
+                className="ml-auto flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] font-normal normal-case tracking-normal text-text-muted transition-colors hover:border-accent/40 hover:text-text-secondary disabled:opacity-50"
+              >
+                <Archive className="h-3 w-3" />
+                Archive all
+              </button>
+            )}
+          </h3>
+          {group.key === "recent" ? (
+            <RecentByDay
+              agents={group.agents}
+              renderCard={(agent) => (
+                <AgentCard
+                  key={agent.id}
+                  agent={agent}
+                  projectMeta={projectMeta.get(agent.projectId)}
+                  hasUnread={unread.has(agent.id)}
+                  onOpenAgent={onOpenAgent}
+                  onArchiveAgent={archiveOne}
+                />
+              )}
+            />
+          ) : (
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {group.agents.map((agent) => (
+                <AgentCard
+                  key={agent.id}
+                  agent={agent}
+                  projectMeta={groupBy === "state" ? projectMeta.get(agent.projectId) : undefined}
+                  hasUnread={unread.has(agent.id)}
+                  onOpenAgent={onOpenAgent}
+                  onArchiveAgent={LIVE_STATUSES.has(agent.status) ? undefined : archiveOne}
+                />
               ))}
-            </>
+            </div>
           )}
         </div>
-      </ScrollArea>
-    </div>
+      ))}
+    </>
   );
 }
 

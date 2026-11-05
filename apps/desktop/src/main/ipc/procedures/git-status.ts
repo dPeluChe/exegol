@@ -65,9 +65,14 @@ export function readGitStatus(cwd: string): Promise<GitFileStatus[]> {
 }
 
 async function spawnGitStatus(cwd: string): Promise<GitFileStatus[]> {
-  const { stdout } = await execFileAsync("git", ["status", "--porcelain=v1", "-z", "-uall"], {
-    cwd,
-    maxBuffer: 1024 * 1024,
-  });
+  // Read-only poll: no index refresh that could block a CLI's own git
+  const { stdout } = await execFileAsync(
+    "git",
+    ["--no-optional-locks", "status", "--porcelain=v1", "-z", "-uall"],
+    {
+      cwd,
+      maxBuffer: 1024 * 1024,
+    },
+  );
   return parseGitStatus(stdout);
 }

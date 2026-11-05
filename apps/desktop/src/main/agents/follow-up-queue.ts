@@ -6,9 +6,9 @@ import { getPtyHost } from "../terminal/pty-host";
 import { injectNow, isEchoingInjection, sanitizeAgentMessage } from "./agent-message-injection";
 import {
   enqueue,
-  isAgentAwaitingApproval,
   listFollowUps,
   msSinceAgentOutput,
+  needsUser,
   notifyFollowUps,
   queuedFor,
   takeQueued,
@@ -111,7 +111,7 @@ export function dropFollowUps(agentId: string): void {
 /** At its input prompt; a terminal whose CLI exited back to the shell is idle too, but not there */
 function atPrompt(db: Database.Database, agentId: string): boolean {
   const agent = getAgent(db, agentId);
-  if (!agent || isAgentAwaitingApproval(agentId)) return false;
+  if (!agent || needsUser(agentId)) return false;
   return agent.status === "waiting_input" || (agent.status === "idle" && !agent.launchedInShell);
 }
 
@@ -184,7 +184,7 @@ async function typeAtPrompt(
     Date.now() - interruptAt >= STEER_QUIET_MS &&
     msSinceAgentOutput(agentId) >= STEER_QUIET_MS &&
     !isEchoingInjection(agentId) &&
-    !isAgentAwaitingApproval(agentId);
+    !needsUser(agentId);
   const ready = await waitUntil(
     () => !queued() || atPrompt(db, agentId) || quiet(),
     STEER_TIMEOUT_MS,

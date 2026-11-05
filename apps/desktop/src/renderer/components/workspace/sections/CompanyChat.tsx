@@ -1,35 +1,38 @@
-import { acceptsFollowUps, type ChatPage, LIVE_STATUSES } from "@exegol/shared";
+import { type AgentMessage, acceptsFollowUps, type ChatPage } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy, X } from "lucide-react";
-import { useState } from "react";
+import { Copy } from "lucide-react";
+import { memo, useMemo, useState } from "react";
 import { useMountEffect } from "../../../hooks/use-mount-effect";
-import { useResumeAgent } from "../../../hooks/use-resume-agent";
-import { agentAsksQuestion } from "../../../lib/agent-question";
 import { isClaudeQuestion } from "../../../lib/claude-question";
+import { answersPrompt } from "../../../lib/dictation/target";
 import {
   appendChatPage,
-  type ChatBubble,
   type ChatHistory,
   chatSummary,
   mergeChat,
-  sendDecision,
+  type SessionBubble,
   toolsLine,
 } from "../../../lib/session-chat";
 import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
 import { type AgentState, useAgentStore } from "../../../stores/agents";
 import { toastError } from "../../../stores/toasts";
 import { AgentQuestion, useScreenDialog } from "../../agents/AgentQuestion";
-import { useFollowUps } from "../../terminal/FollowUpControl";
+import { FollowUpList, useFollowUps } from "../../terminal/FollowUpControl";
+import { DELIVERY, peerName, useAgentMessages } from "./AgentMessages";
 
 const FALLBACK_POLL_MS = 15_000;
+const NO_TURNS: ChatHistory["turns"] = [];
+const NO_MESSAGES: AgentMessage[] = [];
 
 function useChat(agentId: string): ChatHistory | undefined {
   const queryClient = useQueryClient();
   const queryKey = ["chatTurns", agentId];
   useMountEffect(() =>
     window.api.onChatUpdated((event) => {
-      if (event.agentId === agentId) void queryClient.invalidateQueries({ queryKey });
+      if (event.agentId !== agentId) return;
+      void queryClient.invalidateQueries({ queryKey });
+      void queryClient.invalidateQueries({ queryKey: ["messages", "agent", agentId] });
     }),
   );
   return useQuery({
@@ -46,22 +49,37 @@ function useChat(agentId: string): ChatHistory | undefined {
   }).data;
 }
 
-function Bubble({ bubble }: { bubble: ChatBubble }) {
+function PeerBubble({ message, agentId }: { message: AgentMessage; agentId: string }) {
+  const incoming = message.toAgentId === agentId;
+  const peer = useAgentStore((s) =>
+    peerName(s.agents, incoming ? message.fromAgentId : message.toAgentId),
+  );
+  const delivery = message.deliveryState ? DELIVERY[message.deliveryState] : null;
+  return (
+    <div className="rounded-lg border border-border px-2.5 py-1.5">
+      <p className="flex gap-1 text-[10px] text-text-muted">
+        {incoming ? `From ${peer}` : `To ${peer}`}
+        {delivery && <span className={cn("ml-auto", delivery.tone)}>{delivery.label}</span>}
+      </p>
+      <p className="whitespace-pre-wrap break-words text-xs text-text-secondary">
+        {message.content}
+      </p>
+    </div>
+  );
+}
+
+// Memo: a push appends one bubble and leaves the rest of a 200-turn list alone
+const Bubble = memo(function Bubble({
+  bubble,
+  agentId,
+}: {
+  bubble: SessionBubble;
+  agentId: string;
+}) {
   if (bubble.kind === "tools") {
     return <p className="truncate text-[10px] text-text-muted">{toolsLine(bubble.names)}</p>;
   }
-  if (bubble.kind === "peer") {
-    const { peer } = bubble;
-    return (
-      <div className="rounded-lg border border-border px-2.5 py-1.5">
-        <p className="text-[10px] text-text-muted">
-          {peer.incoming ? `From ${peer.peer}` : `To ${peer.peer}`}
-          {peer.delivery ? ` · ${peer.delivery}` : ""}
-        </p>
-        <p className="whitespace-pre-wrap break-words text-xs text-text-secondary">{peer.text}</p>
-      </div>
-    );
-  }
+  if (bubble.kind === "peer") return <PeerBubble message={bubble.message} agentId={agentId} />;
   const mine = bubble.role === "user";
   return (
     <p
@@ -75,68 +93,41 @@ function Bubble({ bubble }: { bubble: ChatBubble }) {
       {bubble.text}
     </p>
   );
-}
+});
 
 function ChatInput({ agent, onTerminal }: { agent: AgentState; onTerminal: () => void }) {
   const [draft, setDraft] = useState("");
-  const live = LIVE_STATUSES.has(agent.status);
   const accepts = acceptsFollowUps(agent);
   const dialog = useScreenDialog(agent.id, accepts);
   const attention = useAgentStore((s) => s.attentionItems[agent.id]);
   const claudeAsks = isClaudeQuestion(attention, agent);
-  const decision = sendDecision({
-    accepts,
+  const asks = answersPrompt({
     status: agent.status,
-    asks: !!dialog || claudeAsks,
+    dialogOnScreen: !!dialog,
+    awaitingAnswer: claudeAsks,
   });
+  const atPrompt = agent.status === "waiting_input" || agent.status === "idle";
   const queued = useFollowUps(agent.id, accepts);
-  const { resume, pending, resumableCliTypes } = useResumeAgent();
 
   const send = useMutation({
-    mutationFn: async (text: string) => {
-      if (await agentAsksQuestion(agent.id)) return false;
-      await trpcMutate("agents.queueFollowUp", { id: agent.id, text });
-      return true;
-    },
-    onSuccess: (sent) => {
-      if (sent) setDraft("");
-    },
+    mutationFn: (text: string) => trpcMutate("agents.queueFollowUp", { id: agent.id, text }),
+    onSuccess: () => setDraft(""),
     onError: toastError("Could not send"),
-  });
-  const cancel = useMutation({
-    mutationFn: (itemId: string) => trpcMutate("agents.removeFollowUp", { id: agent.id, itemId }),
-    onError: toastError("Could not cancel"),
   });
   const submit = () => {
     const text = draft.trim();
-    if (text && !send.isPending && decision !== "closed" && decision !== "question") {
-      send.mutate(text);
-    }
+    if (text && !send.isPending) send.mutate(text);
   };
 
-  if (decision === "closed") {
+  if (!accepts) {
     return (
-      <div className="flex items-center gap-2 border-t border-border p-2 text-[11px] text-text-muted">
-        {live ? (
-          <button type="button" onClick={onTerminal} className="text-accent hover:underline">
-            The CLI exited: continue in the terminal
-          </button>
-        ) : (
-          <>
-            <span className="flex-1">This session ended.</span>
-            {resumableCliTypes.has(agent.cliType) && (
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() => void resume(agent).catch(() => {})}
-                className="rounded bg-accent px-2 py-1 text-[10px] font-medium text-white hover:bg-accent-hover disabled:opacity-50"
-              >
-                Resume
-              </button>
-            )}
-          </>
-        )}
-      </div>
+      <button
+        type="button"
+        onClick={onTerminal}
+        className="border-t border-border p-2 text-left text-[11px] text-accent hover:underline"
+      >
+        The CLI exited: continue in the terminal
+      </button>
     );
   }
 
@@ -155,32 +146,26 @@ function ChatInput({ agent, onTerminal }: { agent: AgentState; onTerminal: () =>
           </button>
         )
       )}
-      {queued.map((item) => (
-        <div key={item.id} className="flex items-center gap-1 text-[10px] text-text-muted">
-          <span className="shrink-0">Queued</span>
-          <span className="min-w-0 flex-1 truncate">{item.text}</span>
-          <button
-            type="button"
-            aria-label="Cancel queued message"
-            onClick={() => cancel.mutate(item.id)}
-            className="shrink-0 hover:text-text-primary"
-          >
-            <X className="h-3 w-3" />
-          </button>
-        </div>
-      ))}
+      {queued.length > 0 && <FollowUpList agentId={agent.id} items={queued} />}
       <textarea
         value={draft}
         rows={2}
+        disabled={asks}
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={(e) => {
           if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
           e.preventDefault();
           submit();
         }}
-        placeholder={decision === "queue" ? "Sends when this turn ends" : "Message this session"}
+        placeholder={
+          asks
+            ? "Answer its question first"
+            : atPrompt
+              ? "Message this session"
+              : "Sends when this turn ends"
+        }
         aria-label="Message this session"
-        className="w-full resize-none rounded border border-border bg-bg-primary px-2 py-1.5 text-xs text-text-primary outline-none placeholder:text-text-muted focus:border-accent"
+        className="w-full resize-none rounded border border-border bg-bg-primary px-2 py-1.5 text-xs text-text-primary outline-none placeholder:text-text-muted focus:border-accent disabled:opacity-60"
       />
     </div>
   );
@@ -197,13 +182,14 @@ export function CompanyChat({
   onTerminal: () => void;
 }) {
   const chat = useChat(agent.id);
-  const turns = chat?.turns ?? [];
-  const bubbles = mergeChat(turns, chat?.peers ?? []);
+  const turns = chat?.turns ?? NO_TURNS;
+  const { data: messages = NO_MESSAGES } = useAgentMessages(agent.id);
+  const bubbles = useMemo(() => mergeChat(turns, messages, agent.id), [turns, messages, agent.id]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex items-center gap-2 px-2.5 pt-1.5 text-[10px] text-text-muted">
-        <span className="flex-1">{chat?.source === "terminal" ? "From the terminal" : ""}</span>
+        <span className="flex-1">{chat?.fromTerminal ? "From the terminal" : ""}</span>
         <button
           type="button"
           onClick={() =>
@@ -222,7 +208,7 @@ export function CompanyChat({
             <p className="text-xs text-text-muted">Nothing to show yet.</p>
           )}
           {bubbles.map((bubble) => (
-            <Bubble key={bubble.id} bubble={bubble} />
+            <Bubble key={bubble.id} bubble={bubble} agentId={agent.id} />
           ))}
         </div>
       </div>

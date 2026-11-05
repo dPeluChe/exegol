@@ -1,17 +1,17 @@
-import { open, readdir, realpath, stat } from "node:fs/promises";
+import { open, readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { ChatPage, ChatPeerMessage } from "@exegol/shared";
+import type { Agent, ChatPage } from "@exegol/shared";
 import type Database from "libsql";
 import { getAgent, getAgentCwd } from "../db/queries/agents";
-import { listMessages } from "../db/queries/messages";
 import { claudeProjectDir } from "../history/providers/claude-code";
 import { dayDirs } from "../history/providers/codex";
 import { broadcast } from "../lib/event-bus";
-import { isInside } from "../system/ports";
+import { setBounded } from "../lib/set-bounded";
+import { assertSafePath } from "../security/path-guard";
 import { getPtyHost } from "../terminal/pty-host";
 import { hookCwdOf, hookSessionOf } from "./hook-cwd";
-import { providerSessionId } from "./provider-session-id";
+import { providerSessionId, SESSION_ID_RE } from "./provider-session-id";
 import {
   type LineParser,
   parseChunk,
@@ -21,18 +21,11 @@ import {
   terminalTurns,
 } from "./session-transcript";
 
-const SESSION_ID = /^[A-Za-z0-9-]{8,64}$/;
 const CODEX_LOOKBACK_SEC = 180 * 86400;
 const NOT_FOUND_RETRY_MS = 30_000;
-const PEER_MESSAGES = 30;
 const PUSH_DELAY_MS = 500;
 const MAX_MARKS = 50;
 const MAX_TRACKED = 256;
-
-const PARSERS: Record<string, LineParser> = {
-  "claude-code": parseClaudeLine,
-  codex: parseCodexLine,
-};
 
 const claudeRoot = () => join(homedir(), ".claude", "projects");
 const codexRoot = () => join(homedir(), ".codex", "sessions");
@@ -70,15 +63,17 @@ async function findCodexFile(sessionId: string): Promise<string | null> {
   return null;
 }
 
-/** Under the CLI's own store, links resolved: the file is never named by the renderer */
-async function confined(path: string | null, root: string): Promise<string | null> {
-  if (!path) return null;
-  const [real, realRoot] = await Promise.all([realpath(path), realpath(root)]).catch(() => [
-    null,
-    null,
-  ]);
-  return real && realRoot && isInside(real, realRoot) ? real : null;
+interface Provider {
+  parse: LineParser;
+  root: () => string;
+  find: (sessionId: string, cwds: (string | null)[]) => Promise<string | null>;
 }
+
+/** The CLIs that keep a transcript Exegol can read */
+const PROVIDERS: Record<string, Provider> = {
+  "claude-code": { parse: parseClaudeLine, root: claudeRoot, find: findClaudeFile },
+  codex: { parse: parseCodexLine, root: codexRoot, find: findCodexFile },
+};
 
 interface Located {
   key: string;
@@ -88,32 +83,27 @@ interface Located {
 
 const located = new Map<string, Located>();
 
+/** Found under the CLI's own store, links resolved: the file is never named by the renderer */
 async function transcriptPath(
   db: Database.Database,
-  agentId: string,
-  cliType: string,
+  agent: Agent,
+  provider: Provider,
 ): Promise<string | null> {
-  const row = db
-    .prepare("SELECT claude_session_id, resume_command FROM agents WHERE id = ?")
-    .get(agentId) as { claude_session_id: string | null; resume_command: string | null };
   const sessionId =
-    providerSessionId(cliType, row.claude_session_id, row.resume_command) ?? hookSessionOf(agentId);
-  if (!sessionId || !SESSION_ID.test(sessionId)) return null;
+    providerSessionId(agent.cliType, agent.claudeSessionId ?? null, agent.resumeCommand ?? null) ??
+    hookSessionOf(agent.id);
+  if (!sessionId || !SESSION_ID_RE.test(sessionId)) return null;
 
-  const key = `${cliType}:${sessionId}`;
-  const known = located.get(agentId);
+  const key = `${agent.cliType}:${sessionId}`;
+  const known = located.get(agent.id);
   const fresh = known?.key === key && (known.path || Date.now() - known.at < NOT_FOUND_RETRY_MS);
   if (fresh) return known.path;
 
-  const path =
-    cliType === "claude-code"
-      ? await confined(
-          await findClaudeFile(sessionId, [hookCwdOf(agentId), getAgentCwd(db, agentId)]),
-          claudeRoot(),
-        )
-      : await confined(await findCodexFile(sessionId), codexRoot());
-  located.set(agentId, { key, path, at: Date.now() });
-  if (located.size > MAX_TRACKED) located.delete(located.keys().next().value as string);
+  const found = await provider.find(sessionId, [hookCwdOf(agent.id), getAgentCwd(db, agent.id)]);
+  const path = found
+    ? await assertSafePath(found, { allowedBases: [provider.root()] }).catch(() => null)
+    : null;
+  setBounded(located, agent.id, { key, path, at: Date.now() }, MAX_TRACKED);
   return path;
 }
 
@@ -135,12 +125,11 @@ const turnMarks = new Map<string, number[]>();
 const pushTimers = new Map<string, NodeJS.Timeout>();
 
 /** A turn began or ended: cut the terminal text there, and tell an open chat */
-export function noteChatBoundary(agentId: string): void {
-  const line = getPtyHost().textLines(agentId)?.total;
-  if (line !== undefined) {
+export function noteChatBoundary(agentId: string, cliType: string): void {
+  const line = PROVIDERS[cliType] ? null : getPtyHost().lineCount(agentId);
+  if (line !== null) {
     const marks = turnMarks.get(agentId) ?? [];
-    turnMarks.set(agentId, [...marks, line].slice(-MAX_MARKS));
-    if (turnMarks.size > MAX_TRACKED) turnMarks.delete(turnMarks.keys().next().value as string);
+    setBounded(turnMarks, agentId, [...marks, line].slice(-MAX_MARKS), MAX_TRACKED);
   }
   if (pushTimers.has(agentId)) return;
   const timer = setTimeout(() => {
@@ -151,25 +140,7 @@ export function noteChatBoundary(agentId: string): void {
   pushTimers.set(agentId, timer);
 }
 
-function peerMessages(db: Database.Database, agentId: string): ChatPeerMessage[] {
-  const nameOf = (id: string | null) => {
-    const peer = id ? getAgent(db, id) : null;
-    return peer?.alias ?? peer?.cliType ?? "Exegol";
-  };
-  return listMessages(db, { agentId }, PEER_MESSAGES)
-    .reverse()
-    .map((m) => {
-      const incoming = m.toAgentId === agentId;
-      return {
-        id: m.id,
-        incoming,
-        peer: nameOf(incoming ? m.fromAgentId : m.toAgentId),
-        text: m.content,
-        at: m.createdAt,
-        delivery: m.deliveryState,
-      };
-    });
-}
+const NOTHING: ChatPage = { turns: [], cursor: null, reset: true, fromTerminal: false };
 
 /** Tailed by byte offset from `cursor`; a CLI with no transcript sends its terminal text whole */
 export async function chatTurns(
@@ -178,23 +149,21 @@ export async function chatTurns(
   cursor: string | undefined,
 ): Promise<ChatPage> {
   const agent = getAgent(db, agentId);
-  const peers = agent ? peerMessages(db, agentId) : [];
-  const none: ChatPage = { turns: [], cursor: null, reset: true, source: "none", peers };
-  if (!agent || agent.cliType === "shell") return none;
+  if (!agent) return NOTHING;
 
-  const parse = PARSERS[agent.cliType];
-  const path = parse ? await transcriptPath(db, agentId, agent.cliType) : null;
-  if (parse && path) {
-    const page = await readTranscript(path, parse, cursor).catch(() => null);
-    return page ? { ...page, source: "transcript", peers } : none;
+  const provider = PROVIDERS[agent.cliType];
+  const path = provider ? await transcriptPath(db, agent, provider) : null;
+  if (provider && path) {
+    const page = await readTranscript(path, provider.parse, cursor).catch(() => null);
+    return page ? { ...page, fromTerminal: false } : NOTHING;
   }
   const text = getPtyHost().textLines(agentId);
-  if (!text) return none;
+  if (!text) return NOTHING;
   const turns = terminalTurns(
     text.lines,
     text.total - text.lines.length,
     turnMarks.get(agentId) ?? [],
     text.altScreen,
   );
-  return { turns, cursor: null, reset: true, source: "terminal", peers };
+  return { turns, cursor: null, reset: true, fromTerminal: true };
 }

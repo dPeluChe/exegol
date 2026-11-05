@@ -33,6 +33,7 @@ import {
   deleteShellRow,
   getAgentLastCwd,
   listActiveAgents,
+  listCompletedSince,
   setAgentAlias,
   setAgentPrWatch,
 } from "../../db/queries/agents";
@@ -72,6 +73,9 @@ export const agentRouter = router({
   listActive: publicProcedure.query(({ ctx }) => listActiveAgents(ctx.db)),
 
   deskFacts: publicProcedure.query(({ ctx }) => deskFacts(ctx.db)),
+  doneSince: publicProcedure
+    .input(z.object({ since: z.number().nonnegative() }))
+    .query(({ ctx, input }) => listCompletedSince(ctx.db, input.since)),
   /** Startup reattach progress; `recovery:progress` pushes each change */
   recoveryState: publicProcedure.query(() => getRecoveryState()),
   /** The view on screen: the next startup reattaches its sessions first */

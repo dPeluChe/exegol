@@ -99,7 +99,9 @@ export function mirrorToFocus(last: string | null, shown: string[]): string | nu
 export function focusDashboard(): void {
   requestAnimationFrame(() =>
     requestAnimationFrame(() => {
-      const cards = document.querySelectorAll<HTMLElement>("[data-mirror-agent-id]");
+      const cards = document.querySelectorAll<HTMLElement>(
+        "[data-watching-card] [data-mirror-agent-id]",
+      );
       const shown = [...cards].map((el) => el.dataset.mirrorAgentId ?? "");
       const target = mirrorToFocus(lastMirror, shown);
       (document.activeElement as HTMLElement | null)?.blur();

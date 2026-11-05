@@ -22,6 +22,7 @@ import { applyRecoveredCrashes, RECOVERY_KEY } from "../lib/session-recovery";
 import { switchSection } from "../lib/switch-section";
 import { trpcMutate } from "../lib/trpc-client";
 import { useAppStore } from "./app";
+import { noteDeskTool } from "./desk-activity";
 import { useNotificationPrefsStore } from "./notification-prefs";
 import { useWatchStore } from "./watch";
 import { collectPaneIds, useWorkspaceStore } from "./workspace";
@@ -102,10 +103,7 @@ export function startAgentStatusPush(queryClient: QueryClient): void {
     useAgentStore.getState().addAttentionItem(agentId, { level: "info", reason, stuck: true }),
   );
   const offActivity = window.api.onAgentActivity(({ agentId, tool }) =>
-    useAgentStore.setState((s) => {
-      const { [agentId]: _old, ...rest } = s.activityTools;
-      return { activityTools: tool ? { ...rest, [agentId]: tool } : rest };
-    }),
+    noteDeskTool(agentId, tool),
   );
   const stopMcp = window.api.onMcpStatus((e) => queryClient.setQueryData(MCP_STATUS_KEY, e));
   const stopFollowUps = window.api.onFollowUps((e) =>
@@ -320,8 +318,6 @@ interface AgentStore {
   attentionItems: Record<string, AttentionItem>;
   /** `cause` overrides the status-derived reason (PR watch) */
   addAttentionItem: (agentId: string, cause?: AttentionCause) => void;
-  /** The last tool per session, from its hook; only Company reads it, so it stays off the agent */
-  activityTools: Record<string, string>;
   markAttentionRead: (agentId: string) => void;
   dismissAttention: (agentId: string) => void;
   toggleAttentionPin: (agentId: string) => void;
@@ -532,11 +528,11 @@ export const useAgentStore = create<AgentStore>()(
         removedIds.add(id);
         // A closed session leaves Watching too ("session gone" strips were left behind)
         useWatchStore.getState().unwatch(id);
+        noteDeskTool(id, null);
         set((state) => {
           const { [id]: _, ...rest } = state.agents;
-          const { [id]: _tool, ...activityTools } = state.activityTools;
           const focusedAgentId = state.focusedAgentId === id ? null : state.focusedAgentId;
-          return { agents: rest, focusedAgentId, activityTools };
+          return { agents: rest, focusedAgentId };
         });
       },
 
@@ -668,8 +664,6 @@ export const useAgentStore = create<AgentStore>()(
         }),
 
       // ─── T57: Attention inbox ──────────────────────────────────────────────
-
-      activityTools: {},
 
       addAttentionItem: (agentId, cause) =>
         set((s) => {

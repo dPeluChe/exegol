@@ -1,5 +1,4 @@
 // PTY Host — manages PTY subprocess sessions from the main process (T35+T36+T37).
-
 import type { LiveSnapshot, ScreenDialog } from "@exegol/shared";
 import { noteSessionActivity } from "../agents/session-activity";
 import { createLimiter } from "../lib/concurrency";
@@ -458,6 +457,11 @@ export class PtyHost {
   /** The chat of a CLI with no transcript */
   textLines(id: string): ReturnType<HeadlessEmulator["textLines"]> | null {
     return this.sessions.get(id)?.emulator.textLines(MAX_CHAT_LINES) ?? null;
+  }
+
+  /** Rows in the active buffer: the turn-boundary marks need no text */
+  lineCount(id: string): number | null {
+    return this.sessions.get(id)?.emulator.lineCount ?? null;
   }
 
   isAlive(id: string): boolean {
