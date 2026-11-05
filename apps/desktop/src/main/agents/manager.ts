@@ -176,7 +176,15 @@ export class AgentManager {
 
     runSetupIfNeeded(project.path).catch(() => {});
 
-    const cwd = setupAgentCwd(db, agent, config, project, this.worktrees, this.initialSnapshots);
+    const { cwd, ready } = setupAgentCwd(
+      db,
+      agent,
+      config,
+      project,
+      this.worktrees,
+      this.initialSnapshots,
+    );
+    await ready;
     if (agent.cliType === "claude-code") await inheritClaudeTrust(cwd, project.path);
 
     // A known session id makes the store check moot; it only guards the generic resume flag

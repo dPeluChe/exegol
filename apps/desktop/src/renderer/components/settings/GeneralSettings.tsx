@@ -6,6 +6,7 @@ import {
   Bell,
   Check,
   GitBranch,
+  HardDrive,
   Loader2,
   MessageSquare,
   Monitor,
@@ -229,6 +230,13 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
           icon={GitBranch}
           value={settings.saveWorktreeWork}
           onToggle={() => onChange({ saveWorktreeWork: !settings.saveWorktreeWork })}
+        />
+        <SwitchRow
+          label="Free disk in idle worktrees"
+          description="Once a day, removes node_modules, build output and caches (.next, dist, build, target, .turbo, coverage, __pycache__, .venv) from Exegol worktrees untouched for a day: clean, HEAD unmoved, no session or process in them. Your code and other files stay"
+          icon={HardDrive}
+          value={settings.worktreeJanitor}
+          onToggle={() => onChange({ worktreeJanitor: !settings.worktreeJanitor })}
         />
       </div>
 

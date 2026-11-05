@@ -44,6 +44,8 @@ export type Settings = {
   toastsEnabled: boolean;
   /** Commit and push a worktree's pending work to its branch when its agent ends or before a sweep */
   saveWorktreeWork: boolean;
+  /** Daily: remove node_modules, build output and caches of Exegol worktrees idle for a day */
+  worktreeJanitor: boolean;
   /** T205: no PTY output and no input for this many days suspends an agent or closes a shell */
   idleSuspendDays: IdleSuspendDays;
   /** T200.10: a turn running longer than this (or silent 10 min) raises an attention item; 0 = Off */
@@ -81,6 +83,7 @@ export const DEFAULT_SETTINGS: Settings = {
   notificationsEnabled: true,
   toastsEnabled: true,
   saveWorktreeWork: true,
+  worktreeJanitor: true,
   idleSuspendDays: 7,
   stuckTurnAlertMinutes: 0,
   mutedNotificationChannels: [],

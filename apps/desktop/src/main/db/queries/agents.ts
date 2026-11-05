@@ -706,6 +706,21 @@ export function listLiveAgentFolders(db: Database.Database): string[] {
   return rows.flatMap((r) => (r.cwd ? [r.cwd] : []));
 }
 
+/** Worktree paths a live agent, or one of `agentIds` (a race awaiting its pick), is bound to */
+export function listBusyWorktreePaths(
+  db: Database.Database,
+  agentIds: readonly string[] = [],
+): string[] {
+  const rows = db
+    .prepare(
+      `SELECT DISTINCT w.path FROM worktrees w
+       JOIN agents a ON a.worktree_id = w.id OR a.id = w.agent_id
+       WHERE a.status IN (${liveIn()}) OR a.id IN (${agentIds.map(() => "?").join(",") || "NULL"})`,
+    )
+    .all(...LIVE_STATUSES, ...agentIds) as { path: string }[];
+  return rows.map((r) => r.path);
+}
+
 export function listLiveAgentIds(db: Database.Database, projectId: string): string[] {
   const rows = db
     .prepare(`SELECT id FROM agents WHERE project_id = ? AND status IN (${liveIn()})`)

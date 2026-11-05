@@ -24,6 +24,26 @@ const REGENERABLE_DIRS = new Set([
 ]);
 const REGENERABLE_FILE = /(^|\/)(\.DS_Store|[^/]+\.log)$/;
 
+/** What the idle janitor deletes: a fixed list, the dependency and build dirs above minus the
+ *  generic caches (out, .vite, .cache) plus Python's, which a worktree can hold work-free */
+export const JANITOR_DIRS: ReadonlySet<string> = new Set([
+  "node_modules",
+  ".next",
+  "dist",
+  "build",
+  "target",
+  ".turbo",
+  "coverage",
+  "__pycache__",
+  ".venv",
+]);
+
+/** Folder names either list treats as recreatable: never searched for files to copy */
+export const BUILD_DIRS: ReadonlySet<string> = new Set([...REGENERABLE_DIRS, ...JANITOR_DIRS]);
+
+/** `git ... -z` output to its entries */
+export const splitNul = (s: string): string[] => s.split("\0").filter(Boolean);
+
 const IN_PROGRESS = [
   "rebase-merge",
   "rebase-apply",
