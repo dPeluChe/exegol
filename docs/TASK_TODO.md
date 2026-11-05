@@ -226,6 +226,28 @@ Checked by the user on the 0.5.15 build: status bar widgets, Ctrl+Tab switcher, 
 
 ## Active Backlog
 
+### T211: Browser panes keep no disk cache by default `added: 2026-11-04`
+**Priority**: P2 | **Effort**: S | **Source**: user, 2026-11-04. Each project's browser pane uses
+the persistent partition `persist:project-<id>` (`browserPartitionFor`, `main/browser/electron-host.ts`),
+so Chromium keeps its HTTP and code caches on disk with no cap: `Partitions/` measured 1.1 GB
+on 2026-11-04, 1.0 GB of it `Cache` + `Code Cache` (one project alone 437 MB). Today they only
+go away through Settings > Storage (`clearBrowserCache`).
+- [ ] Setting "Keep browser cache" (default off): when off, clear `clearCache` + `clearCodeCaches`
+  of every project partition on app quit and at startup; cookies, local storage and permissions
+  stay (logins survive)
+- [ ] Optional: a size cap instead of off (Chromium `disk-cache-size` is app-wide, check per session)
+- [ ] Storage tab shows the cache part of each partition and the setting beside it
+
+### T212: Find widget in the terminal file window ignores Esc and its close button `added: 2026-11-04`
+**Priority**: P1 | **Effort**: S | **Source**: user, 2026-11-04 (screenshot). A file opened from a
+terminal path click (`TerminalFileWindow`, read-only `CodeViewer`), Cmd+F opens Monaco's find
+widget; Esc does nothing and the close (X) button does not respond, so the widget can't be closed.
+Not reproduced yet. Suspects to check: the window's `onKeyDown` Escape handler and the header's
+pointer capture (`startDrag` in `TerminalFileWindow.tsx`), the capture-phase keydown listeners
+(`EndedSessionLauncher`, `use-launcher-keys`, `use-dictation`, `CloseConfirmHost`) and Monaco's
+focus inside a read-only editor. Also check the Files pane's find widget behaves.
+- [ ] Reproduce, fix, and a test for the Escape path
+
 ### T210: Compact project list with search and filters `added: 2026-10-27`
 **Priority**: P2 | **Effort**: S | **Source**: user, 2026-10-27 (screenshot of the projects view
 with 28 projects). `ProjectList.tsx` renders one large card per project in a 1-3 column grid
