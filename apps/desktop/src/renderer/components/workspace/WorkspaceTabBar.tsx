@@ -24,7 +24,7 @@ import { tabCloseTarget } from "../../stores/workspace/helpers";
 import { LayoutPresets } from "./LayoutPresets";
 import { PANE_ALONE_DRAG_TYPE, PANE_DRAG_TYPE, readPaneDrag } from "./PaneDragHandle";
 import { QuickLaunchBar } from "./QuickLaunchBar";
-import { getTabMeta } from "./tab-bar-helpers";
+import { getTabMeta, tabDotClass, tabSignal } from "./tab-bar-helpers";
 import { WorkspaceTabItem } from "./WorkspaceTabItem";
 
 // ─── Component ──────────────────────────────────────────────────────────────
@@ -201,90 +201,79 @@ export function WorkspaceTabBar() {
   }, [editingTabId, editValue, renameTab]);
 
   return (
-    <div className="shrink-0 border-b border-border bg-bg-secondary">
-      {/* Tab row: scrollable tabs + trailing action bar (outside overflow) */}
-      <div className="flex h-9 items-center">
-        {/* biome-ignore lint/a11y/noStaticElementInteractions: drop target for pane extraction */}
-        <div
-          className={cn(
-            "flex h-9 flex-1 items-center gap-0.5 overflow-x-auto px-1 transition-colors",
-            paneDragOverBar && "bg-accent/10 ring-1 ring-inset ring-accent/40",
-          )}
-          onDragOver={handleBarDragOver}
-          onDragLeave={handleBarDragLeave}
-          onDrop={handleBarDrop}
+    <div className="flex h-full min-w-0 flex-1 items-center">
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: drop target for pane extraction */}
+      <div
+        className={cn(
+          "flex h-full min-w-0 flex-1 items-center gap-0.5 overflow-x-auto px-1 transition-colors",
+          paneDragOverBar && "bg-accent/10 ring-1 ring-inset ring-accent/40",
+        )}
+        onDragOver={handleBarDragOver}
+        onDragLeave={handleBarDragLeave}
+        onDrop={handleBarDrop}
+      >
+        {tabs.map((tab) => {
+          const { displayName, Icon, agentCliType } = getTabMeta(
+            tab.label,
+            tab.layout,
+            panes,
+            agents,
+          );
+          const paneIds = collectPaneIds(tab.layout);
+          const signal = tabSignal(paneIds, panes, agents, attentionItems);
+
+          return (
+            <WorkspaceTabItem
+              key={tab.id}
+              tab={tab}
+              isActive={tab.id === activeTabId}
+              isEditing={editingTabId === tab.id}
+              displayName={displayName}
+              TabIcon={Icon}
+              agentCliType={agentCliType}
+              paneCount={paneIds.length}
+              needsYou={signal.needsYou}
+              dotClass={tabDotClass(signal)}
+              agentBrowsing={paneIds.some((id) => browsingPanes.has(id))}
+              dragOverTabId={dragOverTabId}
+              editValue={editValue}
+              setEditValue={setEditValue}
+              setEditingTabId={setEditingTabId}
+              inputRef={inputRef}
+              finishEditing={finishEditing}
+              startEditing={startEditing}
+              setActiveTab={setActiveTab}
+              handleCloseTab={handleCloseTab}
+              handleTabDragStart={handleTabDragStart}
+              handleTabDragOver={handleTabDragOver}
+              handleTabDragLeave={handleTabDragLeave}
+              handleTabDrop={handleTabDrop}
+              handleTabDragEnd={handleTabDragEnd}
+            />
+          );
+        })}
+
+        <button
+          type="button"
+          onClick={() => addTabAndFocus()}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-text-muted transition-colors hover:bg-white/5"
+          title="New tab"
         >
-          {tabs.map((tab) => {
-            const isActive = tab.id === activeTabId;
-            const isEditing = editingTabId === tab.id;
-            const {
-              displayName,
-              Icon: TabIcon,
-              primaryAgentId,
-              agentCliType,
-            } = getTabMeta(tab.label, tab.layout, panes, agents);
-            const tabActivity = primaryAgentId ? agents[primaryAgentId]?.activityLevel : undefined;
-            // T155.3: unread attention beats activity in the tab dot
-            const attentionItem = primaryAgentId ? attentionItems[primaryAgentId] : undefined;
-            const tabAttention = !!attentionItem && !attentionItem.read;
-            const agentBrowsing = collectPaneIds(tab.layout).some((id) => browsingPanes.has(id));
-
-            return (
-              <WorkspaceTabItem
-                key={tab.id}
-                tab={tab}
-                isActive={isActive}
-                isEditing={isEditing}
-                displayName={displayName}
-                TabIcon={TabIcon}
-                agentCliType={agentCliType}
-                tabActivity={tabActivity}
-                tabAttention={tabAttention}
-                agentBrowsing={agentBrowsing}
-                dragOverTabId={dragOverTabId}
-                editValue={editValue}
-                setEditValue={setEditValue}
-                setEditingTabId={setEditingTabId}
-                inputRef={inputRef}
-                finishEditing={finishEditing}
-                startEditing={startEditing}
-                setActiveTab={setActiveTab}
-                handleCloseTab={handleCloseTab}
-                handleTabDragStart={handleTabDragStart}
-                handleTabDragOver={handleTabDragOver}
-                handleTabDragLeave={handleTabDragLeave}
-                handleTabDrop={handleTabDrop}
-                handleTabDragEnd={handleTabDragEnd}
-              />
-            );
-          })}
-
-          {/* Add tab button */}
-          <button
-            type="button"
-            onClick={() => addTabAndFocus()}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-text-muted transition-colors hover:bg-white/5"
-            title="New tab"
-          >
-            <Plus className="h-3.5 w-3.5" />
-          </button>
-          {/* Quick terminal button */}
-          <button
-            type="button"
-            onClick={handleNewTerminal}
-            className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-text-muted transition-colors hover:bg-white/5 hover:text-accent"
-            title="New terminal"
-          >
-            <Terminal className="h-3.5 w-3.5" />
-          </button>
-        </div>
-        {/* Trailing actions — outside the overflow container so dropdowns escape clipping */}
-        <div className="flex h-9 shrink-0 items-center border-l border-border/40 px-1">
-          <LayoutPresets tabId={activeTabId} />
-        </div>
+          <Plus className="h-3.5 w-3.5" />
+        </button>
+        <button
+          type="button"
+          onClick={handleNewTerminal}
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded text-text-muted transition-colors hover:bg-white/5 hover:text-accent"
+          title="New terminal"
+        >
+          <Terminal className="h-3.5 w-3.5" />
+        </button>
       </div>
-
-      {/* Quick-launch bar */}
+      {/* Outside the overflow container so its dropdown escapes clipping */}
+      <div className="flex h-full shrink-0 items-center border-l border-border/40 px-1">
+        <LayoutPresets tabId={activeTabId} />
+      </div>
       <QuickLaunchBar />
     </div>
   );

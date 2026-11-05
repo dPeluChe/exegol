@@ -1,10 +1,9 @@
-import type { AgentActivityLevel } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { Globe, X } from "lucide-react";
-import type { Dispatch, DragEvent, Ref, SetStateAction } from "react";
+import { type Dispatch, type DragEvent, memo, type Ref, type SetStateAction } from "react";
+import { SEMANTIC_BADGE } from "../../lib/semantic-colors";
 import type { WorkspaceTab } from "../../stores/workspace";
 import { AgentIcon } from "../common/AgentIcon";
-import { ACTIVITY_DOT_CLASS } from "./tab-bar-helpers";
 
 interface WorkspaceTabItemProps {
   tab: WorkspaceTab;
@@ -14,9 +13,11 @@ interface WorkspaceTabItemProps {
   TabIcon: React.ComponentType<{ className?: string }> | null;
   /** An agent tab: that CLI's icon instead of the generic one */
   agentCliType: string | null;
-  tabActivity: AgentActivityLevel | undefined;
-  /** T155.3: the tab's agent has an unread attention item — amber pulse wins */
-  tabAttention?: boolean;
+  /** Shown muted past one pane, the layout has no name of its own */
+  paneCount: number;
+  /** A session here waits on you: the badge replaces the dot */
+  needsYou: boolean;
+  dotClass: string | null;
   /** An agent is driving a browser pane in this tab */
   agentBrowsing?: boolean;
   dragOverTabId: string | null;
@@ -35,15 +36,17 @@ interface WorkspaceTabItemProps {
   handleTabDragEnd: () => void;
 }
 
-export function WorkspaceTabItem({
+// Memo: agent pushes re-render the bar, and most change nothing on a given tab
+export const WorkspaceTabItem = memo(function WorkspaceTabItem({
   tab,
   isActive,
   isEditing,
   displayName,
   TabIcon,
   agentCliType,
-  tabActivity,
-  tabAttention = false,
+  paneCount,
+  needsYou,
+  dotClass,
   agentBrowsing = false,
   dragOverTabId,
   editValue,
@@ -70,7 +73,7 @@ export function WorkspaceTabItem({
   return (
     <div
       className={cn(
-        "group relative flex h-7 items-center gap-1.5 rounded px-2.5 text-[11px] font-medium transition-colors",
+        "group relative flex h-8 shrink-0 items-center gap-1.5 rounded px-2.5 text-xs font-medium transition-colors",
         "hover:bg-white/5 cursor-pointer",
         isActive ? "bg-white/10 text-text-primary" : "text-text-secondary",
         dragOverTabId === tab.id && "ring-1 ring-accent/50",
@@ -89,7 +92,7 @@ export function WorkspaceTabItem({
             if (e.key === "Escape") setEditingTabId(null);
             e.stopPropagation();
           }}
-          className="w-24 bg-transparent text-[11px] text-text-primary outline-none"
+          className="w-24 bg-transparent text-xs text-text-primary outline-none"
         />
       ) : (
         <button
@@ -103,28 +106,32 @@ export function WorkspaceTabItem({
           className="-mr-1.5 -ml-2.5 flex cursor-pointer items-center gap-1.5 self-stretch pr-1.5 pl-2.5"
         >
           {agentCliType ? (
-            <AgentIcon provider={agentCliType} size={12} />
+            <AgentIcon provider={agentCliType} size={14} />
           ) : (
-            TabIcon && <TabIcon className="h-3 w-3 shrink-0 text-text-muted" />
+            TabIcon && <TabIcon className="h-3.5 w-3.5 shrink-0 text-text-muted" />
           )}
-          <span className="max-w-[140px] truncate">{displayName}</span>
+          <span className="max-w-[160px] truncate">{displayName}</span>
+          {paneCount > 1 && (
+            <span className="text-[10px] text-text-muted" title={`${paneCount} panes`}>
+              {paneCount}
+            </span>
+          )}
           {agentBrowsing && (
             <Globe
               className="h-2.5 w-2.5 shrink-0 animate-pulse text-accent"
               aria-label="An agent is using a browser here"
             />
           )}
-          {tabAttention ? (
+          {needsYou ? (
             <span
-              className="h-1.5 w-1.5 shrink-0 animate-pulse rounded-full bg-amber-400"
-              aria-hidden="true"
-              title="Needs attention"
-            />
+              className={cn(SEMANTIC_BADGE.warning, "shrink-0 rounded px-1 text-[10px] leading-4")}
+            >
+              Needs you
+            </span>
           ) : (
-            tabActivity &&
-            ACTIVITY_DOT_CLASS[tabActivity] && (
+            dotClass && (
               <span
-                className={cn("h-1.5 w-1.5 shrink-0 rounded-full", ACTIVITY_DOT_CLASS[tabActivity])}
+                className={cn("h-1.5 w-1.5 shrink-0 rounded-full", dotClass)}
                 aria-hidden="true"
               />
             )
@@ -151,4 +158,4 @@ export function WorkspaceTabItem({
       {isActive && <span className="absolute inset-x-0 bottom-0 h-0.5 rounded-full bg-accent" />}
     </div>
   );
-}
+});

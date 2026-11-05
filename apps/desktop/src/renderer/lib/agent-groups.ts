@@ -10,12 +10,17 @@ type Grouped = Pick<
   "id" | "cliType" | "status" | "activityLevel" | "activitySince" | "archived"
 >;
 
-/** Need you: an unread question, or a dialog still open (its action_needed item lives until the
- *  agent runs again). Working: busy. Everything else live is waiting */
+/** An unread question, or a dialog still open (its action_needed item lives until the agent runs again) */
+export function needsYou(
+  a: Pick<AgentState, "status">,
+  item: Pick<AttentionItem, "level" | "read"> | undefined,
+): boolean {
+  return item?.level === "action_needed" && (!item.read || a.status === "waiting_input");
+}
+
+/** Working: busy. Everything else live that does not need you is waiting */
 function agentGroup(a: Grouped, item: AttentionItem | undefined): AgentGroup {
-  if (item?.level === "action_needed" && (!item.read || a.status === "waiting_input")) {
-    return "needYou";
-  }
+  if (needsYou(a, item)) return "needYou";
   return a.activityLevel === "busy" ? "working" : "waiting";
 }
 

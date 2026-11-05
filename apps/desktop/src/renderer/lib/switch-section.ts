@@ -1,5 +1,5 @@
-import type { WorkspaceSection } from "../components/workspace/WorkspaceTabs";
 import { useAppStore } from "../stores/app";
+import type { WorkspaceSection } from "./workspace-sections";
 
 // Typed so a section name that doesn't exist fails to compile instead of blanking the workspace
 export function switchSection(section: WorkspaceSection): void {

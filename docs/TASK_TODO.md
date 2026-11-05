@@ -249,7 +249,7 @@ tRPC calls resolve; no section has a renderer test (backend tests exist for most
 
 Design approved 2026-11-05 (prototype artifact "Exegol: nueva estructura de vistas", 4 boards;
 references in the research doc, section "Company and chat"). One PR per phase, in this order:
-- [ ] Phase 1, one top bar (40 px) instead of three rows: the active project's layout tabs take the
+- [x] Phase 1 (`feat/top-bar`; the GitHub button comes with phase 2, Monitor > Usage and its switch with phase 3), one top bar (40 px) instead of three rows: the active project's layout tabs take the
   row (status dot, layout name, "te espera" badge), CLI launcher on their right, then small GitHub,
   Project and Monitor buttons. Opening Project or Monitor swaps the tabs for a "‹ Tabs" chip that
   keeps their dots, and their sub-tabs fill the row. Project: Tasks, History, Context (Memory +
