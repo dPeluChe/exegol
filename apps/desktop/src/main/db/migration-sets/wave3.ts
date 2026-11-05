@@ -324,6 +324,11 @@ export const wave3Migrations: Migration[] = [
     WHERE pty_cols IS NULL AND resumed_from IS NOT NULL;`,
   },
   {
+    // Gitignore patterns of local files (.env) copied into a project's new worktrees; NULL = default
+    id: "w3_032_project_worktree_copy",
+    sql: "ALTER TABLE projects ADD COLUMN worktree_copy TEXT;",
+  },
+  {
     // Codex rows counted cached input as input: the first background import rewrites its window
     id: "w3_033_token_usage_cache",
     sql: `ALTER TABLE token_usage ADD COLUMN cache_read_tokens INTEGER NOT NULL DEFAULT 0;

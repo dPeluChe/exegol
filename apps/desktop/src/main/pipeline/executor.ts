@@ -8,7 +8,7 @@ import type Database from "libsql";
 import { getAgentManager } from "../agents/manager";
 import { getProviderRegistry } from "../agents/registry";
 import { coreRust, slugifyBranchName } from "../agents/spawn-env";
-import { createManagedWorktree } from "../agents/worktrees";
+import { createManagedWorktree, prepareNewWorktree } from "../agents/worktrees";
 import {
   createAgent,
   createPipelineRun,
@@ -19,7 +19,6 @@ import {
   recoverStalePipelineRuns,
   updatePipelineRun,
 } from "../db/queries";
-import { runSetupHook } from "../hooks/project-hooks";
 import { buildKnowledgeContext } from "../knowledge/context";
 import { logger } from "../lib/logger";
 import { getPtyHost } from "../terminal/pty-host";
@@ -123,7 +122,7 @@ export class PipelineExecutor {
       }
     }
     if (worktreePath && project) {
-      await runSetupHook(project.path, worktreePath, worktreeBranch).catch(() => {});
+      await prepareNewWorktree(db, projectId, project.path, worktreePath, worktreeBranch).done;
     }
 
     logger.info("[Pipeline] Starting run:", { runId: run.id, template: template.name });

@@ -7,6 +7,7 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import type { AgentCliType } from "@exegol/shared";
 import { describe, expect, it } from "vitest";
+import { OscStatusScanner, type TermReport } from "./osc-status-scanner";
 import { AgentStatusParser, OscNotifyScanner, stripAnsi } from "./status-parser";
 
 interface StripCase {
@@ -32,10 +33,17 @@ interface StatusCase {
   expectedResume?: string | null;
 }
 
+interface TermReportCase {
+  name: string;
+  chunks: string[];
+  expected: TermReport[];
+}
+
 interface Vectors {
   strip: StripCase[];
   signals: SignalCase[];
   status: StatusCase[];
+  termReports: TermReportCase[];
 }
 
 const vectorsPath = fileURLToPath(
@@ -87,4 +95,23 @@ describe("parity: AgentStatusParser", () => {
       expect(resume).toBe(c.expectedResume ?? null);
     });
   }
+});
+
+describe("parity: OscStatusScanner", () => {
+  for (const c of vectors.termReports) {
+    it(c.name, () => {
+      const scanner = new OscStatusScanner();
+      expect(c.chunks.flatMap((chunk) => scanner.scan(chunk))).toEqual(c.expected);
+    });
+  }
+});
+
+describe("AgentStatusParser term reports", () => {
+  it("returns OSC 9;4 / 7501 reports beside the scrape", () => {
+    const parser = new AgentStatusParser("test", "antigravity" as AgentCliType);
+    expect(parser.parse("\x1b]9;4;3\x07")?.termReports).toEqual([
+      { kind: "progress", state: "3", detail: null },
+    ]);
+    expect(parser.parse("plain output")).toBeNull();
+  });
 });

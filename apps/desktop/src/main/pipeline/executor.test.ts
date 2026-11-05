@@ -33,6 +33,7 @@ vi.mock("../agents/spawn-env", () => ({
 vi.mock("../agents/worktrees", () => ({
   createManagedWorktree: vi.fn(),
   removeManagedWorktree: vi.fn(),
+  prepareNewWorktree: vi.fn(() => ({ copied: Promise.resolve(), done: Promise.resolve() })),
 }));
 vi.mock("../hooks/project-hooks", () => ({ runSetupHook: vi.fn(async () => {}) }));
 vi.mock("../knowledge/context", () => ({ buildKnowledgeContext: () => "" }));

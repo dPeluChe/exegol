@@ -47,6 +47,13 @@ import {
 } from "./spawn-env";
 import { stripAnsi, stripOscSequences } from "./status-parser";
 import { writeAgentStatus } from "./status-writes";
+import { noteStuckTurnStart } from "./stuck-turn-sweep";
+import {
+  forgetTermStatus,
+  noteHookSignal,
+  PROGRAM_STATUS_REPLY,
+  takeTermStatus,
+} from "./term-status";
 import { endTurn, forgetTurns, startTurn } from "./turn-snapshots";
 
 /** The parser re-reports the same status on every redraw (agy: each keystroke): a change always
@@ -90,6 +97,7 @@ function applyAgentSignals(
   maps: SessionMaps,
   signals: Array<{ agentId: string; event: string }>,
   currentStep: string | null,
+  source: AgentSignalEvent["source"] = "hook",
 ): void {
   let signalStatus: AgentStatus | undefined;
   let turnStarted: number | undefined;
@@ -106,9 +114,13 @@ function applyAgentSignals(
       logger.warn(`[AgentCallback] Ignoring unknown signal type '${sig.event}'`);
       continue;
     }
+    if (source === "hook") noteHookSignal(agent.id);
     const derived = deriveStatusFromSignal(sig.event);
     trackTurn(db, agent, maps, sig.event);
-    if (sig.event === "turn_started") noteTurnStarted(agent.id);
+    if (sig.event === "turn_started") {
+      noteTurnStarted(agent.id);
+      noteStuckTurnStart(agent.id);
+    }
 
     if (derived.status) signalStatus = derived.status;
     if (derived.turnStarted) turnStarted = derived.turnStarted;
@@ -125,7 +137,7 @@ function applyAgentSignals(
       projectId: agent.projectId,
       type: sig.event,
       at: Date.now(),
-      source: "hook",
+      source,
     };
     broadcast("agent:signal", signalEvent);
   }
@@ -137,7 +149,7 @@ function applyAgentSignals(
     // Turn boundaries and attention only: a "running" per tool call was most of the log
     if (turnStarted || turnEnded || needsAttention || idleOnly) {
       logger.info(
-        `[AgentCallback] Signal: ${agent.id} (${agent.cliType}) → status=${signalStatus ?? "unchanged"} needsAttention=${!!needsAttention}${idleOnly ? " idle" : ""}`,
+        `[AgentCallback] Signal (${source}): ${agent.id} (${agent.cliType}) → status=${signalStatus ?? "unchanged"} needsAttention=${!!needsAttention}${idleOnly ? " idle" : ""}`,
       );
     }
     // Muted or suspended sessions stay quiet
@@ -306,7 +318,7 @@ export function createSpawnCallbacks(
 
       appendScrollback(maps, agent.id, data, maxScrollbackBytes);
 
-      if (SKIP_PARSING.has(agent.cliType)) return;
+      if (agent.cliType === "shell") return;
 
       const processor = maps.outputProcessors.get(agent.id);
       if (!processor) return;
@@ -317,6 +329,15 @@ export function createSpawnCallbacks(
         oscDeliveredAgents.add(agent.id);
         applyAgentSignals(db, agent, maps, result.signals, result.currentStep ?? null);
       }
+      if (result.termReports?.length) {
+        const term = takeTermStatus(agent.id, agent.cliType, result.termReports);
+        // Sync, before the pane's DA reply can come back: Claude Code ends its probe on DA
+        if (term.reply) getPtyHost().write(agent.id, PROGRAM_STATUS_REPLY);
+        const signals = term.signals.map((event) => ({ agentId: agent.id, event }));
+        if (signals.length) applyAgentSignals(db, agent, maps, signals, null, "terminal");
+      }
+      // Full-screen TUIs: their own status reports above are deterministic, the scrape is not
+      if (SKIP_PARSING.has(agent.cliType)) return;
 
       // Everything below is SCRAPED from terminal output — and our own injected
       // messages are echoed back into that same stream. While the echo window
@@ -428,6 +449,7 @@ export function createSpawnCallbacks(
       maps.sessionIdsCaptured.delete(agent.id);
       loggedStatus.delete(agent.id);
       statusLogLimit.forget(agent.id);
+      forgetTermStatus(agent.id);
       maps.dataCallbacks.delete(agent.id);
       maps.contexts.delete(agent.id);
 

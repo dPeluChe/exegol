@@ -16,6 +16,7 @@ import {
   diffCommentRowSchema,
   parseBrowserHosts,
   parseRow,
+  parseWorktreeCopy,
   projectGroupRowSchema,
   projectRowSchema,
   promptRowSchema,
@@ -54,6 +55,16 @@ export function mapPromptRow(row: Record<string, unknown>): Prompt {
   };
 }
 
+function parseWorktreeCopyColumn(raw: string | null): string[] | null {
+  if (raw === null) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parseWorktreeCopy(parsed.map(String)) : null;
+  } catch {
+    return null;
+  }
+}
+
 function parseHostsColumn(raw: string | null): string[] {
   if (!raw) return [];
   try {
@@ -82,6 +93,7 @@ export function mapProjectRow(row: Record<string, unknown>): Project {
     browserHosts: parseHostsColumn(r.browser_hosts),
     browserEval: r.browser_eval === 1,
     ide: r.ide ?? null,
+    worktreeCopy: parseWorktreeCopyColumn(r.worktree_copy),
   };
 }
 

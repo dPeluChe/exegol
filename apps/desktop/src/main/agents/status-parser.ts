@@ -1,4 +1,5 @@
 import type { AgentCliType, AgentStatus } from "@exegol/shared";
+import { OscStatusScanner, type TermReport } from "./osc-status-scanner";
 
 type StatusUpdate = {
   status?: AgentStatus;
@@ -7,6 +8,8 @@ type StatusUpdate = {
   resumeCommand?: string;
   /** Deterministic hook/OSC-777 signals detected in this chunk (T123). */
   signals?: { agentId: string; event: string }[];
+  /** The CLI's own OSC 9;4 / 7501 status reports */
+  termReports?: TermReport[];
 };
 
 /**
@@ -88,6 +91,7 @@ export class AgentStatusParser {
   private resumePattern: string;
   private buffer: string = "";
   private oscScanner = new OscNotifyScanner();
+  private statusScanner = new OscStatusScanner();
 
   constructor(_agentId: string, cliType: AgentCliType, resumePattern?: string) {
     this.cliType = cliType;
@@ -101,6 +105,7 @@ export class AgentStatusParser {
   parse(data: string): StatusUpdate | null {
     // OSC-777 notify signals must be scanned on the raw (pre-strip) stream.
     const signals = this.oscScanner.scan(data);
+    const termReports = this.statusScanner.scan(data);
 
     this.buffer += stripAnsi(data);
     if (this.buffer.length > MAX_BUFFER) {
@@ -146,6 +151,9 @@ export class AgentStatusParser {
 
     if (signals.length > 0) {
       lastUpdate = { ...(lastUpdate ?? {}), signals };
+    }
+    if (termReports.length > 0) {
+      lastUpdate = { ...(lastUpdate ?? {}), termReports };
     }
 
     return lastUpdate;

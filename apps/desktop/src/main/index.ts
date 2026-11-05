@@ -6,6 +6,7 @@ import { cleanupOldEvents, startNotifyHandler, stopNotifyHandler } from "./agent
 import { getQueueExecutor } from "./agents/queue";
 import { getProviderRegistry } from "./agents/registry";
 import { warmShellPath } from "./agents/spawn-env";
+import { startStuckTurnSweep } from "./agents/stuck-turn-sweep";
 import { ensureAgentWrappers, sweepStaleAgentEvents } from "./agents/wrappers";
 import { installDeepLinkHandling } from "./bootstrap/deep-link";
 import { enableShortcutsPortal, registerGlobalHotkey } from "./bootstrap/global-hotkey";
@@ -152,6 +153,7 @@ app.whenReady().then(async () => {
     scheduleHousekeeping(getDb());
     scheduleUsageImport(getDb());
     startIdleSuspend(getDb());
+    startStuckTurnSweep(getDb());
   });
 
   // Background services (non-blocking, start after window)

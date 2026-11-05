@@ -18,7 +18,7 @@ import {
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 /** A verified worktree moved aside before deletion; a sweep that died mid-delete finishes it */
-const TRASH_PREFIX = ".exegol-trash-";
+export const TRASH_PREFIX = ".exegol-trash-";
 
 export interface WorktreeSweepResult {
   removed: number;
@@ -42,7 +42,7 @@ interface Row {
 const isDir = (path: string) => lstatSync(path, { throwIfNoEntry: false })?.isDirectory() ?? false;
 
 /** Worktrees an active pipeline or a race still needs, by path or by agent */
-function inUse(db: Database.Database): { paths: Set<string>; agents: Set<string> } {
+export function inUse(db: Database.Database): { paths: Set<string>; agents: Set<string> } {
   const paths = new Set(
     (
       db
@@ -71,8 +71,31 @@ function inUse(db: Database.Database): { paths: Set<string>; agents: Set<string>
   return { paths, agents };
 }
 
+/** Registered projects' checkouts, as path keys */
+export function projectRepoKeys(db: Database.Database): Set<string> {
+  const rows = db.prepare("SELECT path FROM projects").all() as { path: string }[];
+  return new Set(rows.map((p) => pathKey(p.path)));
+}
+
+/** Every `<root>/<project>/<name>` directory: where Exegol puts its worktrees */
+export function worktreeDirs(roots: readonly string[]): { path: string; name: string }[] {
+  const out: { path: string; name: string }[] = [];
+  for (const root of roots) {
+    if (!isDir(root)) continue;
+    for (const project of readdirSync(root)) {
+      const projectDir = join(root, project);
+      if (!isDir(projectDir)) continue;
+      for (const name of readdirSync(projectDir)) {
+        const path = join(projectDir, name);
+        if (isDir(path)) out.push({ path, name });
+      }
+    }
+  }
+  return out;
+}
+
 /** The repo of a worktree, from its own `.git` file (`gitdir: <repo>/.git/worktrees/<name>`) */
-function repoOf(dir: string): string | null {
+export function repoOf(dir: string): string | null {
   const file = join(dir, ".git");
   if (!lstatSync(file, { throwIfNoEntry: false })?.isFile()) return null;
   const m = /^gitdir:\s*(.+?)\/?\s*$/m.exec(readFileSync(file, "utf-8"));
@@ -141,11 +164,7 @@ export async function sweepOrphanWorktrees(
        GROUP BY w.id`,
     )
     .all(...busy.agents) as (Row & { racing: number })[];
-  const projectRepos = new Set(
-    (db.prepare("SELECT path FROM projects").all() as { path: string }[]).map((p) =>
-      pathKey(p.path),
-    ),
-  );
+  const projectRepos = projectRepoKeys(db);
 
   for (const row of rows) {
     if (countLiveAgentsInWorktree(db, row.id) > 0 || row.racing > 0) continue;
@@ -173,28 +192,19 @@ export async function sweepOrphanWorktrees(
   }
 
   const known = new Set(rows.map((r) => pathKey(r.path)));
-  for (const root of roots) {
-    if (!isDir(root)) continue;
-    for (const project of readdirSync(root)) {
-      const projectDir = join(root, project);
-      if (!isDir(projectDir)) continue;
-      for (const name of readdirSync(projectDir)) {
-        const path = join(projectDir, name);
-        if (!isDir(path)) continue;
-        if (name.startsWith(TRASH_PREFIX)) {
-          await rm(path, { recursive: true, force: true }).catch(() => {});
-          continue;
-        }
-        if (known.has(pathKey(path)) || busy.paths.has(pathKey(path))) continue;
-        const gitFile = lstatSync(join(path, ".git"), { throwIfNoEntry: false });
-        // A day old at least: a spawn creates the directory a moment before its row
-        if (gitFile && now - gitFile.mtimeMs < DAY_MS) continue;
-        const free = () => !db.prepare("SELECT 1 FROM worktrees WHERE path = ?").get(path);
-        const save = saveWork ? { expectedBranch: null, alias: name } : null;
-        if (await removeIfSafe(path, projectRepos, free, git, save)) result.removed++;
-        else result.kept++;
-      }
+  for (const { path, name } of worktreeDirs(roots)) {
+    if (name.startsWith(TRASH_PREFIX)) {
+      await rm(path, { recursive: true, force: true }).catch(() => {});
+      continue;
     }
+    if (known.has(pathKey(path)) || busy.paths.has(pathKey(path))) continue;
+    const gitFile = lstatSync(join(path, ".git"), { throwIfNoEntry: false });
+    // A day old at least: a spawn creates the directory a moment before its row
+    if (gitFile && now - gitFile.mtimeMs < DAY_MS) continue;
+    const free = () => !db.prepare("SELECT 1 FROM worktrees WHERE path = ?").get(path);
+    const save = saveWork ? { expectedBranch: null, alias: name } : null;
+    if (await removeIfSafe(path, projectRepos, free, git, save)) result.removed++;
+    else result.kept++;
   }
   return result;
 }

@@ -47,6 +47,7 @@ export const projectRowSchema = z.object({
   browser_hosts: optStr,
   browser_eval: optNum,
   ide: optStr,
+  worktree_copy: optStr,
 });
 
 export const projectGroupRowSchema = z.object({
