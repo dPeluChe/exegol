@@ -12,6 +12,8 @@ export const AGENT_CLI_TYPES = [
   "kilocode",
   "crush",
   "factory-droid",
+  "grok",
+  "cursor",
   "shell",
   "custom",
 ] as const;
@@ -106,6 +108,8 @@ export const YOLO_FLAGS: Record<string, string> = {
   "factory-droid": "--auto=high",
   aider: "--yes-always",
   goose: "--no-confirm",
+  grok: "--always-approve",
+  cursor: "--yolo",
 };
 
 /**
@@ -133,6 +137,8 @@ export const MODEL_LAUNCH: Record<string, ModelLaunch> = {
   amp: { flag: "-m" },
   goose: { env: "GOOSE_MODEL" },
   "factory-droid": { settingsFile: ["sessionDefaultSettings", "model"] },
+  grok: { flag: "-m" },
+  cursor: { flag: "--model" },
 };
 
 /** A second model a CLI takes for one session, for a narrower job than the main one */
@@ -303,6 +309,7 @@ export const CLIPBOARD_IMAGE: Record<string, "ctrl-v" | "/paste"> = {
   kilocode: "ctrl-v",
   crush: "ctrl-v",
   "factory-droid": "ctrl-v",
+  grok: "ctrl-v",
   aider: "/paste",
   kiro: "/paste",
 };

@@ -67,6 +67,7 @@ describe("saidNoSession", () => {
     expect(saidNoSession("factory-droid", "Error: No sessions found in current directory.")).toBe(
       true,
     );
+    expect(saidNoSession("cursor", "No previous chats found.")).toBe(true);
     expect(saidNoSession("aider", "No previous session to resume")).toBe(true);
     expect(saidNoSession("aider", "Invalid API key")).toBe(false);
   });

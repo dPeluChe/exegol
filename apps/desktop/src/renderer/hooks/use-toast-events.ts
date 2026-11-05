@@ -22,7 +22,7 @@ const STATUS_TOAST_MAP: Record<
 };
 
 /** CLIs that frequently toggle waiting_input (interactive TUIs) — skip toast for these */
-const INTERACTIVE_CLI_TYPES = new Set(["crush", "gemini", "opencode", "kiro"]);
+const INTERACTIVE_CLI_TYPES = new Set(["crush", "gemini", "opencode", "kiro", "grok"]);
 const TOAST_THROTTLE_MS = 10_000;
 
 /**

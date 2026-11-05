@@ -1,4 +1,4 @@
-import type { Activity, ActivityType } from "@exegol/shared";
+import { type Activity, type ActivityType, AGENT_CLI_TYPES } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import {
   AlertTriangle,
@@ -31,15 +31,14 @@ const TYPE_CONFIG: Record<ActivityType, { icon: typeof Play; color: string }> = 
   "worktree:saved": { icon: GitCommitHorizontal, color: "text-text-muted" },
 };
 
+const CLI_PREFIX = new RegExp(`^(${AGENT_CLI_TYPES.join("|")})\\s+agent\\s+`, "i");
+
 function ActivityItem({ activity, projectName }: { activity: Activity; projectName?: string }) {
   const config = TYPE_CONFIG[activity.type];
   const Icon = config.icon;
 
   // Clean up description: remove CLI prefix for readability
-  const text = activity.description.replace(
-    /^(claude-code|codex|gemini|aider|goose|opencode|amp|kiro|kilocode|crush|shell|factory-droid)\s+agent\s+/i,
-    "",
-  );
+  const text = activity.description.replace(CLI_PREFIX, "");
   const desc = projectName ? `${projectName}: ${text}` : text;
 
   return (

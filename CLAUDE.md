@@ -145,7 +145,7 @@ Sequential agent orchestration in shared worktrees. Exegol controls everything â
 11. **Oplog v2** (T129): `prepareStepSnapshot`/`commitStepSnapshot` wrap each step â€” git-tree snapshots on hidden ref `refs/exegol/oplog` (GitButler model), restore refuses cross-worktree + takes a PreRestore safety snapshot first
 
 ### Provider registry
-14 built-in providers (Claude Code, Codex, Gemini, Antigravity, Devin, Aider, Goose, OpenCode, Amp, Kiro, Kilo Code, Crush, Factory Droid, Terminal/shell) + custom, in `agents/registry.ts`. Each has: `supportsPromptArg`, `promptFlag`, `enabled`. `supportsPromptArg: false` (launch without prompt injection): Gemini, Aider, OpenCode, Kiro, Kilo Code, Crush, shell.
+16 built-in providers (Claude Code, Codex, Gemini, Antigravity, Devin, Aider, Goose, OpenCode, Amp, Kiro, Kilo Code, Crush, Factory Droid, Grok, Cursor, Terminal/shell) + custom, in `agents/registry.ts`. Each has: `supportsPromptArg`, `promptFlag`, `enabled`. `supportsPromptArg: false` (launch without prompt injection): Gemini, Aider, OpenCode, Kiro, Kilo Code, Crush, shell.
 
 ### Key patterns
 - **tRPC over IPC**: 37 routers in main process (`ipc/router.ts`), renderer calls via `window.api.trpc.invoke` (`lib/trpc-client.ts`: errors come back without Electron's "Error invoking remote method" prefix and with the tRPC `code`, carried in the error name)
@@ -214,7 +214,7 @@ apps/desktop/src/
                     queries/ (22 domain modules + helpers)
     ipc/            router (37 routers), procedures/ (43 modules incl. history, knowledge, doctor, models, storage)
     history/        T181 session history: merged timeline + per-CLI local store readers
-                    (claude-code, codex, droid, goose, gemini) and CLI listings run in the
+                    (claude-code, codex, droid, goose, gemini, grok) and CLI listings run in the
                     folder (devin, opencode, kilocode: `cli-list.ts`); `hasLocalSession` /
                     `lastLocalSession` guard the launcher's "Continue last"
     terminal/       pty-host, sidecar entry/client/discovery/eviction/flusher, ring-buffer,
