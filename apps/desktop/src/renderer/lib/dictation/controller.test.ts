@@ -86,6 +86,19 @@ describe("recording while Exegol is in the background", () => {
     expect(phase()).toBe("listening");
   });
 
+  it("a hold released mid-word keeps listening for the tail, then stops", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    await startRecording();
+    for (let i = 0; i < 16; i++) feed(speech());
+    vi.setSystemTime(Date.now() + 2_000);
+    chordUp();
+    expect(phase()).toBe("listening");
+    feed(new Float32Array(16_000));
+    await new Promise((done) => setTimeout(done, 60));
+    await settle();
+    expect(phase()).not.toBe("listening");
+  });
+
   it("a hold cut by a blur: the lost keyup does not stop, the next press does", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
     await startRecording();
