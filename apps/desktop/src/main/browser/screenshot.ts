@@ -11,39 +11,93 @@ import {
   type WebContents,
 } from "electron";
 import { logger } from "../lib/logger";
+import { withTimeout } from "../lib/timeout";
+import { type TilePlan, tileCrop, tileStops } from "./full-page-tiles";
 
 export type ScreenshotTarget = "file" | "clipboard";
 export type ScreenshotResult = "saved" | "copied" | "canceled" | "failed";
 
-/** Past this the GPU texture can fail and the image comes back blank */
+/** Image rows: past this the bitmap gets too big to hold and encode */
 const FULL_PAGE_MAX_HEIGHT = 16_384;
+/** Own world: the page cannot see or change the capture's state */
+const SHOT_WORLD_ID = 1338;
+/** A hidden or throttled webview may never run the frame callbacks a scroll waits on */
+const SCRIPT_TIMEOUT_MS = 5_000;
 
-/** The whole document through CDP (captureBeyondViewport), without resizing the pane. A page
- *  whose own scroll container holds the content still yields only what is on screen */
+/** One pass over the page: what scrolls (the document, or the tallest inner scroller of an app
+ *  shell) and its fixed and sticky bars; hides the scrollbars and remembers what to restore */
+const PLAN_SCRIPT = `(() => {
+  const vh = innerHeight;
+  const doc = document.scrollingElement || document.documentElement;
+  let el = null, best = doc.scrollHeight - doc.clientHeight;
+  const bars = [];
+  for (const c of document.querySelectorAll("body *")) {
+    const st = getComputedStyle(c);
+    if (st.position === "fixed" || st.position === "sticky") bars.push([c, c.style.visibility]);
+    if (c.clientHeight < vh * 0.5 || !/(auto|scroll)/.test(st.overflowY)) continue;
+    const more = c.scrollHeight - c.clientHeight;
+    if (more > best) { best = more; el = c; }
+  }
+  const s = el || doc;
+  const style = document.createElement("style");
+  style.textContent = "*::-webkit-scrollbar{display:none!important}*{scrollbar-width:none!important}";
+  document.documentElement.appendChild(style);
+  window.__exegolShot = { s, top: s.scrollTop, style, bars };
+  return { total: s.scrollHeight, view: s.clientHeight, offset: el ? Math.max(0, el.getBoundingClientRect().top) : 0, vh };
+})()`;
+
+/** After the first strip, fixed and sticky bars would repeat in every strip */
+const HIDE_BARS_SCRIPT = `(() => { for (const [e] of window.__exegolShot.bars) e.style.visibility = "hidden"; })()`;
+
+const scrollScript = (y: number) => `new Promise((done) => {
+  const x = window.__exegolShot;
+  x.s.scrollTop = ${y};
+  requestAnimationFrame(() => requestAnimationFrame(() => done(x.s.scrollTop)));
+})`;
+
+const RESTORE_SCRIPT = `(() => {
+  const x = window.__exegolShot;
+  for (const [e, v] of x.bars) e.style.visibility = v;
+  x.style.remove();
+  x.s.scrollTop = x.top;
+  delete window.__exegolShot;
+})()`;
+
+/** The whole page, scrolled strip by strip and stitched: a webview's surface is the size of its
+ *  element, so CDP's captureBeyondViewport repeated the visible area (seen at a 390x844 frame).
+ *  The page sees the scroll and the hidden bars while it runs */
 async function captureFullPage(wc: WebContents): Promise<NativeImage> {
-  const dbg = wc.debugger;
-  const wasAttached = dbg.isAttached();
-  if (!wasAttached) dbg.attach("1.3");
+  const run = <T>(code: string) =>
+    withTimeout(
+      wc.executeJavaScriptInIsolatedWorld(SHOT_WORLD_ID, [{ code }], true) as Promise<T>,
+      SCRIPT_TIMEOUT_MS,
+      "screenshot page script",
+    );
+  const plan = await run<TilePlan & { vh: number }>(PLAN_SCRIPT);
   try {
-    const metrics = (await dbg.sendCommand("Page.getLayoutMetrics")) as {
-      cssContentSize?: { width: number; height: number };
-      contentSize: { width: number; height: number };
-    };
-    const size = metrics.cssContentSize ?? metrics.contentSize;
-    const shot = (await dbg.sendCommand("Page.captureScreenshot", {
-      format: "png",
-      captureBeyondViewport: true,
-      clip: {
-        x: 0,
-        y: 0,
-        width: Math.ceil(size.width),
-        height: Math.min(Math.ceil(size.height), FULL_PAGE_MAX_HEIGHT),
-        scale: 1,
-      },
-    })) as { data: string };
-    return nativeImage.createFromBuffer(Buffer.from(shot.data, "base64"));
+    const strips: Buffer[] = [];
+    let width = 0;
+    let scale = 1;
+    let total = plan.total;
+    for (const stop of tileStops(plan.total, plan.view)) {
+      if (stop >= total) break;
+      const real = await run<number>(scrollScript(stop));
+      const image = await wc.capturePage();
+      const size = image.getSize();
+      if (stop === 0) {
+        width = size.width;
+        scale = size.height / plan.vh;
+        total = Math.min(plan.total, Math.floor(FULL_PAGE_MAX_HEIGHT / scale));
+        await run(HIDE_BARS_SCRIPT);
+      }
+      const crop = tileCrop(stop, real, { ...plan, total }, scale, size.height);
+      if (!crop) break;
+      strips.push(image.crop({ x: 0, y: crop.y, width, height: crop.height }).toBitmap());
+    }
+    const bitmap = Buffer.concat(strips);
+    return nativeImage.createFromBitmap(bitmap, { width, height: bitmap.length / (width * 4) });
   } finally {
-    if (!wasAttached && dbg.isAttached()) dbg.detach();
+    await run(RESTORE_SCRIPT).catch(() => undefined);
   }
 }
 

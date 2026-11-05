@@ -55,6 +55,7 @@ const SHOTS: { label: string; target: ScreenshotTarget; fullPage: boolean }[] = 
   { label: "Save visible area...", target: "file", fullPage: false },
   { label: "Save full page...", target: "file", fullPage: true },
   { label: "Copy visible area", target: "clipboard", fullPage: false },
+  { label: "Copy full page", target: "clipboard", fullPage: true },
 ];
 
 /** Camera button: the page as an image, to a file or the clipboard */
