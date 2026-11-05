@@ -1,5 +1,6 @@
-import { ExternalLink } from "lucide-react";
+import { ArrowLeftRight, ExternalLink } from "lucide-react";
 import { type AgentState, jumpToAgent, useAgentStore } from "../../../stores/agents";
+import { type CompanyView, useAppStore } from "../../../stores/app";
 import { AgentIcon } from "../../common/AgentIcon";
 import { SegmentedTabs } from "../../common/SegmentedTabs";
 import { SessionAlias } from "../../common/SessionAlias";
@@ -8,9 +9,7 @@ import { ErrorBoundary, paneFallback } from "../../ErrorBoundary";
 import { MirrorFrame } from "../../terminal/MirrorFrame";
 import { CompanyChat } from "./CompanyChat";
 
-export type SessionView = "chat" | "terminal";
-
-const VIEWS: { id: SessionView; label: string }[] = [
+const VIEWS: { id: CompanyView; label: string }[] = [
   { id: "chat", label: "Chat" },
   { id: "terminal", label: "Terminal" },
 ];
@@ -25,9 +24,11 @@ export function CompanySession({
 }: {
   agent: AgentState;
   where: string;
-  picked: SessionView;
-  onPick: (view: SessionView) => void;
+  picked: CompanyView;
+  onPick: (view: CompanyView) => void;
 }) {
+  const side = useAppStore((s) => s.companySessionSide);
+  const toggleSide = useAppStore((s) => s.toggleCompanySessionSide);
   const hasChat = agent.cliType !== "shell";
   const view = hasChat ? picked : "terminal";
   return (
@@ -38,6 +39,14 @@ export function CompanySession({
           <SessionAlias agent={agent} textClassName="text-xs font-medium" />
           <p className="truncate text-[10px] text-text-muted">{where}</p>
         </div>
+        <button
+          type="button"
+          onClick={toggleSide}
+          title={`Move to the ${side === "left" ? "right" : "left"}`}
+          className="shrink-0 rounded p-1 text-text-muted hover:bg-bg-tertiary hover:text-text-primary"
+        >
+          <ArrowLeftRight className="h-3 w-3" aria-hidden="true" />
+        </button>
         <WatchToggle agentId={agent.id} className="text-[10px]" />
         <button
           type="button"

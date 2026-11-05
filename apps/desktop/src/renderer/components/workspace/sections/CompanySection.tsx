@@ -21,7 +21,7 @@ import {
 import { formatTimeAgo } from "../../../lib/format";
 import { trpcInvoke } from "../../../lib/trpc-client";
 import { type AgentState, showProject, useAgentStore } from "../../../stores/agents";
-import { useAppStore } from "../../../stores/app";
+import { type CompanyView, useAppStore } from "../../../stores/app";
 import { useDeskActivityStore } from "../../../stores/desk-activity";
 import { useNotificationPrefsStore } from "../../../stores/notification-prefs";
 import { useWorkspaceStore } from "../../../stores/workspace";
@@ -29,7 +29,7 @@ import { AgentIcon } from "../../common/AgentIcon";
 import { GitHubCounts } from "../../common/GitHubCounts";
 import { PanelDivider } from "../../common/PanelDivider";
 import type { ProjectMeta } from "../../common/ProjectChip";
-import { CompanySession, type SessionView } from "./CompanySession";
+import { CompanySession } from "./CompanySession";
 
 const DESK_STATE: Record<DeskState, { label: string; color: string; ring: string }> = {
   needs: {
@@ -50,9 +50,6 @@ const ROOM_SUMMARY: [DeskState, string][] = [
 ];
 
 const whereOf = (a: AgentState) => a.branchName ?? "repo root";
-
-// A mirror draws the session's whole grid: narrower than this it is too small to read
-const TERMINAL_MIN_PERCENT = 55;
 
 /** Leaf timer: only this line re-renders as time passes */
 function StateLine({ state, activitySince }: { state: DeskState; activitySince?: number }) {
@@ -278,20 +275,37 @@ export function CompanySection({ projectMeta }: { projectMeta: Map<string, Proje
   useCompanyKeys({ pickNext, selected, live });
 
   const sessionPanel = useRef<ImperativePanelHandle>(null);
-  const chatPercent = useRef<number | null>(null);
-  const [view, setView] = useState<SessionView>("chat");
-  const pickView = (next: SessionView) => {
+  const [view, setView] = useState<CompanyView>("chat");
+  const side = useAppStore((s) => s.companySessionSide);
+  const pickView = (next: CompanyView) => {
     setView(next);
-    const panel = sessionPanel.current;
-    if (!panel) return;
-    if (next === "terminal") {
-      chatPercent.current = panel.getSize();
-      if (panel.getSize() < TERMINAL_MIN_PERCENT) panel.resize(TERMINAL_MIN_PERCENT);
-    } else if (chatPercent.current !== null) {
-      panel.resize(chatPercent.current);
-      chatPercent.current = null;
-    }
+    sessionPanel.current?.resize(useAppStore.getState().companySessionSizes[next]);
   };
+  const keepSize = (dragging: boolean) => {
+    const size = sessionPanel.current?.getSize();
+    if (!dragging && size) useAppStore.getState().setCompanySessionSize(view, size);
+  };
+  // Read as a Panel mounts: later widths come from dragging or `pickView`
+  const sessionSize = useAppStore.getState().companySessionSizes[view];
+  const divider = selected && <PanelDivider onDragging={keepSize} />;
+  const session = selected && (
+    <Panel
+      ref={sessionPanel}
+      id="session"
+      order={side === "left" ? 1 : 2}
+      defaultSize={sessionSize}
+      minSize={20}
+      maxSize={70}
+    >
+      <CompanySession
+        key={selected.id}
+        agent={selected}
+        where={`${projectMeta.get(selected.projectId)?.name ?? ""} · ${whereOf(selected)}`}
+        picked={view}
+        onPick={pickView}
+      />
+    </Panel>
+  );
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 p-4 pt-0">
@@ -309,8 +323,16 @@ export function CompanySection({ projectMeta }: { projectMeta: Map<string, Proje
       {rooms.length === 0 ? (
         <p className="py-8 text-center text-xs text-text-muted">No live sessions right now.</p>
       ) : (
-        <PanelGroup direction="horizontal" autoSaveId="exegol-company" className="min-h-0 flex-1">
-          <Panel id="rooms" order={1} defaultSize={70} minSize={30}>
+        // Keyed: the panels change order, so the group starts over from the stored widths
+        <PanelGroup key={side} direction="horizontal" className="min-h-0 flex-1">
+          {side === "left" && session}
+          {side === "left" && divider}
+          <Panel
+            id="rooms"
+            order={side === "left" ? 2 : 1}
+            defaultSize={100 - sessionSize}
+            minSize={30}
+          >
             {/* The container sits outside: Radix's scroll viewport sizes to its content */}
             <div className="@container h-full">
               <ScrollArea className="h-full">
@@ -330,27 +352,8 @@ export function CompanySection({ projectMeta }: { projectMeta: Map<string, Proje
               </ScrollArea>
             </div>
           </Panel>
-          {selected && (
-            <>
-              <PanelDivider />
-              <Panel
-                ref={sessionPanel}
-                id="session"
-                order={2}
-                defaultSize={30}
-                minSize={20}
-                maxSize={70}
-              >
-                <CompanySession
-                  key={selected.id}
-                  agent={selected}
-                  where={`${projectMeta.get(selected.projectId)?.name ?? ""} · ${whereOf(selected)}`}
-                  picked={view}
-                  onPick={pickView}
-                />
-              </Panel>
-            </>
-          )}
+          {side === "right" && divider}
+          {side === "right" && session}
         </PanelGroup>
       )}
     </div>

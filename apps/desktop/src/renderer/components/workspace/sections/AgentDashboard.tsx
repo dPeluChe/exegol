@@ -25,7 +25,7 @@ import { useNow } from "../../../hooks/use-now";
 import { submitToAgent } from "../../../lib/agent-input";
 import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
 import { type AgentState, isWorking, jumpToAgent, useAgentStore } from "../../../stores/agents";
-import { useAppStore } from "../../../stores/app";
+import { type DashboardMode, useAppStore } from "../../../stores/app";
 import { useWatchStore } from "../../../stores/watch";
 import { ResumeButton } from "../../agents/ResumeButton";
 import { AccessModeBadge } from "../../common/AccessModeBadge";
@@ -125,7 +125,6 @@ interface ProjectInfo {
 }
 
 type GroupBy = "state" | "project";
-type DashboardMode = "company" | "watching" | "all";
 
 // ─── Component ──────────────────────────────────────────────────────────
 
@@ -146,9 +145,11 @@ export function AgentDashboard() {
   const storeAgents = useAgentStore((s) => s.agents);
   const attentionItems = useAgentStore((s) => s.attentionItems);
   const [groupBy, setGroupBy] = useState<GroupBy>("state");
-  // Pinned sessions open it on Watching
+  // Pinned sessions open it on Watching, until a tab is picked
   const watchingCount = useWatchStore((s) => s.watched.length);
-  const [mode, setMode] = useState<DashboardMode>(watchingCount > 0 ? "watching" : "company");
+  const picked = useAppStore((s) => s.dashboardMode);
+  const mode: DashboardMode = picked ?? (watchingCount > 0 ? "watching" : "company");
+  const setMode = useAppStore((s) => s.setDashboardMode);
 
   // Closing the dashboard is what "left" means; Company reads the last stamp as it mounts
   useMountEffect(() => {

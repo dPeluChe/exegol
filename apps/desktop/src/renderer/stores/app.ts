@@ -36,6 +36,16 @@ interface AppStore {
   companySeenAt: number;
   setCompanySeenAt: (at: number) => void;
 
+  /** The Dashboard tab last open; null until one is picked */
+  dashboardMode: DashboardMode | null;
+  setDashboardMode: (mode: DashboardMode) => void;
+  /** Which side of Company the session panel sits on */
+  companySessionSide: CompanySide;
+  toggleCompanySessionSide: () => void;
+  /** Width of the session panel per view, percent of Company */
+  companySessionSizes: Record<CompanyView, number>;
+  setCompanySessionSize: (view: CompanyView, percent: number) => void;
+
   /** Sidebar collapse state */
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
@@ -86,6 +96,10 @@ export function projectOrderFromTabKeys(keys: string[]): string[] {
  * v2 (T120): a persisted 'settings' view would rehydrate sidebarless. v3: the welcome tour.
  * v4: the sidebar orders projects, not tabs. v5: one sidebar view selector, no Projects split
  */
+export type DashboardMode = "company" | "watching" | "all";
+export type CompanyView = "chat" | "terminal";
+export type CompanySide = "left" | "right";
+
 export function migrateAppStore(persisted: unknown, fromVersion: number): AppStore {
   if (!persisted || typeof persisted !== "object") return persisted as AppStore;
   const state = persisted as {
@@ -189,6 +203,14 @@ export const useAppStore = create<AppStore>()(
 
       companySeenAt: Date.now(),
       setCompanySeenAt: (at) => set({ companySeenAt: at }),
+      dashboardMode: null,
+      setDashboardMode: (mode) => set({ dashboardMode: mode }),
+      companySessionSide: "left",
+      toggleCompanySessionSide: () =>
+        set((s) => ({ companySessionSide: s.companySessionSide === "left" ? "right" : "left" })),
+      companySessionSizes: { chat: 30, terminal: 55 },
+      setCompanySessionSize: (view, percent) =>
+        set((s) => ({ companySessionSizes: { ...s.companySessionSizes, [view]: percent } })),
       welcomeTourSeen: false,
       setWelcomeTourSeen: (seen) => set({ welcomeTourSeen: seen }),
     }),
@@ -208,6 +230,9 @@ export const useAppStore = create<AppStore>()(
         projectsOrder: state.projectsOrder,
         claudePlanUsage: state.claudePlanUsage,
         companySeenAt: state.companySeenAt,
+        dashboardMode: state.dashboardMode,
+        companySessionSide: state.companySessionSide,
+        companySessionSizes: state.companySessionSizes,
       }),
     },
   ),
