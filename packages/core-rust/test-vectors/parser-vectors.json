@@ -1,5 +1,5 @@
 {
-  "$comment": "T150 golden parity vectors — consumed by packages/core-rust/src/processing/parity_vectors_tests.rs (cargo test) and apps/desktop/src/main/agents/status-parser-parity.test.ts (vitest). Rust is the source of truth; the JS mirror must match. strip: pure strip_ansi parity on a single input string. signals: OSC-777 notify FSM fed chunk-by-chunk. status: full output stream (AgentOutputStream / AgentStatusParser) fed chunk-by-chunk; expectedStatus/expectedStep are the LAST values emitted; expectedSessionId/expectedResume default null.",
+  "$comment": "T150 golden parity vectors — consumed by packages/core-rust/src/processing/parity_vectors_tests.rs (cargo test) and apps/desktop/src/main/agents/status-parser-parity.test.ts (vitest). Rust is the source of truth; the JS mirror must match. strip: pure strip_ansi parity on a single input string. signals: OSC-777 notify FSM fed chunk-by-chunk. termReports: OSC 9;4 / 7501 scanner fed chunk-by-chunk, detail null unless blocked. status: full output stream (AgentOutputStream / AgentStatusParser) fed chunk-by-chunk; expectedStatus/expectedStep are the LAST values emitted; expectedSessionId/expectedResume default null.",
   "strip": [
     { "name": "plain_text_passthrough", "input": "hello world", "expected": "hello world" },
     { "name": "sgr_color", "input": "\u001b[31mred\u001b[0m", "expected": "red" },
@@ -68,5 +68,16 @@
     { "name": "resume_command_box_drawing", "cliType": "claude-code", "resumePattern": "claude --resume ", "chunks": ["│ claude --resume abc12345 │\n"], "expectedStatus": null, "expectedStep": null, "expectedResume": "claude --resume abc12345" },
     { "name": "resume_not_captured_without_pattern", "cliType": "codex", "chunks": ["To resume: codex resume 019d9315\n"], "expectedStatus": null, "expectedStep": null, "expectedResume": null },
     { "name": "mixed_noise_stream", "cliType": "claude-code", "chunks": ["\u001b[1mStarting\u001b[0m\r\n\u001b]0;title\u0007", "Read(src/a.ts)\nnoise line\n"], "expectedStatus": null, "expectedStep": "Tool: Read" }
+  ],
+  "termReports": [
+    { "name": "progress_bel_and_st", "chunks": ["\u001b]9;4;3\u0007text\u001b]9;4;0;\u001b\\"], "expected": [{"kind": "progress", "state": "3", "detail": null}, {"kind": "progress", "state": "0", "detail": null}] },
+    { "name": "progress_split_mid_terminator", "chunks": ["a\u001b", "]9;4;1;4", "0\u001b", "\\"], "expected": [{"kind": "progress", "state": "1", "detail": null}] },
+    { "name": "progress_bare_clear", "chunks": ["\u001b]9;4\u0007"], "expected": [{"kind": "progress", "state": "0", "detail": null}] },
+    { "name": "status_root_only", "chunks": ["\u001b]7501;state=working:app=claude-code\u001b\\\u001b]7501;state=done:id=build\u0007"], "expected": [{"kind": "status", "state": "working", "detail": null}] },
+    { "name": "status_blocked_kind_split", "chunks": ["\u001b]7501;state=blo", "cked:kind=question:msg=QXBwbHk/\u001b\\"], "expected": [{"kind": "status", "state": "blocked", "detail": "question"}] },
+    { "name": "status_kind_only_when_blocked", "chunks": ["\u001b]7501;state=done:kind=auth\u0007"], "expected": [{"kind": "status", "state": "done", "detail": null}] },
+    { "name": "status_astral_char_in_body", "chunks": ["\u001b]7501;state=working:msg=\ud83d\ude00\u0007"], "expected": [{"kind": "status", "state": "working", "detail": null}] },
+    { "name": "query_st", "chunks": ["\u001b]7501;?\u001b\\"], "expected": [{"kind": "query", "state": "", "detail": null}] },
+    { "name": "unknown_and_aborted_ignored", "chunks": ["\u001b]7501;state=dancing\u0007\u001b]9;4;7\u0007\u001b]0;9;4;3\u0007\u001b]9;4;3\u001b[0m"], "expected": [] }
   ]
 }
