@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { compareSizes, parseSize, sizeKey, toHttpUrl } from "./browser-viewports";
+import { compareSizes, pageLabel, parseSize, sizeKey, toHttpUrl } from "./browser-viewports";
+
+describe("pageLabel", () => {
+  it("never throws: a failed load can carry a URL that does not parse", () => {
+    expect(pageLabel("http://localhost:8007/app")).toBe("localhost:8007/app");
+    expect(pageLabel("not a url")).toBe("not a url");
+    expect(pageLabel("")).toBe("");
+  });
+});
 
 describe("page sizes", () => {
   it("parses W x H, with an optional name", () => {
