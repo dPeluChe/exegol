@@ -50,10 +50,6 @@ export function isTransient(err: unknown): boolean {
   return err instanceof TransientError;
 }
 
-export function isPermanent(err: unknown): boolean {
-  return err instanceof PermanentError;
-}
-
 // ─── Retry Helper ──────────────────────────────────────────────────────────
 
 interface RetryOptions {

@@ -1,9 +1,18 @@
 import { describe, expect, it, vi } from "vitest";
-import { createFrameReader } from "./frame-reader";
+import { createFrameReader, MAX_FRAME_BYTES } from "./frame-reader";
 
 function feedInChunks(feed: (b: Buffer) => void, text: string, size: number) {
   const buf = Buffer.from(text);
   for (let i = 0; i < buf.length; i += size) feed(buf.subarray(i, i + size));
+}
+
+/** Counts work, not time: the string reader this replaced rebuilt what it held on every chunk */
+function joinsDuring(run: () => void): number {
+  const concat = vi.spyOn(Buffer, "concat");
+  run();
+  const joins = concat.mock.calls.length;
+  concat.mockRestore();
+  return joins;
 }
 
 describe("createFrameReader", () => {
@@ -36,24 +45,18 @@ describe("createFrameReader", () => {
     let got = 0;
     const feed = createFrameReader(() => got++, vi.fn(), 32 * 1024 * 1024);
     const data = "\u001b[38;2;1;2;3mhello\u001b[39m\r\n".repeat(400_000);
-    const started = performance.now();
-    feedInChunks(feed, `${JSON.stringify({ data })}\n`, 8192);
+    const frame = `${JSON.stringify({ data })}\n`;
+    expect(joinsDuring(() => feedInChunks(feed, frame, 8192))).toBe(1);
     expect(got).toBe(1);
-    expect(performance.now() - started).toBeLessThan(1000);
   });
 
   it("reads a 4 MB paste request in 64 KB chunks linearly (the sidecar's end)", () => {
     const got: Array<{ params: { data: string } }> = [];
     const feed = createFrameReader<{ params: { data: string } }>((m) => got.push(m));
     const data = "línea pegada ✻\r\n".repeat(250_000);
-    const started = performance.now();
-    feedInChunks(
-      feed,
-      `${JSON.stringify({ id: 1, method: "session.write", params: { data } })}\n`,
-      65536,
-    );
+    const frame = `${JSON.stringify({ id: 1, method: "session.write", params: { data } })}\n`;
+    expect(joinsDuring(() => feedInChunks(feed, frame, 65536))).toBe(1);
     expect(got[0]?.params.data).toBe(data);
-    expect(performance.now() - started).toBeLessThan(1000);
   });
 
   it("keeps the MCP default ceiling: an unframed flood is one incident, then it recovers", () => {
@@ -61,7 +64,7 @@ describe("createFrameReader", () => {
     const overflow = vi.fn();
     const feed = createFrameReader((m) => got.push(m), overflow);
     const flood = Buffer.alloc(1024 * 1024, "x");
-    for (let i = 0; i < 12; i++) feed(flood);
+    for (let i = 0; i <= MAX_FRAME_BYTES / flood.length; i++) feed(flood);
     feed(Buffer.from('\n{"id":1}\n'));
     expect(overflow).toHaveBeenCalledTimes(1);
     expect(got).toEqual([{ id: 1 }]);

@@ -151,14 +151,16 @@ describe("formatRecordingForAgent", () => {
         makeAction({ type: "click", selector: ".hero > button", coordinates: { x: 120, y: 340 } }),
         makeAction({ type: "input", selector: "#email", value: "test@example.com" }),
         makeAction({ type: "navigate", selector: "", url: "http://localhost:3000/dashboard" }),
+        makeAction({ type: "keypress", selector: "#c", value: "Tab" }),
       ],
     });
     const result = formatRecordingForAgent(recording);
 
-    expect(result).toContain("[QA Recording] 3 actions recorded at http://localhost:3000");
+    expect(result).toContain("[QA Recording] 4 actions recorded at http://localhost:3000");
     expect(result).toContain("1. CLICK .hero > button (120, 340)");
     expect(result).toContain('2. INPUT #email \u2192 "test@example.com"');
     expect(result).toContain("3. NAVIGATE \u2192 http://localhost:3000/dashboard");
+    expect(result).toContain("4. KEYPRESS #c \u2192 [Tab]");
   });
 
   it("recording with console errors includes errors section", () => {
@@ -174,22 +176,5 @@ describe("formatRecordingForAgent", () => {
     expect(result).toContain("Console errors during flow:");
     expect(result).toContain("- TypeError: Cannot read property 'foo' of undefined");
     expect(result).toContain("- ReferenceError: bar is not defined");
-  });
-
-  it("action types are formatted correctly (CLICK, INPUT, NAVIGATE, KEYPRESS)", () => {
-    const recording = makeRecording({
-      actions: [
-        makeAction({ type: "click", selector: "#a", coordinates: { x: 10, y: 20 } }),
-        makeAction({ type: "input", selector: "#b", value: "hello" }),
-        makeAction({ type: "navigate", selector: "", url: "http://example.com" }),
-        makeAction({ type: "keypress", selector: "#c", value: "Tab" }),
-      ],
-    });
-    const result = formatRecordingForAgent(recording);
-
-    expect(result).toContain("1. CLICK #a");
-    expect(result).toContain("2. INPUT #b");
-    expect(result).toContain("3. NAVIGATE");
-    expect(result).toContain("4. KEYPRESS #c \u2192 [Tab]");
   });
 });

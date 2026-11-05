@@ -167,19 +167,15 @@ describe("reattachSidecarAgents pool", () => {
         "INSERT INTO agents (id, cli_type, project_id, task_description, status) VALUES (?, 'shell', 'p1', '', 'running')",
       ).run(id);
     }
-    const started = Date.now();
     const run = reattachSidecarAgents(db, ids, emptyMaps(), new Map(), 1024);
     // A pane mounts while the first three are in flight
     const waited = whenSessionReady("s7");
     const result = await run;
-    const elapsed = Date.now() - started;
     await waited;
 
     expect(result.aliveIds.size).toBe(9);
     expect(pty.order.slice(0, 4)).toEqual(["s0", "s1", "s2", "s7"]);
     expect(pty.maxInFlight).toBe(3);
-    // 3 rounds of 20ms, not 9 one after another
-    expect(elapsed).toBeLessThan(9 * 20);
     expect(getRecoveryState().ready).toEqual(expect.arrayContaining(ids));
   });
 });

@@ -1,60 +1,10 @@
 import { describe, expect, it } from "vitest";
-import { createFrameReader, MAX_FRAME_BYTES } from "../lib/frame-reader";
 import { encodeRequest, encodeResponse } from "./exegol-protocol";
 
-/** The MCP socket's framing, fed strings */
-function feeder(onMessage: (m: unknown) => void, onOverflow?: () => void) {
-  const read = createFrameReader(onMessage, onOverflow);
-  return (text: string) => read(Buffer.from(text));
-}
-
-describe("createFrameReader (MCP framing)", () => {
-  it("parses a single complete line", () => {
-    const received: unknown[] = [];
-    const feed = feeder((msg) => received.push(msg));
-    feed(`${JSON.stringify({ hello: "world" })}\n`);
-    expect(received).toEqual([{ hello: "world" }]);
-  });
-
-  it("buffers partial lines across multiple chunks", () => {
-    const received: unknown[] = [];
-    const feed = feeder((msg) => received.push(msg));
-    const json = JSON.stringify({ a: 1 });
-    feed(json.slice(0, 5));
-    feed(`${json.slice(5)}\n`);
-    expect(received).toEqual([{ a: 1 }]);
-  });
-
-  it("parses multiple messages delivered in one chunk", () => {
-    const received: unknown[] = [];
-    const feed = feeder((msg) => received.push(msg));
-    feed(`${JSON.stringify({ n: 1 })}\n${JSON.stringify({ n: 2 })}\n`);
-    expect(received).toEqual([{ n: 1 }, { n: 2 }]);
-  });
-
-  it("frames a message split over many chunks next to whole ones", () => {
-    const received: unknown[] = [];
-    const feed = feeder((msg) => received.push(msg));
-    const big = JSON.stringify({ body: "x".repeat(10_000) });
-    for (let i = 0; i < big.length; i += 64) feed(big.slice(i, i + 64));
-    const two = JSON.stringify({ n: 2 });
-    feed(`\n${JSON.stringify({ n: 1 })}\n${two.slice(0, 3)}`);
-    feed(`${two.slice(3)}\n`);
-    expect(received).toEqual([{ body: "x".repeat(10_000) }, { n: 1 }, { n: 2 }]);
-  });
-
-  it("drops malformed lines without throwing", () => {
-    const received: unknown[] = [];
-    const feed = feeder((msg) => received.push(msg));
-    expect(() => feed("not json\n")).not.toThrow();
-    feed(`${JSON.stringify({ ok: true })}\n`);
-    expect(received).toEqual([{ ok: true }]);
-  });
-});
-
 describe("encodeRequest / encodeResponse", () => {
-  it("round-trips a request through JSON.parse", () => {
+  it("round-trips a newline-terminated request through JSON.parse", () => {
     const line = encodeRequest(1, "call_tool", { tool: "memory_search" });
+    expect(line.endsWith("\n")).toBe(true);
     expect(JSON.parse(line.trim())).toEqual({
       jsonrpc: "2.0",
       id: 1,
@@ -65,50 +15,17 @@ describe("encodeRequest / encodeResponse", () => {
 
   it("encodes a success response", () => {
     const line = encodeResponse(2, { ok: true });
+    expect(line.endsWith("\n")).toBe(true);
     expect(JSON.parse(line.trim())).toEqual({ jsonrpc: "2.0", id: 2, result: { ok: true } });
   });
 
   it("encodes an error response", () => {
     const line = encodeResponse(3, undefined, { code: -32001, message: "nope" });
+    expect(line.endsWith("\n")).toBe(true);
     expect(JSON.parse(line.trim())).toEqual({
       jsonrpc: "2.0",
       id: 3,
       error: { code: -32001, message: "nope" },
     });
-  });
-});
-
-// A socket client that never sends a newline would otherwise grow this buffer
-// without bound — and this runs in the main process, so that is the whole app.
-describe("frame limit", () => {
-  it("discards an unframed flood and recovers at the next newline", () => {
-    const seen: unknown[] = [];
-    let overflows = 0;
-    const feed = feeder(
-      (m) => seen.push(m),
-      () => overflows++,
-    );
-
-    const chunk = "x".repeat(1024 * 1024);
-    for (let i = 0; i <= MAX_FRAME_BYTES / chunk.length; i++) feed(chunk);
-    expect(overflows).toBe(1);
-    expect(seen).toHaveLength(0);
-
-    // The newline ends the garbage frame; the connection keeps working.
-    feed(`\n${encodeRequest(1, "call_tool", { tool: "memory_list" })}`);
-    expect(seen).toEqual([
-      { jsonrpc: "2.0", id: 1, method: "call_tool", params: { tool: "memory_list" } },
-    ]);
-  });
-
-  it("reports one incident, not one per 8M chars of garbage", () => {
-    let overflows = 0;
-    const feed = feeder(
-      () => {},
-      () => overflows++,
-    );
-    const chunk = "x".repeat(1024 * 1024);
-    for (let i = 0; i < 20; i++) feed(chunk);
-    expect(overflows).toBe(1);
   });
 });
