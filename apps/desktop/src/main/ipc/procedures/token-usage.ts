@@ -11,9 +11,13 @@ import {
   getProjectTokenUsageSummary,
   getTokenUsageSummary,
   importScannedTokenUsage,
+  listUsageRows,
   listWorktrees,
 } from "../../db/queries";
+import { getJsonSetting } from "../../db/queries/settings";
 import { scanAllLogs } from "../../tokens/log-parser";
+import { aggregateUsage } from "../../tokens/usage-aggregation";
+import { USAGE_IMPORT_KEY, type UsageImportState } from "../../tokens/usage-import";
 import { publicProcedure, router } from "../trpc";
 
 export const tokenUsageRouter = router({
@@ -54,8 +58,33 @@ export const tokenUsageRouter = router({
       // CLI logs cover every project on the machine: keep sessions run in this one or its worktrees
       const roots = [project.path, ...listWorktrees(ctx.db, project.id).map((w) => w.path)];
       const { entries } = await scanAllLogs(since, undefined, roots);
-      const { imported, skipped } = await importScannedTokenUsage(ctx.db, project.id, entries);
+      const { imported, skipped } = await importScannedTokenUsage(
+        ctx.db,
+        entries,
+        () => project.id,
+      );
       return { imported, skipped, total: entries.length };
+    }),
+
+  /** App-wide usage over [since, until) (unix seconds), filled by the background import */
+  usage: publicProcedure
+    .input(
+      z
+        .object({
+          since: z.number().int().min(0).optional(),
+          until: z.number().int().min(0).optional(),
+          days: z.number().int().min(1).max(365).optional(),
+        })
+        .optional(),
+    )
+    .query(({ ctx, input }) => {
+      const until = input?.until ?? Math.floor(Date.now() / 1000) + 1;
+      const since = input?.since ?? until - 86400 * (input?.days ?? 30);
+      const last = getJsonSetting<UsageImportState | null>(ctx.db, USAGE_IMPORT_KEY, null);
+      return {
+        ...aggregateUsage(listUsageRows(ctx.db, since, until), { since, until }),
+        lastImportAt: last?.at ?? null,
+      };
     }),
 
   /** Get raw token usage records for a project (last N days) */

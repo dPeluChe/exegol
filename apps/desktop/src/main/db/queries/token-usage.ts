@@ -7,6 +7,7 @@ import type {
 } from "@exegol/shared";
 import type Database from "libsql";
 import type { ParsedTokenEntry } from "../../tokens/log-parser";
+import type { UsageRow } from "../../tokens/usage-aggregation";
 import { mapTokenUsageRow } from "./helpers";
 
 export function getTokenUsageSummary(
@@ -253,36 +254,47 @@ const IMPORT_CHUNK = 2000;
 
 /**
  * Upserts on dedup_key: a rescan re-sends the whole window and unchanged rows are skipped.
+ * Entries with no project (projectOf null) are skipped too.
  * Chunked transactions with a yield between, so a large import never holds main for long.
  */
 export async function importScannedTokenUsage(
   db: Database.Database,
-  projectId: string,
   entries: ParsedTokenEntry[],
+  projectOf: (entry: ParsedTokenEntry) => string | null,
 ): Promise<{ imported: number; skipped: number }> {
   const upsert = db.prepare(
     `INSERT INTO token_usage (id, project_id, provider, model, input_tokens, output_tokens,
-       estimated_cost_usd, tool_call_count, recorded_at, source, dedup_key)
-     VALUES (lower(hex(randomblob(10))), ?, ?, ?, ?, ?, ?, ?, ?, 'log_scan', ?)
+       cache_read_tokens, cache_write_tokens, estimated_cost_usd, cost_source, tool_call_count,
+       recorded_at, source, dedup_key)
+     VALUES (lower(hex(randomblob(10))), ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'log_scan', ?)
      ON CONFLICT(dedup_key) DO UPDATE SET
        project_id = excluded.project_id, model = excluded.model,
        input_tokens = excluded.input_tokens, output_tokens = excluded.output_tokens,
-       estimated_cost_usd = excluded.estimated_cost_usd,
+       cache_read_tokens = excluded.cache_read_tokens,
+       cache_write_tokens = excluded.cache_write_tokens,
+       estimated_cost_usd = excluded.estimated_cost_usd, cost_source = excluded.cost_source,
        tool_call_count = excluded.tool_call_count, recorded_at = excluded.recorded_at
      WHERE input_tokens != excluded.input_tokens OR output_tokens != excluded.output_tokens
+       OR cache_read_tokens != excluded.cache_read_tokens
+       OR cache_write_tokens != excluded.cache_write_tokens
        OR model != excluded.model OR estimated_cost_usd != excluded.estimated_cost_usd
-       OR project_id IS NOT excluded.project_id`,
+       OR cost_source != excluded.cost_source OR project_id IS NOT excluded.project_id`,
   );
   const importChunk = db.transaction((chunk: ParsedTokenEntry[]) => {
     let changed = 0;
     for (const e of chunk) {
+      const projectId = projectOf(e);
+      if (!projectId) continue;
       changed += upsert.run(
         projectId,
         e.provider,
         e.model,
         e.inputTokens,
         e.outputTokens,
+        e.cacheReadTokens,
+        e.cacheWriteTokens,
         e.estimatedCostUsd,
+        e.costSource,
         e.toolCallCount,
         Math.floor(e.timestamp),
         e.key,
@@ -296,4 +308,33 @@ export async function importScannedTokenUsage(
     imported += importChunk(entries.slice(i, i + IMPORT_CHUNK)) as number;
   }
   return { imported, skipped: entries.length - imported };
+}
+
+/** App-wide rows in [since, until), grouped for aggregateUsage; days in local time */
+export function listUsageRows(db: Database.Database, since: number, until: number): UsageRow[] {
+  return db
+    .prepare(
+      `SELECT COALESCE(t.project_id, a.project_id) AS projectId,
+        COALESCE(p.name, '') AS projectName,
+        CASE
+          WHEN t.agent_id IS NOT NULL THEN COALESCE(a.cli_type, 'unknown')
+          WHEN t.dedup_key LIKE 'claude:%' THEN 'claude-code'
+          WHEN t.dedup_key LIKE 'codex:%' THEN 'codex'
+          WHEN t.dedup_key LIKE 'aider:%' THEN 'aider'
+          ELSE 'unknown'
+        END AS cli,
+        t.provider AS provider, t.model AS model,
+        date(t.recorded_at, 'unixepoch', 'localtime') AS date,
+        t.cost_source AS costSource,
+        SUM(t.input_tokens) AS inputTokens, SUM(t.output_tokens) AS outputTokens,
+        SUM(t.cache_read_tokens) AS cacheReadTokens,
+        SUM(t.cache_write_tokens) AS cacheWriteTokens,
+        SUM(t.estimated_cost_usd) AS costUsd, COUNT(*) AS records
+       FROM token_usage t
+       LEFT JOIN agents a ON a.id = t.agent_id
+       LEFT JOIN projects p ON p.id = COALESCE(t.project_id, a.project_id)
+       WHERE t.recorded_at >= ? AND t.recorded_at < ?
+       GROUP BY 1, 2, 3, 4, 5, 6, 7`,
+    )
+    .all(since, until) as UsageRow[];
 }

@@ -53,6 +53,33 @@ describe("scanAllLogs", () => {
     utimesSync(file, since - 100, since - 100);
     expect(await scanAllLogs(since, home)).toEqual({ entries: [], parsedFiles: 0 });
   });
+
+  it("with modifiedSince reads only the files written since then", async () => {
+    const dir = join(home, ".claude", "projects", "p1");
+    mkdirSync(dir, { recursive: true });
+    const old = join(dir, "old.jsonl");
+    writeFileSync(old, `${claudeLine(10, 5, now - 7200)}\n`);
+    utimesSync(old, now - 7200, now - 7200);
+    writeFileSync(join(dir, "new.jsonl"), `${claudeLine(20, 7)}\n`);
+    const { entries } = await scanAllLogs(since, home, undefined, now - 3600);
+    expect(entries.map((e) => e.inputTokens)).toEqual([20]);
+  });
+
+  it("flags a model with no price as unpriced at cost 0, not at the Sonnet default", async () => {
+    const dir = join(home, ".claude", "projects", "p1");
+    mkdirSync(dir, { recursive: true });
+    const line = JSON.stringify({
+      timestamp: iso(now - 60),
+      model: "mystery-model",
+      usage: { input_tokens: 1000, output_tokens: 10 },
+    });
+    writeFileSync(join(dir, "s.jsonl"), `${line}\n${claudeLine(1000, 10)}\n`);
+    const { entries } = await scanAllLogs(since, home);
+    expect(entries.map((e) => [e.model, e.costSource, e.estimatedCostUsd > 0])).toEqual([
+      ["mystery-model", "unpriced", false],
+      ["claude-sonnet-4-6", "priced", true],
+    ]);
+  });
 });
 
 describe("parseCodexSessionFile", () => {
@@ -65,7 +92,13 @@ describe("parseCodexSessionFile", () => {
         timestamp: iso(now - 30),
         payload: {
           type: "token_count",
-          info: { total_token_usage: { input_tokens: input, output_tokens: output } },
+          info: {
+            total_token_usage: {
+              input_tokens: input,
+              cached_input_tokens: input - 50,
+              output_tokens: output,
+            },
+          },
         },
       });
     writeFileSync(
@@ -88,10 +121,15 @@ describe("parseCodexSessionFile", () => {
     expect(entries).toHaveLength(1);
     expect(entries[0]).toMatchObject({
       model: "gpt-5",
-      inputTokens: 250,
+      inputTokens: 50,
+      cacheReadTokens: 200,
+      cacheWriteTokens: 0,
       outputTokens: 40,
       cwd: "/repo",
+      costSource: "priced",
     });
+    // Cached input is still billed as input: gpt-5 $2.5/$10
+    expect(entries[0]?.estimatedCostUsd).toBeCloseTo(250 * 2.5e-6 + 40 * 10e-6);
   });
 });
 
@@ -145,6 +183,7 @@ describe("Claude transcripts", () => {
       ["claude:msg_1:req_1", 10, 100, "/repo"],
       ["claude:msg_2:req_2", 5, 7, "/repo"],
     ]);
+    expect(entries[0]).toMatchObject({ cacheReadTokens: 1_000_000, cacheWriteTokens: 300_000 });
     // Sonnet $3/$15: (10 + 1M x 0.1 + 100k x 1.25 + 200k x 2) at input, 100 at output
     expect(entries[0]?.estimatedCostUsd).toBeCloseTo(
       (10 + 100_000 + 125_000 + 400_000) * 3e-6 + 100 * 15e-6,

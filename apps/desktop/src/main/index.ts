@@ -55,6 +55,7 @@ import { startWorkGuard } from "./system/work-guard";
 import { getPtyHost } from "./terminal/pty-host";
 import { ensureShellIntegration, ensureShellWrappers } from "./terminal/shell-wrappers";
 import { startSidecarHealthWatch, stopSidecarHealthWatch } from "./terminal/sidecar-health-watch";
+import { scheduleUsageImport } from "./tokens/usage-import";
 import { installAppMenu } from "./windows/app-menu";
 import { closeAllFloatingPanes, registerFloatingIpcHandlers } from "./windows/floating";
 import { closeSettingsWindow, registerSettingsIpcHandlers } from "./windows/settings";
@@ -150,6 +151,7 @@ app.whenReady().then(async () => {
   void runStartupRecovery().finally(() => {
     getSchedulerEngine().start(getDb());
     scheduleHousekeeping(getDb());
+    scheduleUsageImport(getDb());
     startIdleSuspend(getDb());
     startStuckTurnSweep(getDb());
   });

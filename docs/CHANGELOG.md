@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Token usage now imports from Claude Code and Codex logs in the background (every 30 min), with cache tokens, and models without a price are reported as unpriced instead of billed at the Sonnet default
 - Agent status from the CLI's own terminal reports (OSC 9;4 progress, OSC 7501 program status): Exegol answers the 7501 support query, so pi and Claude Code report working, waiting on you and done; hooks still take priority
 - New worktrees get the checkout's local `.env` files (patterns per project in Edit project, never overwriting), and a daily janitor frees node_modules and build output from Exegol worktrees idle for a day (Settings > General > Worktrees)
 - Alert when a turn runs too long: Settings > General > Sessions can raise a desktop notification and an attention item once per turn when an agent runs past a limit you pick (30m to 4h or custom, off by default), or shows no output for 10 minutes

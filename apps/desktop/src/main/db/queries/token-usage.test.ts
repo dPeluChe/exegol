@@ -15,7 +15,10 @@ const entry = (key: string, input: number, output: number, cost = 0.5): ParsedTo
   model: "claude-sonnet-4-6",
   inputTokens: input,
   outputTokens: output,
+  cacheReadTokens: 0,
+  cacheWriteTokens: 0,
   estimatedCostUsd: cost,
+  costSource: "priced",
   toolCallCount: 0,
   timestamp: now - 3600,
 });
@@ -40,8 +43,14 @@ const count = () => (db.prepare("SELECT COUNT(*) AS n FROM token_usage").get() a
 describe("importScannedTokenUsage", () => {
   it("stores rows under the project with no agent and skips them on a rescan", async () => {
     const entries = [entry("claude:m1:r1", 10, 5), entry("claude:m2:r2", 20, 7)];
-    expect(await importScannedTokenUsage(db, "p1", entries)).toEqual({ imported: 2, skipped: 0 });
-    expect(await importScannedTokenUsage(db, "p1", entries)).toEqual({ imported: 0, skipped: 2 });
+    expect(await importScannedTokenUsage(db, entries, () => "p1")).toEqual({
+      imported: 2,
+      skipped: 0,
+    });
+    expect(await importScannedTokenUsage(db, entries, () => "p1")).toEqual({
+      imported: 0,
+      skipped: 2,
+    });
 
     const summary = getProjectTokenUsageSummary(db, "p1", now - 86400);
     expect(summary).toMatchObject({ totalInputTokens: 30, totalOutputTokens: 12, totalCostUsd: 1 });
@@ -51,12 +60,12 @@ describe("importScannedTokenUsage", () => {
   });
 
   it("updates a record whose totals or price changed instead of adding a second row", async () => {
-    await importScannedTokenUsage(db, "p1", [entry("codex:rollout-1.jsonl", 100, 10)]);
+    await importScannedTokenUsage(db, [entry("codex:rollout-1.jsonl", 100, 10)], () => "p1");
     expect(
-      await importScannedTokenUsage(db, "p1", [entry("codex:rollout-1.jsonl", 250, 40)]),
+      await importScannedTokenUsage(db, [entry("codex:rollout-1.jsonl", 250, 40)], () => "p1"),
     ).toEqual({ imported: 1, skipped: 0 });
     expect(
-      await importScannedTokenUsage(db, "p1", [entry("codex:rollout-1.jsonl", 250, 40, 0.9)]),
+      await importScannedTokenUsage(db, [entry("codex:rollout-1.jsonl", 250, 40, 0.9)], () => "p1"),
     ).toEqual({ imported: 1, skipped: 0 });
     const rows = db.prepare(
       "SELECT input_tokens, output_tokens, estimated_cost_usd FROM token_usage",
@@ -66,7 +75,10 @@ describe("importScannedTokenUsage", () => {
 
   it("imports past one chunk", async () => {
     const many = Array.from({ length: 4500 }, (_, i) => entry(`claude:m${i}`, 1, 1));
-    expect(await importScannedTokenUsage(db, "p1", many)).toEqual({ imported: 4500, skipped: 0 });
+    expect(await importScannedTokenUsage(db, many, () => "p1")).toEqual({
+      imported: 4500,
+      skipped: 0,
+    });
     expect(count()).toBe(4500);
   });
 
@@ -74,7 +86,7 @@ describe("importScannedTokenUsage", () => {
     db.prepare(
       `INSERT INTO token_usage (id, agent_id, provider, model) VALUES ('t1', 'a1', 'anthropic', 'm')`,
     ).run();
-    await importScannedTokenUsage(db, "p1", [entry("claude:m1", 1, 1)]);
+    await importScannedTokenUsage(db, [entry("claude:m1", 1, 1)], () => "p1");
     db.prepare("DELETE FROM agents WHERE id = 'a1'").run();
     expect(count()).toBe(1);
     db.prepare("DELETE FROM projects WHERE id = 'p1'").run();
