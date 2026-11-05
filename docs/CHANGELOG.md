@@ -26,6 +26,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Browser panes search from the address bar: `?telnyx`, or words that are not an address, open a Google search; `localhost:3000`, `example.com` and full URLs still go straight there
 
 ### Fixed
+- Full-screen CLIs such as opencode no longer show old shell text in their blank areas when you come back to their pane
 - Browser pane: a failed load with an unparsable URL no longer crashes the pane
 - Browser full-page screenshots no longer repeat the visible area (seen at device sizes such as 390x844) and include pages that scroll inside their own app shell; fixed and sticky bars appear once
 - A pane's "Add a browser beside" / "Add a terminal beside" menu (globe or terminal icon in its corner toolbar) closed when the pointer moved down to it, so To the right and Below could not be clicked. The toolbar's Float button now shows only when the pane has something to float, as in its right-click menu
