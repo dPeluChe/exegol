@@ -3,6 +3,7 @@
 //! Rust is the source of truth; edit the JSON only alongside both suites.
 
 use super::osc_notify::OscNotifyScanner;
+use super::osc_status::{OscStatusScanner, TermReport};
 use super::status_parser::AgentOutputStream;
 use super::strip_ansi::strip_ansi;
 use serde::Deserialize;
@@ -12,6 +13,22 @@ struct Vectors {
     strip: Vec<StripCase>,
     signals: Vec<SignalCase>,
     status: Vec<StatusCase>,
+    #[serde(rename = "termReports")]
+    term_reports: Vec<TermReportCase>,
+}
+
+#[derive(Deserialize)]
+struct ExpectedReport {
+    kind: String,
+    state: String,
+    detail: Option<String>,
+}
+
+#[derive(Deserialize)]
+struct TermReportCase {
+    name: String,
+    chunks: Vec<String>,
+    expected: Vec<ExpectedReport>,
 }
 
 #[derive(Deserialize)]
@@ -115,5 +132,23 @@ fn parity_status_vectors() {
         assert_eq!(step, case.expected_step, "step mismatch: {}", case.name);
         assert_eq!(session_id, case.expected_session_id, "sessionId mismatch: {}", case.name);
         assert_eq!(resume, case.expected_resume, "resume mismatch: {}", case.name);
+    }
+}
+
+#[test]
+fn parity_term_report_vectors() {
+    for case in load_vectors().term_reports {
+        let mut scanner = OscStatusScanner::new();
+        let got: Vec<TermReport> = case.chunks.iter().flat_map(|c| scanner.scan(c)).collect();
+        let expected: Vec<TermReport> = case
+            .expected
+            .into_iter()
+            .map(|e| TermReport {
+                kind: e.kind,
+                state: e.state,
+                detail: e.detail,
+            })
+            .collect();
+        assert_eq!(got, expected, "term report mismatch: {}", case.name);
     }
 }

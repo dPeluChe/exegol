@@ -1,4 +1,5 @@
 use super::osc_notify::{AgentSignal, OscNotifyScanner};
+use super::osc_status::{OscStatusScanner, TermReport};
 use super::status_matchers::{parse_line, parse_resume_command_pattern, parse_session_id};
 use super::strip_ansi::strip_ansi_bytes;
 use napi::Error;
@@ -34,6 +35,8 @@ pub struct ProcessedOutput {
     pub resume_command: Option<String>,
     /// Deterministic hook/OSC-777 signals detected in this chunk (T123).
     pub signals: Vec<AgentSignal>,
+    /// The CLI's own status reports: OSC 9;4 progress and OSC 7501 program status.
+    pub term_reports: Vec<TermReport>,
 }
 
 /// Persistent state for an agent's output stream.
@@ -46,6 +49,7 @@ pub struct AgentOutputStream {
     resume_command_pattern: String,
     buffer: String,
     osc_scanner: OscNotifyScanner,
+    status_scanner: OscStatusScanner,
 }
 
 #[napi]
@@ -60,6 +64,7 @@ impl AgentOutputStream {
             resume_command_pattern,
             buffer: String::with_capacity(1024),
             osc_scanner: OscNotifyScanner::new(),
+            status_scanner: OscStatusScanner::new(),
         }
     }
 
@@ -70,6 +75,7 @@ impl AgentOutputStream {
         // OSC-777 notify signals must be scanned on the raw (pre-strip) stream —
         // strip_ansi_bytes discards OSC payloads entirely.
         let signals = self.osc_scanner.scan(&raw_data);
+        let term_reports = self.status_scanner.scan(&raw_data);
 
         // Strip ANSI from the raw data
         let clean = strip_ansi_bytes(raw_data.as_bytes());
@@ -135,6 +141,7 @@ impl AgentOutputStream {
             session_id,
             resume_command,
             signals,
+            term_reports,
         })
     }
 
@@ -143,5 +150,6 @@ impl AgentOutputStream {
     pub fn reset(&mut self) {
         self.buffer.clear();
         self.osc_scanner.reset();
+        self.status_scanner.reset();
     }
 }

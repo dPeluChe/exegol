@@ -1,5 +1,6 @@
 import type { AgentCliType } from "@exegol/shared";
 import { logger } from "../lib/logger";
+import type { TermReport } from "./osc-status-scanner";
 import { readableStep } from "./readable-step";
 import { coreRust } from "./spawn-env";
 import { AgentStatusParser } from "./status-parser";
@@ -13,6 +14,8 @@ export type ProcessResult = {
   resumeCommand?: string;
   /** Deterministic hook/OSC-777 signals detected in this chunk (T123). */
   signals?: { agentId: string; event: string }[];
+  /** The CLI's own OSC 9;4 / 7501 status reports */
+  termReports?: TermReport[];
 };
 
 export type OutputProcessor = { process(data: string): ProcessResult };
@@ -60,6 +63,14 @@ export function createOutputProcessor(
             signals: r.signals?.length
               ? r.signals.map((s) => ({ agentId: s.agentId, event: s.event }))
               : undefined,
+            // An older native build has no termReports
+            termReports: r.termReports?.length
+              ? r.termReports.map((t) => ({
+                  kind: t.kind as TermReport["kind"],
+                  state: t.state,
+                  detail: t.detail ?? null,
+                }))
+              : undefined,
           };
         },
       };
@@ -77,6 +88,7 @@ export function createOutputProcessor(
         sessionId: u?.sessionId,
         resumeCommand: u?.resumeCommand,
         signals: u?.signals,
+        termReports: u?.termReports,
       };
     },
   };

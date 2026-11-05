@@ -45,8 +45,9 @@ export interface AgentSignalEvent {
   at: number;
   /** e.g. the pending question text for `attention`, exit code for `exited` */
   detail?: string;
-  /** signal provenance: deterministic hook/OSC vs legacy scraping fallback */
-  source: "hook" | "parser";
+  /** signal provenance: Exegol's hooks (OSC 777 or file events), the CLI's own terminal status
+   *  reports (OSC 9;4 progress, OSC 7501 program status), or the scraping fallback */
+  source: "hook" | "terminal" | "parser";
 }
 
 /** Turn boundaries consumed by T129 (oplog per-turn snapshots). */
