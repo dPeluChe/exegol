@@ -38,6 +38,7 @@ vi.mock("./worktrees", () => ({
   createManagedWorktree: vi.fn(),
   removeManagedWorktree: vi.fn(),
   getWorktreeName: (b: string) => b,
+  prepareNewWorktree: vi.fn(() => ({ copied: Promise.resolve(), done: Promise.resolve() })),
 }));
 vi.mock("../hooks/project-hooks", () => ({ runSetupHook: vi.fn(async () => {}) }));
 vi.mock("../lifecycle/loader", () => ({ loadLifecycleConfig: () => mocks.lifecycle }));

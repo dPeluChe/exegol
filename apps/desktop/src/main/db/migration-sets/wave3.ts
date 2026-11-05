@@ -323,4 +323,9 @@ export const wave3Migrations: Migration[] = [
       pty_rows = (SELECT s.pty_rows FROM agents s WHERE s.id = agents.resumed_from)
     WHERE pty_cols IS NULL AND resumed_from IS NOT NULL;`,
   },
+  {
+    // Gitignore patterns of local files (.env) copied into a project's new worktrees; NULL = default
+    id: "w3_032_project_worktree_copy",
+    sql: "ALTER TABLE projects ADD COLUMN worktree_copy TEXT;",
+  },
 ];

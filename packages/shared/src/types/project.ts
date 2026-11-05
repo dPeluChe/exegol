@@ -20,6 +20,8 @@ export type Project = {
   ide?: string | null;
   /** browser_eval allowed for its agents (off by default) */
   browserEval?: boolean;
+  /** Local files copied into its new agent worktrees (gitignore patterns); null = the default */
+  worktreeCopy?: string[] | null;
 };
 
 export type ProjectCreate = Omit<

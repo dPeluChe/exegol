@@ -85,6 +85,7 @@ export const settingsSchema = z.object({
   notificationsEnabled: z.boolean().default(true),
   toastsEnabled: z.boolean().default(true),
   saveWorktreeWork: z.boolean().default(true),
+  worktreeJanitor: z.boolean().default(true),
   idleSuspendDays: z
     .number()
     .refine((d): d is IdleSuspendDays => (IDLE_SUSPEND_DAYS as readonly number[]).includes(d))

@@ -12,6 +12,7 @@ import { logger } from "../lib/logger";
 import { MCP_CONFIG_DIR } from "../mcp/exegol-mcp-config";
 import { MCP_TOKENS_DIR, tokenKeyFor } from "../mcp/exegol-mcp-token-file";
 import { sweepOrphanWorktrees, type WorktreeSweepResult } from "./worktree-housekeeping";
+import { type JanitorResult, runWorktreeJanitor } from "./worktree-janitor";
 
 const AGENT_ID = /^[A-Za-z0-9_-]{21}$/;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -35,6 +36,7 @@ export interface HousekeepingResult {
   bytes: number;
   skipped?: "db-looks-reset";
   worktrees?: WorktreeSweepResult;
+  janitor?: JanitorResult;
 }
 
 /** Agent history (scrollback) is never swept: it stays as long as the session's row */
@@ -157,7 +159,10 @@ export function scheduleHousekeeping(db: Database.Database): void {
         `[Housekeeping] worktrees: removed ${worktrees.removed}, dropped ${worktrees.droppedRows} row(s) of missing dirs, kept ${worktrees.kept} orphan(s) not clean and pushed`,
       );
     }
-    setJsonSetting(db, HOUSEKEEPING_KEY, { ...result, worktrees });
+    const janitor = getAppSettings(db).worktreeJanitor
+      ? await runWorktreeJanitor(db, Object.values(WORKTREE_ROOTS))
+      : undefined;
+    setJsonSetting(db, HOUSEKEEPING_KEY, { ...result, worktrees, janitor });
   };
   const safeRun = () => void run().catch((err) => logger.warn("[Housekeeping] sweep failed:", err));
   setTimeout(safeRun, START_DELAY_MS).unref?.();

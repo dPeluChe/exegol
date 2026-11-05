@@ -39,6 +39,8 @@ export type Settings = {
   toastsEnabled: boolean;
   /** Commit and push a worktree's pending work to its branch when its agent ends or before a sweep */
   saveWorktreeWork: boolean;
+  /** Daily: remove node_modules, build output and caches of Exegol worktrees idle for a day */
+  worktreeJanitor: boolean;
   /** T205: no PTY output and no input for this many days suspends an agent or closes a shell */
   idleSuspendDays: IdleSuspendDays;
   /** T155.7: per-channel notification kill switches (NotificationMuteChannel ids) */
@@ -74,6 +76,7 @@ export const DEFAULT_SETTINGS: Settings = {
   notificationsEnabled: true,
   toastsEnabled: true,
   saveWorktreeWork: true,
+  worktreeJanitor: true,
   idleSuspendDays: 7,
   mutedNotificationChannels: [],
   ollamaUrl: "http://localhost:11434",

@@ -45,6 +45,18 @@ export function setProjectBrowserHosts(db: Database.Database, id: string, hosts:
   db.prepare("UPDATE projects SET browser_hosts = ? WHERE id = ?").run(JSON.stringify(hosts), id);
 }
 
+/** null goes back to the default patterns */
+export function setProjectWorktreeCopy(
+  db: Database.Database,
+  id: string,
+  patterns: string[] | null,
+): void {
+  db.prepare("UPDATE projects SET worktree_copy = ? WHERE id = ?").run(
+    patterns === null ? null : JSON.stringify(patterns),
+    id,
+  );
+}
+
 export function setProjectBrowserEval(db: Database.Database, id: string, on: boolean): void {
   db.prepare("UPDATE projects SET browser_eval = ? WHERE id = ?").run(on ? 1 : 0, id);
 }

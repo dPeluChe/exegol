@@ -6,7 +6,6 @@ import {
   setAgentWorktree,
 } from "../db/queries";
 import type { LocalSession } from "../history/types";
-import { runSetupHook } from "../hooks/project-hooks";
 import { childEnv } from "../lib/child-env";
 import { commandShape } from "../lib/command-shape";
 import { PermanentError } from "../lib/errors";
@@ -47,7 +46,12 @@ import {
   loginShell,
 } from "./spawn-env";
 import { findReusableWorktree, findWorktreeHolding, requestedBranchFor } from "./spawn-target";
-import { createManagedWorktree, getWorktreeName, removeManagedWorktree } from "./worktrees";
+import {
+  createManagedWorktree,
+  getWorktreeName,
+  prepareNewWorktree,
+  removeManagedWorktree,
+} from "./worktrees";
 import { HOOKS_FILE_ENV } from "./wrappers";
 
 interface PtyInvocation {
@@ -97,8 +101,9 @@ export function setupAgentCwd(
   project: ProjectInfo,
   worktrees: Map<string, WorktreeRecord>,
   initialSnapshots: Map<string, { headSha: string; cwd: string; projectId: string }>,
-): string {
+): { cwd: string; ready: Promise<void> } {
   let cwd = project.path;
+  let ready: Promise<void> = Promise.resolve();
 
   if (config.cwdOverride) {
     cwd = config.cwdOverride;
@@ -110,19 +115,19 @@ export function setupAgentCwd(
     if (shared) joinWorktree(db, agent.id, shared, project.path, worktrees);
     setIsolationMode(db, agent.id, inCheckout ? "project-root" : shared ? "isolated" : "pipeline");
     captureInitialSnapshot(agent, cwd, initialSnapshots);
-    return cwd;
+    return { cwd, ready };
   }
 
   if (!config.useWorktree) {
     setIsolationMode(db, agent.id, "project-root");
     captureInitialSnapshot(agent, cwd, initialSnapshots);
-    return cwd;
+    return { cwd, ready };
   }
   if (!coreRust) {
     // Worktree was requested but the native module is missing — silent fall back.
     setIsolationMode(db, agent.id, "fallback");
     captureInitialSnapshot(agent, cwd, initialSnapshots);
-    return cwd;
+    return { cwd, ready };
   }
 
   const requestedBranchName = requestedBranchFor(config.branchName, agent.taskDescription);
@@ -136,7 +141,7 @@ export function setupAgentCwd(
     });
     setIsolationMode(db, agent.id, "isolated");
     captureInitialSnapshot(agent, cwd, initialSnapshots);
-    return cwd;
+    return { cwd, ready };
   }
 
   let createdWtInfo: { worktreeName: string; path: string; branchName: string } | null = null;
@@ -186,7 +191,13 @@ export function setupAgentCwd(
       path: wtInfo.path,
     });
 
-    runSetupHook(project.path, wtInfo.path, wtInfo.branchName).catch(() => {});
+    ready = prepareNewWorktree(
+      db,
+      agent.projectId,
+      project.path,
+      wtInfo.path,
+      wtInfo.branchName,
+    ).copied;
     setIsolationMode(db, agent.id, "isolated");
   } catch (err) {
     logger.error("[AgentManager] Failed to create worktree, falling back to project root:", err);
@@ -209,7 +220,7 @@ export function setupAgentCwd(
   }
 
   captureInitialSnapshot(agent, cwd, initialSnapshots);
-  return cwd;
+  return { cwd, ready };
 }
 
 function setIsolationMode(db: Database.Database, agentId: string, mode: string): void {

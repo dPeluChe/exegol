@@ -1,9 +1,12 @@
 import {
+  DEFAULT_WORKTREE_COPY,
   type IdeType,
   ideLabel,
   type Project,
   parseBrowserHosts,
+  parseWorktreeCopy,
   type SitePermissionRow,
+  worktreeCopyPatterns,
 } from "@exegol/shared";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -57,6 +60,14 @@ export function ProjectAppearanceDialog({
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
     onError: toastError("Could not save the agent browser settings"),
   });
+  const savedCopy = worktreeCopyPatterns(project.worktreeCopy).join("\n");
+  const [copy, setCopy] = useState(savedCopy);
+  const saveCopy = useMutation({
+    mutationFn: (patterns: string[]) =>
+      trpcMutate("projects.setWorktreeCopy", { id: project.id, patterns }),
+    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
+    onError: toastError("Could not save the worktree file patterns"),
+  });
   // Icon and color apply as they are picked; Save commits the name and hosts and closes
   const saveAndClose = () => {
     const trimmed = name.trim();
@@ -65,6 +76,7 @@ export function ProjectAppearanceDialog({
     if (list.join("\n") !== savedHosts || allowEval !== !!project.browserEval) {
       saveBrowser.mutate({ hosts: list, allowEval });
     }
+    if (parseWorktreeCopy(copy).join("\n") !== savedCopy) saveCopy.mutate(copy.split("\n"));
     onOpenChange(false);
   };
 
@@ -135,6 +147,24 @@ export function ProjectAppearanceDialog({
           </label>
 
           <SitePermissions projectId={project.id} enabled={open} />
+
+          <label className="mb-3 block">
+            <span className="mb-1 block text-[10px] uppercase tracking-wider text-text-muted">
+              Copy into new worktrees
+            </span>
+            <textarea
+              value={copy}
+              onChange={(e) => setCopy(e.target.value)}
+              rows={3}
+              placeholder={DEFAULT_WORKTREE_COPY.join("\n")}
+              className="w-full min-w-0 resize-y rounded border border-border bg-bg-tertiary px-2 py-1 font-mono text-[11px] text-text-primary outline-none focus:border-accent/50"
+            />
+            <span className="mt-1 block text-[10px] text-text-muted">
+              Gitignored files of the checkout copied into each new agent or pipeline worktree
+              before it starts, never over a file already there. Gitignore syntax, one per line;
+              !pattern leaves a file out. Empty copies nothing.
+            </span>
+          </label>
 
           <ProjectIconPicker
             found={found}

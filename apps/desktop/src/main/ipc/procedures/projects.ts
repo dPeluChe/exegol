@@ -9,9 +9,11 @@ import { z } from "zod";
 const execFileAsync = promisify(execFile);
 
 import {
+  DEFAULT_WORKTREE_COPY,
   type FolderInspection,
   MAX_BROWSER_HOSTS,
   parseBrowserHosts,
+  parseWorktreeCopy,
   projectCreateSchema,
 } from "@exegol/shared";
 import { coreRust } from "../../agents/spawn-env";
@@ -37,7 +39,11 @@ import {
   updateProjectSortOrder,
 } from "../../db/queries";
 import { countLiveAgentsInWorktree, listLiveAgentIds } from "../../db/queries/agents";
-import { setProjectBrowserEval, setProjectBrowserHosts } from "../../db/queries/projects";
+import {
+  setProjectBrowserEval,
+  setProjectBrowserHosts,
+  setProjectWorktreeCopy,
+} from "../../db/queries/projects";
 import { runArchiveHook } from "../../hooks/project-hooks";
 import { openInIde, resolveIde } from "../../ide/opener";
 import { runNative } from "../../lib/concurrency";
@@ -183,6 +189,16 @@ export const projectRouter = router({
       await copyCookiesForHosts(input.id, added).catch((err) =>
         logger.warn("[AgentBrowser] cookie copy for new hosts failed:", err),
       );
+      return getProject(ctx.db, input.id);
+    }),
+
+  /** Local files (.env) copied into the project's new worktrees; the default list is kept as null */
+  setWorktreeCopy: publicProcedure
+    .input(z.object({ id: z.string(), patterns: z.array(z.string()).nullable() }))
+    .mutation(({ ctx, input }) => {
+      const patterns = input.patterns === null ? null : parseWorktreeCopy(input.patterns);
+      const isDefault = patterns?.join("\n") === DEFAULT_WORKTREE_COPY.join("\n");
+      setProjectWorktreeCopy(ctx.db, input.id, isDefault ? null : patterns);
       return getProject(ctx.db, input.id);
     }),
 

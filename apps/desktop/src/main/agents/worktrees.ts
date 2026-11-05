@@ -1,8 +1,13 @@
 import { existsSync, readdirSync, rmSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { worktreeCopyPatterns } from "@exegol/shared";
+import type Database from "libsql";
+import { getProject } from "../db/queries";
+import { runSetupHook } from "../hooks/project-hooks";
 import { logger } from "../lib/logger";
 import { coreRust } from "./spawn-env";
+import { copyLocalFiles } from "./worktree-local-files";
 
 type RootKind = "worktrees" | "pipelines";
 
@@ -146,6 +151,32 @@ export function createManagedWorktree(
   throw lastError instanceof Error
     ? lastError
     : new Error(`Failed to create unique worktree for branch '${branchName}'`);
+}
+
+/**
+ * A new worktree's preparation: the project's local files (`copied`, which a spawn waits for),
+ * then its setup hook (`done`, which only a pipeline waits for). Neither rejects
+ */
+export function prepareNewWorktree(
+  db: Database.Database,
+  projectId: string,
+  projectPath: string,
+  worktreePath: string,
+  branchName: string,
+): { copied: Promise<void>; done: Promise<void> } {
+  const patterns = worktreeCopyPatterns(getProject(db, projectId)?.worktreeCopy);
+  const copied = copyLocalFiles(projectPath, worktreePath, patterns).then(
+    (r) => {
+      if (r.copied + r.skipped > 0) {
+        logger.info(`[WorktreeCopy] copied ${r.copied} local file(s), skipped ${r.skipped}`);
+      }
+    },
+    (err) => logger.warn(`[WorktreeCopy] failed: ${(err as { code?: unknown }).code ?? "error"}`),
+  );
+  const done = copied
+    .then(() => runSetupHook(projectPath, worktreePath, branchName))
+    .catch(() => {});
+  return { copied, done };
 }
 
 export function removeManagedWorktree(

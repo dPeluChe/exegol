@@ -99,6 +99,30 @@ async function scanProcessCwds(pids: number[]): Promise<Map<number, string>> {
   return cwds;
 }
 
+/** Every process's cwd from one `lsof` (no pid list). Null when lsof did not run or gave
+ *  nothing (Windows, missing, timed out): no answer is not "no process there" */
+export async function getAllProcessCwds(): Promise<string[] | null> {
+  if (process.platform === "win32") return null;
+  let stdout = "";
+  try {
+    ({ stdout } = await execFileAsync("lsof", ["-a", "-d", "cwd", "-Fpn"], {
+      timeout: 15_000,
+      maxBuffer: 16 * 1024 * 1024,
+    }));
+  } catch (err) {
+    try {
+      stdout = lsofStdout(err);
+    } catch {
+      return null;
+    }
+  }
+  const cwds = stdout
+    .split("\n")
+    .filter((l) => l.startsWith("n"))
+    .map((l) => l.slice(1));
+  return cwds.length > 0 ? cwds : null;
+}
+
 /** `cwd` is `root` or inside it (a path boundary: /repo-2 is not in /repo) */
 export function isInside(cwd: string | null | undefined, root: string): boolean {
   return !!cwd && (cwd === root || cwd.startsWith(`${root}/`));
