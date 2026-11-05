@@ -48,12 +48,19 @@ export interface AttentionItem {
   reason: string;
   timestamp: number;
   read: boolean;
+  /** Raised by the stuck-turn sweep: Company shows it apart from other info items */
+  stuck?: boolean;
   pinned: boolean;
   /** Agent browser: the pane the agent needs the user in (clears on hand-back, not on running) */
   paneId?: string;
 }
 
-export type AttentionCause = { level: AttentionLevel; reason: string; paneId?: string };
+export type AttentionCause = {
+  level: AttentionLevel;
+  reason: string;
+  paneId?: string;
+  stuck?: boolean;
+};
 
 function statusToAttention(
   status: string,
@@ -92,7 +99,10 @@ export function startAgentStatusPush(queryClient: QueryClient): void {
   });
   // "info": action_needed clears on the next running push, and a stuck turn is still running
   const offStuckTurn = window.api.onStuckTurn(({ agentId, reason }) =>
-    useAgentStore.getState().addAttentionItem(agentId, { level: "info", reason }),
+    useAgentStore.getState().addAttentionItem(agentId, { level: "info", reason, stuck: true }),
+  );
+  const offActivity = window.api.onAgentActivity(({ agentId, tool }) =>
+    useAgentStore.setState((s) => ({ activityTools: { ...s.activityTools, [agentId]: tool } })),
   );
   const stopMcp = window.api.onMcpStatus((e) => queryClient.setQueryData(MCP_STATUS_KEY, e));
   const stopFollowUps = window.api.onFollowUps((e) =>
@@ -173,6 +183,7 @@ export function startAgentStatusPush(queryClient: QueryClient): void {
     stopRecovery();
     offPrWatch();
     offStuckTurn();
+    offActivity();
     stopMcp();
     stopFollowUps();
     stopTurns();
@@ -306,6 +317,8 @@ interface AgentStore {
   attentionItems: Record<string, AttentionItem>;
   /** `cause` overrides the status-derived reason (PR watch) */
   addAttentionItem: (agentId: string, cause?: AttentionCause) => void;
+  /** The last tool per session, from its hook; only Company reads it, so it stays off the agent */
+  activityTools: Record<string, string>;
   markAttentionRead: (agentId: string) => void;
   dismissAttention: (agentId: string) => void;
   toggleAttentionPin: (agentId: string) => void;
@@ -652,6 +665,8 @@ export const useAgentStore = create<AgentStore>()(
 
       // ─── T57: Attention inbox ──────────────────────────────────────────────
 
+      activityTools: {},
+
       addAttentionItem: (agentId, cause) =>
         set((s) => {
           const agent = s.agents[agentId];
@@ -680,6 +695,7 @@ export const useAgentStore = create<AgentStore>()(
             read: isRead,
             pinned: existing?.pinned ?? false,
             ...(cause?.paneId ? { paneId: cause.paneId } : {}),
+            ...(cause?.stuck ? { stuck: true } : {}),
           };
           const countDelta = isRead ? 0 : wasUnread ? 0 : 1;
           return {

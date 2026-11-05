@@ -56,6 +56,15 @@ export function createAgentLink(
   };
 }
 
+export function listAgentLinkPairs(db: Database.Database): { from: string; to: string }[] {
+  return db
+    .prepare("SELECT from_agent_id AS 'from', to_agent_id AS 'to' FROM agent_links")
+    .all() as {
+    from: string;
+    to: string;
+  }[];
+}
+
 export function listLinksFrom(db: Database.Database, fromAgentId: string): AgentLink[] {
   const rows = db
     .prepare("SELECT * FROM agent_links WHERE from_agent_id = ?")

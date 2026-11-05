@@ -4,6 +4,7 @@ import { z } from "zod";
 import { saveActiveView } from "../../agents/active-view";
 import { isAgentAwaitingApproval } from "../../agents/agent-messaging";
 import { folderExists } from "../../agents/auto-resume";
+import { deskFacts } from "../../agents/desk-facts";
 import {
   FOLLOW_UP_MAX_CHARS,
   FollowUpError,
@@ -68,6 +69,8 @@ export const agentRouter = router({
   /** T156: cross-project non-terminal agents (project name + group color). */
   // At once, even mid-recovery: the sidebar lists sessions while they reconnect (recoveryState)
   listActive: publicProcedure.query(({ ctx }) => listActiveAgents(ctx.db)),
+
+  deskFacts: publicProcedure.query(({ ctx }) => deskFacts(ctx.db)),
   /** Startup reattach progress; `recovery:progress` pushes each change */
   recoveryState: publicProcedure.query(() => getRecoveryState()),
   /** The view on screen: the next startup reattaches its sessions first */

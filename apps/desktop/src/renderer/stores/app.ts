@@ -32,6 +32,10 @@ interface AppStore {
   openProjects: () => void;
   closeProjects: () => void;
 
+  /** When Company was last left (ms): "Done since you left" counts from here */
+  companySeenAt: number;
+  setCompanySeenAt: (at: number) => void;
+
   /** Sidebar collapse state */
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
@@ -183,6 +187,8 @@ export const useAppStore = create<AppStore>()(
       onboardingComplete: false,
       setOnboardingComplete: (complete) => set({ onboardingComplete: complete }),
 
+      companySeenAt: Date.now(),
+      setCompanySeenAt: (at) => set({ companySeenAt: at }),
       welcomeTourSeen: false,
       setWelcomeTourSeen: (seen) => set({ welcomeTourSeen: seen }),
     }),
@@ -201,6 +207,7 @@ export const useAppStore = create<AppStore>()(
         sidebarActiveOnly: state.sidebarActiveOnly,
         projectsOrder: state.projectsOrder,
         claudePlanUsage: state.claudePlanUsage,
+        companySeenAt: state.companySeenAt,
       }),
     },
   ),

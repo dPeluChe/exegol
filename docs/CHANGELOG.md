@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Company replaces the Dashboard home: a room per project, a desk per session with its state, activity and badges, a Today strip, P for the next one that needs you, Enter to open it in its layout. Watching and the full session list stay as modes
 - Sidebar: open PRs and a needs-you dot per project; Edit project sets how much a project may interrupt (All, Only what needs me, Nothing); Activity shows warnings and the resource meters; Prompts lives in Project
 - Monitor > Usage: Global or per project, by CLI, model and session, models without a price apart, and a monthly limit per CLI that warns at 80% and 100%; budgets now warn after each import, without opening the page
 - GitHub in the top bar: open PRs with CI state and open issues of the project; assign one to an open session or a new tab with its own worktree, and Fix CI sends the failed log

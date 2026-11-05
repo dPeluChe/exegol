@@ -34,6 +34,7 @@ import type { OutputProcessor } from "./agent-output-processor";
 import { handleParallelAgentExit } from "./agent-parallel-orchestration";
 import { detectCliSelfUpdate } from "./cli-self-update";
 import { noteHookCwd } from "./hook-cwd";
+import { noteHookTool } from "./hook-tool";
 import { handleLostSession } from "./lost-session-exit";
 import { detachOutputPipeline } from "./output-pipeline";
 import { noteSessionActivity } from "./session-activity";
@@ -257,11 +258,12 @@ function storeHookSessionId(db: Database.Database, agentId: string, sessionId: s
 export function dispatchAgentFileEvent(
   db: Database.Database,
   maps: SessionMaps,
-  event: { type: string; agentId: string; sessionId?: string; cwd?: string },
+  event: { type: string; agentId: string; sessionId?: string; cwd?: string; tool?: string },
 ): void {
-  // Before the OSC short-circuit: OSC carries no session id or folder, hooks do
+  // Before the OSC short-circuit: OSC carries no session id, folder or tool, hooks do
   if (event.sessionId) storeHookSessionId(db, event.agentId, event.sessionId);
   noteHookCwd(event.agentId, event.cwd);
+  if (event.type === "tool_use") noteHookTool(event.agentId, event.tool);
   if (oscDeliveredAgents.has(event.agentId)) return;
   const sigType = FILE_EVENT_SIGNALS[event.type];
   if (!sigType) return;

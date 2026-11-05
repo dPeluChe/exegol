@@ -373,6 +373,15 @@ export interface PlanUsage {
 }
 
 /** A CLI's installed version against its newest release (Doctor's cliUpdates) */
+/** What a Company desk shows that the agent row does not hold */
+export interface DeskFacts {
+  /** Changed files in its folder; null when that is not a git repo */
+  changedFiles: number | null;
+  port: number | null;
+  /** Agents linked with it, either direction */
+  linkedTo: string[];
+}
+
 export interface CliUpdateStatus {
   cliType: string;
   installed: string | null;

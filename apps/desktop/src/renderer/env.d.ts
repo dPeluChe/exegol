@@ -104,6 +104,8 @@ interface Window {
     onPrWatch: (
       callback: (event: { agentId: string; projectId: string; reason?: string }) => void,
     ) => () => void;
+    /** The last tool of a turn, from the hook's name; never its input */
+    onAgentActivity: (callback: (event: { agentId: string; tool: string }) => void) => () => void;
     onStuckTurn: (
       callback: (event: { agentId: string; projectId: string; reason: string }) => void,
     ) => () => void;
