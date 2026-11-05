@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { z } from "zod";
 import { parseJson } from "../../lib/parse-json";
+import { checkRollupSchema, failingChecks } from "./checks";
 
 /** What one `gh pr view` (+ inline review comments) tells us about a PR. Pure: no IO here. */
 export interface PrSnapshot {
@@ -73,19 +74,7 @@ const prViewSchema = z.object({
   headRefOid: z.string(),
   mergeable: z.string().nullish(),
   mergeStateStatus: z.string().nullish(),
-  statusCheckRollup: z
-    .array(
-      z.object({
-        __typename: z.string().optional(),
-        name: z.string().nullish(),
-        context: z.string().nullish(),
-        conclusion: z.string().nullish(),
-        state: z.string().nullish(),
-        detailsUrl: z.string().nullish(),
-        targetUrl: z.string().nullish(),
-      }),
-    )
-    .nullish(),
+  statusCheckRollup: checkRollupSchema.nullish(),
   reviews: z
     .array(
       z.object({
@@ -121,28 +110,11 @@ const inlineCommentsSchema = z.array(
   }),
 );
 
-// CheckRun conclusions and StatusContext states that mean "this needs a fix"
-const FAILED = new Set([
-  "FAILURE",
-  "ERROR",
-  "TIMED_OUT",
-  "CANCELLED",
-  "ACTION_REQUIRED",
-  "STARTUP_FAILURE",
-]);
-
 const ts = (iso: string | null | undefined) => (iso ? Date.parse(iso) || 0 : 0);
 
 export function parsePrSnapshot(viewJson: string): PrSnapshot | null {
   const view = parseJson(viewJson, prViewSchema);
   if (!view) return null;
-  const failingChecks = (view.statusCheckRollup ?? [])
-    .filter((c) => FAILED.has((c.conclusion ?? c.state ?? "").toUpperCase()))
-    .map((c) => ({
-      name: c.name ?? c.context ?? "check",
-      link: c.detailsUrl ?? c.targetUrl ?? null,
-    }));
-
   const feedback: PrFeedback[] = [];
   for (const r of view.reviews ?? []) {
     const body = r.body?.trim() ?? "";
@@ -172,7 +144,7 @@ export function parsePrSnapshot(viewJson: string): PrSnapshot | null {
     state: view.state,
     headSha: view.headRefOid,
     conflicting: view.mergeable === "CONFLICTING" || view.mergeStateStatus === "DIRTY",
-    failingChecks,
+    failingChecks: failingChecks(view.statusCheckRollup ?? []),
     feedback,
   };
 }

@@ -27,6 +27,18 @@ export async function spawnShellIntoPane(
   return agent.id;
 }
 
+/** Show a spawned agent in a new tab of the active project */
+export function openInNewTab(agent: Agent, label?: string): string | null {
+  useAgentStore.getState().addAgent(toAgentState(agent));
+  useTerminalStore.getState().createTerminal(agent.id);
+  const store = useWorkspaceStore.getState();
+  const tabId = store.addTab(label);
+  const tab = getProjectState().tabs.find((t) => t.id === tabId);
+  const paneId = tab ? findFirstPaneId(tab.layout) : null;
+  if (paneId) store.updatePane(paneId, { type: "terminal", agentId: agent.id });
+  return paneId;
+}
+
 /** Run a command in a new tab's shell, typed once the shell is ready (its first output, or 2s
  *  for a shell that prints no prompt): the palette's `!cmd`, a CLI update */
 export async function runCommandInNewTab(projectId: string, cmd: string): Promise<string> {
@@ -34,13 +46,7 @@ export async function runCommandInNewTab(projectId: string, cmd: string): Promis
     projectId,
     cliType: "shell",
   });
-  useAgentStore.getState().addAgent(toAgentState(agent));
-  useTerminalStore.getState().createTerminal(agent.id);
-  const store = useWorkspaceStore.getState();
-  const tabId = store.addTab(`! ${cmd.slice(0, 30)}`);
-  const tab = getProjectState().tabs.find((t) => t.id === tabId);
-  const paneId = tab ? findFirstPaneId(tab.layout) : null;
-  if (paneId) store.updatePane(paneId, { type: "terminal", agentId: agent.id });
+  openInNewTab(agent, `! ${cmd.slice(0, 30)}`);
   typeWhenReady(agent.id, cmd);
   return agent.id;
 }

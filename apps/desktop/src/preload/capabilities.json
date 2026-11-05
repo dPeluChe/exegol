@@ -280,6 +280,9 @@
       "rebuild"
     ],
     "github": [
+      "overview",
+      "taskPrompt",
+      "sendTask",
       "listIssues",
       "updateIssueLabels",
       "updateIssueState"

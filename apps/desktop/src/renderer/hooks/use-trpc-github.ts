@@ -1,6 +1,16 @@
-import type { GitHubIssue } from "@exegol/shared";
+import type { GitHubIssue, GitHubOverview } from "@exegol/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
+
+// main caches it 2 min; null (no gh, no remote, logged out) asks less, it rarely changes
+export function useGitHubOverview(projectId: string | null) {
+  return useQuery({
+    queryKey: ["github-overview", projectId],
+    queryFn: () => trpcInvoke<GitHubOverview | null>("github.overview", { projectId }),
+    enabled: !!projectId,
+    refetchInterval: (query) => (query.state.data === null ? 600_000 : 120_000),
+  });
+}
 
 // ─── GitHub Issues ──────────────────────────────────────────────────────────
 

@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- GitHub in the top bar: open PRs with CI state and open issues of the project; assign one to an open session or a new tab with its own worktree, and Fix CI sends the failed log
 - One top bar: layout tabs, launcher, Project and Monitor share a single 40 px row, so terminals gain height; a tab shows "Needs you" for any session in it, and Project groups its sections into Context and Automation
 - Browser camera menu: Copy full page, to paste the whole page into a chat or an issue
 - Token usage now imports from Claude Code and Codex logs in the background (every 30 min), with cache tokens, and models without a price are reported as unpriced instead of billed at the Sonnet default
