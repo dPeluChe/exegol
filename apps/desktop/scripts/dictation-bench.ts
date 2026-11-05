@@ -1,7 +1,8 @@
 // Dev only (not shipped): decodes kept dictation recordings with each speech model and scores
 // them against the text saved next to each clip. Usage in docs/GUIDES/DICTATION_BENCH.md.
 //   bun apps/desktop/scripts/dictation-bench.ts [--dir DIR] [--model DIR[=catalogId]]...
-//     [--no-installed] [--threads N] [--language en|es] [--vocab FILE] [--json out.json] [--save]
+//     [--no-installed] [--threads N] [--language en|es] [--vocab FILE] [--terms FILE]
+//     [--mode phrases|whole] [--clean] [--corrected-only] [--json out.json] [--save]
 import {
   chmodSync,
   existsSync,
@@ -14,6 +15,7 @@ import {
 import { tmpdir } from "node:os";
 import { basename, join, resolve } from "node:path";
 import {
+  cleanDictation,
   DEFAULT_DICTATION_SETTINGS,
   DICTATION_LANGUAGE_IDS,
   type DictationLanguage,
@@ -55,6 +57,7 @@ import {
   localBenchModel,
   type ModelRow,
   summarizeModel,
+  termStats,
   wordErrorRate,
 } from "./dictation-bench-score";
 
@@ -77,6 +80,15 @@ const vocabFile = values("--vocab")[0];
 const vocabTerms = vocabFile ? parseVocabulary(readFileSync(resolve(vocabFile), "utf8")) : [];
 const vocabScore = Number(values("--boost")[0] ?? DEFAULT_DICTATION_SETTINGS.vocabularyBoost);
 const vocabHash = vocabularyHash(vocabTerms, vocabScore);
+const termsFile = values("--terms")[0];
+const scoredTerms = termsFile
+  ? parseVocabulary(readFileSync(resolve(termsFile), "utf8"))
+  : vocabTerms;
+const mode = values("--mode")[0] ?? "phrases";
+if (mode !== "phrases" && mode !== "whole") {
+  console.error("--mode must be phrases or whole");
+  process.exit(1);
+}
 
 interface Clip {
   name: string;
@@ -195,6 +207,7 @@ async function decoder(target: ModelTarget): Promise<(samples: Float32Array) => 
       };
       return (await decodeWithVocabulary(run, spec.hotwords ?? null, speechMs)).text;
     };
+    if (mode === "whole") return (samples) => decode(samples, Number.POSITIVE_INFINITY);
     return (samples) => decodeAsApp(samples, decode, minPhraseMs);
   }
   const recognizer = new sherpa.OnlineRecognizer(spec.config);
@@ -213,7 +226,7 @@ async function decoder(target: ModelTarget): Promise<(samples: Float32Array) => 
 }
 
 async function main(): Promise<void> {
-  const clips = loadClips(recordingsDir);
+  const clips = loadClips(recordingsDir).filter((c) => c.corrected || !flag("--corrected-only"));
   const targets = modelTargets();
   if (clips.length === 0) {
     console.error(`no recordings in ${recordingsDir}`);
@@ -232,17 +245,24 @@ async function main(): Promise<void> {
     const results: ClipResult[] = [];
     for (const clip of clips) {
       const started = performance.now();
-      const hypothesis = await decode(clip.samples);
+      const decoded = await decode(clip.samples);
+      const decodeSec = (performance.now() - started) / 1000;
+      const hypothesis = flag("--clean")
+        ? cleanDictation(decoded, { spokenPunctuation: false }).text
+        : decoded;
       results.push({
         clip: clip.name,
         audioSec: clip.samples.length / SAMPLE_RATE,
-        decodeSec: (performance.now() - started) / 1000,
+        decodeSec,
         wer: wordErrorRate(clip.reference, hypothesis),
         cer: charErrorRate(clip.reference, hypothesis),
         reference: clip.reference,
         hypothesis,
         corrected: clip.corrected,
         dictatedWith: clip.dictatedWith,
+        ...(scoredTerms.length > 0 && {
+          terms: termStats(clip.reference, hypothesis, scoredTerms),
+        }),
       });
     }
     rows.push(summarizeModel(target.label, results));

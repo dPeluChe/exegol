@@ -634,6 +634,18 @@ exchange-bus MVP only, no headless council executions. Absorbs:
 
 ---
 
+### T214: Dictation accuracy, ideas from phonon and hex `added: 2026-11-05`
+**Priority**: P2 | **Effort**: M | **Source**: read of Infatoshi/phonon (GPL-3.0) and anomalyco/hex (MIT). Their numbers are theirs, unverified. First correct about 30 clips with `scripts/dictation-review.ts`: without references none of this can be measured.
+- [ ] Silero VAD through sherpa-onnx's `Vad` instead of the fixed `SPEECH_RMS` gate in `phrases.ts`, against an adaptive floor + 12 dB; bench both on clips attenuated by 12 dB. Keep the phrase cuts: whole-clip decoding lost text on long clips
+- [ ] "Heard as" aliases after decoding, in `cleanDictation` and the vocabulary settings, for models with no vocabulary path (Whisper, Canary, Nemotron); `parseVocabulary` treats `,` `/` `:` as spaces, so it needs its own syntax
+- [ ] Hold-to-talk release tail: 200 ms, up to 600 ms while speech continues; bench by trimming clip ends 50-150 ms
+- [ ] Raw capture test: `capture.ts` turns on echo cancellation, noise suppression and auto gain. Record raw and processed pairs behind a dev flag; `SPEECH_RMS` assumes auto gain
+- Skipped, with reasons in `docs/TASK_COMPLETED/2611.md`: Metal/GGUF, CoreML, more threads, LLM refiner, full pass at stop
+
+### T215: Voice orchestrator, one conversation over every project `added: 2026-11-05`
+**Priority**: P3 | **Effort**: L | **Source**: Antonio, after the dictation review
+Talk to Exegol one to one and let it route work to each project and session. An always-open mic makes sense here, not for dictation, and only with a local wake word or push to talk, a visible listening state, and nothing stored or sent before it. Builds on Company (who is doing what) and agent messages (delivery at turn boundaries). Open: what routes the request, and how a wrong target is caught before it reaches an agent.
+
 ### T209: Agent messages, ideas from ttt `added: 2026-10-16`
 **Priority**: P3 | **Effort**: S-M | **Source**: review of tasarren/ttt (2026-10-16); the submit retry landed in `feat/msg-submit-confirm`
 

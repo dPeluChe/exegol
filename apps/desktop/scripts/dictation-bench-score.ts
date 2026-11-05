@@ -41,6 +41,42 @@ export function charErrorRate(reference: string, hypothesis: string): number {
   return rate(editDistance(ref, hyp), ref.length, hyp.length);
 }
 
+export interface TermStats {
+  /** Times the terms appear in the reference */
+  expected: number;
+  found: number;
+  /** Times the model wrote a term the speaker did not say */
+  falseHits: number;
+}
+
+function occurrences(words: readonly string[], term: readonly string[]): number {
+  let count = 0;
+  for (let at = 0; at + term.length <= words.length; at++) {
+    if (term.every((w, i) => words[at + i] === w)) count++;
+  }
+  return count;
+}
+
+/** Term recall misses what WER averages away: one wrong name among 100 words is 1% WER */
+export function termStats(
+  reference: string,
+  hypothesis: string,
+  terms: readonly string[],
+): TermStats {
+  const ref = normalizeText(reference).split(" ");
+  const hyp = normalizeText(hypothesis).split(" ");
+  const stats: TermStats = { expected: 0, found: 0, falseHits: 0 };
+  for (const term of terms) {
+    const words = normalizeText(term).split(" ");
+    const said = occurrences(ref, words);
+    const written = occurrences(hyp, words);
+    stats.expected += said;
+    stats.found += Math.min(said, written);
+    stats.falseHits += Math.max(0, written - said);
+  }
+  return stats;
+}
+
 export interface ClipResult {
   clip: string;
   audioSec: number;
@@ -53,6 +89,8 @@ export interface ClipResult {
   corrected: boolean;
   /** The model that dictated it (its `modelId`) */
   dictatedWith: string | null;
+  /** With --terms */
+  terms?: TermStats;
 }
 
 export interface ModelRow {
@@ -63,6 +101,9 @@ export interface ModelRow {
   audioSec: number;
   decodeSec: number;
   rtf: number;
+  /** Null without --terms, or when no reference has a term */
+  termRecall: number | null;
+  falseTerms: number;
 }
 
 export function summarizeModel(model: string, clips: readonly ClipResult[]): ModelRow {
@@ -70,6 +111,7 @@ export function summarizeModel(model: string, clips: readonly ClipResult[]): Mod
   const mean = (pick: (c: ClipResult) => number) => (clips.length ? sum(pick) / clips.length : 0);
   const audioSec = sum((c) => c.audioSec);
   const decodeSec = sum((c) => c.decodeSec);
+  const expected = sum((c) => c.terms?.expected ?? 0);
   return {
     model,
     clips: clips.length,
@@ -78,11 +120,23 @@ export function summarizeModel(model: string, clips: readonly ClipResult[]): Mod
     audioSec,
     decodeSec,
     rtf: audioSec > 0 ? decodeSec / audioSec : 0,
+    termRecall: expected > 0 ? sum((c) => c.terms?.found ?? 0) / expected : null,
+    falseTerms: sum((c) => c.terms?.falseHits ?? 0),
   };
 }
 
 export function formatTable(rows: readonly ModelRow[]): string {
-  const header = ["model", "clips", "WER %", "CER %", "audio s", "decode s", "RTF"];
+  const withTerms = rows.some((r) => r.termRecall !== null);
+  const header = [
+    "model",
+    "clips",
+    "WER %",
+    "CER %",
+    "audio s",
+    "decode s",
+    "RTF",
+    ...(withTerms ? ["terms %", "false"] : []),
+  ];
   const body = rows.map((r) => [
     r.model,
     String(r.clips),
@@ -91,6 +145,7 @@ export function formatTable(rows: readonly ModelRow[]): string {
     r.audioSec.toFixed(1),
     r.decodeSec.toFixed(1),
     r.rtf.toFixed(3),
+    ...(withTerms ? [((r.termRecall ?? 0) * 100).toFixed(1), String(r.falseTerms)] : []),
   ]);
   const widths = header.map((h, i) =>
     Math.max(h.length, ...body.map((row) => row[i]?.length ?? 0)),
