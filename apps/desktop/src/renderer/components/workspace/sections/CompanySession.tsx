@@ -23,7 +23,7 @@ export function CompanySession({ agent, where }: { agent: AgentState; where: str
   const [picked, setView] = useState<SessionView>("chat");
   const view = hasChat ? picked : "terminal";
   return (
-    <aside className="flex w-[430px] shrink-0 flex-col overflow-hidden rounded-lg border border-border bg-bg-secondary">
+    <aside className="flex h-full flex-col overflow-hidden rounded-lg border border-border bg-bg-secondary">
       <div className="flex items-center gap-2 border-b border-border px-3 py-2">
         <AgentIcon provider={agent.cliType} size={16} />
         <div className="min-w-0 flex-1">

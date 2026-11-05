@@ -35,21 +35,36 @@ export interface Room {
   desks: AgentState[];
 }
 
-/** Rooms and their desks keep one order, so a desk changing state never moves under the pointer */
-export function buildRooms(agents: Iterable<AgentState>): Room[] {
+const DESK_RANK: Record<DeskState, number> = {
+  needs: 0,
+  stuck: 1,
+  working: 2,
+  idle: 3,
+  suspended: 4,
+};
+
+/** What asks for you first, then the latest state change: a desk only moves when its state does */
+export function buildRooms(
+  agents: Iterable<AgentState>,
+  attention: Record<string, AttentionItem>,
+): Room[] {
+  const rank = (a: AgentState) => DESK_RANK[deskState(a, attention[a.id])];
+  const byUrgency = (x: AgentState, y: AgentState) =>
+    rank(x) - rank(y) || (y.activitySince ?? 0) - (x.activitySince ?? 0);
   const rooms = new Map<string, AgentState[]>();
   for (const a of agents) {
     if (a.archived || !LIVE_STATUSES.has(a.status)) continue;
     rooms.set(a.projectId, [...(rooms.get(a.projectId) ?? []), a]);
   }
-  return [...rooms]
-    .map(([projectId, desks]) => ({
-      projectId,
-      desks: desks.sort(
-        (x, y) => (x.startedAt ?? 0) - (y.startedAt ?? 0) || (x.id < y.id ? -1 : 1),
-      ),
-    }))
-    .sort((x, y) => (x.projectId < y.projectId ? -1 : 1));
+  const sorted = [...rooms].map(([projectId, desks]) => ({
+    projectId,
+    desks: desks.sort((x, y) => byUrgency(x, y) || (x.id < y.id ? -1 : 1)),
+  }));
+  return sorted.sort(
+    (x, y) =>
+      (x.desks[0] && y.desks[0] ? byUrgency(x.desks[0], y.desks[0]) : 0) ||
+      (x.projectId < y.projectId ? -1 : 1),
+  );
 }
 
 export interface TodayStrip {

@@ -20,6 +20,7 @@ import { toastError } from "../../../stores/toasts";
 import { AgentQuestion, useScreenDialog } from "../../agents/AgentQuestion";
 import { FollowUpList, useFollowUps } from "../../terminal/FollowUpControl";
 import { DELIVERY, peerName, useAgentMessages } from "./AgentMessages";
+import { ChatMarkdown } from "./ChatMarkdown";
 
 const FALLBACK_POLL_MS = 15_000;
 const NO_TURNS: ChatHistory["turns"] = [];
@@ -61,9 +62,9 @@ function PeerBubble({ message, agentId }: { message: AgentMessage; agentId: stri
         {incoming ? `From ${peer}` : `To ${peer}`}
         {delivery && <span className={cn("ml-auto", delivery.tone)}>{delivery.label}</span>}
       </p>
-      <p className="whitespace-pre-wrap break-words text-xs text-text-secondary">
-        {message.content}
-      </p>
+      <div className="text-xs text-text-secondary">
+        <ChatMarkdown text={message.content} />
+      </div>
     </div>
   );
 }
@@ -72,26 +73,31 @@ function PeerBubble({ message, agentId }: { message: AgentMessage; agentId: stri
 const Bubble = memo(function Bubble({
   bubble,
   agentId,
+  formatted,
 }: {
   bubble: SessionBubble;
   agentId: string;
+  formatted: boolean;
 }) {
   if (bubble.kind === "tools") {
     return <p className="truncate text-[10px] text-text-muted">{toolsLine(bubble.names)}</p>;
   }
   if (bubble.kind === "peer") return <PeerBubble message={bubble.message} agentId={agentId} />;
-  const mine = bubble.role === "user";
+  if (bubble.role === "user") {
+    return (
+      <p className="max-w-[90%] self-end whitespace-pre-wrap break-words rounded-lg bg-accent/15 px-2.5 py-1.5 text-xs text-text-primary">
+        {bubble.text}
+      </p>
+    );
+  }
   return (
-    <p
-      className={cn(
-        "max-w-[90%] whitespace-pre-wrap break-words rounded-lg px-2.5 py-1.5 text-xs",
-        mine
-          ? "self-end bg-accent/15 text-text-primary"
-          : "self-start bg-bg-tertiary text-text-primary",
+    <div className="rounded-lg bg-bg-tertiary px-2.5 py-2 text-xs text-text-secondary">
+      {formatted ? (
+        <ChatMarkdown text={bubble.text} />
+      ) : (
+        <p className="whitespace-pre-wrap break-words font-mono text-[11px]">{bubble.text}</p>
       )}
-    >
-      {bubble.text}
-    </p>
+    </div>
   );
 });
 
@@ -171,7 +177,7 @@ function ChatInput({ agent, onTerminal }: { agent: AgentState; onTerminal: () =>
   );
 }
 
-/** The session as turns, plain text only: links and markup in agent output stay inert */
+/** The session as turns. Text scraped from the terminal is not Markdown: it stays as printed */
 export function CompanyChat({
   agent,
   where,
@@ -208,7 +214,12 @@ export function CompanyChat({
             <p className="text-xs text-text-muted">Nothing to show yet.</p>
           )}
           {bubbles.map((bubble) => (
-            <Bubble key={bubble.id} bubble={bubble} agentId={agent.id} />
+            <Bubble
+              key={bubble.id}
+              bubble={bubble}
+              agentId={agent.id}
+              formatted={!chat?.fromTerminal}
+            />
           ))}
         </div>
       </div>

@@ -1,8 +1,9 @@
 import { TooltipProvider } from "@exegol/ui";
 import { lazy, Suspense } from "react";
-import { Panel, PanelGroup, PanelResizeHandle } from "react-resizable-panels";
+import { Panel, PanelGroup } from "react-resizable-panels";
 import { LoadingSpinner } from "./components/common";
 import { CloseConfirmHost } from "./components/common/CloseConfirmHost";
+import { PanelDivider } from "./components/common/PanelDivider";
 import { SidecarHealthBanner } from "./components/common/SidecarHealthBanner";
 import { ToastStack } from "./components/common/ToastStack";
 import { UpdateBanner } from "./components/common/UpdateBanner";
@@ -114,9 +115,7 @@ export default function App() {
                     <Panel id="sidebar" order={1} defaultSize={20} minSize={10} maxSize={40}>
                       <Sidebar />
                     </Panel>
-                    <PanelResizeHandle className="group relative w-1.5 shrink-0">
-                      <div className="absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-border transition-[width,background-color] group-hover:w-[3px] group-hover:bg-accent/60 group-data-[resize-handle-active]:w-[3px] group-data-[resize-handle-active]:bg-accent" />
-                    </PanelResizeHandle>
+                    <PanelDivider />
                   </>
                 )}
                 <Panel id="main" order={2} defaultSize={80}>

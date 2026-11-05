@@ -51,14 +51,32 @@ describe("deskActivity", () => {
 
 describe("buildRooms", () => {
   it("groups live sessions, shells included, ended and archived ones out", () => {
-    const rooms = buildRooms([
-      agent({ id: "b", startedAt: 2 }),
-      agent({ id: "a", startedAt: 1, cliType: "shell" }),
-      agent({ id: "c", status: "completed" }),
-      agent({ id: "d", archived: true }),
-    ]);
+    const rooms = buildRooms(
+      [
+        agent({ id: "b" }),
+        agent({ id: "a", cliType: "shell" }),
+        agent({ id: "c", status: "completed" }),
+        agent({ id: "d", archived: true }),
+      ],
+      {},
+    );
     expect(rooms).toHaveLength(1);
     expect(rooms[0]?.desks.map((d) => d.id)).toEqual(["a", "b"]);
+  });
+
+  it("puts what needs you first, then working, then the most recent", () => {
+    const idle = { status: "waiting_input", activityLevel: "idle" } as const;
+    const rooms = buildRooms(
+      [
+        agent({ id: "old", projectId: "p1", ...idle, activitySince: 100 }),
+        agent({ id: "recent", projectId: "p1", ...idle, activitySince: 900 }),
+        agent({ id: "busy", projectId: "p2", activityLevel: "busy", activitySince: 1 }),
+        agent({ id: "asks", projectId: "p3", ...idle, activitySince: 2 }),
+      ],
+      { asks: question },
+    );
+    expect(rooms.map((r) => r.projectId)).toEqual(["p3", "p2", "p1"]);
+    expect(rooms[2]?.desks.map((d) => d.id)).toEqual(["recent", "old"]);
   });
 });
 

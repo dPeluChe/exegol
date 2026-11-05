@@ -2,6 +2,7 @@ import type { DeskFacts, DoneSession } from "@exegol/shared";
 import { cn, ScrollArea } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import { memo, type ReactNode, useMemo, useState } from "react";
+import { Panel, PanelGroup } from "react-resizable-panels";
 import { useCliUpdates } from "../../../hooks/use-cli-updates";
 import { useCompanyKeys } from "../../../hooks/use-company-keys";
 import { useNow } from "../../../hooks/use-now";
@@ -25,6 +26,7 @@ import { useDeskActivityStore } from "../../../stores/desk-activity";
 import { useNotificationPrefsStore } from "../../../stores/notification-prefs";
 import { useWorkspaceStore } from "../../../stores/workspace";
 import { AgentIcon } from "../../common/AgentIcon";
+import { PanelDivider } from "../../common/PanelDivider";
 import type { ProjectMeta } from "../../common/ProjectChip";
 import { CompanySession } from "./CompanySession";
 
@@ -182,7 +184,7 @@ function RoomCard({
           Open project
         </button>
       </div>
-      <div className="grid grid-cols-2 gap-2 rounded-md bg-bg-tertiary/20 p-1.5 xl:grid-cols-3">
+      <div className="grid grid-cols-2 gap-2 rounded-md bg-bg-tertiary/20 p-1.5 @xl:grid-cols-3">
         {desks.map((agent) => (
           <Desk
             key={agent.id}
@@ -257,7 +259,7 @@ export function CompanySection({ projectMeta }: { projectMeta: Map<string, Proje
     refetchInterval: 60_000,
   });
 
-  const rooms = buildRooms(Object.values(agents));
+  const rooms = buildRooms(Object.values(agents), attention);
   const today = todayStrip(Object.values(agents), attention, { levelOf, outdated });
   const [pickedId, setPickedId] = useState<string | null>(null);
   const live = rooms.flatMap((r) => r.desks);
@@ -289,30 +291,40 @@ export function CompanySection({ projectMeta }: { projectMeta: Map<string, Proje
       {rooms.length === 0 ? (
         <p className="py-8 text-center text-xs text-text-muted">No live sessions right now.</p>
       ) : (
-        <div className="flex min-h-0 flex-1 gap-3">
-          <ScrollArea className="min-w-0 flex-1">
-            <div className="grid grid-cols-1 gap-3 pr-1 xl:grid-cols-2">
-              {rooms.map((room) => (
-                <RoomCard
-                  key={room.projectId}
-                  room={room}
-                  meta={projectMeta.get(room.projectId)}
-                  deskFacts={deskFacts}
-                  outdated={outdated}
-                  selectedId={selected?.id ?? null}
-                  onSelect={setPickedId}
-                />
-              ))}
+        <PanelGroup direction="horizontal" autoSaveId="exegol-company" className="min-h-0 flex-1">
+          <Panel id="rooms" order={1} defaultSize={70} minSize={30}>
+            {/* The container sits outside: Radix's scroll viewport sizes to its content */}
+            <div className="@container h-full">
+              <ScrollArea className="h-full">
+                <div className="grid grid-cols-1 gap-3 pr-1 @5xl:grid-cols-2">
+                  {rooms.map((room) => (
+                    <RoomCard
+                      key={room.projectId}
+                      room={room}
+                      meta={projectMeta.get(room.projectId)}
+                      deskFacts={deskFacts}
+                      outdated={outdated}
+                      selectedId={selected?.id ?? null}
+                      onSelect={setPickedId}
+                    />
+                  ))}
+                </div>
+              </ScrollArea>
             </div>
-          </ScrollArea>
+          </Panel>
           {selected && (
-            <CompanySession
-              key={selected.id}
-              agent={selected}
-              where={`${projectMeta.get(selected.projectId)?.name ?? ""} · ${whereOf(selected)}`}
-            />
+            <>
+              <PanelDivider />
+              <Panel id="session" order={2} defaultSize={30} minSize={20} maxSize={70}>
+                <CompanySession
+                  key={selected.id}
+                  agent={selected}
+                  where={`${projectMeta.get(selected.projectId)?.name ?? ""} · ${whereOf(selected)}`}
+                />
+              </Panel>
+            </>
           )}
-        </div>
+        </PanelGroup>
       )}
     </div>
   );

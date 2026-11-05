@@ -252,7 +252,9 @@ export function AgentDashboard() {
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-4 p-4 pb-3 text-xs text-text-muted">
-        <SegmentedTabs tabs={MODE_TABS} active={mode} onChange={setMode} label="Dashboard view" />
+        <div className="shrink-0">
+          <SegmentedTabs tabs={MODE_TABS} active={mode} onChange={setMode} label="Dashboard view" />
+        </div>
         <span className="flex items-center gap-1.5">
           <Cpu className="h-3.5 w-3.5" />
           <span className="font-medium text-text-primary">{all.length}</span> agents
@@ -261,10 +263,12 @@ export function AgentDashboard() {
           <span className="h-2 w-2 rounded-full bg-green-500" />
           {runningCount} running
         </span>
-        <span className="flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-full bg-amber-500" />
-          {unread.size} need attention
-        </span>
+        {mode !== "company" && (
+          <span className="flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-amber-500" />
+            {unread.size} need attention
+          </span>
+        )}
         {mode === "company" && (
           <span className="ml-auto">P next that needs you, Enter opens it in its layout</span>
         )}
