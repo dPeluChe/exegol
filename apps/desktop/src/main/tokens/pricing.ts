@@ -21,8 +21,6 @@ export const MODEL_PRICES: Record<string, ModelPrice> = {
   "gemini-2.5-flash": { input: 0.15, output: 0.6 },
 };
 
-const DEFAULT_PRICE: ModelPrice = { input: 3, output: 15 }; // Sonnet
-
 interface ClaudeId {
   family: string;
   version: string;
@@ -42,8 +40,8 @@ function claudeId(model: string): ClaudeId | null {
 const byVersionDesc = (a: ClaudeId, b: ClaudeId) =>
   b.version.localeCompare(a.version, undefined, { numeric: true });
 
-/** Exact id, then Claude family + version (newest of the family if unknown), then prefix, then Sonnet */
-export function priceFor(model: string): ModelPrice {
+/** Exact id, then Claude family + version (newest of the family if unknown), then prefix; null when none */
+export function priceFor(model: string): ModelPrice | null {
   const prices = MODEL_PRICES;
   const exact = prices[model];
   if (exact) return exact;
@@ -56,13 +54,23 @@ export function priceFor(model: string): ModelPrice {
     const match = family.find((c) => c.version === id.version) ?? family[0];
     if (match) return prices[match.key] as ModelPrice;
   }
-  const prefix = Object.entries(prices).find(([key]) => model.startsWith(key))?.[1];
-  return prefix ?? DEFAULT_PRICE;
+  return Object.entries(prices).find(([key]) => model.startsWith(key))?.[1] ?? null;
 }
 
-export function estimateCost(model: string, inputTokens: number, outputTokens: number): number {
+export type CostSource = "priced" | "reported" | "unpriced";
+
+/** A model with no price costs nothing here and is flagged, never billed at the Sonnet default */
+export function knownCost(
+  model: string,
+  inputTokens: number,
+  outputTokens: number,
+): { estimatedCostUsd: number; costSource: CostSource } {
   const price = priceFor(model);
-  return (inputTokens * price.input + outputTokens * price.output) / 1_000_000;
+  if (!price) return { estimatedCostUsd: 0, costSource: "unpriced" };
+  return {
+    estimatedCostUsd: (inputTokens * price.input + outputTokens * price.output) / 1_000_000,
+    costSource: "priced",
+  };
 }
 
 const num = (v: unknown): number => (typeof v === "number" ? v : 0);

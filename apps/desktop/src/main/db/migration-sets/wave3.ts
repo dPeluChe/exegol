@@ -323,4 +323,12 @@ export const wave3Migrations: Migration[] = [
       pty_rows = (SELECT s.pty_rows FROM agents s WHERE s.id = agents.resumed_from)
     WHERE pty_cols IS NULL AND resumed_from IS NOT NULL;`,
   },
+  {
+    // Codex rows counted cached input as input: the first background import rewrites its window
+    id: "w3_032_token_usage_cache",
+    sql: `ALTER TABLE token_usage ADD COLUMN cache_read_tokens INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE token_usage ADD COLUMN cache_write_tokens INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE token_usage ADD COLUMN cost_source TEXT NOT NULL DEFAULT 'priced'
+      CHECK (cost_source IN ('priced', 'reported', 'unpriced'));`,
+  },
 ];

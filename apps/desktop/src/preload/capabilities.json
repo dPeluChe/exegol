@@ -92,7 +92,8 @@
       "modelBreakdown",
       "pipelineRunCost",
       "scan",
-      "summary"
+      "summary",
+      "usage"
     ],
     "resources": [
       "devServers",

@@ -7,7 +7,7 @@ import { claudeProjectDir } from "../history/providers/claude-code";
 import { dayDirs } from "../history/providers/codex";
 import { mapWithConcurrency } from "../lib/concurrency";
 import { isInside } from "../system/ports";
-import { claudeCacheInput, estimateCost } from "./pricing";
+import { type CostSource, claudeCacheInput, knownCost } from "./pricing";
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
@@ -18,9 +18,13 @@ export interface ParsedTokenEntry {
   cwd?: string;
   provider: string;
   model: string;
+  /** Uncached input: cache reads and writes are counted apart */
   inputTokens: number;
   outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
   estimatedCostUsd: number;
+  costSource: CostSource;
   toolCallCount: number;
   timestamp: number;
 }
@@ -44,6 +48,8 @@ interface ScanStats {
   /** Files parsed, not served from the cache */
   parsedFiles: number;
   seen: Set<string>;
+  /** Files untouched since then were imported before: skip them, but keep their cache */
+  modifiedSince: number;
 }
 
 async function scanFile(
@@ -60,6 +66,7 @@ async function scanFile(
   }
   if (info.mtimeMs / 1000 < since) return [];
   stats.seen.add(path);
+  if (info.mtimeMs / 1000 < stats.modifiedSince) return [];
   const hit = fileCache.get(path);
   if (hit && hit.mtimeMs === info.mtimeMs && hit.size === info.size && hit.since <= since) {
     return hit.entries.filter((e) => e.timestamp >= since);
@@ -172,7 +179,9 @@ function extractClaudeTokenUsage(
       ...shared,
       inputTokens,
       outputTokens,
-      estimatedCostUsd: estimateCost(model, inputTokens + claudeCacheInput(usage), outputTokens),
+      cacheReadTokens: num(usage.cache_read_input_tokens),
+      cacheWriteTokens: num(usage.cache_creation_input_tokens),
+      ...knownCost(model, inputTokens + claudeCacheInput(usage), outputTokens),
     };
   }
   // costUSD form (older logs)
@@ -180,7 +189,10 @@ function extractClaudeTokenUsage(
     ...shared,
     inputTokens: entry.inputTokens as number,
     outputTokens: num(entry.outputTokens),
+    cacheReadTokens: 0,
+    cacheWriteTokens: 0,
     estimatedCostUsd: entry.costUSD as number,
+    costSource: "reported",
   };
 }
 
@@ -216,7 +228,7 @@ export async function parseCodexSessionFile(
   let sessionTimestamp = 0;
   let cwd: string | undefined;
   // A holder, not a `let`: TS would keep a closure-assigned local narrowed to null
-  const last: { value: { input: number; output: number; timestamp?: string } | null } = {
+  const last: { value: { usage: Record<string, number>; timestamp?: string } | null } = {
     value: null,
   };
 
@@ -249,16 +261,16 @@ export async function parseCodexSessionFile(
     const info = payload.info as Record<string, unknown> | undefined;
     const usage = info?.total_token_usage as Record<string, number> | undefined;
     if (usage && typeof usage.input_tokens === "number") {
-      last.value = {
-        input: usage.input_tokens,
-        output: usage.output_tokens ?? 0,
-        timestamp: d.timestamp,
-      };
+      last.value = { usage, timestamp: d.timestamp };
     }
   });
 
   if (sessionTimestamp < since || !last.value) return [];
-  const { input: inputTokens, output: outputTokens, timestamp } = last.value;
+  const { usage, timestamp } = last.value;
+  // OpenAI's input_tokens includes the cached part; the cost keeps billing it all as input
+  const totalInput = num(usage.input_tokens);
+  const cacheReadTokens = Math.min(num(usage.cached_input_tokens), totalInput);
+  const outputTokens = num(usage.output_tokens);
   const ts = timestamp ? new Date(timestamp).getTime() / 1000 : sessionTimestamp;
   if (ts < since) return [];
   const model = metaModel ?? fallbackModel ?? "unknown";
@@ -268,9 +280,11 @@ export async function parseCodexSessionFile(
       cwd,
       provider: sessionProvider,
       model,
-      inputTokens,
+      inputTokens: totalInput - cacheReadTokens,
       outputTokens,
-      estimatedCostUsd: estimateCost(model, inputTokens, outputTokens),
+      cacheReadTokens,
+      cacheWriteTokens: num(usage.cache_write_input_tokens),
+      ...knownCost(model, totalInput, outputTokens),
       toolCallCount: 0,
       timestamp: ts,
     },
@@ -305,7 +319,11 @@ async function parseAiderFile(filePath: string): Promise<ParsedTokenEntry[]> {
           model,
           inputTokens: usage.sent,
           outputTokens: usage.received ?? 0,
-          estimatedCostUsd: usage.cost ?? estimateCost(model, usage.sent, usage.received ?? 0),
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          ...(typeof usage.cost === "number"
+            ? { estimatedCostUsd: usage.cost, costSource: "reported" as const }
+            : knownCost(model, usage.sent, usage.received ?? 0)),
           toolCallCount: 0,
           timestamp: Math.floor(Date.now() / 1000), // Cache doesn't have per-entry timestamps
         });
@@ -326,7 +344,10 @@ async function parseAiderFile(filePath: string): Promise<ParsedTokenEntry[]> {
       model: "aider-session",
       inputTokens: Math.round(Number.parseFloat(match[1] ?? "0") * 1000),
       outputTokens: Math.round(Number.parseFloat(match[2] ?? "0") * 1000),
+      cacheReadTokens: 0,
+      cacheWriteTokens: 0,
       estimatedCostUsd: Number.parseFloat(match[3] ?? "0"),
+      costSource: "reported",
       toolCallCount: 0,
       timestamp: Math.floor(Date.now() / 1000),
     });
@@ -378,13 +399,17 @@ function countToolCalls(entry: Record<string, unknown>): number {
 /** Few enough open streams that parsing still interleaves with PTY output */
 const SCAN_CONCURRENCY = 4;
 
-/** With roots (a project and its worktrees), only records whose cwd is inside one of them */
+/**
+ * With roots (a project and its worktrees), only records whose cwd is inside one of them.
+ * With modifiedSince, only files written since then (an incremental import).
+ */
 export async function scanAllLogs(
   sinceTimestamp: number,
   home = homedir(),
   roots?: string[],
+  modifiedSince = 0,
 ): Promise<{ entries: ParsedTokenEntry[]; parsedFiles: number }> {
-  const stats: ScanStats = { parsedFiles: 0, seen: new Set() };
+  const stats: ScanStats = { parsedFiles: 0, seen: new Set(), modifiedSince };
   const [claudeFiles, codexFiles] = await Promise.all([
     listClaudeFiles(home, roots),
     listCodexFiles(home, sinceTimestamp),
