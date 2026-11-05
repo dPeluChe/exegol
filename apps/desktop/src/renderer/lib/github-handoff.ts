@@ -10,16 +10,18 @@ export async function startTaskInNewTab(
   cliType: AgentCliType,
   ref: GitHubTaskRef,
 ): Promise<void> {
-  const { prompt, branch } = await trpcMutate<{ prompt: string; branch: string }>(
-    "github.taskPrompt",
-    { projectId, ...ref },
-  );
+  const { prompt, branch, worktreeRepo } = await trpcMutate<{
+    prompt: string;
+    branch: string;
+    worktreeRepo?: string;
+  }>("github.taskPrompt", { projectId, ...ref });
   const agent = await trpcMutate<Agent>("agents.spawn", {
     projectId,
     cliType,
     taskDescription: prompt,
     useWorktree: true,
     branchName: branch,
+    worktreeRepo,
   });
   // gh and the worktree take seconds: the tab goes in this project even if the user moved on
   showProject(projectId);
@@ -27,7 +29,8 @@ export async function startTaskInNewTab(
   if (paneId) focusNewPane(paneId);
 }
 
-export function taskLabel({ kind, number, fixCi }: GitHubTaskRef): string {
-  if (fixCi) return `Fix CI on #${number}`;
-  return `${kind === "pr" ? "PR" : "Issue"} #${number}`;
+export function taskLabel({ kind, number, fixCi, repo }: GitHubTaskRef): string {
+  const name = repo?.folder ? `${repo.folder} ` : "";
+  if (fixCi) return `Fix CI on ${name}#${number}`;
+  return `${name}${kind === "pr" ? "PR" : "Issue"} #${number}`;
 }

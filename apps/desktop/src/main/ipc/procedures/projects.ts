@@ -48,6 +48,7 @@ import { runArchiveHook } from "../../hooks/project-hooks";
 import { openInIde, resolveIde } from "../../ide/opener";
 import { runNative } from "../../lib/concurrency";
 import { logger } from "../../lib/logger";
+import { repoOf } from "../../lib/worktree-safety";
 import { isPathAllowed } from "../../security/path-guard";
 import {
   adoptDetectedIcon,
@@ -412,7 +413,7 @@ export const projectRouter = router({
 
       try {
         removeManagedWorktree(
-          project.path,
+          repoOf(wt.path) ?? project.path,
           getWorktreeName(wt.branch_name),
           wt.path,
           input.force ?? false,

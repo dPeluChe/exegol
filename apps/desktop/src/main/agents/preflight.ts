@@ -52,6 +52,8 @@ interface PreflightOptions {
   command: string;
   projectPath: string;
   useWorktree?: boolean;
+  /** The repo the worktree comes from, when it is not the project root */
+  worktreeRepo?: string;
   coreRustLoaded?: boolean;
 }
 
@@ -64,7 +66,7 @@ export async function runPreflight(opts: PreflightOptions): Promise<PreflightRes
   const [cliFound, pathStatus, isGitRepo] = await Promise.all([
     opts.command === "__shell__" ? Promise.resolve(true) : checkCliAvailable(opts.command),
     checkProjectPath(opts.projectPath),
-    opts.useWorktree ? checkGitRepo(opts.projectPath) : Promise.resolve(true),
+    opts.useWorktree ? checkGitRepo(opts.worktreeRepo ?? opts.projectPath) : Promise.resolve(true),
   ]);
 
   // ── Error: CLI not found ──────────────────────────────────────────────────

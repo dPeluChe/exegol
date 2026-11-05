@@ -3,6 +3,9 @@ import {
   type AgentProvider,
   acceptsFollowUps,
   type GitHubCi,
+  type GitHubOpenIssue,
+  type GitHubOverview,
+  type GitHubPr,
   type GitHubTaskRef,
 } from "@exegol/shared";
 import { cn } from "@exegol/ui";
@@ -11,9 +14,15 @@ import { useCallback, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { useDismiss } from "../../hooks/use-dismiss";
 import { useLaunchableProviders } from "../../hooks/use-providers";
-import { useGitHubOverview } from "../../hooks/use-trpc-github";
+import { useFullGitHubOverview, useGitHubOverview } from "../../hooks/use-trpc-github";
 import { sessionName } from "../../lib/agent-label";
 import { startTaskInNewTab, taskLabel } from "../../lib/github-handoff";
+import {
+  groupByRepo,
+  reposNotShown,
+  sessionsInRepoFirst,
+  UNAVAILABLE_TEXT,
+} from "../../lib/github-repos";
 import { openInBrowser } from "../../lib/open-in-browser";
 import { isLiveSession } from "../../lib/sidebar-views";
 import { trpcMutate } from "../../lib/trpc-client";
@@ -35,17 +44,38 @@ const takesTask = (p: AgentProvider) => p.capabilities.supportsPromptArg;
 
 type Menu = "closed" | "list" | GitHubTaskRef;
 
-/** Open PRs and issues of the project, each can go to a session. Hidden without gh or a remote */
+/** Open PRs and issues of the project, each can go to a session. Says so when there are none to
+ *  ask for: no gh, not logged in, no remote */
 export function GitHubMenu() {
   const { projectId } = useProjectContext();
   const { data } = useGitHubOverview(projectId);
   const [menu, setMenu] = useState<Menu>("closed");
+  const manyRepos = (data?.repos.length ?? 0) > 1;
+  const { isFetching: loadingAll } = useFullGitHubOverview(
+    projectId,
+    manyRepos && menu !== "closed",
+  );
   const rootRef = useRef<HTMLDivElement>(null);
   const close = useCallback(() => setMenu("closed"), []);
   useDismiss(rootRef, menu !== "closed", close);
 
   if (!projectId || !data) return null;
+  if (data.unavailable) {
+    const { label, title } = UNAVAILABLE_TEXT[data.unavailable];
+    return (
+      <span
+        title={title}
+        className="flex h-7 cursor-default items-center gap-1 rounded px-2 text-[11px] font-medium text-text-muted/60"
+      >
+        <GitPullRequest className="h-3.5 w-3.5 shrink-0" />
+        {label}
+      </span>
+    );
+  }
   const failing = data.prs.filter((p) => p.ci === "failing").length;
+  const repoCount = manyRepos ? ` in ${data.repos.length} repos` : "";
+  const { pending } = reposNotShown(data.repos);
+  const notChecked = pending > 0 ? `, ${pending} repos not checked yet` : "";
 
   return (
     <div ref={rootRef} className="relative">
@@ -53,7 +83,7 @@ export function GitHubMenu() {
         type="button"
         aria-pressed={menu !== "closed"}
         onClick={() => setMenu(menu === "closed" ? "list" : "closed")}
-        title={`${data.prs.length} open PRs, ${data.issues.length} open issues${failing ? `, CI failing on ${failing}` : ""}`}
+        title={`${data.prs.length} open PRs, ${data.issues.length} open issues${repoCount}${failing ? `, CI failing on ${failing}` : ""}${notChecked}`}
         className={cn(
           "relative flex h-7 items-center gap-1 rounded px-2 text-[11px] font-medium tabular-nums transition-colors hover:bg-white/5 hover:text-text-primary",
           menu !== "closed" ? "bg-white/10 text-text-primary" : "text-text-muted",
@@ -72,47 +102,126 @@ export function GitHubMenu() {
             <TargetPicker
               projectId={projectId}
               task={menu}
+              repoSessions={sessionsOfRepo(data, menu)}
+              manyRepos={manyRepos}
               onBack={() => setMenu("list")}
               onDone={close}
             />
           ) : (
-            <>
-              <Heading>Pull requests</Heading>
-              {data.prs.length === 0 && <Empty>No open PRs</Empty>}
-              {data.prs.map((pr) => (
-                <Row
-                  key={pr.number}
-                  dot={CI_DOT[pr.ci]}
-                  number={pr.number}
-                  title={pr.title}
-                  detail={pr.draft ? `draft, ${pr.branch}` : pr.branch}
-                  url={pr.url}
-                  onAssign={() => setMenu({ kind: "pr", number: pr.number })}
-                  onFixCi={
-                    pr.ci === "failing"
-                      ? () => setMenu({ kind: "pr", number: pr.number, fixCi: true })
-                      : undefined
-                  }
-                />
-              ))}
-              <Heading>Issues</Heading>
-              {data.issues.length === 0 && <Empty>No open issues</Empty>}
-              {data.issues.map((issue) => (
-                <Row
-                  key={issue.number}
-                  number={issue.number}
-                  title={issue.title}
-                  detail={issue.labels.join(", ")}
-                  url={issue.url}
-                  onAssign={() => setMenu({ kind: "issue", number: issue.number })}
-                />
-              ))}
-            </>
+            <TaskList overview={data} loading={loadingAll} onPick={setMenu} />
           )}
         </div>
       )}
     </div>
   );
+}
+
+function sessionsOfRepo(overview: GitHubOverview, { repo }: GitHubTaskRef): string[] {
+  const held = overview.repos.find((r) => r.folder === repo?.folder && r.name === repo.name);
+  return held?.sessionIds ?? [];
+}
+
+function TaskList({
+  overview,
+  loading,
+  onPick,
+}: {
+  overview: GitHubOverview;
+  loading: boolean;
+  onPick: (task: GitHubTaskRef) => void;
+}) {
+  if (overview.repos.length > 1) {
+    return <RepoGroups overview={overview} loading={loading} onPick={onPick} />;
+  }
+  return (
+    <>
+      <Heading>Pull requests</Heading>
+      {overview.prs.length === 0 && <Empty>No open PRs</Empty>}
+      <PrRows prs={overview.prs} onPick={onPick} />
+      <Heading>Issues</Heading>
+      {overview.issues.length === 0 && <Empty>No open issues</Empty>}
+      <IssueRows issues={overview.issues} onPick={onPick} />
+    </>
+  );
+}
+
+function RepoGroups({
+  overview,
+  loading,
+  onPick,
+}: {
+  overview: GitHubOverview;
+  loading: boolean;
+  onPick: (task: GitHubTaskRef) => void;
+}) {
+  const [filter, setFilter] = useState("");
+  const groups = groupByRepo(overview, filter);
+  const { failed, pending } = reposNotShown(overview.repos);
+  return (
+    <>
+      <input
+        value={filter}
+        onChange={(e) => setFilter(e.target.value)}
+        placeholder="Filter by repo or title"
+        aria-label="Filter by repo or title"
+        className="mx-2 mt-1 mb-1 rounded border border-border bg-bg-primary px-2 py-1 text-xs text-text-primary outline-none placeholder:text-text-muted focus:border-accent"
+      />
+      {groups.length === 0 && !loading && <Empty>No open PRs or issues</Empty>}
+      {groups.map(({ repo, prs, issues }) => (
+        <div key={`${repo.name}:${repo.folder}`}>
+          <Heading>
+            {repo.folder || repo.name}
+            <span className="ml-1.5 normal-case tracking-normal opacity-70">{repo.name}</span>
+          </Heading>
+          <PrRows prs={prs} onPick={onPick} />
+          <IssueRows issues={issues} onPick={onPick} issuePrefix />
+        </div>
+      ))}
+      {loading && pending > 0 && <Empty>Checking {pending} more repos</Empty>}
+      {failed.length > 0 && (
+        <Empty>Could not load: {failed.map((r) => r.folder || r.name).join(", ")}</Empty>
+      )}
+    </>
+  );
+}
+
+function PrRows({ prs, onPick }: { prs: GitHubPr[]; onPick: (task: GitHubTaskRef) => void }) {
+  return prs.map((pr) => {
+    const task = { kind: "pr", number: pr.number, repo: pr.repo } as const;
+    return (
+      <Row
+        key={pr.url}
+        dot={CI_DOT[pr.ci]}
+        number={pr.number}
+        title={pr.title}
+        detail={pr.draft ? `draft, ${pr.branch}` : pr.branch}
+        url={pr.url}
+        onAssign={() => onPick(task)}
+        onFixCi={pr.ci === "failing" ? () => onPick({ ...task, fixCi: true }) : undefined}
+      />
+    );
+  });
+}
+
+function IssueRows({
+  issues,
+  onPick,
+  issuePrefix,
+}: {
+  issues: GitHubOpenIssue[];
+  onPick: (task: GitHubTaskRef) => void;
+  issuePrefix?: boolean;
+}) {
+  return issues.map((issue) => (
+    <Row
+      key={issue.url}
+      number={issue.number}
+      title={issue.title}
+      detail={[...(issuePrefix ? ["Issue"] : []), ...issue.labels].join(", ")}
+      url={issue.url}
+      onAssign={() => onPick({ kind: "issue", number: issue.number, repo: issue.repo })}
+    />
+  ));
 }
 
 function Heading({ children }: { children: React.ReactNode }) {
@@ -185,18 +294,23 @@ function Row({
 function TargetPicker({
   projectId,
   task,
+  repoSessions,
+  manyRepos,
   onBack,
   onDone,
 }: {
   projectId: string;
   task: GitHubTaskRef;
+  repoSessions: string[];
+  manyRepos: boolean;
   onBack: () => void;
   onDone: () => void;
 }) {
-  const sessions = useProjectAgents(projectId, isOpenSession);
+  const sessions = sessionsInRepoFirst(useProjectAgents(projectId, isOpenSession), repoSessions);
   const clis = useLaunchableProviders().filter(takesTask);
   const [busy, setBusy] = useState(false);
   const label = taskLabel(task);
+  const repoName = task.repo?.folder || task.repo?.name;
 
   const run = async (action: () => Promise<void>) => {
     setBusy(true);
@@ -238,13 +352,16 @@ function TargetPicker({
         <PickButton
           key={session.id}
           name={sessionName(session)}
+          hint={manyRepos && !repoSessions.includes(session.id) ? "elsewhere" : undefined}
           disabled={busy}
           onClick={() => send(session)}
         >
           <AgentIcon provider={session.cliType} size={14} />
         </PickButton>
       ))}
-      <Heading>New tab, own worktree</Heading>
+      <Heading>
+        {manyRepos ? `New tab in ${repoName}, own worktree` : "New tab, own worktree"}
+      </Heading>
       {clis.map((cli) => (
         <PickButton
           key={cli.id}
@@ -261,11 +378,13 @@ function TargetPicker({
 
 function PickButton({
   name,
+  hint,
   disabled,
   onClick,
   children,
 }: {
   name: string;
+  hint?: string;
   disabled: boolean;
   onClick: () => void;
   children: React.ReactNode;
@@ -279,6 +398,7 @@ function PickButton({
     >
       {children}
       <span className="truncate">{name}</span>
+      {hint && <span className="ml-auto shrink-0 text-[10px] text-text-muted">{hint}</span>}
     </button>
   );
 }

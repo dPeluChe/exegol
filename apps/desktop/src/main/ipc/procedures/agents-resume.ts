@@ -316,6 +316,12 @@ export const agentSpawnProcedures = {
         throw new TRPCError({ code: "FORBIDDEN", message: "Start folder is outside the project" });
       }
     }
+    if (
+      input.worktreeRepo &&
+      !(project && (await isPathAllowed(input.worktreeRepo, [project.path])))
+    ) {
+      throw new TRPCError({ code: "FORBIDDEN", message: "Repo is outside the project" });
+    }
     const agent = createAgent(ctx.db, input);
     // An agent's start folder: its resume, session list and links read it (AGENT_FOLDER_SQL)
     if (input.cwdOverride) setAgentLastCwd(ctx.db, agent.id, input.cwdOverride);

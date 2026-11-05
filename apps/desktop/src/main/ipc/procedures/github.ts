@@ -1,36 +1,36 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { acceptsFollowUps, type GitHubIssue } from "@exegol/shared";
+import { acceptsFollowUps, type GitHubIssue, type GitHubRepoRef } from "@exegol/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { sanitizeAgentMessage } from "../../agents/agent-message-injection";
 import { queueFollowUp } from "../../agents/follow-up-queue";
+import { hookCwdOf } from "../../agents/hook-cwd";
 import { getAgent } from "../../db/queries";
+import { listLiveProjectSessions } from "../../db/queries/agents";
 import { getProject } from "../../db/queries/projects";
 import { detectGhCli } from "../../integrations/github/gh";
-import { buildTask, fetchOverview } from "../../integrations/github/overview";
+import {
+  buildTask,
+  type GhTarget,
+  noOverview,
+  projectOverview,
+  taskBranch,
+} from "../../integrations/github/overview";
+import {
+  type ProjectRepo,
+  parseGitHubRemote,
+  projectRepos,
+  sessionsByRepo,
+} from "../../integrations/github/repos";
 import { logger } from "../../lib/logger";
+import { pathKey, repoOf } from "../../lib/worktree-safety";
 import { getApiKey } from "../../security/keystore";
 import { publicProcedure, router } from "../trpc";
 
 const execFileAsync = promisify(execFile);
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
-
-/** Parse owner/repo from a GitHub remote URL (HTTPS or SSH) */
-function parseOwnerRepo(gitRemote: string): { owner: string; repo: string } | null {
-  // HTTPS: https://github.com/owner/repo.git or https://github.com/owner/repo
-  const httpsMatch = gitRemote.match(/github\.com[/:]([^/]+)\/([^/.]+?)(?:\.git)?$/);
-  if (httpsMatch?.[1] && httpsMatch[2]) {
-    return { owner: httpsMatch[1], repo: httpsMatch[2] };
-  }
-  // SSH: git@github.com:owner/repo.git
-  const sshMatch = gitRemote.match(/git@github\.com:([^/]+)\/([^/.]+?)(?:\.git)?$/);
-  if (sshMatch?.[1] && sshMatch[2]) {
-    return { owner: sshMatch[1], repo: sshMatch[2] };
-  }
-  return null;
-}
 
 /** Build env with optional GH_TOKEN from keystore */
 function buildGhEnv(db: Parameters<typeof getApiKey>[0]): Record<string, string | undefined> {
@@ -58,19 +58,58 @@ function resolveProjectRepo(
       message: "Project has no git remote configured",
     });
   }
-  const parsed = parseOwnerRepo(project.gitRemote);
-  if (!parsed) {
+  const [owner, repo] = parseGitHubRemote(project.gitRemote)?.split("/") ?? [];
+  if (!owner || !repo) {
     throw new TRPCError({
       code: "PRECONDITION_FAILED",
-      message: `Cannot parse GitHub owner/repo from remote: ${project.gitRemote}`,
+      message: "Project remote is not a GitHub repo",
     });
   }
-  return { ...parsed, projectPath: project.path };
+  return { owner, repo, projectPath: project.path };
 }
 
-function ghTarget(db: Parameters<typeof getProject>[0], projectId: string) {
-  const { owner, repo, projectPath } = resolveProjectRepo(db, projectId);
-  return { repo: `${owner}/${repo}`, cwd: projectPath, env: buildGhEnv(db) };
+const targetOf = (repo: ProjectRepo, env: NodeJS.ProcessEnv): GhTarget => ({
+  repo: repo.name,
+  folder: repo.folder,
+  cwd: repo.path,
+  env,
+});
+
+function liveSessionsByRepo(
+  db: Parameters<typeof getProject>[0],
+  projectId: string,
+  repos: ProjectRepo[],
+): Map<string, string[]> {
+  const sessions = listLiveProjectSessions(db, projectId).map(({ id, cwd, worktreePath }) => {
+    const worktreeRepo = worktreePath ? repoOf(worktreePath) : null;
+    return {
+      id,
+      cwd: pathKey(hookCwdOf(id) ?? cwd),
+      worktreeRepo: worktreeRepo ? pathKey(worktreeRepo) : null,
+    };
+  });
+  return sessionsByRepo(
+    sessions,
+    repos.map((r) => ({ folder: r.folder, path: pathKey(r.path) })),
+  );
+}
+
+async function repoOfTask(
+  db: Parameters<typeof getProject>[0],
+  projectId: string,
+  ref: GitHubRepoRef | undefined,
+): Promise<ProjectRepo> {
+  const project = getProject(db, projectId);
+  if (!project) {
+    throw new TRPCError({ code: "NOT_FOUND", message: `Project ${projectId} not found` });
+  }
+  const repos = await projectRepos(project.path);
+  const only = repos.length === 1 ? repos[0] : undefined;
+  const repo = ref ? repos.find((r) => r.name === ref.name && r.folder === ref.folder) : only;
+  if (!repo) {
+    throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Repo not found in this project" });
+  }
+  return repo;
 }
 
 const taskInput = z.object({
@@ -78,14 +117,16 @@ const taskInput = z.object({
   kind: z.enum(["pr", "issue"]),
   number: z.number().int().positive(),
   fixCi: z.boolean().optional(),
+  repo: z.object({ name: z.string().max(200), folder: z.string().max(1000) }).optional(),
 });
 
 async function taskText(
   db: Parameters<typeof getProject>[0],
   { projectId, ...ref }: z.infer<typeof taskInput>,
-  withLog: boolean,
+  repo: ProjectRepo,
+  options: { withLog: boolean; runIn?: string | null },
 ): Promise<string> {
-  const text = await buildTask(ref, ghTarget(db, projectId), { withLog });
+  const text = await buildTask(ref, targetOf(repo, buildGhEnv(db)), options);
   if (!text) {
     throw new TRPCError({ code: "NOT_FOUND", message: `#${ref.number} is no longer open` });
   }
@@ -95,23 +136,32 @@ async function taskText(
 // ─── Router ─────────────────────────────────────────────────────────────────
 
 export const githubRouter = router({
-  /** Open PRs with CI and open issues for the top bar, null without gh or a GitHub remote */
+  /** Open PRs with CI and open issues for the top bar; `unavailable` says why there are none.
+   *  `full`: every repo now, for the open menu; else `dueRepos` picks */
   overview: publicProcedure
-    .input(z.object({ projectId: z.string() }))
+    .input(z.object({ projectId: z.string(), full: z.boolean().optional() }))
     .query(async ({ ctx, input }) => {
-      if (!(await detectGhCli())) return null;
-      try {
-        return await fetchOverview(ghTarget(ctx.db, input.projectId));
-      } catch (err) {
-        if (err instanceof TRPCError) return null;
-        throw err;
-      }
+      if (!(await detectGhCli())) return noOverview("no-gh");
+      const project = getProject(ctx.db, input.projectId);
+      const repos = project ? await projectRepos(project.path) : [];
+      if (repos.length === 0) return noOverview("no-remote");
+      const env = buildGhEnv(ctx.db);
+      return projectOverview(
+        repos.map((r) => targetOf(r, env)),
+        liveSessionsByRepo(ctx.db, input.projectId, repos),
+        input.full ?? false,
+      );
     }),
 
   /** The prompt for a new session; built here so what runs comes from gh, not the renderer */
   taskPrompt: publicProcedure.input(taskInput).mutation(async ({ ctx, input }) => {
-    const prompt = sanitizeAgentMessage(await taskText(ctx.db, input, false)).trim();
-    return { prompt, branch: `github/${input.kind}-${input.number}` };
+    const repo = await repoOfTask(ctx.db, input.projectId, input.repo);
+    const text = await taskText(ctx.db, input, repo, { withLog: false });
+    return {
+      prompt: sanitizeAgentMessage(text).trim(),
+      branch: taskBranch(repo.folder, input.kind, input.number),
+      worktreeRepo: repo.folder ? repo.path : undefined,
+    };
   }),
 
   /** Sent as the user's follow-up: the user assigned it, so it is no automatic notice */
@@ -123,7 +173,10 @@ export const githubRouter = router({
       if (agent?.projectId !== task.projectId || !acceptsFollowUps(agent)) {
         throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Session is not running" });
       }
-      const text = await taskText(ctx.db, task, true);
+      const repo = await repoOfTask(ctx.db, task.projectId, task.repo);
+      const inRepo = liveSessionsByRepo(ctx.db, task.projectId, [repo]).get(repo.folder);
+      const runIn = inRepo?.includes(agentId) ? null : repo.path;
+      const text = await taskText(ctx.db, task, repo, { withLog: true, runIn });
       return { delivered: queueFollowUp(ctx.db, agentId, text).delivered };
     }),
 

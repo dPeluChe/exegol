@@ -2,13 +2,30 @@ import type { GitHubIssue, GitHubOverview } from "@exegol/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
 
-// main caches it 2 min; null (no gh, no remote, logged out) asks less, it rarely changes
+const overviewKey = (projectId: string | null) => ["github-overview", projectId];
+
+// main caches it 2 min and picks which repos to ask; `unavailable` asks less, it rarely changes
 export function useGitHubOverview(projectId: string | null) {
   return useQuery({
-    queryKey: ["github-overview", projectId],
-    queryFn: () => trpcInvoke<GitHubOverview | null>("github.overview", { projectId }),
+    queryKey: overviewKey(projectId),
+    queryFn: () => trpcInvoke<GitHubOverview>("github.overview", { projectId }),
     enabled: !!projectId,
-    refetchInterval: (query) => (query.state.data === null ? 600_000 : 120_000),
+    refetchInterval: (query) => (query.state.data?.unavailable ? 600_000 : 120_000),
+  });
+}
+
+/** Every repo of the project, while the menu is open; the answer feeds the sidebar and the bar */
+export function useFullGitHubOverview(projectId: string | null, enabled: boolean) {
+  const queryClient = useQueryClient();
+  return useQuery({
+    queryKey: ["github-overview-full", projectId],
+    queryFn: async () => {
+      const full = await trpcInvoke<GitHubOverview>("github.overview", { projectId, full: true });
+      queryClient.setQueryData(overviewKey(projectId), full);
+      return full;
+    },
+    enabled: enabled && !!projectId,
+    refetchInterval: enabled ? 120_000 : false,
   });
 }
 

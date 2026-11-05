@@ -52,6 +52,8 @@ export const agentCreateSchema = z.object({
   yolo: z.boolean().optional(),
   /** T177: branch/ref the worktree is cut from. Undefined means the repo's HEAD. */
   baseBranch: z.string().optional(),
+  /** A repo inside the project to cut the worktree from. Undefined means the project root. */
+  worktreeRepo: z.string().optional(),
   /** Model for this launch, passed the way MODEL_LAUNCH says for its CLI */
   model: z.string().regex(MODEL_ID_PATTERN).optional(),
   /** Role models for this launch, keyed by MODEL_ROLES id */

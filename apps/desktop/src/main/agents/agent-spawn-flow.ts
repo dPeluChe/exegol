@@ -10,6 +10,7 @@ import { childEnv } from "../lib/child-env";
 import { commandShape } from "../lib/command-shape";
 import { PermanentError } from "../lib/errors";
 import { logger } from "../lib/logger";
+import { repoOf } from "../lib/worktree-safety";
 import { loadLifecycleConfig } from "../lifecycle/loader";
 import {
   resolveMcpShimPath,
@@ -85,7 +86,7 @@ function joinWorktree(
     dbId: wt.id,
     worktreeName: getWorktreeName(wt.branchName),
     worktreePath: wt.path,
-    repoPath,
+    repoPath: repoOf(wt.path) ?? repoPath,
   });
 }
 
@@ -104,6 +105,8 @@ export function setupAgentCwd(
 ): { cwd: string; ready: Promise<void> } {
   let cwd = project.path;
   let ready: Promise<void> = Promise.resolve();
+  // A workspace root has no .git: its worktrees come from the repo inside it
+  const repoPath = config.worktreeRepo ?? project.path;
 
   if (config.cwdOverride) {
     cwd = config.cwdOverride;
@@ -125,16 +128,22 @@ export function setupAgentCwd(
   }
   if (!coreRust) {
     // Worktree was requested but the native module is missing — silent fall back.
+    cwd = repoPath;
     setIsolationMode(db, agent.id, "fallback");
     captureInitialSnapshot(agent, cwd, initialSnapshots);
     return { cwd, ready };
   }
 
   const requestedBranchName = requestedBranchFor(config.branchName, agent.taskDescription);
-  const reuseWt = findReusableWorktree(db, agent.projectId, requestedBranchName);
+  const reuseWt = findReusableWorktree(
+    db,
+    agent.projectId,
+    requestedBranchName,
+    config.worktreeRepo,
+  );
   if (reuseWt) {
     cwd = reuseWt.path;
-    joinWorktree(db, agent.id, reuseWt, project.path, worktrees);
+    joinWorktree(db, agent.id, reuseWt, repoPath, worktrees);
     logger.info("[AgentManager] Reusing existing worktree:", {
       branch: requestedBranchName,
       path: reuseWt.path,
@@ -147,7 +156,7 @@ export function setupAgentCwd(
   let createdWtInfo: { worktreeName: string; path: string; branchName: string } | null = null;
   try {
     const wtInfo = createManagedWorktree(
-      project.path,
+      repoPath,
       project.name,
       requestedBranchName,
       "worktrees",
@@ -168,11 +177,11 @@ export function setupAgentCwd(
       dbId: dbWt.id,
       worktreeName: wtInfo.worktreeName,
       worktreePath: wtInfo.path,
-      repoPath: project.path,
+      repoPath,
     });
 
     try {
-      const snapshot = coreRust.getRepoSnapshot(project.path);
+      const snapshot = coreRust.getRepoSnapshot(repoPath);
       createOplogEntry(db, {
         agentId: agent.id,
         projectId: agent.projectId,
@@ -194,7 +203,7 @@ export function setupAgentCwd(
     ready = prepareNewWorktree(
       db,
       agent.projectId,
-      project.path,
+      repoPath,
       wtInfo.path,
       wtInfo.branchName,
     ).copied;
@@ -203,11 +212,11 @@ export function setupAgentCwd(
     logger.error("[AgentManager] Failed to create worktree, falling back to project root:", err);
     // Half-success guard: createManagedWorktree may have written a worktree
     // to disk before dbCreateWorktree threw. Tear the on-disk worktree down
-    // so we don't leak it, and reset cwd so the agent runs in project.path
+    // so we don't leak it, and reset cwd so the agent runs in the repo
     // (matching what the "fallback" badge claims).
     if (createdWtInfo) {
       try {
-        removeManagedWorktree(project.path, createdWtInfo.worktreeName, createdWtInfo.path, true);
+        removeManagedWorktree(repoPath, createdWtInfo.worktreeName, createdWtInfo.path, true);
       } catch (cleanupErr) {
         logger.warn(
           "[AgentManager] Failed to remove orphaned worktree during fallback:",
@@ -215,7 +224,7 @@ export function setupAgentCwd(
         );
       }
     }
-    cwd = project.path;
+    cwd = repoPath;
     setIsolationMode(db, agent.id, "fallback");
   }
 

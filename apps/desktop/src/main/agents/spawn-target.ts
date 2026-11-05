@@ -11,6 +11,7 @@
 import type { Project, Worktree } from "@exegol/shared";
 import type Database from "libsql";
 import { listWorktrees } from "../db/queries";
+import { pathKey, repoOf } from "../lib/worktree-safety";
 import { slugifyBranchName } from "./spawn-env";
 import { previewManagedWorktree, removingWorktrees } from "./worktrees";
 
@@ -22,15 +23,21 @@ export function requestedBranchFor(
   return branchName?.trim() || slugifyBranchName(taskDescription);
 }
 
-/** A worktree already on that branch is reused as-is — no suffix, no new branch. */
+/** A worktree already on that branch is reused as-is — no suffix, no new branch. `repo`: only one
+ *  of that repo, since repos inside a project can share a branch name */
 export function findReusableWorktree(
   db: Database.Database,
   projectId: string,
   branchName: string,
+  repo?: string,
 ): Worktree | null {
+  const inRepo = (w: Worktree) => {
+    const owner = repo ? repoOf(w.path) : null;
+    return !repo || (owner !== null && pathKey(owner) === pathKey(repo));
+  };
   return (
     listWorktrees(db, projectId).find(
-      (w) => w.branchName === branchName && !removingWorktrees.has(w.path),
+      (w) => w.branchName === branchName && !removingWorktrees.has(w.path) && inRepo(w),
     ) ?? null
   );
 }

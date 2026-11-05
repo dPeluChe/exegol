@@ -1,3 +1,6 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { Project } from "@exegol/shared";
 import Database from "libsql";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -16,7 +19,7 @@ vi.mock("./worktrees", () => ({
 }));
 
 import { runMigrations } from "../db/migrations";
-import { findWorktreeHolding, resolveSpawnTarget } from "./spawn-target";
+import { findReusableWorktree, findWorktreeHolding, resolveSpawnTarget } from "./spawn-target";
 
 const project = { id: "p1", name: "proj", path: "/repo" } as Project;
 
@@ -52,6 +55,20 @@ describe("resolveSpawnTarget", () => {
     expect(
       resolveSpawnTarget(db, project, { useWorktree: true, branchName: "exegol/taken" }),
     ).toEqual({ cwd: "/root/exegol-taken", branchName: "exegol/taken", reused: true });
+  });
+
+  it("reuses only a worktree of the asked repo: repos in a project can share a branch", () => {
+    const dir = mkdtempSync(join(tmpdir(), "exegol-reuse-"));
+    const web = join(dir, "web");
+    mkdirSync(web);
+    writeFileSync(join(web, ".git"), "gitdir: /w/web/.git/worktrees/x\n");
+    db.prepare(
+      `INSERT INTO worktrees (id, project_id, agent_id, path, branch_name)
+       VALUES ('w1', 'p1', NULL, ?, 'github/pr-7')`,
+    ).run(web);
+    expect(findReusableWorktree(db, "p1", "github/pr-7", "/w/api")).toBeNull();
+    expect(findReusableWorktree(db, "p1", "github/pr-7", "/w/web")?.id).toBe("w1");
+    rmSync(dir, { recursive: true, force: true });
   });
 
   it("never reuses a worktree the housekeeping sweep is removing", () => {

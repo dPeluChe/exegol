@@ -548,6 +548,8 @@ export type AgentCreate = {
   yolo?: boolean;
   /** T177: branch/ref the worktree is cut from; undefined means the repo's HEAD. */
   baseBranch?: string;
+  /** A repo inside the project to cut the worktree from; undefined means the project root. */
+  worktreeRepo?: string;
   /** Model for this launch (MODEL_FLAGS); undefined keeps the CLI's default */
   model?: string;
   /** Role models for this launch (MODEL_ROLES ids); undefined keeps a resumed session's */
