@@ -25,6 +25,8 @@ const COLD_MS = 30 * 60_000;
 const HOT_LIMIT = 4;
 const COLD_PER_POLL = 3;
 const REPOS_AT_ONCE = 4;
+const PERMISSION_MS = 6 * 60 * 60_000;
+const NO_PUSH = new Set(["READ", "TRIAGE"]);
 
 export interface GhTarget {
   repo: string;
@@ -107,6 +109,22 @@ const overviewCache = new AsyncLruCache<string, RepoResult>(256, CACHE_MS);
 const ghSlot = createLimiter(8);
 
 const repoKey = ({ repo, folder }: Pick<GhTarget, "repo" | "folder">) => `${repo}\0${folder}`;
+
+const referenceCache = new AsyncLruCache<string, boolean>(256, PERMISSION_MS);
+
+/** A clone inside the project that the user cannot push to is reference material: its PRs are not
+ *  this project's work. An unanswered check keeps the repo, and is not cached */
+function isReference(target: GhTarget): Promise<boolean> {
+  if (!target.folder) return Promise.resolve(false);
+  const args = ["--json", "viewerPermission", "--jq", ".viewerPermission"];
+  return referenceCache
+    .getOrCompute(target.repo, () =>
+      ghSlot(() => gh(["repo", "view", target.repo, ...args], target)).then((out) =>
+        NO_PUSH.has(out.trim()),
+      ),
+    )
+    .catch(() => false);
+}
 
 /** Open PRs and issues of one repo. Cached: every view of the bar asks */
 function loadRepo(target: GhTarget): Promise<RepoResult> {
@@ -195,7 +213,9 @@ export async function projectOverview(
   sessions: ReadonlyMap<string, string[]>,
   full: boolean,
 ): Promise<GitHubOverview> {
-  const due = dueRepos(targets, {
+  const references = await mapWithConcurrency(targets, REPOS_AT_ONCE, isReference);
+  const own = targets.filter((_, i) => !references[i]);
+  const due = dueRepos(own, {
     full,
     hot: new Set(sessions.keys()),
     lastAt: (t) => overviewCache.peek(repoKey(t))?.at,
@@ -203,7 +223,7 @@ export async function projectOverview(
   });
   await mapWithConcurrency(due, REPOS_AT_ONCE, loadRepo);
   return mergeOverview(
-    targets.map((t) => ({
+    own.map((t) => ({
       ref: { name: t.repo, folder: t.folder },
       // Past its TTL too: a repo not polled now still shows what it last said
       result: overviewCache.peek(repoKey(t))?.value,
