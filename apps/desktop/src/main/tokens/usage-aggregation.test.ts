@@ -9,6 +9,8 @@ const row = (over: Partial<UsageRow>): UsageRow => ({
   model: "claude-sonnet-4-6",
   date: "2026-11-01",
   costSource: "priced",
+  session: "",
+  toolCalls: 3,
   inputTokens: 100,
   outputTokens: 50,
   cacheReadTokens: 800,
@@ -109,5 +111,19 @@ describe("aggregateUsage", () => {
       records: 0,
       cacheHitRate: null,
     });
+  });
+
+  it("lists sessions heaviest first and leaves rows without one out", () => {
+    const { bySession } = aggregateUsage(
+      [
+        row({ session: "small", inputTokens: 1 }),
+        row({ session: "big" }),
+        row({ session: "big", date: "2026-11-02" }),
+        row({ session: "" }),
+      ],
+      range,
+    );
+    expect(bySession.map((s) => s.session)).toEqual(["big", "small"]);
+    expect(bySession[0]?.toolCalls).toBe(6);
   });
 });

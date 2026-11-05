@@ -1,52 +1,26 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import {
-  getAgentCosts,
   getAllTokenUsageSummary,
-  getDailyTrend,
-  getModelBreakdown,
   getPipelineRunCost,
   getProject,
-  getProjectTokenUsage,
-  getProjectTokenUsageSummary,
-  getTokenUsageSummary,
   importScannedTokenUsage,
   listUsageRows,
   listWorktrees,
+  usageSessionLabels,
 } from "../../db/queries";
 import { getJsonSetting } from "../../db/queries/settings";
 import { scanAllLogs } from "../../tokens/log-parser";
 import { aggregateUsage } from "../../tokens/usage-aggregation";
-import { USAGE_IMPORT_KEY, type UsageImportState } from "../../tokens/usage-import";
+import { onUsageChanged, USAGE_IMPORT_KEY, type UsageImportState } from "../../tokens/usage-import";
+import { checkUsageLimits, setUsageLimit, usageLimitRows } from "../../tokens/usage-limits";
 import { publicProcedure, router } from "../trpc";
 
 export const tokenUsageRouter = router({
+  /** Since a unix second, all projects (the status bar's "today") */
   summary: publicProcedure
-    .input(
-      z
-        .object({
-          agentId: z.string().optional(),
-          projectId: z.string().optional(),
-          /** The Tokens section's range; the cards said "Last 30 days" over 24h of data */
-          days: z.number().int().min(1).max(365).optional(),
-          /** Unix seconds; overrides `days` (the status bar's "today" starts at local midnight) */
-          since: z.number().int().min(0).optional(),
-        })
-        .optional(),
-    )
-    .query(({ ctx, input }) => {
-      const since = input?.since ?? Math.floor(Date.now() / 1000) - 86400 * (input?.days ?? 1);
-
-      if (input?.agentId) {
-        return getTokenUsageSummary(ctx.db, input.agentId, since);
-      }
-
-      if (input?.projectId) {
-        return getProjectTokenUsageSummary(ctx.db, input.projectId, since);
-      }
-
-      return getAllTokenUsageSummary(ctx.db, since);
-    }),
+    .input(z.object({ since: z.number().int().min(0) }))
+    .query(({ ctx, input }) => getAllTokenUsageSummary(ctx.db, input.since)),
 
   /** Scan local CLI logs and import token usage into the database */
   scan: publicProcedure
@@ -63,6 +37,7 @@ export const tokenUsageRouter = router({
         entries,
         () => project.id,
       );
+      if (imported > 0) onUsageChanged(ctx.db);
       return { imported, skipped, total: entries.length };
     }),
 
@@ -74,6 +49,7 @@ export const tokenUsageRouter = router({
           since: z.number().int().min(0).optional(),
           until: z.number().int().min(0).optional(),
           days: z.number().int().min(1).max(365).optional(),
+          projectId: z.string().optional(),
         })
         .optional(),
     )
@@ -81,38 +57,26 @@ export const tokenUsageRouter = router({
       const until = input?.until ?? Math.floor(Date.now() / 1000) + 1;
       const since = input?.since ?? until - 86400 * (input?.days ?? 30);
       const last = getJsonSetting<UsageImportState | null>(ctx.db, USAGE_IMPORT_KEY, null);
+      const rows = listUsageRows(ctx.db, since, until, input?.projectId);
+      const report = aggregateUsage(rows, { since, until });
+      const labels = usageSessionLabels(
+        ctx.db,
+        report.bySession.map((s) => s.session),
+      );
       return {
-        ...aggregateUsage(listUsageRows(ctx.db, since, until), { since, until }),
+        ...report,
+        bySession: report.bySession.map((s) => ({ ...s, label: labels.get(s.session) })),
         lastImportAt: last?.at ?? null,
       };
     }),
 
-  /** Get raw token usage records for a project (last N days) */
-  history: publicProcedure
-    .input(z.object({ projectId: z.string(), days: z.number().default(30) }))
-    .query(({ ctx, input }) => {
-      return getProjectTokenUsage(ctx.db, input.projectId, input.days);
-    }),
+  limits: publicProcedure.query(({ ctx }) => usageLimitRows(ctx.db)),
 
-  /** T19: Per-model breakdown */
-  modelBreakdown: publicProcedure
-    .input(z.object({ projectId: z.string(), days: z.number().default(30) }))
-    .query(({ ctx, input }) => {
-      return getModelBreakdown(ctx.db, input.projectId, input.days);
-    }),
-
-  /** T19: Per-agent cost table */
-  agentCosts: publicProcedure
-    .input(z.object({ projectId: z.string(), days: z.number().default(30) }))
-    .query(({ ctx, input }) => {
-      return getAgentCosts(ctx.db, input.projectId, input.days);
-    }),
-
-  /** T19: Daily cost trend */
-  dailyTrend: publicProcedure
-    .input(z.object({ projectId: z.string(), days: z.number().default(30) }))
-    .query(({ ctx, input }) => {
-      return getDailyTrend(ctx.db, input.projectId, input.days);
+  setLimit: publicProcedure
+    .input(z.object({ cli: z.string().min(1), limitUsd: z.number().positive().nullable() }))
+    .mutation(({ ctx, input }) => {
+      setUsageLimit(ctx.db, input.cli, input.limitUsd);
+      if (input.limitUsd !== null) checkUsageLimits(ctx.db);
     }),
 
   /**

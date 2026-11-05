@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Monitor > Usage: Global or per project, by CLI, model and session, models without a price apart, and a monthly limit per CLI that warns at 80% and 100%; budgets now warn after each import, without opening the page
 - GitHub in the top bar: open PRs with CI state and open issues of the project; assign one to an open session or a new tab with its own worktree, and Fix CI sends the failed log
 - One top bar: layout tabs, launcher, Project and Monitor share a single 40 px row, so terminals gain height; a tab shows "Needs you" for any session in it, and Project groups its sections into Context and Automation
 - Browser camera menu: Copy full page, to paste the whole page into a chat or an issue

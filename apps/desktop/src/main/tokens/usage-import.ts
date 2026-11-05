@@ -1,9 +1,12 @@
 import type Database from "libsql";
 import { getJsonSetting, setJsonSetting } from "../db/queries/settings";
 import { importScannedTokenUsage } from "../db/queries/token-usage";
+import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { isInside } from "../system/ports";
+import { checkAllBudgets } from "./budget-check";
 import { scanAllLogs } from "./log-parser";
+import { checkUsageLimits } from "./usage-limits";
 
 export const USAGE_IMPORT_KEY = "token_usage_import";
 const WINDOW_SEC = 30 * 86400;
@@ -79,9 +82,22 @@ export function runUsageImport(db: Database.Database): Promise<UsageImportState>
   return running;
 }
 
+/** Only an import writes `token_usage`: warn with nobody looking, and refresh an open page */
+export function onUsageChanged(db: Database.Database): void {
+  checkAllBudgets(db);
+  checkUsageLimits(db);
+  broadcast("tokenUsage:updated");
+}
+
 export function scheduleUsageImport(db: Database.Database): void {
   const run = () =>
-    void runUsageImport(db).catch((err) => logger.warn("[TokenUsage] import failed:", err));
+    void runUsageImport(db)
+      .then(async ({ imported }) => {
+        if (imported === 0) return;
+        await new Promise((resolve) => setImmediate(resolve));
+        onUsageChanged(db);
+      })
+      .catch((err) => logger.warn("[TokenUsage] import failed:", err));
   setTimeout(run, START_DELAY_MS).unref?.();
   setInterval(run, INTERVAL_MS).unref?.();
 }

@@ -22,6 +22,11 @@ export function getBudgets(db: Database.Database, projectId: string): Budget[] {
   return rows.map(mapBudgetRow);
 }
 
+export function getAllBudgets(db: Database.Database): Budget[] {
+  const rows = db.prepare("SELECT * FROM budgets").all() as Record<string, unknown>[];
+  return rows.map(mapBudgetRow);
+}
+
 export function getBudget(
   db: Database.Database,
   projectId: string,

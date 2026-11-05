@@ -304,6 +304,8 @@ contextBridge.exposeInMainWorld("api", {
       safe.off("models:progress", handler as never);
     };
   },
+  /** `token_usage` changed: an import or a scan wrote rows */
+  onUsageUpdated: (callback: (event: unknown) => void) => listen("tokenUsage:updated", callback),
   /** Terminals not answering (the PTY sidecar's health watch) and back */
   onSidecarHealth: (callback: (event: unknown) => void) => listen("sidecar:health", callback),
   /** The GPU process crashed: WebGL terminals must rebuild and repaint */
