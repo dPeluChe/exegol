@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Hold-to-talk dictation keeps listening briefly after the key comes up, so the last word is not cut
 - Two new agent CLIs: Grok (`grok`, sessions listed and resumed by id) and Cursor (`cursor-agent`), with YOLO, model and install or update from Settings
 - Dictation bench: term recall, whole-clip mode, cleaned text and a clip review script (dev tools)
 - Sidebar: open PRs and a needs-you dot per project; Edit project sets how much a project may interrupt (All, Only what needs me, Nothing); Activity shows warnings and the resource meters; Prompts lives in Project
