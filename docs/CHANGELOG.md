@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- New worktrees get the checkout's local `.env` files (patterns per project in Edit project, never overwriting), and a daily janitor frees node_modules and build output from Exegol worktrees idle for a day (Settings > General > Worktrees)
 - Alert when a turn runs too long: Settings > General > Sessions can raise a desktop notification and an attention item once per turn when an agent runs past a limit you pick (30m to 4h or custom, off by default), or shows no output for 10 minutes
 - Browser panes search from the address bar: `?telnyx`, or words that are not an address, open a Google search; `localhost:3000`, `example.com` and full URLs still go straight there
 
