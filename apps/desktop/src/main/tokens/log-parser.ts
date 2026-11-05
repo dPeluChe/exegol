@@ -14,6 +14,8 @@ import { type CostSource, claudeCacheInput, knownCost } from "./pricing";
 export interface ParsedTokenEntry {
   /** Stable per source record, so a rescan updates the row instead of adding one */
   key: string;
+  /** The CLI's session: Claude's sessionId, Codex's rollout file; aider logs have none */
+  sessionId?: string;
   /** Working directory the record came from (Claude, Codex); aider logs have none */
   cwd?: string;
   provider: string;
@@ -166,6 +168,7 @@ function extractClaudeTokenUsage(
   const requestId = hasUsage && typeof entry.requestId === "string" ? `:${entry.requestId}` : "";
   const shared = {
     key: `claude:${id ? `${id}${requestId}` : fallbackKey}`,
+    sessionId: typeof entry.sessionId === "string" ? entry.sessionId : undefined,
     cwd: typeof entry.cwd === "string" ? entry.cwd : undefined,
     provider: "anthropic",
     model,
@@ -277,6 +280,7 @@ export async function parseCodexSessionFile(
   return [
     {
       key: `codex:${basename(path)}`,
+      sessionId: basename(path),
       cwd,
       provider: sessionProvider,
       model,

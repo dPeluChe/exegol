@@ -1,3 +1,5 @@
+import { limitThreshold } from "@exegol/shared";
+
 export function formatBytes(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
@@ -24,4 +26,15 @@ export function thresholdBarColor(percent: number): string {
   if (percent >= 90) return "bg-red-500";
   if (percent >= 70) return "bg-yellow-500";
   return "bg-accent";
+}
+
+/** Budgets and CLI limits, on the same 80 and 100 they warn at */
+export function limitBarColor(percent: number): string {
+  const threshold = limitThreshold(percent);
+  return threshold === 100 ? "bg-error" : threshold === 80 ? "bg-warning" : "bg-accent";
+}
+
+export function limitTextColor(percent: number): string {
+  const threshold = limitThreshold(percent);
+  return threshold === 100 ? "text-error" : threshold === 80 ? "text-warning" : "text-text-muted";
 }

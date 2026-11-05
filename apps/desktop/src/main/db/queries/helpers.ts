@@ -8,7 +8,6 @@ import type {
   Prompt,
   ScheduledRun,
   ScheduledTask,
-  TokenUsage,
   Worktree,
 } from "@exegol/shared";
 import {
@@ -22,7 +21,6 @@ import {
   promptRowSchema,
   scheduledRunRowSchema,
   scheduledTaskRowSchema,
-  tokenUsageRowSchema,
   worktreeRowSchema,
 } from "@exegol/shared";
 import { z } from "zod";
@@ -187,21 +185,6 @@ export function mapScheduledRunRow(row: Record<string, unknown>): ScheduledRun {
     queuedAt: r.queued_at,
     startedAt: r.started_at,
     endedAt: r.ended_at,
-  };
-}
-
-export function mapTokenUsageRow(row: Record<string, unknown>): TokenUsage {
-  const r = parseRow(tokenUsageRowSchema, row, "tokenUsage");
-  return {
-    id: r.id,
-    agentId: r.agent_id,
-    provider: r.provider,
-    model: r.model,
-    inputTokens: r.input_tokens,
-    outputTokens: r.output_tokens,
-    estimatedCostUsd: r.estimated_cost_usd,
-    toolCallCount: r.tool_call_count,
-    recordedAt: r.recorded_at,
   };
 }
 

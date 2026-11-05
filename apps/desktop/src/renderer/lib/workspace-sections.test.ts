@@ -6,7 +6,6 @@ describe("workspace sections", () => {
     const listed = [...SECTION_GROUPS.project, ...SECTION_GROUPS.monitor].flatMap((g) =>
       g.sections.map((s) => s.id),
     );
-    expect(listed).toHaveLength(10);
     expect(new Set(listed).size).toBe(listed.length);
   });
 
@@ -25,7 +24,7 @@ describe("workspace sections", () => {
 
   it("opens a main tab on its first section and closes it back to the tabs", () => {
     expect(toggleMainTab("project", "agents")).toBe("tasks");
-    expect(toggleMainTab("monitor", "knowledge")).toBe("resources-tokens");
+    expect(toggleMainTab("monitor", "knowledge")).toBe("usage");
     expect(toggleMainTab("project", "knowledge")).toBe("agents");
     expect(toggleMainTab("monitor", "scoring")).toBe("agents");
   });

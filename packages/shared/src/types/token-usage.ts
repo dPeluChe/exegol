@@ -1,16 +1,3 @@
-export type TokenUsage = {
-  id: string;
-  /** null for rows imported from CLI logs, which belong to a project */
-  agentId: string | null;
-  provider: string;
-  model: string;
-  inputTokens: number;
-  outputTokens: number;
-  estimatedCostUsd: number;
-  toolCallCount: number;
-  recordedAt: number;
-};
-
 export type TokenUsageSummary = {
   totalInputTokens: number;
   totalOutputTokens: number;
@@ -33,6 +20,7 @@ export type UsageTotals = {
   /** Priced and log-reported rows only; null when every row is unpriced */
   costUsd: number | null;
   records: number;
+  toolCalls: number;
   /** Cache reads over all input (uncached + reads + writes); null with no input */
   cacheHitRate: number | null;
   unpriced: UnpricedUsage;
@@ -60,4 +48,23 @@ export type UsageReport = {
   byModel: UsageModelRow[];
   /** Local day, YYYY-MM-DD, ascending */
   byDay: (UsageTotals & { date: string })[];
+  /** Heaviest first, capped; `label` is the alias or task of the session Exegol ran */
+  bySession: (UsageTotals & {
+    session: string;
+    cli: string;
+    projectName: string;
+    label?: string;
+  })[];
+};
+
+/** The two warning points of a budget or a CLI limit */
+export function limitThreshold(percent: number): 80 | 100 | null {
+  return percent >= 100 ? 100 : percent >= 80 ? 80 : null;
+}
+
+export type UsageLimit = {
+  cli: string;
+  /** USD a month; null when only spent */
+  limitUsd: number | null;
+  spentUsd: number;
 };

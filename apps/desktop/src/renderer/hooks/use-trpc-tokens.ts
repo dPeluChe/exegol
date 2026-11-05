@@ -1,31 +1,7 @@
-import type {
-  AgentCostRow,
-  DailyTrendRow,
-  ModelBreakdownRow,
-  TokenUsageSummary,
-} from "@exegol/shared";
+import type { UsageLimit, UsageReport } from "@exegol/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
-
-// ─── Token Usage ─────────────────────────────────────────────────────────────
-
-/** `days`: the window the numbers cover (1 = the last 24h, the status bar's) */
-export function useTokenUsageSummary(agentId?: string, projectId?: string, days = 1) {
-  return useQuery({
-    queryKey: ["tokenUsage", agentId ?? projectId ?? "all", days],
-    queryFn: () => {
-      const input: { agentId?: string; projectId?: string; days?: number } = { days };
-      if (agentId) input.agentId = agentId;
-      else if (projectId) input.projectId = projectId;
-      return trpcInvoke<TokenUsageSummary>(
-        "tokenUsage.summary",
-        Object.keys(input).length > 0 ? input : undefined,
-      );
-    },
-    refetchInterval: 30_000,
-    staleTime: 10_000,
-  });
-}
+import { useMountEffect } from "./use-mount-effect";
 
 export function useTokenScan() {
   const queryClient = useQueryClient();
@@ -38,36 +14,35 @@ export function useTokenScan() {
   });
 }
 
-// T19: Per-model breakdown
-
-export function useModelBreakdown(projectId: string | null, days = 30) {
+/** The numbers change only on an import, so the page refetches on its push instead of polling */
+export function useUsage(projectId: string | null, days: number) {
+  const queryClient = useQueryClient();
+  useMountEffect(() =>
+    window.api?.onUsageUpdated?.(() => {
+      void queryClient.invalidateQueries({ queryKey: ["tokenUsage"] });
+    }),
+  );
   return useQuery({
-    queryKey: ["tokenUsage", "modelBreakdown", projectId, days],
+    queryKey: ["tokenUsage", "usage", projectId, days],
     queryFn: () =>
-      trpcInvoke<ModelBreakdownRow[]>("tokenUsage.modelBreakdown", { projectId, days }),
-    enabled: !!projectId,
-    refetchInterval: 30_000,
+      trpcInvoke<UsageReport>("tokenUsage.usage", { days, projectId: projectId ?? undefined }),
   });
 }
 
-// T19: Per-agent costs
-
-export function useAgentCosts(projectId: string | null, days = 30) {
+export function useUsageLimits() {
   return useQuery({
-    queryKey: ["tokenUsage", "agentCosts", projectId, days],
-    queryFn: () => trpcInvoke<AgentCostRow[]>("tokenUsage.agentCosts", { projectId, days }),
-    enabled: !!projectId,
-    refetchInterval: 30_000,
+    queryKey: ["tokenUsage", "limits"],
+    queryFn: () => trpcInvoke<UsageLimit[]>("tokenUsage.limits"),
   });
 }
 
-// T19: Daily trend
-
-export function useDailyTrend(projectId: string | null, days = 30) {
-  return useQuery({
-    queryKey: ["tokenUsage", "dailyTrend", projectId, days],
-    queryFn: () => trpcInvoke<DailyTrendRow[]>("tokenUsage.dailyTrend", { projectId, days }),
-    enabled: !!projectId,
-    refetchInterval: 30_000,
+export function useSetUsageLimit() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { cli: string; limitUsd: number | null }) =>
+      trpcMutate<void>("tokenUsage.setLimit", input),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tokenUsage", "limits"] });
+    },
   });
 }

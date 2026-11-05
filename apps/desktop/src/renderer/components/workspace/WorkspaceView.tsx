@@ -41,8 +41,11 @@ const PipelineSection = lazy(() =>
 const ParallelRunsSection = lazy(() =>
   import("./sections/ParallelRunsSection").then((m) => ({ default: m.ParallelRunsSection })),
 );
-const ResourcesTokensSection = lazy(() =>
-  import("./sections/ResourcesTokensSection").then((m) => ({ default: m.ResourcesTokensSection })),
+const UsageSection = lazy(() =>
+  import("./sections/UsageSection").then((m) => ({ default: m.UsageSection })),
+);
+const ResourcesSection = lazy(() =>
+  import("./sections/ResourcesSection").then((m) => ({ default: m.ResourcesSection })),
 );
 const ScoringSection = lazy(() =>
   import("./sections/ScoringSection").then((m) => ({ default: m.ScoringSection })),
@@ -64,7 +67,8 @@ const LAZY_SECTIONS: Record<Exclude<WorkspaceSection, "agents">, React.Component
   pipelines: PipelineSection,
   "parallel-runs": ParallelRunsSection,
   "qa-tests": QaTestsSection,
-  "resources-tokens": ResourcesTokensSection,
+  usage: UsageSection,
+  "resources-tokens": ResourcesSection,
   scoring: ScoringSection,
 };
 

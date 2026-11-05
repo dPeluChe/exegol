@@ -156,6 +156,7 @@ interface Window {
     onSidecarHealth: (
       callback: (event: import("@exegol/shared").SidecarHealth) => void,
     ) => () => void;
+    onUsageUpdated: (callback: () => void) => () => void;
     onModelProgress: (
       callback: (event: import("@exegol/shared").ModelProgressEvent) => void,
     ) => () => void;
