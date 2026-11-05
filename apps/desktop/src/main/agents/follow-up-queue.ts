@@ -78,6 +78,9 @@ function send(
     first,
   );
   if (!delivered) notifyFollowUps(agent.id);
+  logger.info(
+    `[FollowUp] ${agent.id} ${agent.cliType} ${delivered ? "typed" : "queued"} (${agent.status}, ${text.length} chars)`,
+  );
   return { id: messageId, delivered };
 }
 

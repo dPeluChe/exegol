@@ -325,6 +325,8 @@ export function CompanySection({ projectMeta }: { projectMeta: Map<string, Proje
       defaultSize={sessionSize}
       minSize={20}
       maxSize={70}
+      // Using the panel holds it: the session it shows by default moves as states change
+      onFocusCapture={() => setPickedId(selected.id)}
     >
       <CompanySession
         key={selected.id}

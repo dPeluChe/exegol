@@ -6,7 +6,7 @@ import {
 } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Copy } from "lucide-react";
+import { Copy, SendHorizontal } from "lucide-react";
 import { memo, useMemo, useState } from "react";
 import { useMountEffect } from "../../../hooks/use-mount-effect";
 import { isClaudeQuestion } from "../../../lib/claude-question";
@@ -147,9 +147,14 @@ function ChatInput({ agent, onTerminal }: { agent: AgentState; onTerminal: () =>
   const atPrompt = agent.status === "waiting_input" || agent.status === "idle";
   const queued = useFollowUps(agent.id, accepts);
 
+  const [typed, setTyped] = useState<string | null>(null);
   const send = useMutation({
-    mutationFn: (text: string) => trpcMutate("agents.queueFollowUp", { id: agent.id, text }),
-    onSuccess: () => setDraft(""),
+    mutationFn: (text: string) =>
+      trpcMutate<{ delivered: boolean }>("agents.queueFollowUp", { id: agent.id, text }),
+    onSuccess: (result, text) => {
+      setDraft("");
+      setTyped(result.delivered ? text : null);
+    },
     onError: toastError("Could not send"),
   });
   const submit = () => {
@@ -185,26 +190,43 @@ function ChatInput({ agent, onTerminal }: { agent: AgentState; onTerminal: () =>
         )
       )}
       {queued.length > 0 && <FollowUpList agentId={agent.id} items={queued} />}
-      <textarea
-        value={draft}
-        rows={2}
-        disabled={asks}
-        onChange={(e) => setDraft(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
-          e.preventDefault();
-          submit();
-        }}
-        placeholder={
-          asks
-            ? "Answer its question first"
-            : atPrompt
-              ? "Message this session"
-              : "Sends when this turn ends"
-        }
-        aria-label="Message this session"
-        className="w-full resize-none rounded border border-border bg-bg-primary px-2 py-1.5 text-xs text-text-primary outline-none placeholder:text-text-muted focus:border-accent disabled:opacity-60"
-      />
+      {typed && (
+        <p className="truncate text-[10px] text-text-muted">Typed in the terminal: {typed}</p>
+      )}
+      <div className="flex items-end gap-1.5">
+        <textarea
+          value={draft}
+          rows={2}
+          disabled={asks}
+          onChange={(e) => {
+            setDraft(e.target.value);
+            setTyped(null);
+          }}
+          onKeyDown={(e) => {
+            if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
+            e.preventDefault();
+            submit();
+          }}
+          placeholder={
+            asks
+              ? "Answer its question first"
+              : atPrompt
+                ? "Message this session"
+                : "Sends when this turn ends"
+          }
+          aria-label="Message this session"
+          className="min-w-0 flex-1 resize-none rounded border border-border bg-bg-primary px-2 py-1.5 text-xs text-text-primary outline-none placeholder:text-text-muted focus:border-accent disabled:opacity-60"
+        />
+        <button
+          type="button"
+          onClick={submit}
+          disabled={asks || !draft.trim() || send.isPending}
+          title="Send"
+          className="shrink-0 rounded bg-accent p-1.5 text-white hover:bg-accent-hover disabled:opacity-40"
+        >
+          <SendHorizontal className="h-3.5 w-3.5" aria-hidden="true" />
+        </button>
+      </div>
     </div>
   );
 }
