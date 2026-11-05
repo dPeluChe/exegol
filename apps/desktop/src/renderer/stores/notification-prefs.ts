@@ -1,4 +1,4 @@
-import type { NotificationMuteChannel } from "@exegol/shared";
+import type { InterruptionLevel, NotificationMuteChannel, Settings } from "@exegol/shared";
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { trpcInvoke } from "../lib/trpc-client";
@@ -13,15 +13,19 @@ import { trpcInvoke } from "../lib/trpc-client";
 
 interface NotificationPrefsStore {
   mutedChannels: NotificationMuteChannel[];
+  interruption: Record<string, InterruptionLevel>;
   isMuted: (channel: NotificationMuteChannel) => boolean;
   toggleChannel: (channel: NotificationMuteChannel) => void;
+  levelOf: (projectId: string) => InterruptionLevel;
+  /** "all" is the default, so it drops the project's key; also how a deleted project is forgotten */
+  setLevel: (projectId: string, level: InterruptionLevel) => void;
   /** One-time sync from the settings table (DB wins over stale localStorage). */
-  hydrateFromSettings: (muted: string[]) => void;
+  hydrateFromSettings: (muted: string[], interruption: Record<string, InterruptionLevel>) => void;
 }
 
-function pushToMain(muted: NotificationMuteChannel[]): void {
-  trpcInvoke("settings.update", { mutedNotificationChannels: muted }).catch((err) => {
-    console.warn("[NotificationPrefs] Failed to sync muted channels to main:", err);
+function pushToMain(update: Partial<Settings>): void {
+  trpcInvoke("settings.update", update).catch((err) => {
+    console.warn("[NotificationPrefs] Failed to sync to main:", err);
   });
 }
 
@@ -29,6 +33,7 @@ export const useNotificationPrefsStore = create<NotificationPrefsStore>()(
   persist(
     (set, get) => ({
       mutedChannels: [],
+      interruption: {},
 
       isMuted: (channel) => get().mutedChannels.includes(channel),
 
@@ -38,16 +43,29 @@ export const useNotificationPrefsStore = create<NotificationPrefsStore>()(
           ? current.filter((c) => c !== channel)
           : [...current, channel];
         set({ mutedChannels: next });
-        pushToMain(next);
+        pushToMain({ mutedNotificationChannels: next });
       },
 
-      hydrateFromSettings: (muted) => {
-        set({ mutedChannels: muted as NotificationMuteChannel[] });
+      levelOf: (projectId) => get().interruption[projectId] ?? "all",
+
+      setLevel: (projectId, level) => {
+        if (get().levelOf(projectId) === level) return;
+        const { [projectId]: _old, ...rest } = get().interruption;
+        const next = level === "all" ? rest : { ...rest, [projectId]: level };
+        set({ interruption: next });
+        pushToMain({ projectInterruption: next });
+      },
+
+      hydrateFromSettings: (muted, interruption) => {
+        set({ mutedChannels: muted as NotificationMuteChannel[], interruption });
       },
     }),
     {
       name: "exegol-notification-prefs",
-      partialize: (state) => ({ mutedChannels: state.mutedChannels }),
+      partialize: (state) => ({
+        mutedChannels: state.mutedChannels,
+        interruption: state.interruption,
+      }),
     },
   ),
 );

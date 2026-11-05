@@ -93,7 +93,7 @@ function deliver(db: Database.Database, agent: PrWatchedAgent, reactions: PrReac
     );
     if (!sent || quiet) continue;
     getNotificationBus().emit({
-      type: "agent:attention",
+      type: "agent:notice",
       title: r.summary,
       body: "Sent to the agent at its next turn boundary",
       agentId: agent.id,

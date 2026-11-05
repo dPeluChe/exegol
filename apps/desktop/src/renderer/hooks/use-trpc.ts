@@ -12,6 +12,7 @@ import type {
 } from "@exegol/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
+import { useNotificationPrefsStore } from "../stores/notification-prefs";
 import { useShortcutStore } from "../stores/shortcuts";
 import { useWorkspaceStore } from "../stores/workspace";
 
@@ -68,6 +69,7 @@ export function useDeleteProject() {
     onSuccess: (_, id) => {
       // A removed project's Cmd+n would stay reserved and dead
       useShortcutStore.getState().assign(id, null);
+      useNotificationPrefsStore.getState().setLevel(id, "all");
       // Its closed tabs cannot be reopened anywhere, and its hidden layer unmounts now
       useWorkspaceStore.setState((s) => ({
         recentlyClosed: s.recentlyClosed.filter((e) => e.projectId !== id),

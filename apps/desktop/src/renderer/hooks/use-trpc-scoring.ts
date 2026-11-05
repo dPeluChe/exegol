@@ -41,9 +41,8 @@ export function useActivities(projectId: string | null, type?: string) {
       trpcInvoke<Activity[]>("activities.list", {
         projectId: projectId ?? undefined,
         type,
-        limit: 100,
+        limit: 6,
       }),
-    enabled: !!projectId,
     refetchInterval: 30_000,
   });
 }

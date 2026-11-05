@@ -45,6 +45,7 @@ import { AgentIcon } from "../common/AgentIcon";
 import { AgentSpinner } from "../common/AgentSpinner";
 import { ProjectAvatar } from "../common/ProjectAvatar";
 import { ProjectChip, type ProjectMeta } from "../common/ProjectChip";
+import { ProjectSignals } from "./ProjectSignals";
 
 // ─── Level config ────────────────────────────────────────────────────────
 
@@ -374,11 +375,14 @@ const ProjectCard = memo(function ProjectCard({
         <span className="min-w-0 truncate text-[10px] font-medium text-text-secondary">
           {project?.name ?? card.projectId.slice(0, 12)}
         </span>
-        {shortcut && (
-          <kbd className="ml-auto shrink-0 rounded border border-border px-1 font-mono text-[9px] text-text-muted">
-            {shortcut}
-          </kbd>
-        )}
+        <span className="ml-auto flex shrink-0 items-center gap-1">
+          <ProjectSignals projectId={card.projectId} />
+          {shortcut && (
+            <kbd className="shrink-0 rounded border border-border px-1 font-mono text-[9px] text-text-muted">
+              {shortcut}
+            </kbd>
+          )}
+        </span>
       </button>
       {single ? (
         <div className="space-y-0.5">{card.tabs[0] && rowsOf(card.tabs[0])}</div>

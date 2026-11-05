@@ -1,5 +1,6 @@
 import type { NotificationEvent } from "@exegol/shared";
 import { logger } from "../lib/logger";
+import { activityChannel } from "./channels/activity";
 import { desktopChannel } from "./channels/desktop";
 
 /**
@@ -49,6 +50,7 @@ export function getNotificationBus(): NotificationBus {
   if (!instance) {
     instance = new NotificationBus();
     instance.register(desktopChannel);
+    instance.register(activityChannel);
   }
   return instance;
 }

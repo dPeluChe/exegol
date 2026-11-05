@@ -6,6 +6,8 @@ import {
   type AgentStatus,
   classifyActivity,
   ENDED_STATUSES,
+  type InterruptionLevel,
+  interruptionAllows,
   LIVE_STATUSES,
 } from "@exegol/shared";
 import type { QueryClient } from "@tanstack/react-query";
@@ -20,6 +22,7 @@ import { applyRecoveredCrashes, RECOVERY_KEY } from "../lib/session-recovery";
 import { switchSection } from "../lib/switch-section";
 import { trpcMutate } from "../lib/trpc-client";
 import { useAppStore } from "./app";
+import { useNotificationPrefsStore } from "./notification-prefs";
 import { useWatchStore } from "./watch";
 import { collectPaneIds, useWorkspaceStore } from "./workspace";
 
@@ -309,6 +312,11 @@ interface AgentStore {
   clearReadAttention: () => void;
   /** Count of unread attention items (cached for badge rendering) */
   unreadAttentionCount: number;
+}
+
+/** A quiet item is still recorded as read: dots, idle suspend and the question guards read it */
+export function attentionInterrupts(level: InterruptionLevel, item: AttentionLevel): boolean {
+  return interruptionAllows(level, item === "info" ? "agent:notice" : "agent:attention");
 }
 
 const ATTENTION_LEVEL_ORDER: Record<AttentionLevel, number> = {
@@ -658,7 +666,8 @@ export const useAgentStore = create<AgentStore>()(
           ) {
             return s;
           }
-          const isRead = s.focusedAgentId === agentId;
+          const level = useNotificationPrefsStore.getState().levelOf(agent.projectId);
+          const isRead = s.focusedAgentId === agentId || !attentionInterrupts(level, att.level);
           const wasUnread = existing && !existing.read;
           const item: AttentionItem = {
             agentId,

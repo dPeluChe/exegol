@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { INTERRUPTION_LEVELS } from "../types/agent-signals";
 import {
   DEFAULT_DICTATION_SETTINGS,
   DICTATION_AUTO_INSERT_SECONDS,
@@ -102,6 +103,7 @@ export const settingsSchema = z.object({
     .refine((m) => m === 0 || (m >= STUCK_TURN_MIN && m <= STUCK_TURN_MAX))
     .default(DEFAULT_SETTINGS.stuckTurnAlertMinutes),
   mutedNotificationChannels: z.array(z.string()).default([]),
+  projectInterruption: z.record(z.string(), z.enum(INTERRUPTION_LEVELS)).default({}),
   ollamaUrl: z.string().default(DEFAULT_SETTINGS.ollamaUrl),
   ollamaModel: z.string().default(DEFAULT_SETTINGS.ollamaModel),
   mcpVerboseLogging: z.boolean().default(false),

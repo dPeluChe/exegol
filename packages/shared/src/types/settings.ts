@@ -1,3 +1,4 @@
+import type { InterruptionLevel } from "./agent-signals";
 import { DEFAULT_DICTATION_SETTINGS, type DictationSettings } from "./dictation";
 import type { IdeType } from "./ide";
 
@@ -52,6 +53,8 @@ export type Settings = {
   stuckTurnAlertMinutes: number;
   /** T155.7: per-channel notification kill switches (NotificationMuteChannel ids) */
   mutedNotificationChannels: string[];
+  /** Per project; a project left out is "all" */
+  projectInterruption: Record<string, InterruptionLevel>;
   /** Ollama server URL for local embeddings */
   ollamaUrl: string;
   /** Ollama embedding model name */
@@ -87,6 +90,7 @@ export const DEFAULT_SETTINGS: Settings = {
   idleSuspendDays: 7,
   stuckTurnAlertMinutes: 0,
   mutedNotificationChannels: [],
+  projectInterruption: {},
   ollamaUrl: "http://localhost:11434",
   ollamaModel: "nomic-embed-text",
   mcpVerboseLogging: false,

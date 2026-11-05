@@ -1,33 +1,46 @@
-import type { Activity } from "@exegol/shared";
+import type { Activity, ActivityType } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import { CheckCircle, Clock, Globe, Play, Square, XCircle } from "lucide-react";
-import { useActivities } from "../../hooks/use-trpc";
+import {
+  AlertTriangle,
+  CheckCircle,
+  Clock,
+  GitCommitHorizontal,
+  Globe,
+  Pause,
+  Play,
+  Square,
+  XCircle,
+} from "lucide-react";
+import { useActivities, useProjects } from "../../hooks/use-trpc";
 import { formatTimeAgo } from "../../lib/format";
 import { useAppStore } from "../../stores/app";
 
-const TYPE_CONFIG: Record<string, { icon: typeof Play; color: string }> = {
+const TYPE_CONFIG: Record<ActivityType, { icon: typeof Play; color: string }> = {
   agent_spawned: { icon: Play, color: "text-blue-400" },
   agent_completed: { icon: CheckCircle, color: "text-green-400" },
   agent_failed: { icon: XCircle, color: "text-red-400" },
   agent_stopped: { icon: Square, color: "text-zinc-400" },
   scheduler_fired: { icon: Clock, color: "text-purple-400" },
   port_detected: { icon: Globe, color: "text-cyan-400" },
+  "budget:warning": { icon: AlertTriangle, color: "text-warning" },
+  "resource:warning": { icon: AlertTriangle, color: "text-warning" },
+  "security:warning": { icon: AlertTriangle, color: "text-error" },
+  "run:failed": { icon: XCircle, color: "text-red-400" },
+  "pipeline:paused": { icon: Pause, color: "text-warning" },
+  "pipeline:completed": { icon: CheckCircle, color: "text-green-400" },
+  "worktree:saved": { icon: GitCommitHorizontal, color: "text-text-muted" },
 };
 
-function ActivityItem({ activity, showProject }: { activity: Activity; showProject?: boolean }) {
-  const config = TYPE_CONFIG[activity.type] ?? { icon: Play, color: "text-text-muted" };
+function ActivityItem({ activity, projectName }: { activity: Activity; projectName?: string }) {
+  const config = TYPE_CONFIG[activity.type];
   const Icon = config.icon;
 
   // Clean up description: remove CLI prefix for readability
-  let desc = activity.description
-    .replace(
-      /^(claude-code|codex|gemini|aider|goose|opencode|amp|kiro|kilocode|crush|shell|factory-droid)\s+agent\s+/i,
-      "",
-    )
-    .slice(0, 55);
-  if (showProject && activity.projectId) {
-    desc = `[${activity.projectId.slice(0, 6)}] ${desc}`;
-  }
+  const text = activity.description.replace(
+    /^(claude-code|codex|gemini|aider|goose|opencode|amp|kiro|kilocode|crush|shell|factory-droid)\s+agent\s+/i,
+    "",
+  );
+  const desc = projectName ? `${projectName}: ${text}` : text;
 
   return (
     <div className="flex items-center gap-2 rounded-md px-1 py-1.5 transition-colors hover:bg-white/5">
@@ -39,7 +52,9 @@ function ActivityItem({ activity, showProject }: { activity: Activity; showProje
       >
         <Icon className="h-3 w-3" />
       </div>
-      <p className="flex-1 truncate text-[10px] text-text-secondary">{desc}</p>
+      <p className="flex-1 truncate text-[10px] text-text-secondary" title={desc}>
+        {desc}
+      </p>
       <span className="shrink-0 text-[9px] tabular-nums text-text-muted">
         {formatTimeAgo(activity.createdAt)}
       </span>
@@ -51,6 +66,7 @@ export function ActivityFeed() {
   const projectId = useAppStore((s) => s.activeProjectId);
   // Show activities for active project, or all if none selected
   const { data: activities } = useActivities(projectId);
+  const { data: projects } = useProjects();
 
   if (!activities || activities.length === 0) {
     return (
@@ -61,7 +77,11 @@ export function ActivityFeed() {
   return (
     <div className="space-y-0.5">
       {activities.slice(0, 6).map((a) => (
-        <ActivityItem key={a.id} activity={a} showProject={!projectId} />
+        <ActivityItem
+          key={a.id}
+          activity={a}
+          projectName={projectId ? undefined : projects?.find((p) => p.id === a.projectId)?.name}
+        />
       ))}
     </div>
   );

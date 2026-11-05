@@ -61,6 +61,7 @@ export interface TurnBoundary {
 /** Events accepted by the NotificationBus (T124). Emitters anywhere in main. */
 export type NotificationEventType =
   | "agent:attention"
+  | "agent:notice" // worth a look, nobody is blocked: a stuck turn, a PR watch reaction
   | "agent:finished"
   | "agent:failed"
   | "pipeline:paused"
@@ -84,6 +85,23 @@ export interface NotificationEvent {
   meta?: Record<string, unknown>;
 }
 
+/** How much a project may interrupt: notifications, toasts and attention items */
+export const INTERRUPTION_LEVELS = ["all", "needs-me", "none"] as const;
+export type InterruptionLevel = (typeof INTERRUPTION_LEVELS)[number];
+
+const NEEDS_ME: readonly NotificationEventType[] = [
+  "agent:attention",
+  "agent:failed",
+  "pipeline:paused",
+  "run:failed",
+];
+
+/** A credential warning passes every level, see `muteChannelForEvent` */
+export function interruptionAllows(level: InterruptionLevel, type: NotificationEventType): boolean {
+  if (type === "security:warning" || level === "all") return true;
+  return level === "needs-me" && NEEDS_ME.includes(type);
+}
+
 /** User-facing mute categories (T155.7). Persisted in settings + localStorage. */
 export const NOTIFICATION_MUTE_CHANNELS = [
   "agent:attention",
@@ -98,6 +116,7 @@ export type NotificationMuteChannel = (typeof NOTIFICATION_MUTE_CHANNELS)[number
 export function muteChannelForEvent(type: NotificationEventType): NotificationMuteChannel | null {
   switch (type) {
     case "agent:attention":
+    case "agent:notice":
       return "agent:attention";
     case "agent:finished":
     case "worktree:saved":

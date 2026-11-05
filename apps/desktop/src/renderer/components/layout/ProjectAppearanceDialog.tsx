@@ -1,6 +1,7 @@
 import {
   DEFAULT_WORKTREE_COPY,
   type IdeType,
+  type InterruptionLevel,
   ideLabel,
   type Project,
   parseBrowserHosts,
@@ -16,10 +17,50 @@ import { useProjectIde, useProjects, useSettings } from "../../hooks/use-trpc";
 import { chordBadge } from "../../lib/keymap";
 import { useProjectShortcuts } from "../../lib/live-tabs";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
+import { attentionInterrupts, useAgentStore } from "../../stores/agents";
+import { useNotificationPrefsStore } from "../../stores/notification-prefs";
 import { SHORTCUT_DIGITS, type ShortcutDigit, useShortcutStore } from "../../stores/shortcuts";
 import { toastError } from "../../stores/toasts";
+import { SegmentedTabs } from "../common/SegmentedTabs";
 import { IdePicker } from "../settings/IdePicker";
 import { type FoundIcon, type ProjectAppearance, ProjectIconPicker } from "./ProjectIconPicker";
+
+const INTERRUPTION_TABS: { id: InterruptionLevel; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "needs-me", label: "Only what needs me" },
+  { id: "none", label: "Nothing" },
+];
+
+function InterruptionField({ projectId }: { projectId: string }) {
+  const level = useNotificationPrefsStore((s) => s.levelOf(projectId));
+  const change = (next: InterruptionLevel) => {
+    useNotificationPrefsStore.getState().setLevel(projectId, next);
+    const agents = useAgentStore.getState();
+    for (const item of Object.values(agents.attentionItems)) {
+      if (item.projectId === projectId && !attentionInterrupts(next, item.level)) {
+        agents.markAttentionRead(item.agentId);
+      }
+    }
+  };
+  return (
+    <div className="mb-3">
+      <span className="mb-1 block text-[10px] uppercase tracking-wider text-text-muted">
+        Interruptions
+      </span>
+      <SegmentedTabs
+        tabs={INTERRUPTION_TABS}
+        active={level}
+        onChange={change}
+        compact
+        label="Interruptions"
+      />
+      <span className="mt-1 block text-[10px] text-text-muted">
+        Notifications, toasts and unread badges of this project. Only what needs me keeps questions
+        and failures. Attention items stay listed, and a session can still be muted on its own.
+      </span>
+    </div>
+  );
+}
 
 /**
  * Edit a project in one place: its name, and its icon (an image found in the repo,
@@ -147,6 +188,8 @@ export function ProjectAppearanceDialog({
           </label>
 
           <SitePermissions projectId={project.id} enabled={open} />
+
+          <InterruptionField projectId={project.id} />
 
           <label className="mb-3 block">
             <span className="mb-1 block text-[10px] uppercase tracking-wider text-text-muted">

@@ -36,6 +36,7 @@ import {
   stopExegolMcpServer,
 } from "./mcp/exegol-server";
 import { getMcpHost } from "./mcp/host";
+import { setActivityChannelDb } from "./notifications/channels/activity";
 import { setDesktopChannelDb } from "./notifications/channels/desktop";
 import { installSessionPermissions } from "./permissions/session";
 import { getPipelineExecutor } from "./pipeline/executor";
@@ -95,6 +96,7 @@ app.whenReady().then(async () => {
   const settings = getAppSettings(getDb());
   setMcpVerboseLogging(settings.mcpVerboseLogging === true);
   setDesktopChannelDb(getDb()); // T124: NotificationBus desktop channel settings lookup
+  setActivityChannelDb(getDb());
   getProviderRegistry().loadFromDb(getDb()); // Load custom providers from DB
   registerTrpcIpcHandler();
   registerIpcHandlers();

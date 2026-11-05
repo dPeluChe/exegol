@@ -42,6 +42,7 @@ import { AgentMiniCard, VISIBLE_STATUSES } from "./AgentMiniCard";
 import { BranchGroup } from "./BranchGroup";
 import { ProjectAppearanceDialog } from "./ProjectAppearanceDialog";
 import { ProjectLayoutsDialog } from "./ProjectLayoutsDialog";
+import { ProjectSignals } from "./ProjectSignals";
 import { TabsOverview } from "./TabsOverview";
 
 function PortBadges({ projectPath }: { projectPath: string }) {
@@ -262,6 +263,7 @@ export function ProjectItem({
           {!editing && (
             <>
               <span className="min-w-0 flex-1 truncate font-medium">{project.name}</span>
+              <ProjectSignals projectId={project.id} />
               {counts}
               {shortcut && (
                 <kbd className="shrink-0 rounded border border-border px-1 font-mono text-[9px] font-normal text-text-muted">
