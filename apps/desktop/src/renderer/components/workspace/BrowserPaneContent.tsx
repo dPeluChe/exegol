@@ -6,7 +6,7 @@ import { usePaneProject } from "../../contexts/ProjectScope";
 import { useMountEffect } from "../../hooks/use-mount-effect";
 import { type PortInfo, useSetPreferredPort } from "../../hooks/use-trpc-scheduler";
 import { isPasteTarget } from "../../lib/agent-input";
-import { isHttpUrl, toHttpUrl } from "../../lib/browser-viewports";
+import { isHttpUrl, pageLabel, toHttpUrl } from "../../lib/browser-viewports";
 import { claimPaneFocus } from "../../lib/pane-focus";
 import { trpcMutate } from "../../lib/trpc-client";
 import { useProjectAgents } from "../../stores/agents";
@@ -431,7 +431,7 @@ function LoadErrorOverlay({
       <Globe className="h-8 w-8 text-text-muted/60" />
       <div className="space-y-0.5">
         <div className="text-xs font-medium text-text-primary">
-          Can't reach {new URL(currentUrl).host}
+          Can't reach {pageLabel(currentUrl) || "this page"}
         </div>
         <div className="max-w-sm text-[10px] text-text-muted">
           {loadError.desc} ({loadError.code}). Is your dev server running? Try starting it and click
