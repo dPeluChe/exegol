@@ -29,6 +29,7 @@
       "archive",
       "archiveEnded",
       "cancelParallelRun",
+      "chatOlder",
       "chatTurns",
       "continueInShell",
       "defaultModel",

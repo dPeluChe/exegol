@@ -10,6 +10,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Company chat loads earlier messages, opens links and file paths on click, and shows the CLI and time on each turn; the Terminal view widens the panel
+- Sidebar and rooms show open PRs and issues with their own icons
 - Company chat renders Markdown (tables, lists, code) and its panel resizes with a bar; rooms and sessions list what needs you first, then the most recent
 - Company chat: the selected session reads as a chat beside its terminal, with messages from other agents and their delivery state; type at the prompt or queue for the turn end, answer a question with its buttons (the input waits meanwhile), copy a summary. Claude Code and Codex read from their transcripts, other CLIs from terminal text
 - Company replaces the Dashboard home: a room per project, a desk per session with its state, activity and badges, a Today strip, P for the next one that needs you, Enter to open it in its layout. Watching and the full session list stay as modes
