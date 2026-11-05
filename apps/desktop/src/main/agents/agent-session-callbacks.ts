@@ -47,6 +47,7 @@ import {
 } from "./spawn-env";
 import { stripAnsi, stripOscSequences } from "./status-parser";
 import { writeAgentStatus } from "./status-writes";
+import { noteStuckTurnStart } from "./stuck-turn-sweep";
 import { endTurn, forgetTurns, startTurn } from "./turn-snapshots";
 
 /** The parser re-reports the same status on every redraw (agy: each keystroke): a change always
@@ -108,7 +109,10 @@ function applyAgentSignals(
     }
     const derived = deriveStatusFromSignal(sig.event);
     trackTurn(db, agent, maps, sig.event);
-    if (sig.event === "turn_started") noteTurnStarted(agent.id);
+    if (sig.event === "turn_started") {
+      noteTurnStarted(agent.id);
+      noteStuckTurnStart(agent.id);
+    }
 
     if (derived.status) signalStatus = derived.status;
     if (derived.turnStarted) turnStarted = derived.turnStarted;

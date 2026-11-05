@@ -1,7 +1,7 @@
+import { compactDuration } from "@exegol/shared";
 import { describe, expect, it } from "vitest";
 import {
   buildTrayProjects,
-  compactDuration,
   TRAY_AGENTS_PER_PROJECT,
   type TrayAgentRow,
   trayAgentsIn,

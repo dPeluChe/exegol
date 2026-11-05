@@ -12,7 +12,13 @@ import {
   parseChord,
 } from "../types/dictation";
 import { IDE_IDS } from "../types/ide";
-import { DEFAULT_SETTINGS, IDLE_SUSPEND_DAYS, type IdleSuspendDays } from "../types/settings";
+import {
+  DEFAULT_SETTINGS,
+  IDLE_SUSPEND_DAYS,
+  type IdleSuspendDays,
+  STUCK_TURN_MAX,
+  STUCK_TURN_MIN,
+} from "../types/settings";
 
 export const ideTypeSchema = z.enum(IDE_IDS);
 
@@ -89,6 +95,11 @@ export const settingsSchema = z.object({
     .number()
     .refine((d): d is IdleSuspendDays => (IDLE_SUSPEND_DAYS as readonly number[]).includes(d))
     .default(DEFAULT_SETTINGS.idleSuspendDays),
+  stuckTurnAlertMinutes: z
+    .number()
+    .int()
+    .refine((m) => m === 0 || (m >= STUCK_TURN_MIN && m <= STUCK_TURN_MAX))
+    .default(DEFAULT_SETTINGS.stuckTurnAlertMinutes),
   mutedNotificationChannels: z.array(z.string()).default([]),
   ollamaUrl: z.string().default(DEFAULT_SETTINGS.ollamaUrl),
   ollamaModel: z.string().default(DEFAULT_SETTINGS.ollamaModel),
