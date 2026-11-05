@@ -26,6 +26,7 @@
 | [RESEARCH/PERF_AUDIT_2026_10.md](./RESEARCH/PERF_AUDIT_2026_10.md) | Performance audit: renders, bundle, requests, DB, assets and packaging, with ids to pick from |
 | [RESEARCH/KEEP_MOUNTED_PROJECTS_2026_10.md](./RESEARCH/KEEP_MOUNTED_PROJECTS_2026_10.md) | Keep the last projects mounted on a switch: what breaks, cost, phased design |
 | [RESEARCH/COMPETITIVE_UPDATE_2026_10.md](./RESEARCH/COMPETITIVE_UPDATE_2026_10.md) | October competitor review (48 repos) feeding T200 |
+| [RESEARCH/COMPETITIVE_UPDATE_2026_11.md](./RESEARCH/COMPETITIVE_UPDATE_2026_11.md) | November competitor review (48 repos) feeding T213 |
 | [RESEARCH/EXEGOL_REVIEW_2026_09_05.md](./RESEARCH/EXEGOL_REVIEW_2026_09_05.md) | Latest whole-app review feeding the board |
 | [ARCHITECTURE/OWL_FLEET_WATCH.md](./ARCHITECTURE/OWL_FLEET_WATCH.md) | Dashboard fleet + Watching design |
 | [RESEARCH/CODE_HEALTH_AUDIT_2026_07.md](./RESEARCH/CODE_HEALTH_AUDIT_2026_07.md) | Code audit feeding Wave 2.6 (T149–T152) |
