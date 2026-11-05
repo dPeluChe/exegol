@@ -233,6 +233,8 @@ export interface ProcessedOutput {
   resumeCommand?: string
   /** Deterministic hook/OSC-777 signals detected in this chunk (T123). */
   signals: Array<AgentSignal>
+  /** The CLI's own status reports: OSC 9;4 progress and OSC 7501 program status. */
+  termReports: Array<TermReport>
 }
 
 /** Remove a git worktree. If `force` is true, removes even with uncommitted changes. */
@@ -318,6 +320,17 @@ export interface SearchResult {
  * - Synchronized output: ESC [ ? 2026 h/l
  */
 export declare function stripAnsi(input: string): string
+
+/**
+ * A program's own report of what it is doing, read from its output:
+ * `progress` (OSC 9;4, state "0".."4"), `status` (OSC 7501 root record) or `query` (OSC 7501 ; ?).
+ */
+export interface TermReport {
+  kind: string
+  state: string
+  /** What a blocked program waits for: permission, question or auth. */
+  detail?: string
+}
 
 /** r" Whether a worktree has uncommitted changes, computed off the JS thread. */
 export declare function worktreeHasChangesAsync(worktreePath: string): Promise<boolean>

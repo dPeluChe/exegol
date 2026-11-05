@@ -1,4 +1,5 @@
 mod osc_notify;
+mod osc_status;
 mod status_matchers;
 mod status_parser;
 mod strip_ansi;
@@ -9,5 +10,6 @@ mod parity_vectors_tests;
 mod status_parser_tests;
 
 pub use osc_notify::*;
+pub use osc_status::*;
 pub use status_parser::*;
 pub use strip_ansi::*;
