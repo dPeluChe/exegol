@@ -81,7 +81,7 @@ export function checkStuckTurns(db: Database.Database, now = Date.now()): void {
     logger.info(`[StuckTurn] ${s.id} ${s.cliType} running ${minutes}m (${verdict.reason})`);
     const title = stuckTitle(displayName(s), verdict);
     getNotificationBus().emit({
-      type: "agent:attention",
+      type: "agent:notice",
       title,
       body: verdict.reason === "limit" ? "Longer than your alert limit" : "It may be frozen",
       agentId: s.id,

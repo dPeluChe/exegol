@@ -1,5 +1,5 @@
-import type { NotificationEvent } from "@exegol/shared";
-import { DEFAULT_SETTINGS, muteChannelForEvent } from "@exegol/shared";
+import type { InterruptionLevel, NotificationEvent } from "@exegol/shared";
+import { DEFAULT_SETTINGS, interruptionAllows, muteChannelForEvent } from "@exegol/shared";
 import { Notification } from "electron";
 import type Database from "libsql";
 import { getAppSettings } from "../../db/queries/settings";
@@ -11,6 +11,7 @@ import type { NotificationChannel } from "../bus";
 interface CachedPrefs {
   enabled: boolean;
   mutedChannels: string[];
+  interruption: Record<string, InterruptionLevel>;
 }
 
 let dbRef: Database.Database | null = null;
@@ -39,6 +40,7 @@ function getPrefs(): CachedPrefs {
     mutedChannels: Array.isArray(settings.mutedNotificationChannels)
       ? settings.mutedNotificationChannels
       : [],
+    interruption: settings.projectInterruption,
   };
   cacheTimestamp = now;
   return cachedPrefs;
@@ -60,6 +62,8 @@ export const desktopChannel: NotificationChannel = {
       // T155.7: per-channel kill switch
       const muteChannel = muteChannelForEvent(event.type);
       if (muteChannel && prefs.mutedChannels.includes(muteChannel)) return;
+      const level = event.projectId ? prefs.interruption[event.projectId] : undefined;
+      if (level && !interruptionAllows(level, event.type)) return;
       // Suppress-empty pattern (openclaw `shouldSkipHeartbeatOnlyDelivery`):
       // never show a blank notification.
       if (!event.title?.trim() && !event.body?.trim()) return;

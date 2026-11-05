@@ -278,9 +278,10 @@ references in the research doc, section "Company and chat"). One PR per phase, i
   when the CLI is at its prompt, and waits for the turn end when it is busy (same boundary rule as
   agent_send); a question shows its options and each sends only its key; agent_send messages appear
   as "other agent" bubbles with their delivery state; Copy summary
-- [ ] Phase 6, sidebar: PR badge and a needs-you dot per project; interruption level per project
-  (All, Only what needs me, Nothing) replacing mute for notifications, sound and the Today strip;
-  Activity becomes the event feed and absorbs Resources; Prompts moves to Project
+- [x] Phase 6 (`feat/project-signals`), sidebar: PR badge and a needs-you dot per project; interruption
+  level per project (All, Only what needs me, Nothing) for notifications, toasts and attention items,
+  the Today strip reads it in phase 4; a session's own mute stays; Activity is the event feed (warnings
+  included) and absorbs Resources; Prompts moves to Project, where pins and Copy already live
 - [ ] Later, rooms as group chats (bloks model: @mention wakes an agent, max hops per human
   message, held mentions shown, not dropped)
 

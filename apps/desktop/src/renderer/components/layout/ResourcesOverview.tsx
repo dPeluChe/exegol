@@ -57,7 +57,6 @@ function MiniMetric({
 
 /**
  * Global overview of host resources across all projects.
- * Shows in the sidebar as a collapsible section.
  */
 export function ResourcesOverview() {
   const { data: queryMetrics } = useSystemMetrics();

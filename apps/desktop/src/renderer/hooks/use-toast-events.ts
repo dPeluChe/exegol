@@ -1,4 +1,5 @@
-import type { NotificationMuteChannel, Settings } from "@exegol/shared";
+import type { Settings } from "@exegol/shared";
+import { interruptionAllows } from "@exegol/shared";
 import { useEffect } from "react";
 import { switchSection } from "../lib/switch-section";
 import { trpcInvoke } from "../lib/trpc-client";
@@ -13,7 +14,7 @@ import { useSettings } from "./use-trpc";
 
 const STATUS_TOAST_MAP: Record<
   string,
-  { type: ToastType; label: string; channel: NotificationMuteChannel }
+  { type: ToastType; label: string; channel: "agent:finished" | "agent:failed" }
 > = {
   completed: { type: "success", label: "completed", channel: "agent:finished" },
   failed: { type: "error", label: "failed", channel: "agent:failed" },
@@ -40,7 +41,10 @@ export function useToastEvents(): void {
       .then((settings) => {
         useNotificationPrefsStore
           .getState()
-          .hydrateFromSettings(settings.mutedNotificationChannels ?? []);
+          .hydrateFromSettings(
+            settings.mutedNotificationChannels ?? [],
+            settings.projectInterruption,
+          );
       })
       .catch(() => {});
 
@@ -57,7 +61,9 @@ export function useToastEvents(): void {
       if (!mapping) return;
 
       // T155.7: per-channel kill switch (renderer-side toast suppression)
-      if (useNotificationPrefsStore.getState().isMuted(mapping.channel)) return;
+      const prefs = useNotificationPrefsStore.getState();
+      if (prefs.isMuted(mapping.channel)) return;
+      if (quiet && !interruptionAllows(prefs.levelOf(quiet.projectId), mapping.channel)) return;
 
       // Skip waiting_input toasts for interactive CLIs (they toggle constantly)
       if (event.status === "waiting_input" && INTERACTIVE_CLI_TYPES.has(event.cliType)) return;

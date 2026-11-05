@@ -58,7 +58,8 @@ export function listActivities(
   const params: unknown[] = [];
 
   if (opts.projectId) {
-    conditions.push("project_id = ?");
+    // A row with no project is app-wide: terminal memory, a CLI's monthly limit
+    conditions.push("(project_id = ? OR project_id IS NULL)");
     params.push(opts.projectId);
   }
 
