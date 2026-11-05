@@ -226,6 +226,30 @@ Checked by the user on the 0.5.15 build: status bar widgets, Ctrl+Tab switcher, 
 
 ## Active Backlog
 
+### T213: Restructure Project and Monitor into app-wide and per-project views `added: 2026-11-04`
+**Priority**: P1 | **Effort**: L | **Source**: 2026-10-27 audit of the 10 sections (below) and
+[`RESEARCH/COMPETITIVE_UPDATE_2026_11.md`](./RESEARCH/COMPETITIVE_UPDATE_2026_11.md). Design first;
+decide per section keep / move to app-wide / hide / remove before building.
+
+Audit (2026-10-27, real DB read-only): only History (288 sessions) and Scoring (147 scores) are in
+use; Prompts, Memory, Pipelines, Parallel Runs, QA Tests, Token Usage and Budgets have 0 rows,
+Knowledge is initialized in no project. Every section is filtered by the active project. All renderer
+tRPC calls resolve; no section has a renderer test (backend tests exist for most).
+- [ ] Fix: the Skills enable switch has no effect (`skills_state` is never read at spawn,
+  `skills.getEnabledForSpawn` unused; `SpawnOptions.tsx` lists every available skill)
+- [ ] Fix: Budgets are stored but nothing checks or warns (`hardStop` unused, no `budget:warning`
+  emitter although CLAUDE.md names one; `budgets.delete` has no UI)
+- [ ] Token Usage imports only on a manual "Scan Logs"; import automatically
+- [ ] App-wide by nature, today inside a project: system metrics + PTY memory, dev servers of all
+  projects, model price table, the Skills library, the scheduler (no UI at all)
+- [ ] Need both views: Token Usage + Budgets, Scoring (compare CLIs across projects)
+- [ ] Unused and costly to keep: Pipelines, Parallel Runs (only Cmd+Shift+N, no button), QA Tests,
+  Prompts. Decide keep, hide or remove
+- [ ] Command Palette has no "Go to <section>" entries; `ToggleButton` duplicated in
+  `PromptsSkillsSection` and `ResourcesTokensSection`
+- [ ] Global screen models to compare: openchamber Overview, bernstein Fleet, superset views
+  (research doc, section 1); usage limits and the usage page (section 2)
+
 ### T211: Browser panes keep no disk cache by default `added: 2026-11-04`
 **Priority**: P2 | **Effort**: S | **Source**: user, 2026-11-04. Each project's browser pane uses
 the persistent partition `persist:project-<id>` (`browserPartitionFor`, `main/browser/electron-host.ts`),
