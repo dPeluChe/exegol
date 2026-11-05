@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ciState } from "./checks";
 import {
   ciTask,
@@ -8,9 +8,13 @@ import {
   issueTask,
   mergeOverview,
   parseOverview,
+  projectOverview,
   runIdOf,
   taskBranch,
 } from "./overview";
+
+const exec = vi.hoisted(() => vi.fn());
+vi.mock("../../lib/exec-file", () => ({ execFileAsync: exec }));
 
 describe("ciState", () => {
   it("reads a mix of check runs and status contexts", () => {
@@ -168,6 +172,43 @@ describe("mergeOverview", () => {
     expect(isAuthFailure({ code: 4 })).toBe(true);
     expect(isAuthFailure({ code: 1, stderr: "HTTP 401: Bad credentials" })).toBe(true);
     expect(isAuthFailure({ code: 1, stderr: "Could not resolve to a Repository" })).toBe(false);
+  });
+});
+
+describe("projectOverview", () => {
+  const target = (repo: string, folder: string): GhTarget => ({ repo, folder, cwd: "", env: {} });
+  const github = (permission: (repo: string) => string) =>
+    exec.mockImplementation(async (_gh: string, args: string[]) => {
+      const repo = args[0] === "repo" ? args[2] : "";
+      return { stdout: repo ? permission(repo) : "[]" };
+    });
+  const viewed = () => exec.mock.calls.map(([, args]) => (args as string[]).slice(0, 2).join(" "));
+
+  it("leaves out sub repos without push access and never lists them", async () => {
+    github((repo) => (repo === "them/clone" ? "READ\n" : "ADMIN\n"));
+    const overview = await projectOverview(
+      [target("me/app", "app"), target("them/clone", "clone")],
+      new Map(),
+      true,
+    );
+    expect(overview.repos.map((r) => r.name)).toEqual(["me/app"]);
+    expect(exec.mock.calls.filter(([, a]) => (a as string[]).includes("them/clone"))).toHaveLength(
+      1,
+    );
+  });
+
+  it("keeps a repo whose check failed, and the project root without asking", async () => {
+    exec.mockReset();
+    github((repo) => {
+      throw new Error(repo);
+    });
+    const overview = await projectOverview(
+      [target("me/root", ""), target("me/unknown", "unknown")],
+      new Map(),
+      true,
+    );
+    expect(overview.repos.map((r) => r.name)).toEqual(["me/root", "me/unknown"]);
+    expect(viewed().filter((call) => call === "repo view")).toHaveLength(1);
   });
 });
 
