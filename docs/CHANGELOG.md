@@ -15,6 +15,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Company chat renders Markdown (tables, lists, code) and its panel resizes with a bar; rooms and sessions list what needs you first, then the most recent
 - Company chat: the selected session reads as a chat beside its terminal, with messages from other agents and their delivery state; type at the prompt or queue for the turn end, answer a question with its buttons (the input waits meanwhile), copy a summary. Claude Code and Codex read from their transcripts, other CLIs from terminal text
 - Company replaces the Dashboard home: a room per project, a desk per session with its state, activity and badges, a Today strip, P for the next one that needs you, Enter to open it in its layout. Watching and the full session list stay as modes
+- Dictation bench: term recall, whole-clip mode, cleaned text and a clip review script (dev tools)
 - Sidebar: open PRs and a needs-you dot per project; Edit project sets how much a project may interrupt (All, Only what needs me, Nothing); Activity shows warnings and the resource meters; Prompts lives in Project
 - Monitor > Usage: Global or per project, by CLI, model and session, models without a price apart, and a monthly limit per CLI that warns at 80% and 100%; budgets now warn after each import, without opening the page
 - GitHub in the top bar: open PRs with CI state and open issues of the project; assign one to an open session or a new tab with its own worktree, and Fix CI sends the failed log

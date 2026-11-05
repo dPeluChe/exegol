@@ -1,4 +1,9 @@
+import { existsSync, readdirSync } from "node:fs";
+import { join } from "node:path";
 import type { DictationRecordingsSummary, DictationTargetKind } from "@exegol/shared";
+import { EXEGOL_DIR } from "../terminal/pty-sidecar-protocol";
+
+export const RECORDINGS_DIR = join(EXEGOL_DIR, "dictation-audio");
 
 const DAY_MS = 86_400_000;
 const PROJECT_DIR = /^[A-Za-z0-9_-]{1,64}$/;
@@ -21,6 +26,8 @@ export interface RecordingMeta {
   historyId: string | null;
   text: string;
   rawText?: string;
+  /** Typed by a person hearing the clip: the bench scores against it and retention keeps it */
+  reference?: string;
   /** Terms the dictation had (count and hash, never the words); `applied`: the model used them */
   vocabulary?: { terms: number; hash: string; applied: boolean };
 }
@@ -95,6 +102,25 @@ export const recordingBaseName = (at: Date, id: string): string =>
 /** A recording is its base name; the .wav and .json beside it are one */
 export const recordingStem = (name: string): string | null =>
   name.endsWith(".wav") || name.endsWith(".json") ? name.slice(0, name.lastIndexOf(".")) : null;
+
+/** Every recording's .json with its .wav beside it, at any depth */
+export function recordingJsonPaths(dir: string): string[] {
+  if (!existsSync(dir)) return [];
+  return readdirSync(dir, { withFileTypes: true }).flatMap((e) => {
+    const path = join(dir, e.name);
+    if (e.isDirectory()) return recordingJsonPaths(path);
+    const paired = e.isFile() && e.name.endsWith(".json");
+    return paired && existsSync(path.replace(/\.json$/, ".wav")) ? [path] : [];
+  });
+}
+
+export function hasReference(metaJson: string): boolean {
+  try {
+    return typeof (JSON.parse(metaJson) as RecordingMeta).reference === "string";
+  } catch {
+    return false;
+  }
+}
 
 export interface RecordingFile {
   project: string;

@@ -1,5 +1,5 @@
 import type { Dirent } from "node:fs";
-import { chmod, lstat, mkdir, readdir, rm, unlink, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, readdir, readFile, rm, unlink, writeFile } from "node:fs/promises";
 import { createRequire } from "node:module";
 import { join } from "node:path";
 import {
@@ -10,11 +10,12 @@ import {
 import { createLimiter, mapWithConcurrency } from "../lib/concurrency";
 import { logger } from "../lib/logger";
 import { findModel } from "../models/catalog";
-import { EXEGOL_DIR } from "../terminal/pty-sidecar-protocol";
 import {
   encodeWav,
   expiredRecordings,
+  hasReference,
   projectDirName,
+  RECORDINGS_DIR,
   type RecordingFile,
   type RecordingMeta,
   recordingBaseName,
@@ -23,7 +24,6 @@ import {
 } from "./recording-files";
 import type { VocabularyInfo } from "./vocabulary";
 
-export const RECORDINGS_DIR = join(EXEGOL_DIR, "dictation-audio");
 const fsLimit = createLimiter(16);
 
 let engineVersion: string | null | undefined;
@@ -147,7 +147,18 @@ export async function recordingsSummary(
 
 /** Drops recordings past the retention; whether keeping is on or off */
 export async function sweepRecordings(days: number, now = Date.now()): Promise<number> {
-  const expired = expiredRecordings(await listRecordingFiles(), days, now);
+  const past = expiredRecordings(await listRecordingFiles(), days, now);
+  // A corrected clip took a person's time and is what the bench is measured against
+  const reviewed = new Set<string>();
+  await mapWithConcurrency(
+    past.filter((f) => f.name.endsWith(".json")),
+    8,
+    async (f) => {
+      const meta = await readFile(join(RECORDINGS_DIR, f.project, f.name), "utf8").catch(() => "");
+      if (hasReference(meta)) reviewed.add(`${f.project}/${recordingStem(f.name)}`);
+    },
+  );
+  const expired = past.filter((f) => !reviewed.has(`${f.project}/${recordingStem(f.name)}`));
   await mapWithConcurrency(expired, 8, (f) =>
     unlink(join(RECORDINGS_DIR, f.project, f.name)).catch(() => {}),
   );
