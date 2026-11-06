@@ -10,6 +10,7 @@ import { broadcast } from "../lib/event-bus";
 import { setBounded } from "../lib/set-bounded";
 import { assertSafePath } from "../security/path-guard";
 import { getPtyHost } from "../terminal/pty-host";
+import { devinDbPath, devinPage, olderDevinPage } from "./devin-chat";
 import { hookCwdOf, hookSessionOf } from "./hook-cwd";
 import { olderOpencodePage, opencodeDbPath, opencodePage } from "./opencode-chat";
 import { providerSessionId, SESSION_ID_RE } from "./provider-session-id";
@@ -151,20 +152,53 @@ export function noteChatBoundary(agentId: string, cliType: string): void {
   pushTimers.set(agentId, timer);
 }
 
-/** The folders to look in. opencode files sessions by folder only: with two of its sessions live
- *  in one folder either could be the other's, so those stay on terminal text */
-function opencodeFolders(db: Database.Database, agent: Agent): string[] {
+/** The folders to look in. A store found by folder cannot tell two live sessions of one CLI in the
+ *  same folder apart: either could be the other's, so those stay on terminal text */
+function loneFolders(db: Database.Database, agent: Agent): string[] {
   const own = getAgentCwd(db, agent.id);
   const shared = listAgents(db, agent.projectId).some(
     (a) =>
       a.id !== agent.id &&
-      a.cliType === "opencode" &&
+      a.cliType === agent.cliType &&
       LIVE_STATUSES.has(a.status) &&
       getAgentCwd(db, a.id) === own,
   );
   if (shared) return [];
   return [...new Set([hookCwdOf(agent.id), own])].filter((cwd): cwd is string => !!cwd);
 }
+
+type StorePage = Omit<ChatPage, "fromTerminal">;
+
+interface ChatStore {
+  page: (db: Database.Database, agent: Agent, cursor: string | undefined) => StorePage | null;
+  older: (before: string) => OlderChatPage;
+}
+
+/** The CLIs that keep their turns in a database of their own */
+const STORES: Record<string, ChatStore> = {
+  opencode: {
+    page(db, agent, cursor) {
+      const cwds = loneFolders(db, agent);
+      if (cwds.length === 0) return null;
+      return opencodePage(opencodeDbPath(), cwds, (agent.startedAt ?? 0) * 1000, cursor);
+    },
+    older: (before) => olderOpencodePage(opencodeDbPath(), before),
+  },
+  devin: {
+    page(db, agent, cursor) {
+      const id =
+        providerSessionId(agent.cliType, null, agent.resumeCommand ?? null) ??
+        hookSessionOf(agent.id);
+      const target = {
+        id: id && SESSION_ID_RE.test(id) ? id : null,
+        cwds: loneFolders(db, agent),
+        sinceSec: agent.startedAt ?? 0,
+      };
+      return devinPage(devinDbPath(), target, cursor);
+    },
+    older: (before) => olderDevinPage(devinDbPath(), before),
+  },
+};
 
 const NOTHING: ChatPage = {
   turns: [],
@@ -183,12 +217,8 @@ export async function chatTurns(
   const agent = getAgent(db, agentId);
   if (!agent) return NOTHING;
 
-  if (agent.cliType === "opencode") {
-    const cwds = opencodeFolders(db, agent);
-    const since = (agent.startedAt ?? 0) * 1000;
-    const page = cwds.length > 0 ? opencodePage(opencodeDbPath(), cwds, since, cursor) : null;
-    if (page) return { ...page, fromTerminal: false };
-  }
+  const stored = STORES[agent.cliType]?.page(db, agent, cursor);
+  if (stored) return { ...stored, fromTerminal: false };
 
   const provider = PROVIDERS[agent.cliType];
   const path = provider ? await transcriptPath(db, agent, provider) : null;
@@ -215,7 +245,8 @@ export async function olderChatTurns(
 ): Promise<OlderChatPage> {
   const nothing = { turns: [], older: null };
   const agent = getAgent(db, agentId);
-  if (agent?.cliType === "opencode") return olderOpencodePage(opencodeDbPath(), before);
+  const store = agent && STORES[agent.cliType];
+  if (store) return store.older(before);
   const provider = agent && PROVIDERS[agent.cliType];
   const path = agent && provider ? await transcriptPath(db, agent, provider) : null;
   if (!provider || !path) return nothing;

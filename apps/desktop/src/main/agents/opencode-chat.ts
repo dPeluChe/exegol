@@ -46,7 +46,7 @@ export function opencodeTurns(rows: MessageRow[]): { turns: SessionTurn[]; last:
   return { turns, last };
 }
 
-function withDb<T>(path: string, read: (db: Database.Database) => T): T {
+export function withReadonlyDb<T>(path: string, read: (db: Database.Database) => T): T {
   const db = new Database(path, { readonly: true, fileMustExist: true });
   try {
     return read(db);
@@ -84,7 +84,7 @@ export function opencodePage(
   cursor: string | undefined,
 ) {
   try {
-    return withDb(path, (db) => {
+    return withReadonlyDb(path, (db) => {
       const session = latestSession(db, cwds, sinceMs);
       if (!session) return null;
       const after = seqOf(cursor, session);
@@ -115,7 +115,7 @@ export function opencodePage(
 export function olderOpencodePage(path: string, before: string): OlderChatPage {
   const [session, seq] = before.split(":");
   try {
-    return withDb(path, (db) => {
+    return withReadonlyDb(path, (db) => {
       const rows = db
         .prepare(`SELECT ${TURN_ROWS} WHERE ${IN_SESSION} AND seq < ? ORDER BY seq DESC LIMIT ?`)
         .all(session, Number(seq), PAGE_ROWS)
