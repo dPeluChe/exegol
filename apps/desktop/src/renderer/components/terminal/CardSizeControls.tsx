@@ -1,6 +1,7 @@
 import { cn } from "@exegol/ui";
 import { Maximize2, Minimize2 } from "lucide-react";
 import { DEFAULT_CARD_FONT, stepCardFont, useWatchStore } from "../../stores/watch";
+import { FontStepper, SIZE_BUTTON } from "./FontStepper";
 
 /**
  * A-/A+ and "fit session to card": a plain mirror shows the owner pane's grid
@@ -11,25 +12,13 @@ export function CardSizeControls({ agentId }: { agentId: string }) {
   const cardFont = useWatchStore((s) => s.cardFont[agentId]);
   const setCardFont = useWatchStore((s) => s.setCardFont);
   const sizing = cardFont !== undefined;
-  const step = (delta: number) => stepCardFont(agentId, delta);
-  const btn =
-    "rounded px-1 py-0.5 text-[10px] text-text-muted hover:bg-white/10 hover:text-text-primary";
 
   return (
-    <div className="flex shrink-0 items-center gap-0.5">
-      <button type="button" onClick={() => step(-1)} className={btn} title="Smaller text">
-        A−
-      </button>
-      {sizing && (
-        <span className="w-5 text-center text-[10px] tabular-nums text-accent">{cardFont}</span>
-      )}
-      <button type="button" onClick={() => step(1)} className={btn} title="Larger text">
-        A+
-      </button>
+    <FontStepper size={cardFont} accent onStep={(delta) => stepCardFont(agentId, delta)}>
       <button
         type="button"
         onClick={() => setCardFont(agentId, sizing ? null : DEFAULT_CARD_FONT)}
-        className={cn(btn, sizing && "text-accent")}
+        className={cn(SIZE_BUTTON, sizing && "text-accent")}
         title={
           sizing
             ? "Stop sizing the session here: show the pane's layout, scaled to fit"
@@ -38,6 +27,6 @@ export function CardSizeControls({ agentId }: { agentId: string }) {
       >
         {sizing ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
       </button>
-    </div>
+    </FontStepper>
   );
 }

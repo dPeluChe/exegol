@@ -459,9 +459,8 @@ export class PtyHost {
     return this.sessions.get(id)?.emulator.textLines(MAX_CHAT_LINES) ?? null;
   }
 
-  /** Rows in the active buffer: the turn-boundary marks need no text */
-  lineCount(id: string): number | null {
-    return this.sessions.get(id)?.emulator.lineCount ?? null;
+  markTurn(id: string): void {
+    this.sessions.get(id)?.emulator.markTurn();
   }
 
   isAlive(id: string): boolean {

@@ -2,7 +2,7 @@ import {
   type AgentMessage,
   type AgentStatus,
   type ChatPage,
-  injectedHeaders,
+  injectedMessageId,
   type OlderChatPage,
   type SessionTurn,
 } from "@exegol/shared";
@@ -14,14 +14,19 @@ export type SessionBubble =
   | { kind: "tools"; id: string; names: string[] }
   | { kind: "peer"; id: string; message: AgentMessage };
 
+/** The same object when a poll brought nothing new: the chat need not redraw */
 export function appendChatPage(prev: ChatHistory | undefined, page: ChatPage): ChatHistory {
-  const fresh = page.reset || !prev;
-  return {
-    turns: fresh ? page.turns : [...prev.turns, ...page.turns],
-    cursor: page.cursor,
-    fromTerminal: page.fromTerminal,
-    older: fresh ? page.older : prev.older,
-  };
+  const { cursor, fromTerminal, markdown } = page;
+  if (!prev || page.reset)
+    return { turns: page.turns, cursor, fromTerminal, markdown, older: page.older };
+  const nothingNew =
+    page.turns.length === 0 &&
+    cursor === prev.cursor &&
+    fromTerminal === prev.fromTerminal &&
+    markdown === prev.markdown;
+  if (nothingNew) return prev;
+  const turns = page.turns.length === 0 ? prev.turns : [...prev.turns, ...page.turns];
+  return { turns, cursor, fromTerminal, markdown, older: prev.older };
 }
 
 /** `before` is the `older` the page was asked with: a reset since then makes it another history */
@@ -34,6 +39,16 @@ export function prependChatPage(
   return { ...history, turns: [...page.turns, ...history.turns], older: page.older };
 }
 
+export function sameBubble(a: SessionBubble, b: SessionBubble): boolean {
+  if (a.kind === "turn" && b.kind === "turn") {
+    return a.id === b.id && a.role === b.role && a.text === b.text && a.at === b.at;
+  }
+  if (a.kind === "tools" && b.kind === "tools") {
+    return a.id === b.id && a.names.join("\n") === b.names.join("\n");
+  }
+  return a.kind === "peer" && b.kind === "peer" && a.message === b.message;
+}
+
 /** "14:05", with the day once it is not today */
 export function chatTime(at: number, now = new Date()): string {
   const date = new Date(at * 1000);
@@ -43,16 +58,18 @@ export function chatTime(at: number, now = new Date()): string {
 }
 
 /** Turns in file order, `messages` (oldest first) by time. A message typed into this session is
- *  also a turn, known by its header: shown once, as the peer's. Terminal turns have no time, so
- *  messages follow them */
+ *  also a turn, known by its header whether or not its row is among `messages`: shown once, as the
+ *  peer's. One this session sent stays a turn. Terminal turns have no time, so messages follow */
 export function mergeChat(
   turns: SessionTurn[],
   messages: AgentMessage[],
   agentId: string,
 ): SessionBubble[] {
-  const headers = messages
-    .filter((m) => m.toAgentId === agentId)
-    .flatMap((m) => injectedHeaders(m.id));
+  const sent = new Set(messages.filter((m) => m.toAgentId !== agentId).map((m) => m.id));
+  const injected = (text: string) => {
+    const id = injectedMessageId(text);
+    return id !== null && !sent.has(id);
+  };
   const bubbles: SessionBubble[] = [];
   let next = 0;
   const messagesUntil = (at: number) => {
@@ -62,7 +79,7 @@ export function mergeChat(
     }
   };
   for (const turn of turns) {
-    if (turn.role === "user" && headers.some((h) => turn.text.startsWith(h))) continue;
+    if (turn.role === "user" && injected(turn.text)) continue;
     if (turn.at !== null) messagesUntil(turn.at);
     const last = bubbles.at(-1);
     if (turn.role !== "tool") {

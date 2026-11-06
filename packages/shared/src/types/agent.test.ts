@@ -3,6 +3,8 @@ import {
   appliedModelRoles,
   classifyActivity,
   deriveIsolationMode,
+  injectedHeaders,
+  injectedMessageId,
   isNewerVersion,
   MODEL_ID_PATTERN,
   roleModelProblem,
@@ -131,5 +133,15 @@ describe("roleModelProblem", () => {
   it("other roles only need a model id", () => {
     expect(roleModelProblem("claude-code", "subagents", "haiku", "fable")).toBeNull();
     expect(roleModelProblem("codex", "review", "gpt 5", "")).toBe("Not a model id");
+  });
+});
+
+describe("injectedMessageId", () => {
+  it("reads the id back from either header, only at the start of a turn", () => {
+    for (const header of injectedHeaders("m-1")) {
+      expect(injectedMessageId(`${header}from x]`)).toBe("m-1");
+      expect(injectedMessageId(`see ${header}from x]`)).toBeNull();
+    }
+    expect(injectedMessageId("[Exegol said hi")).toBeNull();
   });
 });

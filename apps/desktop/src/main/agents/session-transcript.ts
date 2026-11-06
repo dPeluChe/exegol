@@ -1,6 +1,8 @@
-import { open } from "node:fs/promises";
-import type { OlderChatPage, SessionTurn } from "@exegol/shared";
+import { type FileHandle, open } from "node:fs/promises";
+import type { ChatPage, OlderChatPage, SessionTurn } from "@exegol/shared";
+import { z } from "zod";
 import { BOILERPLATE_PREFIXES } from "../history/providers/codex";
+import { parseJson } from "../lib/parse-json";
 
 /** One read of a transcript, and the first read's window: a session log reaches tens of MB */
 export const MAX_READ_BYTES = 2 * 1024 * 1024;
@@ -69,6 +71,35 @@ export function parseChunk(
   return { turns, nextOffset: plan.offset + end, firstOffset };
 }
 
+// allocUnsafe: `alloc` zeroes up to 2 MB a read; the subarray bounds what is read out
+async function readWindow(handle: FileHandle, plan: ReadPlan, parse: LineParser) {
+  const chunk = Buffer.allocUnsafe(plan.length);
+  const { bytesRead } = await handle.read(chunk, 0, plan.length, plan.offset);
+  return parseChunk(chunk.subarray(0, bytesRead), plan, parse);
+}
+
+/** The tail from `cursor`, or the last window when the cursor no longer applies */
+export async function readTranscript(
+  path: string,
+  parse: LineParser,
+  cursor: string | undefined,
+): Promise<Pick<ChatPage, "turns" | "cursor" | "reset" | "older">> {
+  const handle = await open(path, "r");
+  try {
+    const file = await handle.stat();
+    const plan = planRead(cursor, file);
+    const { turns, nextOffset, firstOffset } = await readWindow(handle, plan, parse);
+    return {
+      turns,
+      cursor: `${file.ino}:${nextOffset}`,
+      reset: plan.reset,
+      older: firstOffset > 0 ? `${file.ino}:${firstOffset}` : null,
+    };
+  } finally {
+    await handle.close();
+  }
+}
+
 /** Walks back from `before`, one window at a time, until there is a page to show */
 export async function readOlder(
   path: string,
@@ -83,9 +114,7 @@ export async function readOlder(
     for (let read = 0; older && read < OLDER_MAX_READS && turns.length < OLDER_MIN_TURNS; read++) {
       const plan = planOlder(older, file);
       if (!plan) return { turns, older: null };
-      const chunk = Buffer.alloc(plan.length);
-      const { bytesRead } = await handle.read(chunk, 0, plan.length, plan.offset);
-      const page = parseChunk(chunk.subarray(0, bytesRead), plan, parse);
+      const page = await readWindow(handle, plan, parse);
       turns = [...page.turns, ...turns];
       // One line over the window has no start in it: step past it
       const end = plan.offset + plan.length;
@@ -103,15 +132,6 @@ const secondsOf = (timestamp: unknown): number | null => {
   return Number.isNaN(ms) ? null : Math.floor(ms / 1000);
 };
 
-function jsonLine(line: string): Record<string, unknown> | null {
-  try {
-    const value = JSON.parse(line);
-    return value && typeof value === "object" ? value : null;
-  } catch {
-    return null;
-  }
-}
-
 export const textTurn = (
   id: string,
   role: SessionTurn["role"],
@@ -125,25 +145,48 @@ export const textTurn = (
 // What Claude Code writes as a user line and nobody typed
 const CLAUDE_SCAFFOLD = /^<(command-|local-command|system-reminder|task-notification|bash-)/;
 
-interface Block {
-  type?: string;
-  text?: string;
-  name?: string;
-}
+const Block = z
+  .object({
+    type: z.string().nullish(),
+    text: z.string().nullish(),
+    name: z.string().nullish(),
+  })
+  .passthrough();
+
+const ClaudeLine = z
+  .object({
+    type: z.unknown(),
+    message: z
+      .object({ content: z.union([z.string(), z.array(Block)]).nullish() })
+      .passthrough()
+      .nullish(),
+  })
+  .passthrough();
+
+const CodexLine = z
+  .object({
+    type: z.unknown(),
+    payload: z
+      .object({
+        type: z.string().nullish(),
+        role: z.string().nullish(),
+        name: z.string().nullish(),
+        content: z.array(z.object({ text: z.string().nullish() }).passthrough()).nullish(),
+      })
+      .passthrough()
+      .nullish(),
+  })
+  .passthrough();
 
 /** Text and tool names only: a tool's input and result never reach the chat */
 export const parseClaudeLine: LineParser = (line, id) => {
-  const d = jsonLine(line);
+  const d = parseJson(line, ClaudeLine);
   if (!d || (d.type !== "user" && d.type !== "assistant")) return [];
   if (d.isSidechain || d.isMeta || d.isCompactSummary) return [];
   const at = secondsOf(d.timestamp);
-  const content = (d.message as { content?: unknown } | undefined)?.content;
-  const blocks: Block[] =
-    typeof content === "string"
-      ? [{ type: "text", text: content }]
-      : Array.isArray(content)
-        ? content
-        : [];
+  const content = d.message?.content;
+  const blocks: z.infer<typeof Block>[] =
+    typeof content === "string" ? [{ type: "text", text: content }] : (content ?? []);
   return blocks.flatMap((b, i): SessionTurn[] => {
     const turnId = `${id}:${i}`;
     if (b.type === "tool_use" && d.type === "assistant") {
@@ -156,23 +199,20 @@ export const parseClaudeLine: LineParser = (line, id) => {
 };
 
 export const parseCodexLine: LineParser = (line, id) => {
-  const d = jsonLine(line);
+  const d = parseJson(line, CodexLine);
   if (d?.type !== "response_item") return [];
   const at = secondsOf(d.timestamp);
-  const p = d.payload as {
-    type?: string;
-    role?: string;
-    name?: string;
-    content?: Array<{ text?: string }>;
-  };
+  const p = d.payload;
   if (p?.type === "function_call" || p?.type === "custom_tool_call") {
     return textTurn(id, "tool", p.name ?? "", at);
   }
-  if (p?.type !== "message" || (p.role !== "user" && p.role !== "assistant")) return [];
+  if (p?.type !== "message") return [];
+  const { role } = p;
+  if (role !== "user" && role !== "assistant") return [];
   const text = (p.content ?? []).map((c) => c.text ?? "").join("");
   const typed = text.trimStart();
-  if (p.role === "user" && BOILERPLATE_PREFIXES.some((b) => typed.startsWith(b))) return [];
-  return textTurn(id, p.role, text, at);
+  if (role === "user" && BOILERPLATE_PREFIXES.some((b) => typed.startsWith(b))) return [];
+  return textTurn(id, role, text, at);
 };
 
 const CHROME = /^[\s─━═╌│|╭╮╰╯┌┐└┘├┤┬┴┼▔▁]*$/;
@@ -191,10 +231,11 @@ function plainText(lines: string[]): string {
 export function terminalTurns(
   lines: string[],
   first: number,
-  marks: number[],
+  turnLines: number[],
   altScreen: boolean,
 ): SessionTurn[] {
-  const cuts = altScreen ? [] : marks.filter((m) => m > first && m < first + lines.length);
+  const inside = (line: number) => line > first && line < first + lines.length;
+  const cuts = altScreen ? [] : turnLines.filter(inside);
   const bounds = [first, ...cuts, first + lines.length];
   return bounds.slice(0, -1).flatMap((from, i) => {
     const part = lines.slice(from - first, (bounds[i + 1] as number) - first);

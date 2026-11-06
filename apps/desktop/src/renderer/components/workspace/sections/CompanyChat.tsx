@@ -21,11 +21,13 @@ import {
   mergeChat,
   prependChatPage,
   type SessionBubble,
+  sameBubble,
   toolsLine,
 } from "../../../lib/session-chat";
 import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
 import { type AgentState, useAgentStore } from "../../../stores/agents";
 import { DEFAULT_CHAT_FONT, useAppStore } from "../../../stores/app";
+import { setChatDraft, useChatDraftStore } from "../../../stores/chat-drafts";
 import { toastError } from "../../../stores/toasts";
 import { AgentQuestion, useScreenDialog } from "../../agents/AgentQuestion";
 import { AgentIcon } from "../../common/AgentIcon";
@@ -91,18 +93,14 @@ function PeerBubble({ message, agentId }: { message: AgentMessage; agentId: stri
   );
 }
 
-// Memo: a push appends one bubble and leaves the rest of a 200-turn list alone
-const Bubble = memo(function Bubble({
-  bubble,
-  agentId,
-  cliType,
-  formatted,
-}: {
+interface BubbleProps {
   bubble: SessionBubble;
   agentId: string;
   cliType: string;
   formatted: boolean;
-}) {
+}
+
+function BubbleBody({ bubble, agentId, cliType, formatted }: BubbleProps) {
   if (bubble.kind === "tools") {
     return <p className="truncate pl-6 text-[10px] text-text-muted">{toolsLine(bubble.names)}</p>;
   }
@@ -135,18 +133,22 @@ const Bubble = memo(function Bubble({
       </div>
     </div>
   );
-});
+}
 
-// Moving between sessions remounts the input: what was being typed waits for the way back
-const drafts = new Map<string, string>();
+// By content: mergeChat builds new bubbles on every push, and one push adds one bubble to a
+// 200-turn list
+const Bubble = memo(
+  BubbleBody,
+  (a, b) =>
+    a.agentId === b.agentId &&
+    a.cliType === b.cliType &&
+    a.formatted === b.formatted &&
+    sameBubble(a.bubble, b.bubble),
+);
 
 function ChatInput({ agent, onTerminal }: { agent: AgentState; onTerminal: () => void }) {
-  const [draft, setDraftText] = useState(() => drafts.get(agent.id) ?? "");
-  const setDraft = (text: string) => {
-    setDraftText(text);
-    if (text) drafts.set(agent.id, text);
-    else drafts.delete(agent.id);
-  };
+  const draft = useChatDraftStore((s) => s.drafts[agent.id] ?? "");
+  const setDraft = (text: string) => setChatDraft(agent.id, text);
   const accepts = acceptsFollowUps(agent);
   const dialog = useScreenDialog(agent.id, accepts);
   const attention = useAgentStore((s) => s.attentionItems[agent.id]);
@@ -159,9 +161,9 @@ function ChatInput({ agent, onTerminal }: { agent: AgentState; onTerminal: () =>
   const atPrompt = agent.status === "waiting_input" || agent.status === "idle";
   const queued = useFollowUps(agent.id, accepts);
 
-  // From the map: a saved image lands after renders that may have changed the draft
+  // From the store: a saved image lands after renders that may have changed the draft
   const attach = (text: string) => {
-    const now = drafts.get(agent.id) ?? "";
+    const now = useChatDraftStore.getState().drafts[agent.id] ?? "";
     setDraft(`${now}${now && !now.endsWith(" ") ? " " : ""}${text}`);
   };
   const [dropping, setDropping] = useState(false);
@@ -277,8 +279,7 @@ function ChatInput({ agent, onTerminal }: { agent: AgentState; onTerminal: () =>
   );
 }
 
-/** The session as turns. Text scraped from the terminal is not Markdown and stays as printed,
- *  except Antigravity's, whose screen shows the raw Markdown */
+/** The session as turns */
 export function CompanyChat({
   agent,
   where,
@@ -337,7 +338,7 @@ export function CompanyChat({
               bubble={bubble}
               agentId={agent.id}
               cliType={agent.cliType}
-              formatted={!chat?.fromTerminal || agent.cliType === "agy"}
+              formatted={!!chat?.markdown}
             />
           ))}
         </div>

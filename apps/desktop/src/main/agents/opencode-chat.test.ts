@@ -34,6 +34,16 @@ describe("opencodeTurns", () => {
     ]);
   });
 
+  it("skips a row of an unexpected shape", () => {
+    const { turns, last } = opencodeTurns([
+      { seq: 1, type: "user", time_created: 1000, data: "not json" },
+      row(2, "assistant", { ...done, content: "text" }),
+      row(3, "user", { text: "hi" }),
+    ]);
+    expect(turns.map((t) => t.text)).toEqual(["hi"]);
+    expect(last).toBe(3);
+  });
+
   it("stops at a step still running, so the cursor comes back to it", () => {
     const { turns, last } = opencodeTurns([
       row(1, "user", { text: "hi" }),

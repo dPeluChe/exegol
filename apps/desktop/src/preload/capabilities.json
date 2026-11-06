@@ -419,6 +419,7 @@
     "agent:pr-watch",
     "agent:stuck-turn",
     "agent:activity",
+    "agent:message-held",
     "agent:chat-updated",
     "agent:resume-missed",
     "agent:cli-self-updated",

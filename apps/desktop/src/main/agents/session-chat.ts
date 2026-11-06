@@ -1,11 +1,10 @@
-import { open, readdir, stat } from "node:fs/promises";
-import { homedir } from "node:os";
+import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { type Agent, type ChatPage, LIVE_STATUSES, type OlderChatPage } from "@exegol/shared";
+import type { Agent, ChatPage, OlderChatPage } from "@exegol/shared";
 import type Database from "libsql";
-import { getAgent, getAgentCwd, listAgents } from "../db/queries/agents";
-import { claudeProjectDir } from "../history/providers/claude-code";
-import { dayDirs } from "../history/providers/codex";
+import { getAgent, getAgentCwd, listLiveProjectSessions } from "../db/queries/agents";
+import { claudeProjectDir, claudeRoot } from "../history/providers/claude-code";
+import { codexRoot, dayDirs } from "../history/providers/codex";
 import { broadcast } from "../lib/event-bus";
 import { setBounded } from "../lib/set-bounded";
 import { assertSafePath } from "../security/path-guard";
@@ -17,22 +16,17 @@ import { olderOpencodePage, opencodeDbPath, opencodePage } from "./opencode-chat
 import { providerSessionId, SESSION_ID_RE } from "./provider-session-id";
 import {
   type LineParser,
-  parseChunk,
   parseClaudeLine,
   parseCodexLine,
-  planRead,
   readOlder,
+  readTranscript,
   terminalTurns,
 } from "./session-transcript";
 
 const CODEX_LOOKBACK_SEC = 180 * 86400;
 const NOT_FOUND_RETRY_MS = 30_000;
 const PUSH_DELAY_MS = 500;
-const MAX_MARKS = 50;
 const MAX_TRACKED = 256;
-
-const claudeRoot = () => join(homedir(), ".claude", "projects");
-const codexRoot = () => join(homedir(), ".codex", "sessions");
 
 async function exists(path: string): Promise<boolean> {
   return stat(path).then(
@@ -87,16 +81,22 @@ interface Located {
 
 const located = new Map<string, Located>();
 
+/** The id the CLI's own store files this session under, safe to name a file with */
+function sessionIdOf(agent: Agent): string | null {
+  const id =
+    providerSessionId(agent.cliType, agent.claudeSessionId ?? null, agent.resumeCommand ?? null) ??
+    hookSessionOf(agent.id);
+  return id && SESSION_ID_RE.test(id) ? id : null;
+}
+
 /** Found under the CLI's own store, links resolved: the file is never named by the renderer */
 async function transcriptPath(
   db: Database.Database,
   agent: Agent,
   provider: Provider,
 ): Promise<string | null> {
-  const sessionId =
-    providerSessionId(agent.cliType, agent.claudeSessionId ?? null, agent.resumeCommand ?? null) ??
-    hookSessionOf(agent.id);
-  if (!sessionId || !SESSION_ID_RE.test(sessionId)) return null;
+  const sessionId = sessionIdOf(agent);
+  if (!sessionId) return null;
 
   const key = `${agent.cliType}:${sessionId}`;
   const known = located.get(agent.id);
@@ -111,39 +111,11 @@ async function transcriptPath(
   return path;
 }
 
-async function readTranscript(path: string, parse: LineParser, cursor: string | undefined) {
-  const handle = await open(path, "r");
-  try {
-    const file = await handle.stat();
-    const plan = planRead(cursor, file);
-    const chunk = Buffer.alloc(plan.length);
-    const { bytesRead } = await handle.read(chunk, 0, plan.length, plan.offset);
-    const { turns, nextOffset, firstOffset } = parseChunk(
-      chunk.subarray(0, bytesRead),
-      plan,
-      parse,
-    );
-    return {
-      turns,
-      cursor: `${file.ino}:${nextOffset}`,
-      reset: plan.reset,
-      older: firstOffset > 0 ? `${file.ino}:${firstOffset}` : null,
-    };
-  } finally {
-    await handle.close();
-  }
-}
-
-const turnMarks = new Map<string, number[]>();
 const pushTimers = new Map<string, NodeJS.Timeout>();
 
 /** A turn began or ended: cut the terminal text there, and tell an open chat */
 export function noteChatBoundary(agentId: string, cliType: string): void {
-  const line = PROVIDERS[cliType] ? null : getPtyHost().lineCount(agentId);
-  if (line !== null) {
-    const marks = turnMarks.get(agentId) ?? [];
-    setBounded(turnMarks, agentId, [...marks, line].slice(-MAX_MARKS), MAX_TRACKED);
-  }
+  if (!PROVIDERS[cliType]) getPtyHost().markTurn(agentId);
   if (pushTimers.has(agentId)) return;
   const timer = setTimeout(() => {
     pushTimers.delete(agentId);
@@ -157,18 +129,14 @@ export function noteChatBoundary(agentId: string, cliType: string): void {
  *  same folder apart: either could be the other's, so those stay on terminal text */
 function loneFolders(db: Database.Database, agent: Agent): string[] {
   const own = getAgentCwd(db, agent.id);
-  const shared = listAgents(db, agent.projectId).some(
-    (a) =>
-      a.id !== agent.id &&
-      a.cliType === agent.cliType &&
-      LIVE_STATUSES.has(a.status) &&
-      getAgentCwd(db, a.id) === own,
+  const shared = listLiveProjectSessions(db, agent.projectId).some(
+    (s) => s.id !== agent.id && s.cliType === agent.cliType && s.cwd === own,
   );
   if (shared) return [];
   return [...new Set([hookCwdOf(agent.id), own])].filter((cwd): cwd is string => !!cwd);
 }
 
-type StorePage = Omit<ChatPage, "fromTerminal">;
+type StorePage = Omit<ChatPage, "fromTerminal" | "markdown">;
 
 interface ChatStore {
   page: (db: Database.Database, agent: Agent, cursor: string | undefined) => StorePage | null;
@@ -187,11 +155,8 @@ const STORES: Record<string, ChatStore> = {
   },
   devin: {
     page(db, agent, cursor) {
-      const id =
-        providerSessionId(agent.cliType, null, agent.resumeCommand ?? null) ??
-        hookSessionOf(agent.id);
       const target = {
-        id: id && SESSION_ID_RE.test(id) ? id : null,
+        id: sessionIdOf(agent),
         cwds: loneFolders(db, agent),
         sinceSec: agent.startedAt ?? 0,
       };
@@ -206,8 +171,12 @@ const NOTHING: ChatPage = {
   cursor: null,
   reset: true,
   fromTerminal: false,
+  markdown: false,
   older: null,
 };
+
+/** A CLI's own record of the turns holds what the model wrote, Markdown as it was */
+const RECORDED = { fromTerminal: false, markdown: true };
 
 /** Tailed by byte offset from `cursor`; a CLI with no transcript sends its terminal text whole */
 export async function chatTurns(
@@ -219,21 +188,27 @@ export async function chatTurns(
   if (!agent) return NOTHING;
 
   const stored = STORES[agent.cliType]?.page(db, agent, cursor);
-  if (stored) return { ...stored, fromTerminal: false };
+  if (stored) return { ...stored, ...RECORDED };
 
   const provider = PROVIDERS[agent.cliType];
   const path = provider ? await transcriptPath(db, agent, provider) : null;
   if (provider && path) {
     const page = await readTranscript(path, provider.parse, cursor).catch(() => null);
-    return page ? { ...page, fromTerminal: false } : NOTHING;
+    return page ? { ...page, ...RECORDED } : NOTHING;
   }
   const text = getPtyHost().textLines(agentId);
   if (!text) return NOTHING;
   const first = text.total - text.lines.length;
   const parsed = agent.cliType === "agy" && !text.altScreen ? agyTurns(text.lines, first) : null;
-  const turns =
-    parsed ?? terminalTurns(text.lines, first, turnMarks.get(agentId) ?? [], text.altScreen);
-  return { turns, cursor: null, reset: true, fromTerminal: true, older: null };
+  // Antigravity's screen shows the raw Markdown; any other terminal text stays as printed
+  return {
+    turns: parsed ?? terminalTurns(text.lines, first, text.turnLines, text.altScreen),
+    cursor: null,
+    reset: true,
+    fromTerminal: true,
+    markdown: parsed !== null,
+    older: null,
+  };
 }
 
 /** What came before a page, walking the transcript back from the `older` it gave */

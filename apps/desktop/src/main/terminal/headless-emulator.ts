@@ -4,11 +4,12 @@
 
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { Unicode11Addon } from "@xterm/addon-unicode11";
-import { Terminal } from "@xterm/headless";
+import { type IMarker, Terminal } from "@xterm/headless";
 import { utf8Tail } from "./pty-sidecar-flusher";
 
 /** T143: cap the serialized ANSI snapshot size (reattach + disk scrollback flush). */
 const MAX_SNAPSHOT_BYTES = 2 * 1024 * 1024; // 2MB
+const MAX_TURN_MARKERS = 50;
 
 /** Terminal mode state for reattach protocol */
 interface TerminalModes {
@@ -46,6 +47,7 @@ export class HeadlessEmulator {
   private _revision = 0;
   private _hasContent = false;
   private parseWaiters = new Set<() => void>();
+  private turnMarkers: IMarker[] = [];
 
   constructor(cols: number, rows: number, scrollback = 5000) {
     this.terminal = new Terminal({ cols, rows, scrollback, allowProposedApi: true });
@@ -205,31 +207,51 @@ export class HeadlessEmulator {
     return lines;
   }
 
-  get lineCount(): number {
-    return this.terminal.buffer.active.length;
+  /** A turn boundary at the cursor. Markers follow their row as scrollback trims and reflows, and
+   *  go with it; the alt screen has none */
+  markTurn(): void {
+    const marker = this.terminal.registerMarker(0);
+    if (!marker) return;
+    const live = this.turnMarkers.filter((m) => !m.isDisposed);
+    for (const old of live.splice(0, live.length + 1 - MAX_TURN_MARKERS)) old.dispose();
+    this.turnMarkers = [...live, marker];
   }
 
-  /** The last rows of the active buffer as plain text; `total` numbers its rows from the top */
-  textLines(max: number): { lines: string[]; total: number; altScreen: boolean } {
+  /** The last rows of the active buffer as plain text. `total` numbers its rows from the top, and
+   *  `turnLines` are the turn boundaries in those numbers */
+  textLines(max: number): {
+    lines: string[];
+    total: number;
+    turnLines: number[];
+    altScreen: boolean;
+  } {
     const buffer = this.terminal.buffer.active;
     const total = buffer.length;
     const lines: string[] = [];
     for (let i = Math.max(0, total - max); i < total; i++) {
       lines.push(buffer.getLine(i)?.translateToString(true) ?? "");
     }
-    return { lines, total, altScreen: buffer.type === "alternate" };
+    const turnLines = this.turnMarkers.filter((m) => !m.isDisposed).map((m) => m.line);
+    return { lines, total, turnLines, altScreen: buffer.type === "alternate" };
   }
 
   /** Clear Terminal: drop the scrollback and screen, as the view's xterm does */
   clear(): void {
     this._revision++;
+    this.disposeTurnMarkers();
     this.terminal.clear();
   }
 
   dispose(): void {
     for (const resolve of this.parseWaiters) resolve();
     this.parseWaiters.clear();
+    this.disposeTurnMarkers();
     this.terminal.dispose();
+  }
+
+  private disposeTurnMarkers(): void {
+    for (const marker of this.turnMarkers) marker.dispose();
+    this.turnMarkers = [];
   }
 
   private setDecMode(mode: number, enabled: boolean): void {

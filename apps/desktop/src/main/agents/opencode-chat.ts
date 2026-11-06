@@ -1,13 +1,15 @@
-import { homedir } from "node:os";
 import { join } from "node:path";
 import type { OlderChatPage, SessionTurn } from "@exegol/shared";
-import Database from "libsql";
+import type Database from "libsql";
+import { z } from "zod";
+import { parseJson } from "../lib/parse-json";
+import { withReadonlyDb } from "../lib/readonly-db";
+import { xdgDataDir } from "../lib/xdg-data";
 import { textTurn } from "./session-transcript";
 
 const PAGE_ROWS = 80;
 
-export const opencodeDbPath = () =>
-  join(process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share"), "opencode", "opencode.db");
+export const opencodeDbPath = () => join(xdgDataDir(), "opencode", "opencode.db");
 
 interface MessageRow {
   seq: number;
@@ -16,43 +18,46 @@ interface MessageRow {
   data: string;
 }
 
-interface OpencodeData {
-  text?: string;
-  finish?: string | null;
-  time?: { completed?: number | null };
-  content?: { type?: string; text?: string; name?: string }[];
-}
+const OpencodeData = z
+  .object({
+    text: z.string().nullish(),
+    finish: z.string().nullish(),
+    time: z.object({ completed: z.number().nullish() }).passthrough().nullish(),
+    content: z
+      .array(
+        z
+          .object({
+            type: z.string().nullish(),
+            text: z.string().nullish(),
+            name: z.string().nullish(),
+          })
+          .passthrough(),
+      )
+      .nullish(),
+  })
+  .passthrough();
 
 /** Text and tool names only. An assistant step still running ends the list: its row changes, so
- *  the cursor must not pass it */
+ *  the cursor must not pass it. A row of another shape is skipped */
 export function opencodeTurns(rows: MessageRow[]): { turns: SessionTurn[]; last: number | null } {
   const turns: SessionTurn[] = [];
   let last: number | null = null;
   for (const row of rows) {
-    const data = JSON.parse(row.data) as OpencodeData;
+    const data = parseJson(row.data, OpencodeData);
     const at = Math.floor(row.time_created / 1000);
-    if (row.type === "assistant") {
+    if (data && row.type === "assistant") {
       if (!data.time?.completed && !data.finish) break;
       for (const [i, block] of (data.content ?? []).entries()) {
         const id = `${row.seq}:${i}`;
         if (block.type === "text") turns.push(...textTurn(id, "assistant", block.text ?? "", at));
         if (block.type === "tool") turns.push(...textTurn(id, "tool", block.name ?? "", at));
       }
-    } else {
+    } else if (data) {
       turns.push(...textTurn(String(row.seq), "user", data.text ?? "", at));
     }
     last = row.seq;
   }
   return { turns, last };
-}
-
-export function withReadonlyDb<T>(path: string, read: (db: Database.Database) => T): T {
-  const db = new Database(path, { readonly: true, fileMustExist: true });
-  try {
-    return read(db);
-  } finally {
-    db.close();
-  }
 }
 
 const TURN_ROWS = "seq, type, time_created, data FROM session_message";

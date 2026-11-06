@@ -61,8 +61,10 @@ export const claudeCodeHistory: LocalHistoryProvider = {
   },
 };
 
+export const claudeRoot = () => join(homedir(), ".claude", "projects");
+
 function projectDirFor(cwd: string): string {
-  return join(homedir(), ".claude", "projects", claudeProjectDir(cwd));
+  return join(claudeRoot(), claudeProjectDir(cwd));
 }
 
 /** The /rename name, else the AI title, of one known session: one file, never the first prompt

@@ -1,4 +1,4 @@
-import { mkdtemp, open, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
@@ -11,6 +11,7 @@ import {
   planOlder,
   planRead,
   readOlder,
+  readTranscript,
   terminalTurns,
 } from "./session-transcript";
 
@@ -59,18 +60,11 @@ describe("readOlder", () => {
     const parse: LineParser = (text) => [
       { id: text.split(" ")[0] ?? "", role: "assistant", text: "t", at: null },
     ];
-    const { ino, size } = await stat(path);
 
-    const start = Math.max(0, size - MAX_READ_BYTES);
-    const plan = { offset: start, dropFirstLine: true };
-    const tail = Buffer.alloc(size - start);
-    const handle = await open(path, "r");
-    await handle.read(tail, 0, tail.length, start);
-    await handle.close();
-    const first = parseChunk(tail, plan, parse);
+    const first = await readTranscript(path, parse, undefined);
 
     let seen = first.turns.map((t) => t.id);
-    let older: string | null = `${ino}:${first.firstOffset}`;
+    let older = first.older;
     while (older) {
       const page = await readOlder(path, parse, older);
       seen = [...page.turns.map((t) => t.id), ...seen];
@@ -142,6 +136,20 @@ describe("parseClaudeLine", () => {
       { role: "user", text: "fix it", at: Date.parse("2026-11-04T10:00:00Z") / 1000 },
     ]);
   });
+
+  it("skips a row of an unexpected shape, with the rest of the page kept", () => {
+    const rows = [
+      claude("user", [null]),
+      claude("assistant", [{ type: "text", text: 7 }]),
+      claude("assistant", 9),
+      '{"type":"user"',
+      "42",
+      claude("user", "still here"),
+    ];
+    const chunk = Buffer.from(`${rows.join("\n")}\n`);
+    const { turns } = parseChunk(chunk, { offset: 0, dropFirstLine: false }, parseClaudeLine);
+    expect(turns.map((t) => t.text)).toEqual(["still here"]);
+  });
 });
 
 describe("parseCodexLine", () => {
@@ -154,6 +162,14 @@ describe("parseCodexLine", () => {
     expect(
       parseCodexLine(item({ type: "function_call", name: "shell", arguments: "x" }), "1"),
     ).toMatchObject([{ role: "tool", text: "shell" }]);
+  });
+
+  it("skips a row of an unexpected shape", () => {
+    expect(parseCodexLine(item({ type: "message", role: "user", content: "text" }), "1")).toEqual(
+      [],
+    );
+    expect(parseCodexLine(item({ type: "function_call", name: 7 }), "1")).toEqual([]);
+    expect(parseCodexLine("null", "1")).toEqual([]);
   });
 });
 

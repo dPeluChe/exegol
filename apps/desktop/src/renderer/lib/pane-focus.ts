@@ -11,17 +11,17 @@ export function paneRoot(paneId: string): Element | null {
   return document.querySelector(`[data-pane-id="${CSS.escape(paneId)}"]`);
 }
 
-/** The pane after `current` (or before it), wrapping around; the first one without a current */
-export function adjacentPane(
-  paneIds: string[],
+/** The id after `current` (or before it), wrapping around; the first one without a current */
+export function adjacentId(
+  ids: string[],
   current: string | null,
   direction: "next" | "prev",
 ): string | null {
-  if (paneIds.length === 0) return null;
-  const at = current ? paneIds.indexOf(current) : -1;
-  if (at === -1) return paneIds[0] ?? null;
+  if (ids.length === 0) return null;
+  const at = current ? ids.indexOf(current) : -1;
+  if (at === -1) return ids[0] ?? null;
   const step = direction === "next" ? 1 : -1;
-  return paneIds[(at + step + paneIds.length) % paneIds.length] ?? null;
+  return ids[(at + step + ids.length) % ids.length] ?? null;
 }
 
 /**
@@ -75,7 +75,7 @@ export function cyclePane(direction: "next" | "prev"): void {
   const { tabs, activeTabId } = getProjectState();
   const tab = tabs.find((t) => t.id === activeTabId);
   if (!tab) return;
-  const target = adjacentPane(
+  const target = adjacentId(
     collectPaneIds(tab.layout),
     useWorkspaceStore.getState().focusedPaneId,
     direction,

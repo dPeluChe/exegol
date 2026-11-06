@@ -5,6 +5,7 @@ import {
   mergeChat,
   prependChatPage,
   type SessionBubble,
+  sameBubble,
   toolsLine,
 } from "./session-chat";
 
@@ -33,6 +34,7 @@ describe("appendChatPage", () => {
     cursor: "1:2",
     reset,
     fromTerminal: false,
+    markdown: true,
     older: "1:0",
   });
 
@@ -40,6 +42,14 @@ describe("appendChatPage", () => {
     const first = appendChatPage(undefined, page([turn("a", "user", "x")], true));
     expect(appendChatPage(first, page([turn("b", "user", "y")], false)).turns).toHaveLength(2);
     expect(appendChatPage(first, page([turn("b", "user", "y")], true)).turns).toHaveLength(1);
+  });
+
+  it("returns the same object for a tail with nothing new, but keeps a cursor that moved", () => {
+    const first = appendChatPage(undefined, page([turn("a", "user", "x")], true));
+    expect(appendChatPage(first, page([], false))).toBe(first);
+    const moved = appendChatPage(first, { ...page([], false), cursor: "1:9" });
+    expect(moved.cursor).toBe("1:9");
+    expect(moved.turns).toBe(first.turns);
   });
 
   it("prepends older turns, unless the history was replaced since asking", () => {
@@ -83,6 +93,11 @@ describe("mergeChat", () => {
     expect(ids(mergeChat([typed], [peer("p", 20, false)], SELF))).toEqual(["peer:p", "a"]);
   });
 
+  it("hides an injected turn whose message row is not loaded", () => {
+    const old = turn("a", "user", '[Exegol message gone from agent "Scout" (id s)]\nok', 30);
+    expect(ids(mergeChat([old, turn("b", "user", "hi", 31)], [], SELF))).toEqual(["b"]);
+  });
+
   it("joins consecutive tools into one line and keeps peers after terminal text", () => {
     const bubbles = mergeChat(
       [
@@ -101,5 +116,24 @@ describe("mergeChat", () => {
 describe("toolsLine", () => {
   it("counts repeats in the order first used", () => {
     expect(toolsLine(["Read", "Bash", "Read"])).toBe("Read x2, Bash");
+  });
+});
+
+describe("sameBubble", () => {
+  const turnBubble = (text: string): SessionBubble => ({
+    kind: "turn",
+    id: "a",
+    role: "assistant",
+    text,
+    at: 1,
+  });
+
+  it("compares content, not the object mergeChat rebuilt", () => {
+    expect(sameBubble(turnBubble("x"), turnBubble("x"))).toBe(true);
+    expect(sameBubble(turnBubble("x"), turnBubble("y"))).toBe(false);
+    const tools = (names: string[]): SessionBubble => ({ kind: "tools", id: "t", names });
+    expect(sameBubble(tools(["Read"]), tools(["Read"]))).toBe(true);
+    expect(sameBubble(tools(["Read"]), tools(["Read", "Bash"]))).toBe(false);
+    expect(sameBubble(turnBubble("x"), tools(["x"]))).toBe(false);
   });
 });

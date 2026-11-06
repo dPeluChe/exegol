@@ -22,7 +22,7 @@ import { applyRecoveredCrashes, RECOVERY_KEY } from "../lib/session-recovery";
 import { switchSection } from "../lib/switch-section";
 import { trpcMutate } from "../lib/trpc-client";
 import { useAppStore } from "./app";
-import { noteDeskTool } from "./desk-activity";
+import { noteDeskActivity } from "./desk-activity";
 import { useNotificationPrefsStore } from "./notification-prefs";
 import { useWatchStore } from "./watch";
 import { collectPaneIds, useWorkspaceStore } from "./workspace";
@@ -102,8 +102,12 @@ export function startAgentStatusPush(queryClient: QueryClient): void {
   const offStuckTurn = window.api.onStuckTurn(({ agentId, reason }) =>
     useAgentStore.getState().addAttentionItem(agentId, { level: "info", reason, stuck: true }),
   );
-  const offActivity = window.api.onAgentActivity(({ agentId, tool }) =>
-    noteDeskTool(agentId, tool),
+  const offActivity = window.api.onAgentActivity(({ agentId, activity }) =>
+    noteDeskActivity(agentId, activity),
+  );
+  // "info": action_needed clears on the next running push, and a dialog is not a question it asked
+  const offMessageHeld = window.api.onMessageHeld(({ agentId, reason }) =>
+    useAgentStore.getState().addAttentionItem(agentId, { level: "info", reason }),
   );
   const stopMcp = window.api.onMcpStatus((e) => queryClient.setQueryData(MCP_STATUS_KEY, e));
   const stopFollowUps = window.api.onFollowUps((e) =>
@@ -185,6 +189,7 @@ export function startAgentStatusPush(queryClient: QueryClient): void {
     offPrWatch();
     offStuckTurn();
     offActivity();
+    offMessageHeld();
     stopMcp();
     stopFollowUps();
     stopTurns();
@@ -528,7 +533,7 @@ export const useAgentStore = create<AgentStore>()(
         removedIds.add(id);
         // A closed session leaves Watching too ("session gone" strips were left behind)
         useWatchStore.getState().unwatch(id);
-        noteDeskTool(id, null);
+        noteDeskActivity(id, null);
         set((state) => {
           const { [id]: _, ...rest } = state.agents;
           const focusedAgentId = state.focusedAgentId === id ? null : state.focusedAgentId;

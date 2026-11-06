@@ -1,16 +1,8 @@
+import { toolActivity } from "@exegol/shared";
 import { describe, expect, it } from "vitest";
 import type { AgentState, AttentionItem } from "../stores/agents";
-import { toolActivity } from "../stores/desk-activity";
 import type { ProjectWorkspace } from "../stores/workspace/types";
-import {
-  buildRooms,
-  deskActivity,
-  deskState,
-  groupByTab,
-  nextNeedsYou,
-  stepDesk,
-  todayStrip,
-} from "./company";
+import { buildRooms, deskActivity, deskState, groupByTab, todayStrip } from "./company";
 
 const agent = (over: Partial<AgentState> & { id: string }) =>
   ({
@@ -51,9 +43,9 @@ describe("deskActivity", () => {
     expect(toolActivity("Read")).toBe("thinking");
   });
 
-  it("is thinking with no hook, a question wins, and an idle session shows nothing", () => {
+  it("is thinking with no hook, and a question or an idle session shows nothing", () => {
     expect(deskActivity(busy, undefined, undefined)).toBe("thinking");
-    expect(deskActivity(busy, question, "edits")).toBe("question");
+    expect(deskActivity(busy, question, "edits")).toBeNull();
     expect(deskActivity(agent({ id: "a" }), undefined, "edits")).toBeNull();
   });
 });
@@ -135,14 +127,6 @@ describe("todayStrip", () => {
   });
 });
 
-describe("stepDesk", () => {
-  it("moves both ways round the list", () => {
-    expect(stepDesk(["a", "b", "c"], "c", 1)).toBe("a");
-    expect(stepDesk(["a", "b", "c"], "a", -1)).toBe("c");
-    expect(stepDesk([], null, 1)).toBeNull();
-  });
-});
-
 describe("groupByTab", () => {
   const tab = (id: string, paneId: string) => ({
     id,
@@ -161,13 +145,25 @@ describe("groupByTab", () => {
     expect(groups[0]?.label).toBe("T2");
     expect(groups[2]?.desks.map((d) => d.id)).toEqual(["loose"]);
   });
-});
 
-describe("nextNeedsYou", () => {
-  it("walks the list and wraps around", () => {
-    expect(nextNeedsYou(["a", "b"], null)).toBe("a");
-    expect(nextNeedsYou(["a", "b"], "a")).toBe("b");
-    expect(nextNeedsYou(["a", "b"], "b")).toBe("a");
-    expect(nextNeedsYou([], "a")).toBeNull();
+  it("says which tab holds a browser pane", () => {
+    const beside = {
+      tabs: [
+        {
+          id: "t1",
+          label: "T1",
+          layout: {
+            type: "split",
+            children: [
+              { type: "pane", paneId: "p1" },
+              { type: "pane", paneId: "web" },
+            ],
+          },
+        },
+      ],
+      panes: { p1: { agentId: "a" }, web: { type: "browser" } },
+    } as unknown as ProjectWorkspace;
+    const groups = groupByTab([agent({ id: "a" }), agent({ id: "loose" })], beside);
+    expect(groups.map((g) => g.browser)).toEqual([true, false]);
   });
 });

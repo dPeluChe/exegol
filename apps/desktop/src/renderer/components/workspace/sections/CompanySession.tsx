@@ -8,6 +8,7 @@ import { SessionAlias } from "../../common/SessionAlias";
 import { WatchToggle } from "../../common/WatchToggle";
 import { ErrorBoundary, paneFallback } from "../../ErrorBoundary";
 import { CardSizeControls } from "../../terminal/CardSizeControls";
+import { FontStepper } from "../../terminal/FontStepper";
 import { MirrorFrame } from "../../terminal/MirrorFrame";
 import { CompanyChat } from "./CompanyChat";
 
@@ -20,19 +21,7 @@ const PANEL_ID = "company-session-panel";
 function ChatSizeControls() {
   const font = useAppStore((s) => s.companyChatFont);
   const step = useAppStore((s) => s.stepCompanyChatFont);
-  const btn =
-    "rounded px-1 py-0.5 text-[10px] text-text-muted hover:bg-white/10 hover:text-text-primary";
-  return (
-    <div className="flex shrink-0 items-center gap-0.5">
-      <button type="button" onClick={() => step(-1)} className={btn} title="Smaller text">
-        A−
-      </button>
-      <span className="w-5 text-center text-[10px] tabular-nums text-text-muted">{font}</span>
-      <button type="button" onClick={() => step(1)} className={btn} title="Larger text">
-        A+
-      </button>
-    </div>
-  );
+  return <FontStepper size={font} onStep={step} />;
 }
 
 /** The selected desk: its turns as a chat, or its mirror. A plain shell has no turns */

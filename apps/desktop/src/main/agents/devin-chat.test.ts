@@ -10,6 +10,14 @@ const message = (role: string, content: string, extra: object = {}) =>
 const typed = (content: string) => message("user", content, { metadata: { is_user_input: true } });
 
 describe("devinTurns", () => {
+  it("skips a row of an unexpected shape", () => {
+    const rows = ["not json", "null", message("assistant", "ok", { tool_calls: "x" }), typed("hi")];
+    const turns = devinTurns(
+      rows.map((chat_message, i) => ({ node_id: i, created_at: 5, chat_message })),
+    );
+    expect(turns.map((t) => t.text)).toEqual(["hi"]);
+  });
+
   it("keeps typed text, replies and tool names, never tool output or injected rows", () => {
     const rows = [
       message("system", "rules"),

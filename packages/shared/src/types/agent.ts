@@ -351,6 +351,8 @@ export type ChatPage = {
   reset: boolean;
   /** Read from the terminal: there was no transcript */
   fromTerminal: boolean;
+  /** The turns are Markdown; terminal text is shown as printed */
+  markdown: boolean;
   /** Hand it to `agents.chatOlder` for what came before; null at the start. Only with `reset` */
   older: string | null;
 };
@@ -362,6 +364,23 @@ export const injectedHeaders = (messageId: string): [string, string] => [
   `[Exegol message ${messageId} `,
   `[Exegol notice ${messageId} `,
 ];
+
+const INJECTED_HEADER = /^\[Exegol (?:message|notice) (\S+) /;
+
+/** The message a turn was typed in for, read from its header; null for any other turn */
+export const injectedMessageId = (text: string): string | null =>
+  INJECTED_HEADER.exec(text)?.[1] ?? null;
+
+/** What a session does, by the last tool its hooks named */
+export type DeskActivity = "edits" | "command" | "browser" | "thinking" | "message";
+
+export function toolActivity(tool: string): DeskActivity {
+  if (/^(Edit|MultiEdit|Write|NotebookEdit|apply_patch)$/.test(tool)) return "edits";
+  if (/^(Bash|shell|exec_command)$/.test(tool)) return "command";
+  if (/^(WebFetch|WebSearch)$/.test(tool) || tool.includes("browser_")) return "browser";
+  if (tool.endsWith("agent_send")) return "message";
+  return "thinking";
+}
 
 /** A prompt the user queued for an agent's next turn boundary (T200.4) */
 export interface FollowUpItem {

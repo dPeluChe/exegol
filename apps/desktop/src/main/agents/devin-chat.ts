@@ -1,19 +1,15 @@
-import { homedir } from "node:os";
 import { join } from "node:path";
 import type { OlderChatPage, SessionTurn } from "@exegol/shared";
 import type Database from "libsql";
-import { withReadonlyDb } from "./opencode-chat";
+import { z } from "zod";
+import { parseJson } from "../lib/parse-json";
+import { withReadonlyDb } from "../lib/readonly-db";
+import { xdgDataDir } from "../lib/xdg-data";
 import { textTurn } from "./session-transcript";
 
 const PAGE_NODES = 80;
 
-export const devinDbPath = () =>
-  join(
-    process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share"),
-    "devin",
-    "cli",
-    "sessions.db",
-  );
+export const devinDbPath = () => join(xdgDataDir(), "devin", "cli", "sessions.db");
 
 export interface DevinNode {
   node_id: number;
@@ -21,17 +17,21 @@ export interface DevinNode {
   chat_message: string;
 }
 
-interface DevinMessage {
-  role?: string;
-  content?: string;
-  tool_calls?: { name?: string }[];
-  metadata?: { is_user_input?: boolean };
-}
+const DevinMessage = z
+  .object({
+    role: z.string().nullish(),
+    content: z.string().nullish(),
+    tool_calls: z.array(z.object({ name: z.string().nullish() }).passthrough()).nullish(),
+    metadata: z.object({ is_user_input: z.boolean().nullish() }).passthrough().nullish(),
+  })
+  .passthrough();
 
-/** Text and tool names only. A user row nobody typed (a resume, a reminder) has no is_user_input */
+/** Text and tool names only. A user row nobody typed (a resume, a reminder) has no is_user_input.
+ *  A row of another shape is skipped */
 export function devinTurns(nodes: DevinNode[]): SessionTurn[] {
   return nodes.flatMap((node) => {
-    const m = JSON.parse(node.chat_message) as DevinMessage;
+    const m = parseJson(node.chat_message, DevinMessage);
+    if (!m) return [];
     const id = String(node.node_id);
     if (m.role === "user" && m.metadata?.is_user_input) {
       return textTurn(id, "user", m.content ?? "", node.created_at);

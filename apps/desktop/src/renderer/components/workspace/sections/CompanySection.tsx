@@ -10,18 +10,17 @@ import { useNow } from "../../../hooks/use-now";
 import { useGitHubOverview } from "../../../hooks/use-trpc-github";
 import { sessionName } from "../../../lib/agent-label";
 import {
-  besideBrowser,
   buildRooms,
   type DeskState,
   deskActivity,
   deskState,
   groupByTab,
-  nextNeedsYou,
   type Room,
   shellCommand,
   todayStrip,
 } from "../../../lib/company";
 import { formatTimeAgo } from "../../../lib/format";
+import { adjacentId } from "../../../lib/pane-focus";
 import { trpcInvoke } from "../../../lib/trpc-client";
 import { type AgentState, showProject, useAgentStore } from "../../../stores/agents";
 import { type CompanyView, useAppStore } from "../../../stores/app";
@@ -142,7 +141,7 @@ const Desk = memo(function Desk({
         ) : (
           <span className="truncate text-[10px] text-text-muted">
             <StateLine state={state} activitySince={agent.activitySince} />
-            {activity && activity !== "question" && ` · ${activity}`}
+            {activity && ` · ${activity}`}
           </span>
         )}
       </span>
@@ -169,7 +168,6 @@ function RoomCard({
   const attention = useAgentStore((s) => s.attentionItems);
   const { data: overview } = useGitHubOverview(projectId);
   const workspace = useWorkspaceStore((s) => s.projectWorkspaces[projectId]);
-  const browsers = useMemo(() => besideBrowser(workspace), [workspace]);
   const states = desks.map((a) => deskState(a, attention[a.id]));
   const summary = ROOM_SUMMARY.map(
     ([state, label]) => [states.filter((s) => s === state).length, label] as const,
@@ -217,7 +215,7 @@ function RoomCard({
                 agent={agent}
                 facts={deskFacts?.[agent.id]}
                 prNumber={prs.find((p) => p.branch === agent.branchName)?.number}
-                browser={browsers.has(agent.id)}
+                browser={group.browser}
                 cliOutdated={outdated.has(agent.cliType)}
                 selected={agent.id === selectedId}
                 onSelect={onSelect}
@@ -266,9 +264,7 @@ function TodayCard({
 export function CompanySection({ projectMeta }: { projectMeta: Map<string, ProjectMeta> }) {
   const agents = useAgentStore((s) => s.agents);
   const attention = useAgentStore((s) => s.attentionItems);
-  const levelOf = useNotificationPrefsStore((s) => s.levelOf);
-  // Subscribed for its changes: `levelOf` itself is one stable function
-  useNotificationPrefsStore((s) => s.interruption);
+  const interruption = useNotificationPrefsStore((s) => s.interruption);
   const cliUpdates = useCliUpdates();
   const outdated = useMemo(
     () => new Set([...cliUpdates.values()].filter((c) => c.updateAvailable).map((c) => c.cliType)),
@@ -287,16 +283,20 @@ export function CompanySection({ projectMeta }: { projectMeta: Map<string, Proje
     refetchInterval: 60_000,
   });
 
-  const rooms = buildRooms(Object.values(agents), attention);
-  const today = todayStrip(Object.values(agents), attention, { levelOf, outdated });
+  const rooms = useMemo(() => buildRooms(Object.values(agents), attention), [agents, attention]);
+  const today = useMemo(() => {
+    const levelOf = (projectId: string) => interruption[projectId] ?? "all";
+    return todayStrip(Object.values(agents), attention, { levelOf, outdated });
+  }, [agents, attention, interruption, outdated]);
   const [pickedId, setPickedId] = useState<string | null>(null);
   const live = rooms.flatMap((r) => r.desks);
   const selected =
     live.find((a) => a.id === pickedId) ?? today.needs[0] ?? today.stuck[0] ?? live[0];
   const pickNext = () => {
-    const next = nextNeedsYou(
+    const next = adjacentId(
       today.needs.map((a) => a.id),
       selected?.id ?? null,
+      "next",
     );
     if (next) setPickedId(next);
   };

@@ -2,21 +2,21 @@ import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../stores/workspace", () => ({}));
 vi.stubGlobal("requestAnimationFrame", () => 0);
-const { adjacentPane, claimPaneFocus, dropPaneFocus, focusNewPane, mirrorToFocus } = await import(
+const { adjacentId, claimPaneFocus, dropPaneFocus, focusNewPane, mirrorToFocus } = await import(
   "./pane-focus"
 );
 
-describe("adjacentPane", () => {
+describe("adjacentId", () => {
   it("moves forward and back, wrapping around", () => {
-    expect(adjacentPane(["a", "b", "c"], "a", "next")).toBe("b");
-    expect(adjacentPane(["a", "b", "c"], "c", "next")).toBe("a");
-    expect(adjacentPane(["a", "b", "c"], "a", "prev")).toBe("c");
+    expect(adjacentId(["a", "b", "c"], "a", "next")).toBe("b");
+    expect(adjacentId(["a", "b", "c"], "c", "next")).toBe("a");
+    expect(adjacentId(["a", "b", "c"], "a", "prev")).toBe("c");
   });
 
   it("starts at the first pane when none (or one from another tab) is focused", () => {
-    expect(adjacentPane(["a", "b"], null, "next")).toBe("a");
-    expect(adjacentPane(["a", "b"], "other-tab-pane", "prev")).toBe("a");
-    expect(adjacentPane([], "a", "next")).toBeNull();
+    expect(adjacentId(["a", "b"], null, "next")).toBe("a");
+    expect(adjacentId(["a", "b"], "other-tab-pane", "prev")).toBe("a");
+    expect(adjacentId([], "a", "next")).toBeNull();
   });
 });
 

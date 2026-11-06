@@ -1,8 +1,7 @@
-import { type InterruptionLevel, LIVE_STATUSES } from "@exegol/shared";
+import { type DeskActivity, type InterruptionLevel, LIVE_STATUSES } from "@exegol/shared";
 import type { AgentState, AttentionItem } from "../stores/agents";
-import type { DeskActivity } from "../stores/desk-activity";
 import { collectPaneIds } from "../stores/workspace/helpers";
-import type { ProjectWorkspace, WorkspaceTab } from "../stores/workspace/types";
+import type { ProjectWorkspace } from "../stores/workspace/types";
 import { agentGroup, needsYou } from "./agent-groups";
 import { isBusy } from "./sidebar-views";
 
@@ -23,9 +22,8 @@ export function deskActivity(
   a: AgentState,
   item: AttentionItem | undefined,
   activity: DeskActivity | undefined,
-): DeskActivity | "question" | null {
-  if (needsYou(a, item)) return "question";
-  if (a.suspended || !isBusy(a)) return null;
+): DeskActivity | null {
+  if (needsYou(a, item) || a.suspended || !isBusy(a)) return null;
   if (a.cliType === "shell") return "command";
   return activity ?? "thinking";
 }
@@ -48,12 +46,14 @@ export function buildRooms(
   agents: Iterable<AgentState>,
   attention: Record<string, AttentionItem>,
 ): Room[] {
-  const rank = (a: AgentState) => DESK_RANK[deskState(a, attention[a.id])];
+  const ranks = new Map<string, number>();
   const byUrgency = (x: AgentState, y: AgentState) =>
-    rank(x) - rank(y) || (y.activitySince ?? 0) - (x.activitySince ?? 0);
+    (ranks.get(x.id) ?? 0) - (ranks.get(y.id) ?? 0) ||
+    (y.activitySince ?? 0) - (x.activitySince ?? 0);
   const rooms = new Map<string, AgentState[]>();
   for (const a of agents) {
     if (a.archived || !LIVE_STATUSES.has(a.status)) continue;
+    ranks.set(a.id, DESK_RANK[deskState(a, attention[a.id])]);
     rooms.set(a.projectId, [...(rooms.get(a.projectId) ?? []), a]);
   }
   const sorted = [...rooms].map(([projectId, desks]) => ({
@@ -99,28 +99,6 @@ export function todayStrip(
   return strip;
 }
 
-/** P: the next one after the selection, round the list */
-export function nextNeedsYou(needs: string[], selected: string | null): string | null {
-  return needs[(needs.indexOf(selected ?? "") + 1) % needs.length] ?? null;
-}
-
-/** The session `step` places from the selection, round the list */
-export function stepDesk(ids: string[], selected: string | null, step: number): string | null {
-  const at = ids.indexOf(selected ?? "");
-  return ids[(Math.max(at, 0) + step + ids.length) % ids.length] ?? null;
-}
-
-/** Sessions sharing a tab with a browser pane */
-export function besideBrowser(workspace: ProjectWorkspace | undefined): Set<string> {
-  const ids = new Set<string>();
-  for (const tab of workspace?.tabs ?? []) {
-    const panes = collectPaneIds(tab.layout).map((id) => workspace?.panes[id]);
-    if (!panes.some((p) => p?.type === "browser")) continue;
-    for (const p of panes) if (p?.agentId) ids.add(p.agentId);
-  }
-  return ids;
-}
-
 /** What a shell runs right now */
 export function shellCommand(a: AgentState): string | null {
   return a.cliType === "shell" && !a.suspended ? a.currentStep : null;
@@ -130,6 +108,8 @@ export interface DeskGroup {
   /** null: sessions in no tab */
   tabId: string | null;
   label: string | null;
+  /** The tab holds a browser pane */
+  browser: boolean;
   desks: AgentState[];
 }
 
@@ -138,20 +118,19 @@ export function groupByTab(
   desks: AgentState[],
   workspace: ProjectWorkspace | undefined,
 ): DeskGroup[] {
-  const tabOf = new Map<string, WorkspaceTab>();
+  const groupOf = new Map<string, DeskGroup>();
   for (const tab of workspace?.tabs ?? []) {
-    for (const id of collectPaneIds(tab.layout)) {
-      const agentId = workspace?.panes[id]?.agentId;
-      if (agentId) tabOf.set(agentId, tab);
-    }
+    const panes = collectPaneIds(tab.layout).map((id) => workspace?.panes[id]);
+    const browser = panes.some((p) => p?.type === "browser");
+    const group = { tabId: tab.id, label: tab.label, browser, desks: [] };
+    for (const p of panes) if (p?.agentId) groupOf.set(p.agentId, group);
   }
-  const groups = new Map<string | null, DeskGroup>();
+  const noTab: DeskGroup = { tabId: null, label: null, browser: false, desks: [] };
+  const groups = new Set<DeskGroup>();
   for (const desk of desks) {
-    const tab = tabOf.get(desk.id);
-    const tabId = tab?.id ?? null;
-    const group = groups.get(tabId) ?? { tabId, label: tab?.label ?? null, desks: [] };
+    const group = groupOf.get(desk.id) ?? noTab;
     group.desks.push(desk);
-    groups.set(tabId, group);
+    groups.add(group);
   }
-  return [...groups.values()];
+  return [...groups];
 }
