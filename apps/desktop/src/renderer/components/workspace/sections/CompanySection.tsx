@@ -6,6 +6,8 @@ import { memo, type ReactNode, useMemo, useRef, useState } from "react";
 import { type ImperativePanelHandle, Panel, PanelGroup } from "react-resizable-panels";
 import { useCliUpdates } from "../../../hooks/use-cli-updates";
 import { useCompanyKeys } from "../../../hooks/use-company-keys";
+import { useLatest } from "../../../hooks/use-latest";
+import { useMountEffect } from "../../../hooks/use-mount-effect";
 import { useNow } from "../../../hooks/use-now";
 import { useGitHubOverview } from "../../../hooks/use-trpc-github";
 import { sessionName } from "../../../lib/agent-label";
@@ -288,7 +290,8 @@ export function CompanySection({ projectMeta }: { projectMeta: Map<string, Proje
     const levelOf = (projectId: string) => interruption[projectId] ?? "all";
     return todayStrip(Object.values(agents), attention, { levelOf, outdated });
   }, [agents, attention, interruption, outdated]);
-  const [pickedId, setPickedId] = useState<string | null>(null);
+  const pickedId = useAppStore((s) => s.companyPickedId);
+  const setPickedId = useAppStore((s) => s.setCompanyPickedId);
   const live = rooms.flatMap((r) => r.desks);
   const selected =
     live.find((a) => a.id === pickedId) ?? today.needs[0] ?? today.stuck[0] ?? live[0];
@@ -303,11 +306,24 @@ export function CompanySection({ projectMeta }: { projectMeta: Map<string, Proje
 
   useCompanyKeys({ pickNext, pick: setPickedId, selected, live });
 
+  // A default moves with states: the one on screen stays for the way back, unless one was picked
+  const shownId = useLatest(selected?.id);
+  useMountEffect(() => {
+    requestAnimationFrame(() =>
+      document
+        .querySelector('[aria-pressed="true"][data-desk-id]')
+        ?.scrollIntoView({ block: "nearest" }),
+    );
+    return () => {
+      if (shownId.current && !useAppStore.getState().companyPickedId) setPickedId(shownId.current);
+    };
+  });
+
   const sessionPanel = useRef<ImperativePanelHandle>(null);
-  const [view, setView] = useState<CompanyView>("chat");
+  const view = useAppStore((s) => s.companyView);
   const side = useAppStore((s) => s.companySessionSide);
   const pickView = (next: CompanyView) => {
-    setView(next);
+    useAppStore.getState().setCompanyView(next);
     sessionPanel.current?.resize(useAppStore.getState().companySessionSizes[next]);
   };
   const keepSize = (dragging: boolean) => {
@@ -325,7 +341,7 @@ export function CompanySection({ projectMeta }: { projectMeta: Map<string, Proje
       defaultSize={sessionSize}
       minSize={20}
       maxSize={70}
-      // Using the panel holds it: the session it shows by default moves as states change
+      // Using the panel holds it: a default selection moves as states change
       onFocusCapture={() => setPickedId(selected.id)}
     >
       <CompanySession

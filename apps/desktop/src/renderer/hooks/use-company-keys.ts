@@ -65,6 +65,7 @@ export function useCompanyKeys(keys: {
         if (!deskId && active?.closest("button, a")) return;
         const target = live.find((a) => a.id === deskId) ?? selected;
         if (!target) return;
+        latest.current.pick(target.id);
         jumpToAgent(target.id, target.projectId);
       } else return;
       e.preventDefault();
