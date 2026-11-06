@@ -702,7 +702,8 @@ function RenameDialog({
 
   const submit = async () => {
     const next = name.trim();
-    if (!path || !next || next === current || /[\\/]/.test(next)) return onClose();
+    if (!path || !next || next === current || next.includes("/") || next.includes(pathSep(path)))
+      return onClose();
     try {
       await trpcMutate("files.rename", { from: path, to: `${dir}${next}` });
       onRenamed(path, `${dir}${next}`);

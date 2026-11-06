@@ -1,5 +1,9 @@
 import { existsSync, statSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
+import { TRPCError } from "@trpc/server";
+import { shell } from "electron";
+import { z } from "zod";
+
 import {
   DEFAULT_WORKTREE_COPY,
   type FolderInspection,
