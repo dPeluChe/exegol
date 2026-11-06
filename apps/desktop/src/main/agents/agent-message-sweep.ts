@@ -119,6 +119,11 @@ export function msSinceAgentOutput(agentId: string): number {
   return last === undefined ? Number.POSITIVE_INFINITY : Date.now() - last;
 }
 
+/** When the session last printed, for readers that only look after something changed */
+export function lastAgentOutput(agentId: string): number | undefined {
+  return lastOutputAt.get(agentId);
+}
+
 export function forgetSweepState(agentId: string): void {
   lastOutputAt.delete(agentId);
   boundarySignalling.delete(agentId);

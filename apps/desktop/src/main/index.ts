@@ -4,6 +4,7 @@ import { seedAgentLinkCache } from "./agents/agent-messaging";
 import { startIdleSuspend } from "./agents/idle-suspend-sweep";
 import { getAgentManager } from "./agents/manager";
 import { cleanupOldEvents, startNotifyHandler, stopNotifyHandler } from "./agents/notify-handler";
+import { startQuestionWatch } from "./agents/question-watch";
 import { getQueueExecutor } from "./agents/queue";
 import { getProviderRegistry } from "./agents/registry";
 import { warmShellPath } from "./agents/spawn-env";
@@ -158,6 +159,7 @@ app.whenReady().then(async () => {
     scheduleUsageImport(getDb());
     startIdleSuspend(getDb());
     startStuckTurnSweep(getDb());
+    startQuestionWatch(getDb());
   });
 
   // Background services (non-blocking, start after window)

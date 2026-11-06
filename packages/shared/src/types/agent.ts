@@ -330,6 +330,8 @@ export interface ScreenDialog {
   /** A few lines above the question: what the agent wants to run or change */
   context: string[];
   options: { key: string; label: string }[];
+  /** A selection sits on an option: a dialog for sure, not a numbered list in an answer */
+  picked: boolean;
   /** Question + context: an answer names the dialog it was given for */
   fingerprint: string;
 }
