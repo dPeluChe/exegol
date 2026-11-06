@@ -2,6 +2,7 @@ import { HOST_GUARD, PAGE_COMMON } from "./page-scripts";
 
 export type PageAction =
   | { action: "click"; force?: boolean }
+  | { action: "hover"; force?: boolean }
   | { action: "type"; text: string; submit?: boolean; append?: boolean }
   | { action: "select"; value: string };
 
@@ -13,6 +14,9 @@ export interface ActionResult {
   options?: string[];
   /** The field holds something else than what was typed (a mask, maxlength): page data */
   actual?: string;
+  /** Where a real mouse should move, in the top page's coordinates */
+  x?: number;
+  y?: number;
   /** "enter": no form around, so the caller sends a real Enter */
   submitted?: "form" | "enter";
 }
@@ -37,7 +41,7 @@ watchChanges(false);
 const root = el.getRootNode();
 const doc = el.ownerDocument;
 const win = doc.defaultView;
-if (act.action === "click") {
+if (act.action === "click" || act.action === "hover") {
   const r = el.getBoundingClientRect();
   const x = r.left + r.width / 2, y = r.top + r.height / 2;
   if (!act.force) {
@@ -50,7 +54,11 @@ if (act.action === "click") {
   const pointer = (type, buttons) => el.dispatchEvent(new win.PointerEvent(type, { ...at, buttons, pointerId: 1, pointerType: "mouse", isPrimary: true }));
   const mouse = (type, buttons) => el.dispatchEvent(new win.MouseEvent(type, { ...at, buttons, detail: 1 }));
   pointer("pointerover", 0); mouse("mouseover", 0);
+  el.dispatchEvent(new win.PointerEvent("pointerenter", { ...at, bubbles: false }));
+  el.dispatchEvent(new win.MouseEvent("mouseenter", { ...at, bubbles: false }));
   pointer("pointermove", 0); mouse("mousemove", 0);
+  // :hover answers only to a real mouse, which the caller sends; a frame has its own coordinates
+  if (act.action === "hover") return win === window ? { ok: true, x, y } : { ok: true };
   const pressed = pointer("pointerdown", 1);
   const down = pressed ? mouse("mousedown", 1) : true;
   if (down && typeof el.focus === "function") el.focus();
@@ -110,4 +118,49 @@ if (act.action === "select") {
 }
 return { error: "unknown_action" };
 })(${JSON.stringify(ref)}, ${JSON.stringify(act)})`;
+}
+
+export type ScrollTarget = "down" | "up" | "top" | "bottom";
+
+/** The inner panel under the middle of the viewport when an app scrolls one, else the page */
+export function scrollScript(ref: string | null, to: ScrollTarget, expectedHost: string): string {
+  return `((ref, to) => {
+${HOST_GUARD(expectedHost)}
+${PAGE_COMMON}
+watchChanges(true);
+if (ref) {
+  const st = globalThis.__exegol;
+  const el = st && ref.split(".")[1] === st.doc ? st.refs.get(ref)?.deref() : null;
+  if (!el || !el.isConnected) return { error: "stale_ref" };
+  el.scrollIntoView({ block: "center", behavior: "instant" });
+  return { ok: true };
+}
+let box = document.elementFromPoint(innerWidth / 2, innerHeight / 2);
+while (box && box !== document.body && box !== document.documentElement) {
+  const overflow = getComputedStyle(box).overflowY;
+  if ((overflow === "auto" || overflow === "scroll") && box.scrollHeight > box.clientHeight) break;
+  box = box.parentElement;
+}
+if (!box || box === document.body || box === document.documentElement) box = document.scrollingElement;
+const step = box.clientHeight * 0.8;
+const top = to === "top" ? 0 : to === "bottom" ? box.scrollHeight : box.scrollTop + (to === "down" ? step : -step);
+box.scrollTo({ top, behavior: "instant" });
+return { ok: true, atEnd: box.scrollTop + box.clientHeight >= box.scrollHeight - 1 };
+})(${JSON.stringify(ref)}, ${JSON.stringify(to)})`;
+}
+
+export interface WaitCondition {
+  text?: string;
+  gone?: string;
+  url?: string;
+}
+
+export function waitScript(condition: WaitCondition, expectedHost: string): string {
+  return `((c) => {
+${HOST_GUARD(expectedHost)}
+const shown = document.body ? document.body.innerText : "";
+return (c.text === undefined || shown.includes(c.text)) &&
+  (c.gone === undefined || !shown.includes(c.gone)) &&
+  (c.url === undefined || location.href.includes(c.url));
+})(${JSON.stringify(condition)})`;
 }

@@ -67,7 +67,7 @@ const RESTORE_SCRIPT = `(() => {
 /** The whole page, scrolled strip by strip and stitched: a webview's surface is the size of its
  *  element, so CDP's captureBeyondViewport repeated the visible area (seen at a 390x844 frame).
  *  The page sees the scroll and the hidden bars while it runs */
-async function captureFullPage(wc: WebContents): Promise<NativeImage> {
+export async function captureFullPage(wc: WebContents): Promise<NativeImage> {
   const run = <T>(code: string) =>
     withTimeout(
       wc.executeJavaScriptInIsolatedWorld(SHOT_WORLD_ID, [{ code }], true) as Promise<T>,

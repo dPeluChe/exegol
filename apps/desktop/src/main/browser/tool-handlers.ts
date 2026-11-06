@@ -1,10 +1,18 @@
 import { hostOf, isOutsideAllowlist, LOCAL_HOST_PATTERNS } from "@exegol/shared";
 import type Database from "libsql";
 import { getProject } from "../db/queries/projects";
+import { delay } from "../lib/timeout";
 import { ExegolToolError } from "../mcp/exegol-protocol";
 import { getPaneControl } from "./control";
 import { isLogLevel } from "./log-ring";
-import { type ActionResult, actionScript, type PageAction } from "./page-actions";
+import {
+  type ActionResult,
+  actionScript,
+  type PageAction,
+  type ScrollTarget,
+  scrollScript,
+  waitScript,
+} from "./page-actions";
 import {
   guardedEvalScript,
   isPageChangedError,
@@ -17,6 +25,7 @@ import {
   type BrowserPaneHandle,
   type BrowserToolContext,
   checkUrlArg,
+  type HistoryAction,
   inspect,
   logAction,
   needsUserResult,
@@ -162,16 +171,28 @@ export async function handleLogs(
   };
 }
 
+const isHistoryAction = (raw: unknown): raw is HistoryAction =>
+  raw === "back" || raw === "forward" || raw === "reload";
+
 export async function handleNavigate(
   db: Database.Database,
   ctx: BrowserToolContext,
   pane: BrowserPaneHandle,
   args: Record<string, unknown>,
 ) {
-  const url = checkUrlArg(db, ctx, args.url);
   touch(db, ctx, pane);
   const mark = markAction(pane, args.snapshot);
-  pane.loadUrl(url);
+  if (args.action === undefined) {
+    pane.loadUrl(checkUrlArg(db, ctx, args.url));
+  } else if (!isHistoryAction(args.action)) {
+    throw new ExegolToolError("action must be back, forward or reload", -32602);
+  } else if (!pane.history(args.action)) {
+    return {
+      status: "no_history",
+      pane: pane.paneId,
+      hint: `There is no page to go ${args.action} to.`,
+    };
+  }
   return pageSummary(db, ctx, pane, mark);
 }
 
@@ -199,7 +220,7 @@ export async function runAction(
   const { page, host, needsUser, loadFailed } = await inspect(db, ctx, pane);
   if (!page) return pageUnavailable(pane, needsUser, loadFailed);
   touch(db, ctx, pane);
-  const reacts = act.action === "click" || (act.action === "type" && act.submit);
+  const reacts = act.action !== "select" && (act.action !== "type" || act.submit);
   const mark = markAction(pane, snapshot, reacts ? page : undefined);
   const r = (await runGuarded(() =>
     pane.runIsolated(actionScript(ref, act, host)),
@@ -236,6 +257,7 @@ export async function runAction(
     throw new ExegolToolError(`${act.action} failed on ${ref}: ${r?.error ?? "no result"}`, -32026);
   }
   if (r.submitted === "enter") pane.sendKey("Enter", []);
+  if (r.x !== undefined && r.y !== undefined) pane.moveMouse(r.x, r.y);
   return pageSummary(db, ctx, pane, mark, { submitted: r.submitted, actualValue: r.actual });
 }
 
@@ -265,6 +287,86 @@ export async function handlePress(
   const mark = markAction(pane, args.snapshot, page);
   pane.sendKey(key.keyCode, key.modifiers);
   return pageSummary(db, ctx, pane, mark);
+}
+
+const SCROLL_TARGETS: readonly unknown[] = ["down", "up", "top", "bottom"];
+
+export async function handleScroll(
+  db: Database.Database,
+  ctx: BrowserToolContext,
+  pane: BrowserPaneHandle,
+  args: Record<string, unknown>,
+) {
+  const ref = args.ref === undefined ? null : parseRef(args.ref);
+  if (args.ref !== undefined && !ref) {
+    throw new ExegolToolError("ref must look like e12.k3x (from browser_snapshot)", -32602);
+  }
+  const to = (args.to ?? "down") as ScrollTarget;
+  if (!SCROLL_TARGETS.includes(to)) {
+    throw new ExegolToolError("to must be down, up, top or bottom", -32602);
+  }
+  const { page, host, needsUser, loadFailed } = await inspect(db, ctx, pane);
+  if (!page) return pageUnavailable(pane, needsUser, loadFailed);
+  touch(db, ctx, pane);
+  const mark = markAction(pane, args.snapshot, page);
+  const r = (await runGuarded(() => pane.runIsolated(scrollScript(ref, to, host)))) as {
+    error?: string;
+    atEnd?: boolean;
+  } | null;
+  if (r?.error === "stale_ref") {
+    throw new ExegolToolError(
+      `${ref} is not on the page anymore (it changed or navigated): take a new browser_snapshot`,
+      -32025,
+    );
+  }
+  return pageSummary(db, ctx, pane, mark, { atEnd: r?.atEnd });
+}
+
+const WAIT_POLL_MS = 200;
+const DEFAULT_WAIT_S = 5;
+const MAX_WAIT_S = 20;
+
+const optionalText = (raw: unknown): string | undefined =>
+  typeof raw === "string" && raw ? raw : undefined;
+
+export async function handleWaitFor(
+  db: Database.Database,
+  ctx: BrowserToolContext,
+  pane: BrowserPaneHandle,
+  args: Record<string, unknown>,
+) {
+  const condition = {
+    text: optionalText(args.text),
+    gone: optionalText(args.gone),
+    url: optionalText(args.url),
+  };
+  if (!condition.text && !condition.gone && !condition.url) {
+    throw new ExegolToolError("pass text, gone or url", -32602);
+  }
+  const asked = Number(args.timeout_seconds);
+  const seconds = asked > 0 ? Math.min(asked, MAX_WAIT_S) : DEFAULT_WAIT_S;
+  const started = Date.now();
+  const mark = markAction(pane, args.snapshot);
+  while (Date.now() - started < seconds * 1000) {
+    let met = false;
+    try {
+      const { page, host, needsUser, loadFailed } = await inspect(db, ctx, pane);
+      if (!page) return pageUnavailable(pane, needsUser, loadFailed);
+      met = (await pane.runIsolated(waitScript(condition, host))) === true;
+    } catch (err) {
+      // A page mid-navigation has nothing to read yet: the next poll does
+      if (!isPageChangedError(err) && !(err instanceof ExegolToolError && err.code === -32021)) {
+        throw err;
+      }
+    }
+    if (met) return pageSummary(db, ctx, pane, mark, { waitedMs: Date.now() - started });
+    await delay(WAIT_POLL_MS);
+  }
+  return {
+    status: "timed_out",
+    pane: pane.paneId,
+    hint: `It did not happen in ${seconds} s. browser_snapshot shows the page, browser_logs its errors.`,
+  };
 }
 
 export async function handleEval(

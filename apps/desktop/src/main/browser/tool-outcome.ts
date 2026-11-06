@@ -38,6 +38,9 @@ export interface ActionOutcome {
   submitted?: "form" | "enter";
   /** The field holds something else than what was typed: page data */
   actualValue?: string;
+  /** browser_scroll reached the bottom */
+  atEnd?: boolean;
+  waitedMs?: number;
 }
 
 export const markAction = (
@@ -139,6 +142,8 @@ export async function pageSummary(
     pane: pane.paneId,
     url: page?.url,
     submitted: outcome.submitted,
+    at_end: outcome.atEnd,
+    waited_ms: outcome.waitedMs,
     changed,
     http_status: httpStatus !== null && httpStatus >= 400 ? httpStatus : undefined,
     load_stopped: stopped || undefined,

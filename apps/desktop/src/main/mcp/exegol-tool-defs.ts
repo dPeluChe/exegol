@@ -49,7 +49,7 @@ export const SEARCH_ONLY_TOOLS = new Set<ExegolToolName>([
 
 const MEMORY_CATEGORY_VALUES = [...MEMORY_CATEGORIES];
 
-export const EXEGOL_TOOL_DEFS: ExegolToolDef<ExegolToolName>[] = [
+const TOOLS: ExegolToolDef<ExegolToolName>[] = [
   {
     name: "memory_search",
     description: "Hybrid RRF search over this project's memory store. Returns top facts.",
@@ -260,6 +260,46 @@ export const EXEGOL_TOOL_DEFS: ExegolToolDef<ExegolToolName>[] = [
   },
   ...BROWSER_TOOL_DEFS,
 ];
+
+// Narrower than SEARCH_ONLY_TOOLS: those change no repo files, these change nothing at all
+const READ_ONLY = new Set<ExegolToolName>([
+  "memory_search",
+  "memory_list",
+  "knowledge_get",
+  "agents_list",
+  "message_status",
+  "list_claims",
+]);
+
+const TITLES: Partial<Record<ExegolToolName, string>> = {
+  memory_search: "Search project memory",
+  memory_list: "List project memory",
+  memory_save: "Save to project memory",
+  knowledge_get: "Read project knowledge",
+  agents_list: "List agents",
+  agent_send: "Message an agent",
+  message_status: "Check a message",
+  message_cancel: "Cancel a message",
+  messages_check: "Check for messages",
+  claim_paths: "Claim files",
+  release_paths: "Release files",
+  list_claims: "List file claims",
+  agent_link: "Link to an agent",
+};
+
+export const EXEGOL_TOOL_DEFS: ExegolToolDef<ExegolToolName>[] = TOOLS.map((t) =>
+  t.annotations
+    ? t
+    : {
+        ...t,
+        title: TITLES[t.name],
+        annotations: {
+          readOnlyHint: READ_ONLY.has(t.name),
+          destructiveHint: false,
+          openWorldHint: false,
+        },
+      },
+);
 
 /** Tool defs visible at the given access mode (display-only in the shim — the
  *  server re-derives the mode from the DB and enforces it on every call). */

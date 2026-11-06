@@ -39,6 +39,7 @@ import {
   setPaneRegistryDb,
   toolTimeout,
 } from "./pane-registry";
+import { captureFullPage } from "./screenshot";
 import { type BrowserPaneHandle, setBrowserHost, setNeedsUserNotifier } from "./tool-guards";
 import {
   awaitPageLoad,
@@ -109,12 +110,31 @@ function handleFor(r: Registered, wc: WebContents): BrowserPaneHandle {
     },
     awaitLoad: () => awaitPageLoad(wc),
     loadState: () => loadOf(wc.id),
-    capture: async () => {
+    capture: async (fullPage) => {
       // Right after a navigation there may be no frame to copy yet
-      let img = await wc.capturePage().catch(() => delay(300).then(() => wc.capturePage()));
+      let img = fullPage
+        ? await captureFullPage(wc)
+        : await wc.capturePage().catch(() => delay(300).then(() => wc.capturePage()));
       if (img.getSize().width > SCREENSHOT_MAX_WIDTH)
         img = img.resize({ width: SCREENSHOT_MAX_WIDTH });
       return opaqueJpeg(img, 80);
+    },
+    moveMouse: (x, y) => {
+      markAgentInput(wc.id);
+      const zoom = wc.getZoomFactor();
+      wc.sendInputEvent({
+        type: "mouseMove",
+        x: Math.round(x * zoom),
+        y: Math.round(y * zoom),
+      });
+    },
+    history: (action) => {
+      const { navigationHistory: nav } = wc;
+      if (action === "reload") wc.reload();
+      else if (action === "back" && nav.canGoBack()) nav.goBack();
+      else if (action === "forward" && nav.canGoForward()) nav.goForward();
+      else return false;
+      return true;
     },
     sendKey: (keyCode, modifiers) => {
       const mods = modifiers as ("shift" | "control" | "alt" | "meta")[];

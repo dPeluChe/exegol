@@ -6,6 +6,13 @@
 
 import { connect } from "node:net";
 import { join } from "node:path";
+import {
+  discoverResult,
+  EXEGOL_INSTRUCTIONS,
+  negotiateLegacyVersion,
+  serverInfo,
+  unsupportedVersionError,
+} from "./exegol-mcp-handshake";
 import { resolveShimToken } from "./exegol-mcp-token-file";
 import {
   createFrameReader,
@@ -88,13 +95,16 @@ function dispatchRaw(content: string, framed: boolean): void {
   }
 }
 
+declare const __EXEGOL_VERSION__: string;
+const SERVER_VERSION = __EXEGOL_VERSION__;
+
 function writeToClient(
   id: number | string,
   // Captured per REQUEST: async replies (a 30s tool call) must not inherit the
   // framing of whatever message happened to arrive meanwhile.
   framed: boolean,
   result?: unknown,
-  error?: { code: number; message: string },
+  error?: { code: number; message: string; data?: unknown },
 ): void {
   const body = error
     ? { jsonrpc: "2.0", id, error }
@@ -288,16 +298,27 @@ function handleClientMessage(
 ): void {
   if (msg.id === undefined) return; // notification — nothing to reply to
 
+  const unsupported = unsupportedVersionError(msg.params);
+  if (unsupported) {
+    writeToClient(msg.id, framed, undefined, unsupported);
+    return;
+  }
+
   switch (msg.method) {
     case "initialize": {
       const requested = (msg.params as { protocolVersion?: string } | undefined)?.protocolVersion;
       writeToClient(msg.id, framed, {
-        protocolVersion: requested ?? "2024-11-05",
+        protocolVersion: negotiateLegacyVersion(requested),
         capabilities: { tools: {} },
-        serverInfo: { name: "exegol", version: "1.0.0" },
+        serverInfo: serverInfo(SERVER_VERSION),
+        instructions: EXEGOL_INSTRUCTIONS,
       });
       return;
     }
+
+    case "server/discover":
+      writeToClient(msg.id, framed, discoverResult(SERVER_VERSION));
+      return;
 
     case "ping":
       writeToClient(msg.id, framed, {});
@@ -305,18 +326,24 @@ function handleClientMessage(
 
     case "tools/list": {
       const fallback = () => getToolDefsForAccessMode(displayMode);
+      const list = (tools: unknown[]) => ({
+        resultType: "complete",
+        ttlMs: 0,
+        cacheScope: "private",
+        tools,
+      });
       // Socket down: answer from the bundle now, queuing stalls the client past its init timeout
       if (!socket) {
-        writeToClient(msg.id, framed, { tools: fallback() });
+        writeToClient(msg.id, framed, list(fallback()));
         return;
       }
       callSocket("list_tools", { token, ppid: process.ppid })
         .then((result) => {
           const tools = (result as { tools?: unknown[] } | null)?.tools;
-          writeToClient(msg.id as number, framed, { tools: tools?.length ? tools : fallback() });
+          writeToClient(msg.id as number, framed, list(tools?.length ? tools : fallback()));
         })
         .catch(() => {
-          writeToClient(msg.id as number, framed, { tools: fallback() });
+          writeToClient(msg.id as number, framed, list(fallback()));
         });
       return;
     }
@@ -328,6 +355,7 @@ function handleClientMessage(
           // Ready-made content blocks (browser_screenshot's image) go through as they are
           const blocks = (result as { __mcpContent?: unknown } | null)?.__mcpContent;
           writeToClient(msg.id as number, framed, {
+            resultType: "complete",
             content: Array.isArray(blocks)
               ? blocks
               : [{ type: "text", text: JSON.stringify(result) }],
@@ -335,6 +363,7 @@ function handleClientMessage(
         })
         .catch((err: Error) => {
           writeToClient(msg.id as number, framed, {
+            resultType: "complete",
             content: [{ type: "text", text: err.message }],
             isError: true,
           });

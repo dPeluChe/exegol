@@ -21,6 +21,8 @@ import {
   snapshotScript,
 } from "./page-scripts";
 
+export type HistoryAction = "back" | "forward" | "reload";
+
 /** One live browser pane as the tools see it. The host only hands out panes whose webview runs
  *  in the asked project's own partition, so a pane id from another project never resolves */
 export interface BrowserPaneHandle {
@@ -36,8 +38,12 @@ export interface BrowserPaneHandle {
   awaitLoad(): Promise<boolean>;
   loadState(): Pick<PageLoad, "failure" | "stopped">;
   /** JPEG, at most 1280px wide */
-  capture(): Promise<Buffer>;
+  capture(fullPage: boolean): Promise<Buffer>;
   sendKey(keyCode: string, modifiers: string[]): void;
+  /** Viewport coordinates of the page */
+  moveMouse(x: number, y: number): void;
+  /** False when there is nowhere to go */
+  history(action: HistoryAction): boolean;
   lastHttpStatus(): number | null;
   logs: LogRing;
 }

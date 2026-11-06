@@ -1,6 +1,7 @@
 import Database from "libsql";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runMigrations } from "../db/migrations";
+import type { BrowserToolName } from "../mcp/browser-tool-defs";
 import { callBrowserTool, forgetBrowserAgent } from "./agent-browser-tools";
 import { forgetPane } from "./control";
 import type { LoadFailure } from "./load-state";
@@ -37,11 +38,17 @@ interface Scene {
   stopped?: boolean;
   http?: number;
   onAction?: (logs: LogRing) => void;
+  canGo?: boolean;
+  /** browser_wait: the poll it first holds on */
+  metOnPoll?: number;
 }
 
 function fakePane(scene: Scene) {
   const logs = new LogRing();
   const keys: string[] = [];
+  const moves: [number, number][] = [];
+  const history: string[] = [];
+  let polls = 0;
   const reads = [...(scene.reads ?? [signals()])];
   const pane: BrowserPaneHandle = {
     paneId: "pane-a",
@@ -53,6 +60,7 @@ function fakePane(scene: Scene) {
         return reads.length > 1 ? reads.shift() : reads[0];
       }
       if (code.includes("watchChanges(true);\n})()")) return null;
+      if (code.includes("(c.url === undefined")) return ++polls >= (scene.metOnPoll ?? 1);
       scene.onAction?.(logs);
       return scene.action ?? { ok: true };
     },
@@ -62,10 +70,15 @@ function fakePane(scene: Scene) {
     loadState: () => ({ failure: scene.failure ?? null, stopped: !!scene.stopped }),
     capture: async () => Buffer.from(""),
     sendKey: (key) => keys.push(key),
+    moveMouse: (x, y) => moves.push([x, y]),
+    history: (action) => {
+      history.push(action);
+      return scene.canGo !== false;
+    },
     lastHttpStatus: () => scene.http ?? 200,
     logs,
   };
-  return { pane, keys };
+  return { pane, keys, moves, history };
 }
 
 describe("what an action reports", () => {
@@ -76,15 +89,11 @@ describe("what an action reports", () => {
       openPane: async () => pane,
       devServerUrl: async () => null,
     });
-  const run = async (
-    scene: Scene,
-    tool: "browser_click" | "browser_type" | "browser_select",
-    args = {},
-  ) => {
-    const { pane, keys } = fakePane(scene);
+  const run = async (scene: Scene, tool: string, args = {}) => {
+    const { pane, ...seen } = fakePane(scene);
     useHost(pane);
     const r = await callBrowserTool(db, tool, { ref: "e1.doc1", ...args }, ctx);
-    return { r: r as Record<string, unknown> & { untrusted_page_content: never }, keys };
+    return { r: r as Record<string, unknown> & { untrusted_page_content: never }, ...seen };
   };
 
   beforeEach(() => {
@@ -237,5 +246,45 @@ describe("what an action reports", () => {
       "browser_snapshot",
       "browser_logs",
     ]);
+  });
+
+  it("a hover moves the real mouse where the element is, so CSS :hover answers", async () => {
+    const { r, moves } = await run({ action: { ok: true, x: 40, y: 60 } }, "browser_hover");
+    expect(r.status).toBe("ok");
+    expect(moves).toEqual([[40, 60]]);
+  });
+
+  it("a scroll says when it reached the end, and a gone ref is an error", async () => {
+    const { r } = await run({ action: { ok: true, atEnd: true } }, "browser_scroll", {
+      ref: undefined,
+      to: "bottom",
+    });
+    expect(r).toMatchObject({ status: "ok", at_end: true });
+    await expect(
+      run({ action: { error: "stale_ref" } }, "browser_scroll", { ref: "e9.doc1" }),
+    ).rejects.toThrow(/take a new browser_snapshot/);
+  });
+
+  it("back and forward use the history, and say when there is none", async () => {
+    const went = await run({}, "browser_navigate", { action: "back" });
+    expect(went.history).toEqual(["back"]);
+    const none = await run({ canGo: false }, "browser_navigate", { action: "forward" });
+    expect(none.r.status).toBe("no_history");
+    await expect(run({}, "browser_navigate", { action: "sideways" })).rejects.toThrow(/back/);
+  });
+
+  it("a wait polls until the page shows it", async () => {
+    const { r } = await run({ metOnPoll: 3 }, "browser_wait", { text: "Saved" });
+    expect(r.status).toBe("ok");
+    expect(r.waited_ms).toBeGreaterThanOrEqual(400);
+  });
+
+  it("a wait that never happens times out, and one with no condition is refused", async () => {
+    const { r } = await run({ metOnPoll: 1e9 }, "browser_wait", {
+      gone: "Spinner",
+      timeout_seconds: 0.3,
+    });
+    expect(r.status).toBe("timed_out");
+    await expect(run({}, "browser_wait")).rejects.toThrow(/text, gone or url/);
   });
 });

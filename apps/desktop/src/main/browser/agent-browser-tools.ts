@@ -29,7 +29,9 @@ import {
   handleNavigate,
   handleOpen,
   handlePress,
+  handleScroll,
   handleSnapshot,
+  handleWaitFor,
   runAction,
 } from "./tool-handlers";
 import { handleScreenshot } from "./tool-screenshot";
@@ -73,7 +75,7 @@ export async function callBrowserTool(
         result = await handleSnapshot(db, ctx, pane, args);
         break;
       case "browser_screenshot":
-        result = await handleScreenshot(db, ctx, pane);
+        result = await handleScreenshot(db, ctx, pane, args);
         break;
       case "browser_logs":
         result = await handleLogs(db, ctx, pane, args);
@@ -129,6 +131,22 @@ export async function callBrowserTool(
           },
           args.snapshot,
         );
+        break;
+      case "browser_hover":
+        result = await runAction(
+          db,
+          ctx,
+          pane,
+          args.ref,
+          { action: "hover", force: args.force === true },
+          args.snapshot,
+        );
+        break;
+      case "browser_scroll":
+        result = await handleScroll(db, ctx, pane, args);
+        break;
+      case "browser_wait":
+        result = await handleWaitFor(db, ctx, pane, args);
         break;
       case "browser_eval":
         result = await handleEval(db, ctx, pane, args);
