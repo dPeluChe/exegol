@@ -44,12 +44,14 @@ export function getApiKey(db: Database.Database, provider: string): string | nul
 
 function decrypted(value: string, provider: string): string | null {
   try {
-    if (!safeStorage.isEncryptionAvailable()) throw new Error("no keyring");
-    return safeStorage.decryptString(Buffer.from(value.slice("encrypted:".length), "base64"));
+    if (safeStorage.isEncryptionAvailable()) {
+      return safeStorage.decryptString(Buffer.from(value.slice("encrypted:".length), "base64"));
+    }
   } catch {
-    logger.warn(`[Keystore] Cannot read the ${provider} key: the system keyring is unavailable`);
-    return null;
+    /* logged below */
   }
+  logger.warn(`[Keystore] Cannot read the ${provider} key: the system keyring is unavailable`);
+  return null;
 }
 
 export function deleteApiKey(db: Database.Database, provider: string): void {

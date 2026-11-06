@@ -90,7 +90,7 @@ const CURL_PIPE_SH_RE = new RegExp(
 const IWR_PIPE_IEX_RE =
   /\b(?:iwr|irm|curl|wget|invoke-webrequest|invoke-restmethod)\b[^;&\n]*\|\s*(?:iex|invoke-expression)\b/i;
 const WIN_WIPE_RE =
-  /\b(?:(?:remove-item|ri|del|erase|rm)\b[^;&|\n]*-r[^;&|\n]*|(?:rd|rmdir|del|erase)\s+\/s\b[^;&|\n]*?|format\s+)\s*["']?(?:[a-z]:[\\/]?|\$env:(?:userprofile|systemroot|windir)|%(?:userprofile|systemroot|windir)%)["']?(?:\s|$)/i;
+  /\b(?:(?:remove-item|ri|del|erase|rm)\s[^;&|\n]*?(?:^|\s)-r[^;&|\n]*?|(?:rd|rmdir|del|erase)\s+\/s\b[^;&|\n]*?|format)[\s"']+(?:[a-z]:[\\/]?|\$env:(?:userprofile|systemroot|windir)|%(?:userprofile|systemroot|windir)%)["']?(?:\s|$)/i;
 
 function firstMatch(input: string, re: RegExp): string | null {
   const m = input.match(re);

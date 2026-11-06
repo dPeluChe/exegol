@@ -177,5 +177,6 @@ describe("redact on Windows and Linux", () => {
       "/<mount-path> and /<mount-path>",
     );
     expect(redact("see https://github.com/a/b", "")).toContain("github.com/a/b");
+    expect(redact("src/media/x.ts and a\\\\nb", "")).toBe("src/media/x.ts and a\\\\nb");
   });
 });
