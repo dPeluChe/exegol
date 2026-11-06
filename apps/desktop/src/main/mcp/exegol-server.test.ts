@@ -352,26 +352,15 @@ describe("check_path guard", () => {
 });
 
 describe("ancestorChain", () => {
-  it("climbs the table up to the hop limit and stops at an unknown parent", () => {
-    expect(
-      ancestorChain(
-        5,
-        new Map([
-          [5, 4],
-          [4, 3],
-        ]),
-      ),
-    ).toEqual([5, 4, 3]);
-    expect(
-      ancestorChain(
-        9,
-        new Map([
-          [9, 8],
-          [8, 7],
-          [7, 6],
-          [6, 5],
-        ]),
-      ),
-    ).toEqual([9, 8, 7, 6]);
+  it("climbs up to the hop limit and stops at an unknown parent", () => {
+    const parents = new Map([
+      [9, 8],
+      [8, 7],
+      [7, 6],
+      [6, 5],
+    ]);
+    const up = (pid: number) => parents.get(pid);
+    expect(ancestorChain(7, up)).toEqual([7, 6, 5]);
+    expect(ancestorChain(9, up)).toEqual([9, 8, 7, 6]);
   });
 });

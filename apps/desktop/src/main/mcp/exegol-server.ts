@@ -78,11 +78,11 @@ export async function handleRequest(
   req: JsonRpcRequest,
   conn?: McpConnectionState,
 ): Promise<void> {
-  await primeAncestors(conn, (req.params as { ppid?: number } | undefined)?.ppid);
+  const caller = req.params as { token?: string; ppid?: number } | undefined;
+  await primeAncestors(conn, caller?.token, caller?.ppid);
   // Shims proxy tools/list so a shim spawned weeks ago lists what the running app has
   if (req.method === "list_tools") {
-    const params = req.params as { token?: string; ppid?: number } | undefined;
-    const resolved = resolveContext(db, params?.token, params?.ppid, conn);
+    const resolved = resolveContext(db, caller?.token, caller?.ppid, conn);
     record({
       kind: "call",
       tool: "tools/list",

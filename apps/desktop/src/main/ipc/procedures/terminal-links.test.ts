@@ -27,7 +27,7 @@ vi.mock("../../db/queries", () => ({
   listWorktrees: () => [],
 }));
 
-const { linkOpenAction, terminalLinksRouter } = await import("./terminal-links");
+const { linkOpenAction, ON_A_MOUNT, terminalLinksRouter } = await import("./terminal-links");
 const caller = terminalLinksRouter.createCaller({ db: {} } as never);
 
 async function resolved(texts: string[], cwd?: string) {
@@ -97,15 +97,23 @@ describe("terminalLinks access", () => {
     ]);
     expect(await resolved(["secret.txt"], outside)).toEqual([null]);
   });
+});
 
-  it("never touches a network mount a shell reported as its folder", async () => {
-    for (const cwd of [
-      "/mnt/nas/x",
-      "/media/me/usb",
-      "/run/user/1000/gvfs/smb",
-      "//server/share",
+describe("ON_A_MOUNT", () => {
+  it("knows the network mounts of the three systems, and no ordinary folder", () => {
+    for (const path of [
+      "/Volumes/nas/a",
+      "/mnt/nas/a",
+      "/media/me/usb/a",
+      "/run/media/me/usb/a",
+      "/run/user/1000/gvfs/smb/a",
+      "//server/share/a",
+      "\\\\server\\share\\a",
     ]) {
-      expect(await resolved(["src/app.ts"], cwd)).toEqual([join(project, "src", "app.ts")]);
+      expect(ON_A_MOUNT.test(path)).toBe(true);
+    }
+    for (const path of ["/home/me/mnt/a", "/Users/me/a", "/run/user/1000/a", "C:\\mnt\\a"]) {
+      expect(ON_A_MOUNT.test(path)).toBe(false);
     }
   });
 });

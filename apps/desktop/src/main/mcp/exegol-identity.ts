@@ -23,7 +23,6 @@ function parentOf(pid: number): number | null {
 }
 
 const PID_WALK_MAX_HOPS = 4;
-const TABLE_MAX_AGE_MS = 5_000;
 
 /**
  * Which session a shim belongs to, when sessions share a token: the shim descends from its CLI,
@@ -32,33 +31,32 @@ const TABLE_MAX_AGE_MS = 5_000;
  */
 function ancestorPids(conn: McpConnectionState | undefined, ppid: number | undefined): number[] {
   if (conn?.ancestors) return conn.ancestors;
-  const chain: number[] = [];
-  let pid: number | null = ppid ?? null;
-  while (pid !== null && chain.length < PID_WALK_MAX_HOPS) {
-    chain.push(pid);
-    pid = chain.length < PID_WALK_MAX_HOPS ? parentOf(pid) : null;
-  }
+  const chain = ppid === undefined ? [] : ancestorChain(ppid, parentOf);
   if (conn) conn.ancestors = chain;
   return chain;
 }
 
 /** A PTY's PowerShell sits above the CLI, and the walk needs a process table Windows reads in a
- *  second or two: read off the main thread, once per connection */
+ *  second or two: off the main thread, once per connection and only for a live token. Always a
+ *  fresh read: the chain stays for the connection and an older table can miss the shim's parent */
 export async function primeAncestors(
   conn: McpConnectionState | undefined,
+  token: string | undefined,
   ppid: number | undefined,
 ): Promise<void> {
   if (process.platform !== "win32" || !conn || conn.ancestors || ppid === undefined) return;
-  const rows = await readProcessTable({ maxAgeMs: TABLE_MAX_AGE_MS }).catch(() => []);
-  conn.ancestors = ancestorChain(ppid, new Map(rows.map((r) => [r.pid, r.ppid])));
+  if (!token || !boundAgents(token)?.length) return;
+  const rows = await readProcessTable().catch(() => []);
+  const parents = new Map(rows.map((r) => [r.pid, r.ppid]));
+  conn.ancestors = ancestorChain(ppid, (pid) => parents.get(pid));
 }
 
-export function ancestorChain(ppid: number, parents: Map<number, number>): number[] {
+export function ancestorChain(ppid: number, parent: (pid: number) => number | null | undefined) {
   const chain = [ppid];
   while (chain.length < PID_WALK_MAX_HOPS) {
-    const parent = parents.get(chain.at(-1) as number);
-    if (!parent) break;
-    chain.push(parent);
+    const next = parent(chain.at(-1) as number);
+    if (!next) break;
+    chain.push(next);
   }
   return chain;
 }

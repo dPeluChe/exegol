@@ -24,7 +24,7 @@ export interface LinkMatch {
   range?: IBufferRange;
 }
 
-const NAME_CHAR = "[\\p{L}\\p{N}_.@~+-]";
+export const NAME_CHAR = "[\\p{L}\\p{N}_.@~+-]";
 const NAME_EDGE = "[\\p{L}\\p{N}_@~+-]";
 const SEGMENT = `${NAME_CHAR}+`;
 const EXTENSION = "\\.[A-Za-z][A-Za-z0-9]{0,7}";

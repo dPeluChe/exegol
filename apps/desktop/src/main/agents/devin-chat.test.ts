@@ -103,8 +103,11 @@ describe("devinDbPath", () => {
   it("lives in roaming app data on Windows", () => {
     vi.stubEnv("APPDATA", join("C:", "Roaming"));
     const platform = vi.spyOn(process, "platform", "get").mockReturnValue("win32");
-    expect(devinDbPath()).toBe(join("C:", "Roaming", "devin", "cli", "sessions.db"));
-    platform.mockRestore();
-    vi.unstubAllEnvs();
+    try {
+      expect(devinDbPath()).toBe(join("C:", "Roaming", "devin", "cli", "sessions.db"));
+    } finally {
+      platform.mockRestore();
+      vi.unstubAllEnvs();
+    }
   });
 });

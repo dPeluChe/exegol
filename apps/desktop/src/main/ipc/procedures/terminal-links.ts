@@ -41,7 +41,7 @@ export function linkOpenAction(path: string, how: LinkOpen): LinkOpen {
 
 /** Checked before any realpath: a printed path must not wake a network mount. macOS, Linux and
  *  gvfs mounts, and a Windows share in either spelling */
-const ON_A_MOUNT =
+export const ON_A_MOUNT =
   /^(?:\/(?:Volumes|net|Network|mnt|media|run\/media|run\/user\/\d+\/gvfs)\/|\\\\|\/\/)/;
 
 /** Relative paths resolve against main's session folder; a renderer cwd counts only inside it */

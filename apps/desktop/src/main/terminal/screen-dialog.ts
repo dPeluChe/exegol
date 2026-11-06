@@ -7,7 +7,7 @@ const OPTION = /^[\s│|]*[❯>›]?\s*(\d)[.)]\s+(.+?)[\s│|]*$/;
 // quoted list has it on every line, so exactly one must carry it
 const PICKED = /^[\s│|]*[❯›>]\s*(\d)[.)]?\s+(.+?)[\s│|]*$/;
 const PICKER_OPTION = /^[\s│|]*(?:[❯›>]\s*)?(\d)[.)]?\s+(.+?)[\s│|]*$/;
-const SELECTED = /^[\s│|]*[❯›>]/;
+const oneSelected = (lines: string[]) => lines.filter((l) => PICKED.test(l)).length === 1;
 const CONTEXT_LINES = 6;
 /** Help lines under an option */
 const MAX_GAP = 2;
@@ -47,7 +47,7 @@ function readPicker(lines: string[], last: number): ScreenDialog | null {
   }
   const end = rows.at(-1) as number;
   if (rows.length < 2 || last - end > MAX_PICKER_TAIL) return null;
-  if (rows.filter((row) => SELECTED.test(lines[row] ?? "")).length !== 1) return null;
+  if (!oneSelected(rows.map((row) => lines[row] ?? ""))) return null;
   const options = rows.map((row) => {
     const m = PICKER_OPTION.exec(lines[row] ?? "") as RegExpExecArray;
     return { key: m[1] as string, label: (m[2] as string).trim() };
@@ -102,8 +102,7 @@ function readPlainList(lines: string[], last: number): ScreenDialog | null {
   });
   const inOrder = options.every((o, i) => o.key === String(i + 1));
   if (options.length < 2 || !inOrder) return null;
-  const picked = lines.slice(start, end + 1).filter((l) => SELECTED.test(l)).length === 1;
-  return dialogAt(lines, start, options, picked);
+  return dialogAt(lines, start, options, oneSelected(lines.slice(start, end + 1)));
 }
 
 const clean = (line: string) => line.replace(/^[\s│|╭╰─]+|[\s│|╮╯─]+$/g, "").trim();
