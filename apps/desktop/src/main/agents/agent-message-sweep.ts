@@ -1,6 +1,6 @@
 import { logger } from "../lib/logger";
 import { isEchoingInjection } from "./agent-message-injection";
-import { isAgentAwaitingApproval, queuedAgentIds } from "./agent-message-queue";
+import { needsUser, queuedAgentIds } from "./agent-message-queue";
 
 // Delivery waits for a turn boundary, but only providers with hooks (claude,
 // codex) reliably emit one — opencode's TUI produces nothing the scraper
@@ -56,7 +56,7 @@ function sweepQuietAgents(deliver: (agentId: string) => void): void {
     const announces = boundarySignalling.has(agentId);
     if (quietFor < (announces ? BOUNDARY_STALL_MS : QUIET_MS)) continue;
     if (isEchoingInjection(agentId)) continue;
-    if (isAgentAwaitingApproval(agentId)) continue;
+    if (needsUser(agentId)) continue;
     if (announces) {
       logger.warn(
         `[AgentMsg] ${agentId} announces turn boundaries but none arrived in ${BOUNDARY_STALL_MS / 1000}s — delivering anyway`,

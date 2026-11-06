@@ -2,6 +2,7 @@ import type { FollowUpItem, FollowUpsChangedEvent } from "@exegol/shared";
 import type Database from "libsql";
 import { markMessagesUndeliverable } from "../db/queries/messages";
 import { broadcast } from "../lib/event-bus";
+import { getPtyHost } from "../terminal/pty-host";
 import type { PendingMessage } from "./agent-message-state";
 
 const queues = new Map<string, PendingMessage[]>();
@@ -52,6 +53,11 @@ export function setAgentAwaitingApproval(agentId: string, awaiting: boolean): vo
 
 export function isAgentAwaitingApproval(agentId: string): boolean {
   return agentsAwaitingApproval.has(agentId);
+}
+
+/** A hook-reported approval or a dialog on its screen (CLIs with no hook for it): Enter answers it */
+export function needsUser(agentId: string): boolean {
+  return agentsAwaitingApproval.has(agentId) || getPtyHost().screenDialog(agentId) != null;
 }
 
 /** The queue died; the row is where the sender can still learn that (follow-ups have no row). */
