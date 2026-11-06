@@ -169,9 +169,7 @@ export function registerIpcHandlers(): void {
   ipcMain.handle("updater:check", () => {
     checkForUpdatesManual();
   });
-  ipcMain.handle("updater:install", () => {
-    installUpdate();
-  });
+  ipcMain.handle("updater:install", () => installUpdate());
 
   // Window controls
   ipcMain.on("window:minimize", () => {

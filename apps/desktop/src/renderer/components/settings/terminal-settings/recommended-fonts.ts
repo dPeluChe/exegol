@@ -18,6 +18,10 @@ export interface RecommendedFont {
   bundled?: boolean;
 }
 
+import { IS_MAC } from "../../../lib/keymap";
+
+const MAC_ONLY = new Set(["SF Mono", "Menlo"]);
+
 export const RECOMMENDED_FONTS: RecommendedFont[] = [
   // ── Bundled Nerd Fonts (shipped inside the .app, no install needed) ───
   {
@@ -109,7 +113,7 @@ export const RECOMMENDED_FONTS: RecommendedFont[] = [
     url: "",
     nerdFont: false,
   },
-];
+].filter((font) => IS_MAC || !MAC_ONLY.has(font.family));
 
 /** Detect if a font is available using canvas measurement */
 export function isFontInstalled(family: string): boolean {

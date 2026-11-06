@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, statfs } from "node:fs/promises";
 import * as os from "node:os";
 import type { MetricsSnapshot } from "@exegol/shared";
 import { app, BrowserWindow } from "electron";
@@ -9,7 +9,7 @@ import { getNotificationBus } from "../notifications/bus";
 import { getPtyHost } from "../terminal/pty-host";
 import { readPidFile } from "../terminal/pty-sidecar-discovery";
 import type { SessionMemoryResult } from "../terminal/pty-sidecar-protocol";
-import { readProcessMetrics } from "./process-metrics";
+import { readProcessMetrics, WIN_TABLE_AGE_MS } from "./process-metrics";
 import { type ProcRow, readProcessTable, readProcessUsage } from "./process-table";
 import { duBytes } from "./storage";
 
@@ -339,10 +339,9 @@ async function getProcessUsage(cores: number): Promise<ProcessUsage> {
     exegolMemory += m.memory.workingSetSize * 1024;
   }
   const sidecarPid = readPidFile()?.pid ?? 0;
-  // No ps on Windows: Exegol's own Electron processes only
   const rows =
     process.platform === "win32"
-      ? []
+      ? await readProcessTable({ maxAgeMs: WIN_TABLE_AGE_MS }).catch(() => [])
       : (readProcessTable.recent(SHARED_PS_AGE_MS) ?? (await readProcessUsage()));
   const children = new Map<number, ProcRow[]>();
   for (const r of rows) children.set(r.ppid, [...(children.get(r.ppid) ?? []), r]);
@@ -384,6 +383,18 @@ const DATA_VOLUME = existsSync("/System/Volumes/Data")
 
 async function getDiskMetrics() {
   try {
+    if (process.platform === "win32") {
+      const fsInfo = await statfs(DATA_VOLUME);
+      const total = fsInfo.blocks * fsInfo.bsize;
+      const free = fsInfo.bavail * fsInfo.bsize;
+      const used = total - free;
+      return {
+        total,
+        used,
+        free,
+        usagePercent: total > 0 ? Math.round((used / total) * 1000) / 10 : 0,
+      };
+    }
     const { stdout } = await execFileAsync("df", ["-k", DATA_VOLUME], { timeout: 5_000 });
     const line = stdout.trim().split("\n")[1];
     if (!line) return { total: 0, used: 0, free: 0, usagePercent: 0 };

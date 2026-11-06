@@ -22,6 +22,7 @@ const VSCODE_BIN = "Contents/Resources/app/bin";
 const TOOLBOX_SCRIPTS = [
   "Library/Application Support/JetBrains/Toolbox/scripts",
   ".local/share/JetBrains/Toolbox/scripts",
+  "AppData/Local/JetBrains/Toolbox/scripts",
 ];
 
 /** Sources in docs/TASK_COMPLETED/2610.md (2026-10-07). VS Code forks take `--goto file:line`,

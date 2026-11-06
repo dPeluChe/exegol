@@ -2,6 +2,9 @@ import type { InterruptionLevel } from "./agent-signals";
 import { DEFAULT_DICTATION_SETTINGS, type DictationSettings } from "./dictation";
 import type { IdeType } from "./ide";
 
+/** Menlo exists only on macOS; the bundled Meslo is its look elsewhere */
+export const DEFAULT_TERMINAL_FONT = "Menlo, Monaco, MesloLGS NF, monospace";
+
 export type AgentCliConfig = {
   cliType: string;
   command: string;
@@ -80,7 +83,7 @@ export const DEFAULT_SETTINGS: Settings = {
   ],
   globalHotkey: "CommandOrControl+Shift+E",
   terminalFontSize: 14,
-  terminalFontFamily: "Menlo, Monaco, monospace",
+  terminalFontFamily: DEFAULT_TERMINAL_FONT,
   sendToRunTerminal: false,
   sendToSubmitAgent: false,
   notificationsEnabled: true,

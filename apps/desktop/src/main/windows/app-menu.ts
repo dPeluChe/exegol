@@ -185,8 +185,8 @@ export function popupAppMenu(win: BrowserWindow, x: number, y: number): void {
         { type: "separator" },
         { label: "Settings…", ...keys("Ctrl+Shift+,"), click: () => openSettingsWindow() },
         { type: "separator" },
-        ...cliItems(),
-        { type: "separator" },
+        // POSIX script and links: no Windows form of the CLI ships yet
+        ...(process.platform === "win32" ? [] : [...cliItems(), { type: "separator" as const }]),
         { label: `Quit ${app.name}`, ...keys("Ctrl+Shift+Q"), click: () => app.quit() },
       ],
     },

@@ -1,7 +1,7 @@
 import { readdir } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { mapWithConcurrency } from "../../lib/concurrency";
+import { windowsAppData, xdgDataDir } from "../../lib/xdg-data";
 import { FILE_CONCURRENCY, mentionsAnyCwd } from "../pool";
 import { readHead } from "../read-head";
 import { type LocalHistoryProvider, type LocalSession, normalizeTitle } from "../types";
@@ -16,12 +16,17 @@ interface GooseHeader {
   description?: string;
 }
 
+const gooseSessionsDir = () =>
+  process.platform === "win32"
+    ? join(windowsAppData(), "Block", "goose", "data", "sessions")
+    : join(xdgDataDir(), "goose", "sessions");
+
 export const gooseHistory: LocalHistoryProvider = {
   id: "goose",
   sharedStore: true,
 
   async list(cwds: string[], since: number): Promise<LocalSession[]> {
-    const dir = join(homedir(), ".local", "share", "goose", "sessions");
+    const dir = gooseSessionsDir();
     let entries: string[];
     try {
       entries = await readdir(dir);

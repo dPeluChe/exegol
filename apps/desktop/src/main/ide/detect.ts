@@ -55,12 +55,17 @@ async function scan(): Promise<Map<IdeId, IdeLauncher>> {
   return found;
 }
 
+/** Toolbox writes `idea.cmd` on Windows */
+const SCRIPT_EXTENSIONS = process.platform === "win32" ? [".cmd", ".exe", ""] : [""];
+
 function cliLauncher(launch: IdeLaunch, home: string): IdeLauncher | null {
   for (const command of launch.commands) {
     const onPath = findOnPath(command);
     const path =
       onPath ??
-      launch.extraDirs?.map((d) => join(home, d, command)).find((p) => existsSync(p)) ??
+      launch.extraDirs
+        ?.flatMap((d) => SCRIPT_EXTENSIONS.map((ext) => join(home, d, command + ext)))
+        .find((p) => existsSync(p)) ??
       null;
     if (path && scriptTargetExists(path)) return { argv: [path], line: launch.line };
   }

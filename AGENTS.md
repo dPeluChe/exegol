@@ -39,6 +39,10 @@ React health: CI runs react-doctor@0.9.14 on the PR's changes; errors fail; fix 
   (`assertPathInsideProject`, `isPathAllowed`, zod regex for names).
 - Never commit secrets, never put prompts, agent output, keys or home paths in log lines
   (bug reports are public).
+- The app runs on macOS, Windows and Linux: no `split("/")`, `startsWith("/")`, `/dev/null`, `ps` or
+  bare `.cmd` launches in new code. Use `node:path`, `@exegol/shared` path helpers, `execFileAsync`,
+  `cliLaunch`, `readProcessTable`, `IS_MAC`/`PLATFORM`. What cannot be run here goes in
+  `docs/GUIDES/CROSS_PLATFORM_CHECKS.md`.
 - Reuse existing helpers; match the surrounding code; comments only for a non-obvious why.
 - Do not run `git push --force`, rewrite history on `main`, or publish releases unless asked.
 

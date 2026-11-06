@@ -117,7 +117,7 @@ export function ResourcesOverview() {
             ? `${gb(metrics.disk.total - metrics.disk.free)} of ${gb(metrics.disk.total)}`
             : undefined
         }
-        title="Your data volume (on macOS / is the read-only system volume)"
+        title="Your data volume"
       />
     </div>
   );
