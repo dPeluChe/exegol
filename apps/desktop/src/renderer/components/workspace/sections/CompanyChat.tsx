@@ -29,6 +29,7 @@ import { DEFAULT_CHAT_FONT, useAppStore } from "../../../stores/app";
 import { toastError } from "../../../stores/toasts";
 import { AgentQuestion, useScreenDialog } from "../../agents/AgentQuestion";
 import { AgentIcon } from "../../common/AgentIcon";
+import { DictationWidget } from "../../layout/StatusBarDictation";
 import { FollowUpList, useFollowUps } from "../../terminal/FollowUpControl";
 import { DELIVERY, peerName, useAgentMessages } from "./AgentMessages";
 import { ChatMarkdown } from "./ChatMarkdown";
@@ -261,6 +262,7 @@ function ChatInput({ agent, onTerminal }: { agent: AgentState; onTerminal: () =>
           aria-label="Message this session"
           className="min-w-0 flex-1 resize-none rounded border border-border bg-bg-primary px-2 py-1.5 text-xs text-text-primary outline-none placeholder:text-text-muted focus:border-accent disabled:opacity-60"
         />
+        <DictationWidget />
         <button
           type="button"
           onClick={submit}

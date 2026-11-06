@@ -91,7 +91,7 @@ export function useDictation() {
       const d = dictationSettingsOf(saved);
       // No speech engine on this system: the chord stays the app's (or the terminal's)
       const engine = queryClient.getQueryData<DictationStatus>(DICTATION_STATUS_KEY);
-      const key = d.enabled && engine?.engineAvailable ? d.shortcut : "";
+      const key = d.enabled && engine?.engineAvailable !== false ? d.shortcut : "";
       if (key !== cached.key) cached = { key, chord: key ? parseChord(key) : null };
       return cached.chord;
     });

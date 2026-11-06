@@ -98,10 +98,11 @@ export function useMediaConsent() {
   });
 }
 
-/** The speech engine loads on this system: without it every dictation control hides */
+/** Controls hide only on a known "no engine": a status slow or failed to load must not take them.
+ *  A start reads the status itself and says why it stopped */
 export function useDictationAvailable(): boolean {
   const { data } = useDictationStatus();
-  return data?.engineAvailable === true;
+  return data?.engineAvailable !== false;
 }
 
 /** Status bar widget defaults that depend on state: Dictation shows once the mic was allowed */

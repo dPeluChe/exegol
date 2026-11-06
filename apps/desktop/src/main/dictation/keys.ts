@@ -60,6 +60,7 @@ export function forwardDictationKeys(
     if (input.type === "keyDown" && matchesChord(chordKeys(input), chord, mac)) {
       event.preventDefault();
       if (input.isAutoRepeat) return;
+      logger.info("[Dictation] chord in a browser page");
       held = true;
       host.send("dictation:key", { kind: "down" });
     } else if (input.type === "keyUp" && held && releasesChord(input, chord, mac)) {
