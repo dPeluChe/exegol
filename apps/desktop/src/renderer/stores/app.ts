@@ -39,6 +39,12 @@ interface AppStore {
   /** The Dashboard tab last open; null until one is picked */
   dashboardMode: DashboardMode | null;
   setDashboardMode: (mode: DashboardMode) => void;
+  /** The session Company shows, a pick or the default on screen when it was left, and how; held
+   *  here, off persist, so leaving the view keeps them */
+  companyPickedId: string | null;
+  setCompanyPickedId: (id: string | null) => void;
+  companyView: CompanyView;
+  setCompanyView: (view: CompanyView) => void;
   /** Which side of Company the session panel sits on */
   companySessionSide: CompanySide;
   toggleCompanySessionSide: () => void;
@@ -212,6 +218,11 @@ export const useAppStore = create<AppStore>()(
       setCompanySeenAt: (at) => set({ companySeenAt: at }),
       dashboardMode: null,
       setDashboardMode: (mode) => set({ dashboardMode: mode }),
+      companyPickedId: null,
+      setCompanyPickedId: (id) =>
+        set((s) => (s.companyPickedId === id ? s : { companyPickedId: id })),
+      companyView: "chat",
+      setCompanyView: (view) => set({ companyView: view }),
       companySessionSide: "left",
       toggleCompanySessionSide: () =>
         set((s) => ({ companySessionSide: s.companySessionSide === "left" ? "right" : "left" })),
