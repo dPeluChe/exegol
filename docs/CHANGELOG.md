@@ -12,6 +12,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ### Added
 - Company chat loads earlier messages, opens links and file paths on click, and shows the CLI and time on each turn; Chat and Terminal keep their own panel width, and the panel sits left or right
 - The Dashboard reopens on the tab you left
+- Antigravity in the Company chat reads as a conversation: prompts, activity and formatted answers. Long replies are no longer cut short
 - The Company chat has a dictation button, and dictation no longer goes missing while its status has not loaded
 - Company chat reads opencode and Devin from their own databases: real turns and tools, earlier messages too. The session panel has text size controls for Chat and Terminal
 - Company chat has a Send button and says when a message was typed in the terminal; using the panel keeps it on that session

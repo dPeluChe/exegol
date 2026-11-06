@@ -10,6 +10,7 @@ import { broadcast } from "../lib/event-bus";
 import { setBounded } from "../lib/set-bounded";
 import { assertSafePath } from "../security/path-guard";
 import { getPtyHost } from "../terminal/pty-host";
+import { agyTurns } from "./agy-terminal";
 import { devinDbPath, devinPage, olderDevinPage } from "./devin-chat";
 import { hookCwdOf, hookSessionOf } from "./hook-cwd";
 import { olderOpencodePage, opencodeDbPath, opencodePage } from "./opencode-chat";
@@ -228,12 +229,10 @@ export async function chatTurns(
   }
   const text = getPtyHost().textLines(agentId);
   if (!text) return NOTHING;
-  const turns = terminalTurns(
-    text.lines,
-    text.total - text.lines.length,
-    turnMarks.get(agentId) ?? [],
-    text.altScreen,
-  );
+  const first = text.total - text.lines.length;
+  const parsed = agent.cliType === "agy" && !text.altScreen ? agyTurns(text.lines, first) : null;
+  const turns =
+    parsed ?? terminalTurns(text.lines, first, turnMarks.get(agentId) ?? [], text.altScreen);
   return { turns, cursor: null, reset: true, fromTerminal: true, older: null };
 }
 

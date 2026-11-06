@@ -277,7 +277,8 @@ function ChatInput({ agent, onTerminal }: { agent: AgentState; onTerminal: () =>
   );
 }
 
-/** The session as turns. Text scraped from the terminal is not Markdown: it stays as printed */
+/** The session as turns. Text scraped from the terminal is not Markdown and stays as printed,
+ *  except Antigravity's, whose screen shows the raw Markdown */
 export function CompanyChat({
   agent,
   where,
@@ -336,7 +337,7 @@ export function CompanyChat({
               bubble={bubble}
               agentId={agent.id}
               cliType={agent.cliType}
-              formatted={!chat?.fromTerminal}
+              formatted={!chat?.fromTerminal || agent.cliType === "agy"}
             />
           ))}
         </div>

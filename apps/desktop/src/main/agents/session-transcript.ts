@@ -5,7 +5,7 @@ import { BOILERPLATE_PREFIXES } from "../history/providers/codex";
 /** One read of a transcript, and the first read's window: a session log reaches tens of MB */
 export const MAX_READ_BYTES = 2 * 1024 * 1024;
 const NEWLINE = 0x0a;
-const MAX_TURN_CHARS = 8000;
+const MAX_TURN_CHARS = 32_000;
 const OLDER_MIN_TURNS = 40;
 // Tool results fill a log: a window can hold no turn at all
 const OLDER_MAX_READS = 5;
@@ -198,6 +198,7 @@ export function terminalTurns(
   const bounds = [first, ...cuts, first + lines.length];
   return bounds.slice(0, -1).flatMap((from, i) => {
     const part = lines.slice(from - first, (bounds[i + 1] as number) - first);
-    return textTurn(`term:${from}`, "assistant", plainText(part), null);
+    // The end is what a terminal is showing now
+    return textTurn(`term:${from}`, "assistant", plainText(part).slice(-MAX_TURN_CHARS), null);
   });
 }
