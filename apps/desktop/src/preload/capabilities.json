@@ -462,6 +462,7 @@
     "browser:agent-state",
     "browser:open-request",
     "browser:open-result",
+    "browser:close-request",
     "browser:page-dialog",
     "browser:page-dialog-closed",
     "browser:page-dialog-answer",

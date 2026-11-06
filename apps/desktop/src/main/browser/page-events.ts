@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { ipcMain, type WebContents } from "electron";
 import { logger } from "../lib/logger";
 import { allowPageClipboard, isUserGesture, originOf } from "./clipboard-policy";
-import { getPaneControl, isAgentActing } from "./control";
+import { getPaneControl, isAgentActing, noteUserGesture } from "./control";
 import {
   addPending,
   answerPending,
@@ -136,6 +136,8 @@ export function trackPageEvents(wc: WebContents): void {
   wc.on("input-event", (_e, input) => {
     if (!isUserGesture(input?.type) || Date.now() < state.agentInputUntil) return;
     state.gesture = { at: Date.now(), origin: originOf(wc.getURL()) };
+    const paneId = paneOf(wc.id);
+    if (paneId) noteUserGesture(paneId);
   });
   wc.on("did-start-navigation", (details) => {
     if (!details.isMainFrame || details.isSameDocument) return;

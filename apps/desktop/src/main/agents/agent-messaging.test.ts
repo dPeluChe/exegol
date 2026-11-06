@@ -24,12 +24,15 @@ vi.mock("../terminal/pty-host", () => ({
 import { createAgentLink, listLinksFrom } from "../db/queries/agent-links";
 import { getMessageDelivery, markStaleQueuedUndeliverable } from "../db/queries/messages";
 import { noteTurnStarted, SUBMIT_CONFIRM_MS, SUBMIT_RETRIES } from "./agent-message-injection";
+import { setAgentAwaitingApproval } from "./agent-message-queue";
+import { stopSweep } from "./agent-message-sweep";
 import {
   cancelQueuedMessage,
   checkAgentMessages,
   clearAgentLinks,
   clearAgentMessageQueue,
   deliverPendingAgentMessages,
+  failQueuedMessages,
   fireAgentLinks,
   getMessageDeliveryState,
   isEchoingInjection,
@@ -37,8 +40,6 @@ import {
   seedAgentLinkCache,
   sendAgentMessage,
   sendSystemMessage,
-  setAgentAwaitingApproval,
-  stopSweep,
 } from "./agent-messaging";
 
 function setupDb(): Database.Database {
@@ -60,11 +61,16 @@ function resetQueues(db: Database.Database, ids: string[]): void {
   stopSweep();
 }
 
-function insertAgent(db: Database.Database, id: string, status: string): void {
+function insertAgent(
+  db: Database.Database,
+  id: string,
+  status: string,
+  cliType = "claude-code",
+): void {
   db.prepare(
     `INSERT INTO agents (id, project_id, cli_type, status, task_description, started_at)
-     VALUES (?, 'p1', 'claude-code', ?, 'do things', unixepoch())`,
-  ).run(id, status);
+     VALUES (?, 'p1', ?, ?, 'do things', unixepoch())`,
+  ).run(id, cliType, status);
 }
 
 function messageCount(db: Database.Database): number {
@@ -82,6 +88,34 @@ describe("sendAgentMessage", () => {
     resetQueues(db, ["a1", "a2", "a3", "e1", "e2"]);
     vi.useFakeTimers();
     vi.setSystemTime(new Date("2026-08-11T12:00:00Z"));
+  });
+
+  it("never pastes into a plain terminal: it would run as a command", () => {
+    insertAgent(db, "a1", "running");
+    insertAgent(db, "a2", "waiting_input", "shell");
+    ptyMock.alive.add("a2");
+    expect(() => sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "a2", text: "x" })).toThrow(
+      "plain terminal",
+    );
+    expect(sendSystemMessage(db, { toAgentId: "a2", source: "PR watch", text: "x" })).toBeNull();
+    expect(ptyMock.writes).toEqual([]);
+  });
+
+  it("a CLI back at its shell gets nothing it had queued, and the sender is told", () => {
+    insertAgent(db, "a1", "waiting_input");
+    insertAgent(db, "a2", "running", "codex");
+    ptyMock.alive.add("a1");
+    ptyMock.alive.add("a2");
+    const { messageId } = sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "a2", text: "x" });
+
+    failQueuedMessages(db, "a2");
+    deliverPendingAgentMessages(db, "a2");
+
+    expect(ptyMock.writes.filter((w) => w.id === "a2")).toEqual([]);
+    expect(getMessageDelivery(db, messageId)?.state).toBe("undeliverable");
+    expect(ptyMock.writes.some((w) => w.id === "a1" && w.data.includes("never reached"))).toBe(
+      true,
+    );
   });
 
   it("delivers immediately to a target at its prompt, with attribution + submit", () => {

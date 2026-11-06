@@ -1,12 +1,34 @@
-import { checkAgentUrl, isOutsideAllowlist, needsUserReason } from "@exegol/shared";
+import {
+  checkAgentUrl,
+  hostOf,
+  isHostAllowed,
+  isOutsideAllowlist,
+  needsUserReason,
+} from "@exegol/shared";
 import type Database from "libsql";
 import { getAgent } from "../db/queries/agents";
-import { getProject } from "../db/queries/projects";
+import { getProjectBrowserHosts } from "../db/queries/projects";
+import type { HISTORY_ACTIONS } from "../mcp/browser-tool-defs";
 import { ExegolToolError } from "../mcp/exegol-protocol";
-import { getPaneControl, lastPaneOf, noteAgentAction, setNeedsUser } from "./control";
-import type { LogRing } from "./log-ring";
+import {
+  getPaneControl,
+  heldByOther,
+  lastSeenPane,
+  noteAgentAction,
+  setNeedsUser,
+} from "./control";
+import type { PageLoad } from "./load-state";
+import type { BrowserLogEntry, LogRing } from "./log-ring";
 import { detectNeedsUser, type NeedsUser } from "./needs-user";
-import { type RawSignals, type RawSnapshot, signalsScript, snapshotScript } from "./page-scripts";
+import {
+  type RawSignals,
+  type RawSnapshot,
+  type SnapshotOptions,
+  signalsScript,
+  snapshotScript,
+} from "./page-scripts";
+
+export type HistoryAction = (typeof HISTORY_ACTIONS)[number];
 
 /** One live browser pane as the tools see it. The host only hands out panes whose webview runs
  *  in the asked project's own partition, so a pane id from another project never resolves */
@@ -17,10 +39,17 @@ export interface BrowserPaneHandle {
   getTitle(): string;
   runIsolated(code: string): Promise<unknown>;
   runMain(code: string, timeoutMs: number): Promise<unknown>;
-  loadUrl(url: string): Promise<void>;
+  /** Starts the load: awaitLoad and loadState tell how it went */
+  loadUrl(url: string): void;
+  /** Waits for the load in progress, bounded. True when it is still going on after that */
+  awaitLoad(): Promise<boolean>;
+  loadState(): Pick<PageLoad, "failure" | "stopped">;
   /** JPEG, at most 1280px wide */
-  capture(): Promise<Buffer>;
+  capture(fullPage: boolean): Promise<Buffer>;
   sendKey(keyCode: string, modifiers: string[]): void;
+  moveMouse(x: number, y: number): void;
+  /** False when there is nowhere to go */
+  history(action: HistoryAction): boolean;
   lastHttpStatus(): number | null;
   logs: LogRing;
 }
@@ -29,6 +58,8 @@ export interface BrowserHost {
   livePanes(projectId: string): BrowserPaneHandle[];
   openPane(req: { projectId: string; agentId: string; url: string }): Promise<BrowserPaneHandle>;
   devServerUrl(projectId: string): Promise<string | null>;
+  /** False with no window to close it in */
+  closePane(paneId: string): boolean;
 }
 
 export interface BrowserToolContext {
@@ -73,7 +104,43 @@ export function logAction(
 }
 
 export function allowedHostsOf(db: Database.Database, projectId: string): string[] {
-  return getProject(db, projectId)?.browserHosts ?? [];
+  return getProjectBrowserHosts(db, projectId);
+}
+
+export const PAGE_CHANGED =
+  "The page changed (navigated to another host) before the action ran: take a new browser_snapshot.";
+
+/** Log entries the project may see: a page outside its hosts keeps its console to itself */
+export const visibleEntries = (entries: BrowserLogEntry[], allowed: string[]): BrowserLogEntry[] =>
+  entries.filter((e) => !e.page || isHostAllowed(e.page, allowed));
+
+/** The main document failed to load: what the pane shows is Chromium's error page, not the site */
+export function loadFailedResult(
+  db: Database.Database,
+  ctx: BrowserToolContext,
+  pane: BrowserPaneHandle,
+) {
+  const { failure } = pane.loadState();
+  if (!failure) return null;
+  const outside = isOutsideAllowlist(failure.url, allowedHostsOf(db, ctx.projectId));
+  return {
+    status: "load_failed",
+    pane: pane.paneId,
+    url: outside ? `(outside the allowed hosts: ${hostOf(failure.url)})` : failure.url,
+    error: failure.error,
+    hint: "The page did not load, so there is nothing to read or act on. Check that the server is running and the URL is right, then browser_navigate.",
+  };
+}
+
+/** A read that got no page: the load that failed, the login it stopped at, or an error */
+export function pageUnavailable(
+  pane: BrowserPaneHandle,
+  needsUser: NeedsUser | null,
+  loadFailed: ReturnType<typeof loadFailedResult>,
+) {
+  if (loadFailed) return loadFailed;
+  if (needsUser) return needsUserResult(pane, needsUser);
+  throw new ExegolToolError("Could not read the page", -32021);
 }
 
 export function aliasOf(db: Database.Database, agentId: string): string | null {
@@ -84,25 +151,12 @@ export function aliasOf(db: Database.Database, agentId: string): string | null {
   }
 }
 
-/** The pane an agent means: the one it named, else the last it used, else the only one.
- *  `lenient` (browser_open): with several and none used yet, the first; with none, null */
+/** The pane an agent means: the one it named, else the last it used, else the only one */
 export function resolvePane(
   panes: BrowserPaneHandle[],
   ctx: BrowserToolContext,
   requested: unknown,
-  opts: { lenient: true },
-): BrowserPaneHandle | null;
-export function resolvePane(
-  panes: BrowserPaneHandle[],
-  ctx: BrowserToolContext,
-  requested: unknown,
-): BrowserPaneHandle;
-export function resolvePane(
-  panes: BrowserPaneHandle[],
-  ctx: BrowserToolContext,
-  requested: unknown,
-  opts: { lenient?: boolean } = {},
-): BrowserPaneHandle | null {
+): BrowserPaneHandle {
   const own = panes.filter((p) => p.projectId === ctx.projectId);
   if (typeof requested === "string" && requested) {
     const p = own.find((x) => x.paneId === requested);
@@ -115,15 +169,12 @@ export function resolvePane(
     }
     return p;
   }
-  const last = lastPaneOf(
+  const last = lastSeenPane(
     ctx.agentId,
     own.map((p) => p.paneId),
   );
-  const pick =
-    own.find((p) => p.paneId === last) ??
-    (own.length === 1 || opts.lenient ? own[0] : undefined) ??
-    null;
-  if (pick || opts.lenient) return pick;
+  const pick = own.find((p) => p.paneId === last) ?? (own.length === 1 ? own[0] : undefined);
+  if (pick) return pick;
   if (own.length === 0) {
     throw new ExegolToolError(
       "No browser pane is open in your project (or its project is not on screen). Call browser_open.",
@@ -141,7 +192,7 @@ export function userHasControl(pane: BrowserPaneHandle) {
     ? {
         status: "user_has_control",
         pane: pane.paneId,
-        hint: "The user took over this browser. Wait with browser_wait_for_user, or ask them in chat; tools work again once they hand it back.",
+        hint: "The user took over this browser. You can still read the page. To act, wait with browser_wait_for_user or ask them in chat.",
       }
     : null;
 }
@@ -172,6 +223,7 @@ interface Inspected<T> {
   /** host:port the page was on when read, for the in-page guard of what follows */
   host: string;
   needsUser: NeedsUser | null;
+  loadFailed: ReturnType<typeof loadFailedResult>;
 }
 
 /** Reads the page the pane is on (the small signals, or the full snapshot) and checks it against
@@ -180,20 +232,22 @@ export async function inspect(
   db: Database.Database,
   ctx: BrowserToolContext,
   pane: BrowserPaneHandle,
-  full: true,
+  snapshot: SnapshotOptions,
 ): Promise<Inspected<RawSnapshot>>;
 export async function inspect(
   db: Database.Database,
   ctx: BrowserToolContext,
   pane: BrowserPaneHandle,
-  full?: false,
+  snapshot?: undefined,
 ): Promise<Inspected<RawSignals>>;
 export async function inspect(
   db: Database.Database,
   ctx: BrowserToolContext,
   pane: BrowserPaneHandle,
-  full = false,
+  snapshot?: SnapshotOptions,
 ): Promise<Inspected<RawSignals>> {
+  const loadFailed = loadFailedResult(db, ctx, pane);
+  if (loadFailed) return { page: null, host: "", needsUser: null, loadFailed };
   const allowed = allowedHostsOf(db, ctx.projectId);
   const flag = (n: NeedsUser | null) =>
     setNeedsUser(pane.paneId, ctx.projectId, n ? { host: n.host, kind: n.reason } : null);
@@ -201,9 +255,9 @@ export async function inspect(
   if (isOutsideAllowlist(url, allowed)) {
     const n = detectNeedsUser({ url, hasCaptcha: false, hasPasswordField: false }, allowed);
     flag(n);
-    return { page: null, host: "", needsUser: n };
+    return { page: null, host: "", needsUser: n, loadFailed: null };
   }
-  const raw = (await pane.runIsolated(full ? snapshotScript() : signalsScript())) as
+  const raw = (await pane.runIsolated(snapshot ? snapshotScript(snapshot) : signalsScript())) as
     | RawSignals
     | RawSnapshot
     | null;
@@ -218,12 +272,33 @@ export async function inspect(
   } catch {
     /* about:blank and the like: the guard compares "" */
   }
-  return { page: n?.reason === "outside_allowlist" ? null : raw, host: pageHost, needsUser: n };
+  return {
+    page: n?.reason === "outside_allowlist" ? null : raw,
+    host: pageHost,
+    needsUser: n,
+    loadFailed: null,
+  };
 }
 
 export function touch(db: Database.Database, ctx: BrowserToolContext, pane: BrowserPaneHandle) {
   noteAgentAction(pane.paneId, ctx.projectId, { id: ctx.agentId, alias: aliasOf(db, ctx.agentId) });
 }
+
+export function paneBusy(pane: BrowserPaneHandle, agentId: string) {
+  const holder = heldByOther(pane.paneId, agentId);
+  return holder
+    ? {
+        status: "pane_busy",
+        pane: pane.paneId,
+        held_by: holder,
+        hint: "Another agent is driving this pane. You can still read it. To act, use your own (browser_open with new_pane), or ask them with agent_send.",
+      }
+    : null;
+}
+
+/** Why this agent may not act on the pane right now */
+export const actBlocked = (pane: BrowserPaneHandle, agentId: string) =>
+  userHasControl(pane) ?? paneBusy(pane, agentId);
 
 export function checkUrlArg(db: Database.Database, ctx: BrowserToolContext, raw: unknown): string {
   if (typeof raw !== "string" || !raw.trim()) {

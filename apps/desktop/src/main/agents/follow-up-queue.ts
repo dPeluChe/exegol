@@ -5,14 +5,14 @@ import { logger } from "../lib/logger";
 import { getPtyHost } from "../terminal/pty-host";
 import { injectNow, isEchoingInjection, sanitizeAgentMessage } from "./agent-message-injection";
 import {
-  enqueue,
   listFollowUps,
-  msSinceAgentOutput,
   needsUser,
   notifyFollowUps,
   queuedFor,
   takeQueued,
-} from "./agent-messaging";
+} from "./agent-message-queue";
+import { msSinceAgentOutput } from "./agent-message-sweep";
+import { enqueue } from "./agent-messaging";
 import { interruptKeyOf } from "./cli-catalog";
 
 export { listFollowUps };
@@ -102,13 +102,6 @@ export function removeFollowUp(agentId: string, id: string): boolean {
   if (!takeQueued(agentId, isFollowUp(id))) return false;
   notifyFollowUps(agentId);
   return true;
-}
-
-/** Its CLI exited to the shell: nothing queued may reach the shell prompt */
-export function dropFollowUps(agentId: string): void {
-  let dropped = 0;
-  while (takeQueued(agentId, (p) => !!p.onDelivered)) dropped++;
-  if (dropped) notifyFollowUps(agentId);
 }
 
 /** At its input prompt; a terminal whose CLI exited back to the shell is idle too, but not there */

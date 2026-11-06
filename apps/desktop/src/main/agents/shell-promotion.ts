@@ -14,9 +14,9 @@ import {
   providerCommands,
   readProcessTable,
 } from "../system/shell-clis";
+import { failQueuedMessages } from "./agent-messaging";
 import { pickAgentCodename } from "./agent-names";
 import type { SessionMaps } from "./agent-session-callbacks";
-import { dropFollowUps } from "./follow-up-queue";
 import { attachOutputPipeline, detachOutputPipeline } from "./output-pipeline";
 import { lastInputOf } from "./session-activity";
 import { broadcastAgentStatus } from "./spawn-env";
@@ -129,7 +129,7 @@ function applyTransition(
     });
     return;
   }
-  dropFollowUps(session.id);
+  failQueuedMessages(db, session.id);
   // The prompt's own output must not be read as the agent's status
   detachOutputPipeline(maps, session.id);
   db.prepare("UPDATE agents SET status = 'idle', current_step = NULL WHERE id = ?").run(session.id);
@@ -215,6 +215,7 @@ export function startShellPromotion(db: Database.Database, maps: SessionMaps): (
     return () => {};
   }
   let busy = false;
+  let lastFailure = "";
   let lastRead: { at: number; ids: ReadonlySet<string> } = { at: 0, ids: new Set() };
   const tick = async () => {
     if (busy) return;
@@ -239,8 +240,12 @@ export function startShellPromotion(db: Database.Database, maps: SessionMaps): (
         const session = byId.get(step.id);
         if (session) applyTransition(db, maps, session, step, args[step.id] ?? "");
       }
+      lastFailure = "";
     } catch (err) {
-      logger.warn("[ShellPromotion] Tick failed:", err);
+      // Every 3 s while it lasts: a run of these would push real problems out of a bug report
+      const failure = String(err);
+      if (failure !== lastFailure) logger.warn("[ShellPromotion] Tick failed:", err);
+      lastFailure = failure;
     } finally {
       busy = false;
     }

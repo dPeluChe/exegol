@@ -1,18 +1,13 @@
-/**
- * T145 — Exegol MCP tool handlers: memory_search, memory_save, knowledge_get.
- * Every write is attributed via `context.agentId` (signed by the caller's
- * EXEGOL_AGENT_ID env, forwarded through the shim); access mode (T58) gates
- * which tools a `read`/`plan` agent may call — the store decides, the agent
- * can't corrupt data even if it tries.
- */
+/** T145: the Exegol MCP tool handlers. Identity and access rules: exegol-identity.ts */
 
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import type { MemoryCategory } from "@exegol/shared";
-import { MEMORY_CATEGORIES } from "@exegol/shared";
+import { acceptsFollowUps, MEMORY_CATEGORIES } from "@exegol/shared";
 import type Database from "libsql";
 import {
   AgentMessagingError,
+  assertReachable,
   cancelQueuedMessage,
   checkAgentMessages,
   getMessageDeliveryState,
@@ -41,17 +36,8 @@ import {
   searchMemories,
 } from "../memory/store";
 import { isPathInside, realpathSafeSync } from "../security/path-guard";
-import {
-  EXEGOL_TOOL_NAMES,
-  type ExegolToolContext,
-  ExegolToolError,
-  type ExegolToolName,
-  SEARCH_ONLY_TOOLS,
-} from "./exegol-protocol";
-
-// Tool definitions live in exegol-protocol.ts (dependency-free) so the shim
-// bundle never drags this module's memory/knowledge/db import graph.
-export { EXEGOL_TOOL_DEFS, getToolDefsForAccessMode } from "./exegol-protocol";
+import { type ExegolToolContext, ExegolToolError, type ExegolToolName } from "./exegol-protocol";
+import { EXEGOL_TOOL_NAMES, SEARCH_ONLY_TOOLS } from "./exegol-tool-defs";
 
 export { ExegolToolError };
 
@@ -167,9 +153,16 @@ function handleKnowledgeGet(
 /** T157: other live agents the caller can message, plus the caller's OWN
  *  identity (agents didn't know their own session name — "me llamó Juanito y
  *  no sé de dónde salió", 2026-08-12). */
-function handleAgentsList(db: Database.Database, context: ExegolToolContext) {
+function handleAgentsList(
+  db: Database.Database,
+  args: Record<string, unknown>,
+  context: ExegolToolContext,
+) {
   const all = listActiveAgents(db);
   const me = all.find((a) => a.id === context.agentId);
+  const others = all.filter((a) => a.id !== context.agentId && acceptsFollowUps(a));
+  const listed =
+    args.all_projects === true ? others : others.filter((a) => a.projectId === context.projectId);
   // Shape is a CONTRACT: `self` and `agents` are always present, so a client
   // can destructure without guarding (a caller crashed when an early response
   // omitted `self` — Juanito, 2026-08-13).
@@ -179,16 +172,15 @@ function handleAgentsList(db: Database.Database, context: ExegolToolContext) {
       name: me?.alias ?? null,
       note: "This is YOU. Sign messages with this name; others reach you via agent_send with it. Your id and name do not change for the rest of this session.",
     },
-    agents: all
-      .filter((a) => a.id !== context.agentId)
-      .map((a) => ({
-        id: a.id,
-        name: a.alias ?? null,
-        provider: a.cliType,
-        project: a.projectName,
-        status: a.status,
-        task: a.taskDescription.slice(0, 120),
-      })),
+    agents: listed.map((a) => ({
+      id: a.id,
+      name: a.alias ?? null,
+      provider: a.cliType,
+      project: a.projectName,
+      status: a.status,
+      task: a.taskDescription.slice(0, 120),
+    })),
+    inOtherProjects: others.length - listed.length,
   };
 }
 
@@ -375,6 +367,7 @@ function handleAgentLink(
   if (target.id === context.agentId) {
     throw new ExegolToolError("cannot link to yourself", -32602);
   }
+  assertReachable(target);
   const once = args.once !== false;
   // Cycle guard: a recurring (once:false) link whose reverse already exists is
   // a perpetual A↔B notify machine (simplify A7). One-shots are self-limiting.
@@ -428,7 +421,7 @@ export async function callExegolTool(
       case "knowledge_get":
         return handleKnowledgeGet(db, args, context);
       case "agents_list":
-        return handleAgentsList(db, context);
+        return handleAgentsList(db, args, context);
       case "agent_send":
         return handleAgentSend(db, args, context);
       case "message_status":

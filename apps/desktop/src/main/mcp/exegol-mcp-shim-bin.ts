@@ -1,29 +1,29 @@
 /**
- * T145 — Exegol MCP shim: a standalone process spawned by the agent CLI as
- * its "exegol" MCP server (registered via `.mcp.json`, see exegol-mcp-config.ts).
- * Speaks proper MCP-over-stdio (Content-Length framed JSON-RPC, mirroring
- * host.ts's StdioTransport) to the CLI, and forwards `tools/call` over the
- * NDJSON Unix socket to the main process (exegol-server.ts). Runs via
- * `ELECTRON_RUN_AS_NODE=1` — same pattern as pty-sidecar-entry.ts.
- *
- * All diagnostics go to stderr; stdout is reserved for the framed protocol.
+ * Exegol MCP shim: the process a CLI spawns as its "exegol" server. Speaks MCP over stdio to the
+ * CLI and forwards calls over the socket to the main process (exegol-server.ts). Runs with
+ * ELECTRON_RUN_AS_NODE. Diagnostics go to stderr; stdout is the protocol.
  */
 
 import { connect } from "node:net";
 import { join } from "node:path";
+import {
+  completeResult,
+  discoverResult,
+  initializeResult,
+  toolsResult,
+  unsupportedVersionError,
+} from "./exegol-mcp-handshake";
 import { resolveShimToken } from "./exegol-mcp-token-file";
 import {
   createFrameReader,
   type ExegolAccessMode,
   encodeRequest,
-  getToolDefsForAccessMode,
   type JsonRpcResponse,
   MCP_SOCK_PATH,
 } from "./exegol-protocol";
+import { getToolDefsForAccessMode } from "./exegol-tool-defs";
 
-// Identity is the token — the server maps it to agent/project and re-reads
-// access mode from the DB. The env mode below only shapes tools/list display;
-// it fails CLOSED to "read" (enforcement is server-side regardless).
+// Identity is the token; the env mode only shapes the offline tools/list and fails closed
 function resolveToken(): string {
   return resolveShimToken(process.env, process.cwd());
 }
@@ -37,15 +37,10 @@ if (!token) {
 const displayMode = (process.env.EXEGOL_ACCESS_MODE as ExegolAccessMode) ?? "read";
 
 // ─── stdio framing ──────────────────────────────────────────────────────────
-// MCP-over-stdio is newline-delimited JSON (what Claude Code and every spec
-// client sends). The original shim spoke Content-Length/LSP framing, so
-// clients hung forever on "connecting". Auto-detect per message and reply in
-// whichever framing the client used (framed kept for host.ts-style clients).
+// Newline-delimited JSON is what clients send; Content-Length framing is auto-detected per
+// message and answered in kind.
 
-// The buffer is BYTES, not a string: Content-Length counts bytes while a JS
-// string indexes UTF-16 units, so any non-ASCII body (español, emoji) made the
-// old string-sliced version cut mid-frame, desync, and silently flip the
-// client to the wrong framing forever.
+// Bytes, not a string: Content-Length counts bytes
 let stdinBuffer = Buffer.alloc(0);
 const HEADER_SEP = Buffer.from("\r\n\r\n");
 
@@ -60,7 +55,6 @@ process.stdout.on("error", () => process.exit(0));
 
 function processStdinBuffer(): void {
   for (;;) {
-    // Skip leading whitespace/newlines between frames.
     let start = 0;
     while (start < stdinBuffer.length && stdinBuffer[start] !== undefined) {
       const b = stdinBuffer[start] as number;
@@ -70,8 +64,6 @@ function processStdinBuffer(): void {
     if (start > 0) stdinBuffer = stdinBuffer.subarray(start);
     if (stdinBuffer.length === 0) return;
 
-    // Header detection is case-insensitive: LSP allows `content-length:` and
-    // other headers before it.
     const headerEnd = stdinBuffer.indexOf(HEADER_SEP);
     const maybeHeader =
       headerEnd === -1 ? null : stdinBuffer.subarray(0, headerEnd).toString("latin1").toLowerCase();
@@ -103,17 +95,19 @@ function dispatchRaw(content: string, framed: boolean): void {
   }
 }
 
+declare const __EXEGOL_VERSION__: string;
+
 function writeToClient(
   id: number | string,
   // Captured per REQUEST: async replies (a 30s tool call) must not inherit the
   // framing of whatever message happened to arrive meanwhile.
   framed: boolean,
-  result?: unknown,
-  error?: { code: number; message: string },
+  result: object = {},
+  error?: { code: number; message: string; data?: unknown },
 ): void {
   const body = error
     ? { jsonrpc: "2.0", id, error }
-    : { jsonrpc: "2.0", id, result: result ?? null };
+    : { jsonrpc: "2.0", id, result: completeResult(result) };
   const msg = JSON.stringify(body);
   if (framed) {
     process.stdout.write(`Content-Length: ${Buffer.byteLength(msg, "utf-8")}\r\n\r\n${msg}`);
@@ -151,11 +145,8 @@ const RECONNECT_BASE_MS = 1_000;
 const RECONNECT_MAX_MS = 5_000;
 const MAX_OUTBOX = 64;
 
-// The shim outlives app restarts (it's the CLI's child). A one-shot socket left
-// every call timing out after a restart until the user ran /mcp — live incident
-// 2026-08-12. Reconnect with exponential backoff; calls made while down wait in
-// the outbox (keyed by id) and flush on reconnect — but only if still pending,
-// so a call that already timed out is NOT silently re-executed on reconnect.
+// The shim outlives app restarts: reconnect with backoff. Calls made while down wait in the
+// outbox and flush only if still pending, so one that timed out never re-runs.
 let socket: ReturnType<typeof connect> | null = null;
 let reconnectScheduled = false;
 let reconnectDelay = RECONNECT_BASE_MS;
@@ -241,10 +232,8 @@ function callSocket(
   label = method,
 ): Promise<unknown> {
   const id = nextSocketId++;
-  // Whether the request reached the wire decides what a timeout MEANS: still in
-  // the outbox = definitely not executed; already written = unknown, it may
-  // have run and lost the ack. Reporting the second as the first is what made
-  // an agent re-send a message it had already delivered (2026-08-13).
+  // Whether it reached the wire decides what a timeout means: in the outbox it never ran; written,
+  // it may have run and lost the ack.
   return new Promise((resolve, reject) => {
     const entry: PendingCall = {
       resolve,
@@ -287,9 +276,7 @@ async function callTool(tool: string, args: Record<string, unknown>): Promise<un
   try {
     return await callSocket("call_tool", { tool, args, token, ppid: process.ppid }, tool);
   } catch (err) {
-    // A stale token (app restarted, config rewritten) is permanent for the rest
-    // of the session unless we re-read it: the file on disk may already hold a
-    // freshly re-armed one.
+    // A stale token (app restarted, config rewritten): the file may hold a re-armed one
     if (err instanceof Error && err.message.includes("EXEGOL_MCP_TOKEN")) {
       const fresh = resolveToken();
       if (fresh && fresh !== token) {
@@ -310,42 +297,42 @@ function handleClientMessage(
 ): void {
   if (msg.id === undefined) return; // notification — nothing to reply to
 
+  const unsupported = unsupportedVersionError(msg.params);
+  if (unsupported) {
+    writeToClient(msg.id, framed, undefined, unsupported);
+    return;
+  }
+
   switch (msg.method) {
     case "initialize": {
       const requested = (msg.params as { protocolVersion?: string } | undefined)?.protocolVersion;
-      writeToClient(msg.id, framed, {
-        protocolVersion: requested ?? "2024-11-05",
-        capabilities: { tools: {} },
-        serverInfo: { name: "exegol", version: "1.0.0" },
-      });
+      writeToClient(msg.id, framed, initializeResult(requested, __EXEGOL_VERSION__));
       return;
     }
+
+    case "server/discover":
+      writeToClient(msg.id, framed, discoverResult(__EXEGOL_VERSION__));
+      return;
 
     case "ping":
       writeToClient(msg.id, framed, {});
       return;
 
     case "tools/list": {
-      // T163 stale-shim fix: ask the RUNNING app for tool defs so a shim
-      // spawned by an old session still lists tools added since. The bundled
-      // defs are only the offline fallback.
-      const fallback = () => getToolDefsForAccessMode(displayMode);
-      // Socket down (app closed / restarting): answer from the bundle NOW.
-      // Queuing this behind the 30s call timeout made the client sit through
-      // a silent initialization stall and mark the server failed — the exact
-      // "sigue conectando" symptom.
+      const reply = (tools?: unknown[]) =>
+        writeToClient(
+          msg.id as number,
+          framed,
+          toolsResult(tools?.length ? tools : getToolDefsForAccessMode(displayMode, false)),
+        );
+      // Socket down: answer from the bundle now, queuing stalls the client past its init timeout
       if (!socket) {
-        writeToClient(msg.id, framed, { tools: fallback() });
+        reply();
         return;
       }
       callSocket("list_tools", { token, ppid: process.ppid })
-        .then((result) => {
-          const tools = (result as { tools?: unknown[] } | null)?.tools;
-          writeToClient(msg.id as number, framed, { tools: tools?.length ? tools : fallback() });
-        })
-        .catch(() => {
-          writeToClient(msg.id as number, framed, { tools: fallback() });
-        });
+        .then((result) => reply((result as { tools?: unknown[] } | null)?.tools))
+        .catch(() => reply());
       return;
     }
 

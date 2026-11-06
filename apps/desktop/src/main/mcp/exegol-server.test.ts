@@ -60,6 +60,17 @@ describe("exegol MCP server token lifecycle", () => {
     revokeAgentMcpToken("reader");
   });
 
+  it("lists browser_eval only where the project allows it", async () => {
+    const token = registerAgentMcpToken("writer", "p1");
+    const names = async () => {
+      const res = await call(db, { tool: "", args: {}, token }, "list_tools");
+      return (res.result as { tools: { name: string }[] }).tools.map((t) => t.name);
+    };
+    expect(await names()).not.toContain("browser_eval");
+    db.prepare("UPDATE projects SET browser_eval = 1 WHERE id = 'p1'").run();
+    expect(await names()).toContain("browser_eval");
+  });
+
   it("rejects unknown methods with -32601", async () => {
     const res = await call(db, { tool: "memory_list", args: {} }, "list_tools_nope");
     expect(res.error?.code).toBe(-32601);

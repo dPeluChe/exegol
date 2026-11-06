@@ -10,6 +10,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Agents no longer act on a browser pane another agent is driving, `browser_open` no longer loads over a pane you are reading, and agents can close the panes they opened
+- Agents get usage instructions from Exegol's MCP server and three new browser tools: wait for text or a url, hover, and scroll; they can also go back, forward or reload and take a full-page screenshot
 - Company chat loads earlier messages, opens links and file paths on click, and shows the CLI and time on each turn; Chat and Terminal keep their own panel width, and the panel sits left or right
 - The Dashboard reopens on the tab you left
 - Antigravity in the Company chat reads as a conversation: prompts, activity and formatted answers. Long replies are no longer cut short
@@ -38,6 +40,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Browser panes search from the address bar: `?telnyx`, or words that are not an address, open a Google search; `localhost:3000`, `example.com` and full URLs still go straight there
 
 ### Fixed
+- Agent browser results stop reporting success for what did not happen: a failed load, a click covered by another element, a click the page ignored, a popup that was blocked or a load held up by a resource that never ends; clicks and typing fire the events real input does, so menus and custom widgets respond, and screenshots of pages with no background are no longer black
+- An agent can no longer message a plain terminal: `agent_send` and `agent_link` refuse it (the text would have run as a command) and `agents_list` shows only who can read messages, in your project by default
 - GitHub counts in the sidebar and the GitHub menu skip sub repos you cannot push to, such as an open source project cloned for reference
 - Full-screen CLIs such as opencode no longer show old shell text in their blank areas when you come back to their pane
 - Browser pane: a failed load with an unparsable URL no longer crashes the pane
@@ -45,6 +49,10 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - A pane's "Add a browser beside" / "Add a terminal beside" menu (globe or terminal icon in its corner toolbar) closed when the pointer moved down to it, so To the right and Below could not be clicked. The toolbar's Float button now shows only when the pane has something to float, as in its right-click menu
 - Knowledge: the digest's `trs ingest` runs tagged `TRS_AGENT=exegol`, so `trs stats --by-agent` lists it as exegol instead of mixing it with the commands you type
 - The "What's new" dialog shows the update's download progress (a bar and the percent), as the title-bar button does, instead of only "Downloading"
+
+### Changed
+- MCP and agent browser code split into smaller modules, no behavior change
+- Log files write your home folder as `~`, and reconnecting sessions at startup logs half as many lines
 
 ## [0.5.28] — 2026-10-26 — Terminals look right after a restart and a GPU crash, less background work, smaller app
 

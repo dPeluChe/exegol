@@ -1,6 +1,6 @@
 import { join } from "node:path";
 import { app, Menu, nativeImage, shell, Tray } from "electron";
-import { isAgentAwaitingApproval } from "../agents/agent-messaging";
+import { isAgentAwaitingApproval } from "../agents/agent-message-queue";
 import { getProviderRegistry } from "../agents/registry";
 import { getDb } from "../db/client";
 import { LOG_DIR, logger } from "../lib/logger";

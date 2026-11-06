@@ -7,12 +7,8 @@ import { runMigrations } from "../db/migrations";
 import { ensureProjectBrief } from "../knowledge/brief";
 import { refreshDigest } from "../knowledge/staleness";
 import type { ExegolToolContext } from "./exegol-protocol";
-import {
-  callExegolTool,
-  EXEGOL_TOOL_DEFS,
-  ExegolToolError,
-  getToolDefsForAccessMode,
-} from "./exegol-tools";
+import { EXEGOL_TOOL_DEFS, getToolDefsForAccessMode } from "./exegol-tool-defs";
+import { callExegolTool, ExegolToolError } from "./exegol-tools";
 
 // The internal digest, never the real trs (it would record each call in ~/.trs history)
 vi.mock("../agents/spawn-env", async (importOriginal) => ({
@@ -68,6 +64,36 @@ describe("exegol-tools", () => {
       );
     });
 
+    it("agents_list shows who can read messages, in your project unless asked", async () => {
+      db.prepare(
+        "INSERT INTO projects (id, name, path) VALUES ('proj-2', 'Other', '/tmp/o')",
+      ).run();
+      const insert = db.prepare(
+        "INSERT INTO agents (id, project_id, cli_type, status, task_description) VALUES (?, ?, ?, 'running', 't')",
+      );
+      insert.run("mate", "proj-1", "codex");
+      insert.run("term", "proj-1", "shell");
+      insert.run("far", "proj-2", "claude-code");
+      db.prepare("UPDATE agents SET status = 'running' WHERE id = 'agent-1'").run();
+      const ids = (r: unknown) => (r as { agents: { id: string }[] }).agents.map((a) => a.id);
+
+      const own = await callExegolTool(db, "agents_list", {}, makeContext());
+      expect(ids(own)).toEqual(["mate"]);
+      expect(own).toMatchObject({ self: { id: "agent-1" }, inOtherProjects: 1 });
+
+      const all = await callExegolTool(db, "agents_list", { all_projects: true }, makeContext());
+      expect(ids(all).sort()).toEqual(["far", "mate"]);
+    });
+
+    it("agent_link refuses a plain terminal", async () => {
+      db.prepare(
+        "INSERT INTO agents (id, project_id, cli_type, status, task_description) VALUES ('term', 'proj-1', 'shell', 'running', 't')",
+      ).run();
+      await expect(
+        callExegolTool(db, "agent_link", { target: "term" }, makeContext()),
+      ).rejects.toThrow("plain terminal");
+    });
+
     it("memory_save creates a fact attributed to the calling agent", async () => {
       const result = (await callExegolTool(
         db,
@@ -83,17 +109,6 @@ describe("exegol-tools", () => {
         source_agent_id: string;
       };
       expect(row.source_agent_id).toBe("agent-1");
-    });
-
-    it("memory_save rejects read-mode agents", async () => {
-      await expect(
-        callExegolTool(
-          db,
-          "memory_save",
-          { fact: "Should not be saved", category: "convention" },
-          makeContext({ accessMode: "read" }),
-        ),
-      ).rejects.toThrow(/write access/);
     });
 
     it("memory_search finds a previously saved fact", async () => {

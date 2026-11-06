@@ -2,7 +2,7 @@ import { agentStatusSchema } from "@exegol/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { saveActiveView } from "../../agents/active-view";
-import { isAgentAwaitingApproval } from "../../agents/agent-messaging";
+import { isAgentAwaitingApproval } from "../../agents/agent-message-queue";
 import { folderExists } from "../../agents/auto-resume";
 import { deskFacts } from "../../agents/desk-facts";
 import {

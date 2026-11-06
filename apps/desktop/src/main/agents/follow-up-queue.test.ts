@@ -22,21 +22,14 @@ vi.mock("../terminal/pty-host", () => ({
   }),
 }));
 
+import { setAgentAwaitingApproval } from "./agent-message-queue";
+import { noteAgentOutput, stopSweep } from "./agent-message-sweep";
 import {
   clearAgentMessageQueue,
   deliverPendingAgentMessages,
-  noteAgentOutput,
   sendAgentMessage,
-  setAgentAwaitingApproval,
-  stopSweep,
 } from "./agent-messaging";
-import {
-  dropFollowUps,
-  listFollowUps,
-  queueFollowUp,
-  removeFollowUp,
-  steerFollowUp,
-} from "./follow-up-queue";
+import { listFollowUps, queueFollowUp, removeFollowUp, steerFollowUp } from "./follow-up-queue";
 
 let db: Database.Database;
 
@@ -167,14 +160,11 @@ describe("follow-up queue", () => {
     expect(db.prepare("SELECT COUNT(*) AS n FROM messages").get()).toMatchObject({ n: 0 });
   });
 
-  it("leaves agent_send messages alone: remove and drop touch only follow-ups", () => {
+  it("removeFollowUp leaves agent_send messages alone", () => {
     insertAgent("a1", "running");
     insertAgent("a2", "running");
     const msg = sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "a2", text: "hello" });
-    queueFollowUp(db, "a2", "mine");
     expect(removeFollowUp("a2", msg.messageId)).toBe(false);
-    dropFollowUps("a2");
-    expect(listFollowUps("a2")).toEqual([]);
     deliverPendingAgentMessages(db, "a2");
     expect(typed()).toContain("hello");
   });

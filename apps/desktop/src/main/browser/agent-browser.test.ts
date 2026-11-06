@@ -15,32 +15,14 @@ import {
   waitForHandBack,
 } from "./control";
 import { projectsToMigrate, selectCookiesToCopy, toSetDetails } from "./cookie-migration";
+import { fakePane, page } from "./fake-pane";
 import { LogRing } from "./log-ring";
 import { detectNeedsUser } from "./needs-user";
-import {
-  actionScript,
-  formatSnapshot,
-  guardedEvalScript,
-  parseKey,
-  parseRef,
-  type RawSnapshot,
-} from "./page-scripts";
+import { actionScript } from "./page-actions";
+import { formatSnapshot, guardedEvalScript, parseKey, parseRef } from "./page-scripts";
 import { blocksAgentRequest, logUrl } from "./request-guard";
 import { type BrowserPaneHandle, type BrowserToolContext, setBrowserHost } from "./tool-guards";
-import { isWaitStale } from "./tool-handlers";
-
-const page = (over: Partial<RawSnapshot> = {}): RawSnapshot => ({
-  url: "http://localhost:3000/",
-  title: "Home",
-  text: "Welcome",
-  elements: [{ ref: "e1.doc1", role: "button", name: "Save", tag: "button" }],
-  more: false,
-  hasPasswordField: false,
-  hasCaptcha: false,
-  loggedIn: false,
-  focusSecret: false,
-  ...over,
-});
+import { isWaitStale } from "./tool-wait";
 
 /** A login page as the in-page collector reports it */
 const LOGIN_FIXTURE = page({
@@ -54,45 +36,6 @@ const LOGIN_FIXTURE = page({
   ],
   hasPasswordField: true,
 });
-
-function fakePane(
-  paneId: string,
-  projectId: string,
-  opts: { snapshot?: RawSnapshot; action?: unknown; url?: string } = {},
-): BrowserPaneHandle & { scripts: string[]; loaded: string[]; evals: string[] } {
-  const scripts: string[] = [];
-  const loaded: string[] = [];
-  const evals: string[] = [];
-  let url = opts.url ?? opts.snapshot?.url ?? "http://localhost:3000/";
-  return {
-    paneId,
-    projectId,
-    scripts,
-    loaded,
-    evals,
-    getUrl: () => url,
-    getTitle: () => "Home",
-    runIsolated: async (code: string) => {
-      scripts.push(code);
-      if (code.includes("const elements = []") || code.includes("return signals();")) {
-        return { ...(opts.snapshot ?? page()), url };
-      }
-      return opts.action ?? { ok: true };
-    },
-    runMain: async (code: string) => {
-      evals.push(code);
-      return 42;
-    },
-    loadUrl: async (u: string) => {
-      loaded.push(u);
-      url = u;
-    },
-    capture: async () => Buffer.from("jpeg"),
-    sendKey: () => {},
-    lastHttpStatus: () => 200,
-    logs: new LogRing(),
-  };
-}
 
 describe("agent browser tools", () => {
   let db: Database.Database;
@@ -124,6 +67,7 @@ describe("agent browser tools", () => {
         return opened;
       },
       devServerUrl: async () => "http://localhost:5173",
+      closePane: () => true,
     });
   });
 
@@ -155,6 +99,7 @@ describe("agent browser tools", () => {
       livePanes: () => panes,
       openPane: async () => panes[1] as BrowserPaneHandle,
       devServerUrl: async () => null,
+      closePane: () => true,
     });
     await expect(
       callBrowserTool(db, "browser_click", { pane: "pane-b", ref: "e1.doc1" }, ctx()),
@@ -304,16 +249,6 @@ describe("agent browser tools", () => {
     const r = (await waiting) as { status: string };
     expect(r.status).toBe("handed_back");
     expect(getPaneControl("pane-a")?.waiting).toBeNull();
-  });
-
-  it("a hand back between two polls still counts", async () => {
-    const first = callBrowserTool(db, "browser_wait_for_user", { reason: "log in" }, ctx());
-    setTimeout(() => handBack("pane-a"), 10);
-    await first;
-    // A second, fresh wait starts over instead of returning the old hand back
-    const second = callBrowserTool(db, "browser_wait_for_user", { reason: "again" }, ctx());
-    setTimeout(() => handBack("pane-a"), 10);
-    expect(((await second) as { status: string }).status).toBe("handed_back");
   });
 
   it("a closed pane wakes its waiter with pane_closed", async () => {

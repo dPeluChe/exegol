@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, openSync, renameSync, rmSync, writeSync } from "node:fs";
 import { homedir, tmpdir } from "node:os";
 import { join } from "node:path";
+import { scrubHome } from "../terminal/sidecar-log";
 
 const isDev = process.env.NODE_ENV !== "production";
 let shuttingDown = false;
@@ -87,11 +88,14 @@ function formatArg(a: unknown): string {
   }
 }
 
+const HOME = homedir();
+
 function writeToFile(level: string, args: unknown[]): void {
   if (fd === null && pending.length >= MAX_EARLY_LINES) return;
   try {
     const ts = new Date().toISOString();
-    const msg = args.map(formatArg).join(" ");
+    // Reports redact theirs; this is for the raw files in Open Logs Folder
+    const msg = scrubHome(args.map(formatArg).join(" "), HOME);
     pending.push(`${ts} [${level}] ${msg}\n`);
     scheduleFlush();
   } catch {

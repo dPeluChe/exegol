@@ -68,6 +68,10 @@ export class LogRing {
     };
   }
 
+  get lastSeq(): number {
+    return this.seq;
+  }
+
   get size(): number {
     return this.entries.length;
   }

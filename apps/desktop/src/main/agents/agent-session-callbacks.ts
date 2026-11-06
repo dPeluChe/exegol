@@ -23,13 +23,8 @@ import {
   noteOutputDropped,
 } from "../terminal/pty-visibility";
 import { noteTurnStarted } from "./agent-message-injection";
-import {
-  clearAgentLinks,
-  clearAgentMessageQueue,
-  isEchoingInjection,
-  noteAgentBoundarySignal,
-  noteAgentOutput,
-} from "./agent-messaging";
+import { noteAgentBoundarySignal, noteAgentOutput } from "./agent-message-sweep";
+import { clearAgentLinks, clearAgentMessageQueue, isEchoingInjection } from "./agent-messaging";
 import type { OutputProcessor } from "./agent-output-processor";
 import { handleParallelAgentExit } from "./agent-parallel-orchestration";
 import { detectCliSelfUpdate } from "./cli-self-update";
