@@ -15,10 +15,11 @@ export type ToolBody<N extends string> = Omit<ExegolToolDef<N>, "annotations">;
 export const HISTORY_ACTIONS = ["back", "forward", "reload"] as const;
 export const SCROLL_TARGETS = ["down", "up", "top", "bottom"] as const;
 
-/** Looking at the page and asking the user for help change nothing in the repo */
+/** Looking at a page and asking the user for help change nothing in the repo */
 export const BROWSER_READ_TOOLS = [
   "browser_list",
   "browser_open",
+  "browser_close",
   "browser_snapshot",
   "browser_screenshot",
   "browser_logs",
@@ -67,10 +68,10 @@ const BROWSER_TOOLS: ToolBody<BrowserToolName>[] = [
     name: "browser_open",
     title: "Open a page",
     description:
-      "Start here to look at a page: it opens a pane if you have none. In write mode it loads " +
-      "the url in the pane you used last unless you pass new_pane; in read and plan mode it " +
-      'always opens a new pane. url "dev" opens the project\'s running dev server. To move a ' +
-      `pane you are already driving, use browser_navigate. ${BROWSER_SCOPE} ${UNTRUSTED}`,
+      "Start here to look at a page. In write mode it loads the url in the pane you used last, " +
+      "or a new one: it never takes over a pane that is not yours unless you name it. In read " +
+      'and plan mode it always opens a new pane. url "dev" opens the project\'s running dev ' +
+      `server. To move a pane you are driving, use browser_navigate. ${BROWSER_SCOPE} ${UNTRUSTED}`,
     inputSchema: {
       type: "object",
       properties: {
@@ -81,6 +82,13 @@ const BROWSER_TOOLS: ToolBody<BrowserToolName>[] = [
       },
       required: ["url"],
     },
+  },
+  {
+    name: "browser_close",
+    title: "Close a pane you opened",
+    description:
+      "Close a pane you opened when you are done with it. Any other pane stays: status not_yours.",
+    inputSchema: { type: "object", properties: { ...PANE_ARG } },
   },
   {
     name: "browser_snapshot",
@@ -297,8 +305,8 @@ const BROWSER_TOOLS: ToolBody<BrowserToolName>[] = [
     title: "Run JavaScript in the page",
     description:
       "Run JavaScript in the page and get its JSON result (write mode, 10s limit), for checks a " +
-      "snapshot cannot do; prefer click and type for interaction. Off unless the user allowed " +
-      "it for the project; while it runs, requests outside the allowed hosts are blocked. " +
+      "snapshot cannot do; prefer click and type for interaction. While it runs, requests " +
+      "outside the allowed hosts are blocked. " +
       UNTRUSTED,
     inputSchema: {
       type: "object",
@@ -309,6 +317,7 @@ const BROWSER_TOOLS: ToolBody<BrowserToolName>[] = [
 ];
 
 const READS: readonly string[] = BROWSER_READ_TOOLS;
+export const isBrowserReadTool = (name: string): boolean => READS.includes(name);
 const PAGE_CHANGING: readonly string[] = [
   "browser_click",
   "browser_type",
@@ -320,8 +329,9 @@ const PAGE_CHANGING: readonly string[] = [
 export const BROWSER_TOOL_DEFS: ExegolToolDef<BrowserToolName>[] = BROWSER_TOOLS.map((t) => ({
   ...t,
   annotations: {
-    // browser_open is allowed in read mode, yet it can load a page over the one in a pane
-    readOnlyHint: READS.includes(t.name) && t.name !== "browser_open",
+    // Both are allowed in read mode, yet they change what the panes show
+    readOnlyHint:
+      isBrowserReadTool(t.name) && t.name !== "browser_open" && t.name !== "browser_close",
     // What a click does is up to the page: it may delete data there
     destructiveHint: PAGE_CHANGING.includes(t.name),
     openWorldHint: true,

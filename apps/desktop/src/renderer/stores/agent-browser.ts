@@ -1,10 +1,10 @@
 import { type AgentBrowserPaneState, needsUserReason } from "@exegol/shared";
 import { nanoid } from "nanoid";
 import { create } from "zustand";
-import { useAgentStore } from "./agents";
+import { findPane, useAgentStore } from "./agents";
 import { useAppStore } from "./app";
 import { useWorkspaceStore } from "./workspace";
-import { collectPaneIds } from "./workspace/helpers";
+import { collectPaneIds, projectOfPane } from "./workspace/helpers";
 
 interface AgentBrowserStore {
   /** Keyed by paneId: who drives each browser pane (main pushes every change) */
@@ -74,6 +74,14 @@ function openForAgent(req: { projectId: string; agentId: string; url: string }):
   return paneId;
 }
 
+function closeForAgent(paneId: string): void {
+  const ws = useWorkspaceStore.getState();
+  const pid = projectOfPane(ws, paneId);
+  const found = pid ? findPane(pid, paneId) : null;
+  if (found) ws.removePane(found.tabId, paneId);
+  else void window.api.floating.close(paneId);
+}
+
 let stop: (() => void) | null = null;
 
 /** Once per window. The main window also raises alerts and opens panes for browser_open */
@@ -92,6 +100,7 @@ export function startAgentBrowserPush(mainWindow: boolean): () => void {
         }
       })
     : () => {};
+  const offClose = mainWindow ? window.api.browser.onCloseRequest(closeForAgent) : () => {};
   window.api.browser
     .agentStates()
     .then((list) => {
@@ -101,6 +110,7 @@ export function startAgentBrowserPush(mainWindow: boolean): () => void {
   stop = () => {
     offState();
     offOpen();
+    offClose();
     stop = null;
   };
   return stop;

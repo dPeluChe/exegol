@@ -10,7 +10,13 @@ import { getAgent } from "../db/queries/agents";
 import { getProjectBrowserHosts } from "../db/queries/projects";
 import type { HISTORY_ACTIONS } from "../mcp/browser-tool-defs";
 import { ExegolToolError } from "../mcp/exegol-protocol";
-import { getPaneControl, lastPaneOf, noteAgentAction, setNeedsUser } from "./control";
+import {
+  getPaneControl,
+  heldByOther,
+  lastSeenPane,
+  noteAgentAction,
+  setNeedsUser,
+} from "./control";
 import type { PageLoad } from "./load-state";
 import type { BrowserLogEntry, LogRing } from "./log-ring";
 import { detectNeedsUser, type NeedsUser } from "./needs-user";
@@ -52,6 +58,8 @@ export interface BrowserHost {
   livePanes(projectId: string): BrowserPaneHandle[];
   openPane(req: { projectId: string; agentId: string; url: string }): Promise<BrowserPaneHandle>;
   devServerUrl(projectId: string): Promise<string | null>;
+  /** False with no window to close it in */
+  closePane(paneId: string): boolean;
 }
 
 export interface BrowserToolContext {
@@ -143,25 +151,12 @@ export function aliasOf(db: Database.Database, agentId: string): string | null {
   }
 }
 
-/** The pane an agent means: the one it named, else the last it used, else the only one.
- *  `lenient` (browser_open): with several and none used yet, the first; with none, null */
+/** The pane an agent means: the one it named, else the last it used, else the only one */
 export function resolvePane(
   panes: BrowserPaneHandle[],
   ctx: BrowserToolContext,
   requested: unknown,
-  opts: { lenient: true },
-): BrowserPaneHandle | null;
-export function resolvePane(
-  panes: BrowserPaneHandle[],
-  ctx: BrowserToolContext,
-  requested: unknown,
-): BrowserPaneHandle;
-export function resolvePane(
-  panes: BrowserPaneHandle[],
-  ctx: BrowserToolContext,
-  requested: unknown,
-  opts: { lenient?: boolean } = {},
-): BrowserPaneHandle | null {
+): BrowserPaneHandle {
   const own = panes.filter((p) => p.projectId === ctx.projectId);
   if (typeof requested === "string" && requested) {
     const p = own.find((x) => x.paneId === requested);
@@ -174,15 +169,12 @@ export function resolvePane(
     }
     return p;
   }
-  const last = lastPaneOf(
+  const last = lastSeenPane(
     ctx.agentId,
     own.map((p) => p.paneId),
   );
-  const pick =
-    own.find((p) => p.paneId === last) ??
-    (own.length === 1 || opts.lenient ? own[0] : undefined) ??
-    null;
-  if (pick || opts.lenient) return pick;
+  const pick = own.find((p) => p.paneId === last) ?? (own.length === 1 ? own[0] : undefined);
+  if (pick) return pick;
   if (own.length === 0) {
     throw new ExegolToolError(
       "No browser pane is open in your project (or its project is not on screen). Call browser_open.",
@@ -200,7 +192,7 @@ export function userHasControl(pane: BrowserPaneHandle) {
     ? {
         status: "user_has_control",
         pane: pane.paneId,
-        hint: "The user took over this browser. Wait with browser_wait_for_user, or ask them in chat; tools work again once they hand it back.",
+        hint: "The user took over this browser. You can still read the page. To act, wait with browser_wait_for_user or ask them in chat.",
       }
     : null;
 }
@@ -291,6 +283,22 @@ export async function inspect(
 export function touch(db: Database.Database, ctx: BrowserToolContext, pane: BrowserPaneHandle) {
   noteAgentAction(pane.paneId, ctx.projectId, { id: ctx.agentId, alias: aliasOf(db, ctx.agentId) });
 }
+
+export function paneBusy(pane: BrowserPaneHandle, agentId: string) {
+  const holder = heldByOther(pane.paneId, agentId);
+  return holder
+    ? {
+        status: "pane_busy",
+        pane: pane.paneId,
+        held_by: holder,
+        hint: "Another agent is driving this pane. You can still read it. To act, use your own (browser_open with new_pane), or ask them with agent_send.",
+      }
+    : null;
+}
+
+/** Why this agent may not act on the pane right now */
+export const actBlocked = (pane: BrowserPaneHandle, agentId: string) =>
+  userHasControl(pane) ?? paneBusy(pane, agentId);
 
 export function checkUrlArg(db: Database.Database, ctx: BrowserToolContext, raw: unknown): string {
   if (typeof raw !== "string" || !raw.trim()) {

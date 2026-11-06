@@ -19,6 +19,7 @@ import {
   logAction,
   notifyNeedsUser,
   pageUnavailable,
+  paneBusy,
   requireHost,
   resolvePane,
 } from "./tool-guards";
@@ -83,6 +84,8 @@ export async function handleWait(
     MAX_WAIT_MIN,
   );
   const pane = resolvePane(requireHost().livePanes(ctx.projectId), ctx, args.pane);
+  const busy = paneBusy(pane, ctx.agentId);
+  if (busy) return busy;
   const handBacks = () => getPaneControl(pane.paneId)?.handBacks ?? 0;
   const now = Date.now();
 

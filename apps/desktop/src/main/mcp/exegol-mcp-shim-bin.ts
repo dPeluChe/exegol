@@ -323,7 +323,7 @@ function handleClientMessage(
         writeToClient(
           msg.id as number,
           framed,
-          toolsResult(tools?.length ? tools : getToolDefsForAccessMode(displayMode)),
+          toolsResult(tools?.length ? tools : getToolDefsForAccessMode(displayMode, false)),
         );
       // Socket down: answer from the bundle now, queuing stalls the client past its init timeout
       if (!socket) {

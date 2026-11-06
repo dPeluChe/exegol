@@ -202,6 +202,7 @@ interface Window {
         }) => void,
       ) => () => void;
       openResult: (result: { requestId: string; paneId?: string; error?: string }) => Promise<void>;
+      onCloseRequest: (callback: (paneId: string) => void) => () => void;
       onPageDialog: (
         callback: (dialog: {
           id: string;

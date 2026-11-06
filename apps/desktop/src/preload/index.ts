@@ -396,6 +396,8 @@ contextBridge.exposeInMainWorld("api", {
     },
     openResult: (result: { requestId: string; paneId?: string; error?: string }) =>
       safe.invoke("browser:open-result", result),
+    onCloseRequest: (callback: (paneId: string) => void) =>
+      listen("browser:close-request", callback as (data: unknown) => void),
     /** alert / confirm / prompt of a pane's page, answered in the pane */
     onPageDialog: (callback: (dialog: unknown) => void) => listen("browser:page-dialog", callback),
     onPageDialogClosed: (callback: (closed: unknown) => void) =>
