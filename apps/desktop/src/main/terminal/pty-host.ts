@@ -6,6 +6,7 @@ import { logger } from "../lib/logger";
 import { terminalProcesses, terminateAll } from "../system/process-tree";
 import { readProcessTable } from "../system/shell-clis";
 import { ExitWaiters } from "./exit-waiters";
+import type { HeadlessEmulator } from "./headless-emulator";
 import { SidecarLossHandler } from "./pty-host-loss";
 import {
   newSidecarSession,
@@ -46,6 +47,7 @@ const SNAPSHOT_PARSE_DEADLINE_MS = 1_500;
 
 /** Redraws asked within this of the last one are the same repaint */
 const REDRAW_WINDOW_MS = 500;
+const MAX_CHAT_LINES = 600;
 
 export class PtyHost {
   private sessions = new Map<string, Session>();
@@ -450,6 +452,15 @@ export class PtyHost {
   screenDialog(id: string): ScreenDialog | null {
     const lines = this.sessions.get(id)?.emulator.visibleLines();
     return lines ? readScreenDialog(lines) : null;
+  }
+
+  /** The chat of a CLI with no transcript */
+  textLines(id: string): ReturnType<HeadlessEmulator["textLines"]> | null {
+    return this.sessions.get(id)?.emulator.textLines(MAX_CHAT_LINES) ?? null;
+  }
+
+  markTurn(id: string): void {
+    this.sessions.get(id)?.emulator.markTurn();
   }
 
   isAlive(id: string): boolean {

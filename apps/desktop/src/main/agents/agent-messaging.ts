@@ -29,8 +29,8 @@ import {
   drainQueue,
   forgetQueueState,
   hasQueuedMessages,
-  isAgentAwaitingApproval,
   markUndeliverable,
+  needsUser,
   notifyFollowUps,
   queuedFor,
   shiftQueued,
@@ -330,7 +330,7 @@ export function enqueue(
 
 /**
  * Target at its prompt → inject immediately; otherwise queue for the boundary.
- * NEVER inject while it's on a permission dialog (see isAgentAwaitingApproval).
+ * NEVER inject while it's on a permission dialog or a question (see needsUser).
  * User follow-ups go ahead of agent messages, and wait their turn behind earlier ones.
  */
 function route(
@@ -343,8 +343,8 @@ function route(
   const { toAgentId } = pending;
   const atIdlePrompt =
     (targetStatus === "waiting_input" || targetStatus === "idle") &&
-    !isAgentAwaitingApproval(toAgentId) &&
-    !(pending.onDelivered && !first && queue.some((p) => p.onDelivered));
+    !(pending.onDelivered && !first && queue.some((p) => p.onDelivered)) &&
+    !needsUser(toAgentId);
   if (atIdlePrompt && injectNow(pending)) {
     if (!pending.onDelivered) setOutcome(db, pending.messageId, "delivered");
     return true;
@@ -408,6 +408,8 @@ export function sendSystemMessage(
 export function deliverPendingAgentMessages(db: Database.Database, agentId: string): void {
   // This IS the boundary: anything injected before it has now been read.
   markConsumed(db, agentId);
+  // A boundary can land on a dialog: the sweep tries again once it is gone
+  if (needsUser(agentId)) return;
   const next = shiftQueued(agentId);
   if (!next) return;
   if (!injectNow(next)) {

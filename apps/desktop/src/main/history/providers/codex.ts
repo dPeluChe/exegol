@@ -33,7 +33,7 @@ interface SessionMeta {
  */
 const TITLE_SCAN_BYTES = 128 * 1024;
 
-const BOILERPLATE_PREFIXES = [
+export const BOILERPLATE_PREFIXES = [
   "# AGENTS.md instructions",
   "<permissions instructions",
   "The following is the Codex agent history",
@@ -122,13 +122,14 @@ export async function dayDirs(root: string, since: number): Promise<string[]> {
   return days.flat();
 }
 
+export const codexRoot = () => join(homedir(), ".codex", "sessions");
+
 export const codexHistory: LocalHistoryProvider = {
   id: "codex",
   sharedStore: true,
 
   async list(cwds: string[], since: number): Promise<LocalSession[]> {
-    const root = join(homedir(), ".codex", "sessions");
-    const dirs = await dayDirs(root, since);
+    const dirs = await dayDirs(codexRoot(), since);
 
     const paths = (
       await Promise.all(

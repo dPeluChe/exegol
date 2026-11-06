@@ -28,16 +28,18 @@ function quote(p: string): string {
   return /[\s'"]/.test(p) ? `'${p.replace(/'/g, "'\\''")}'` : p;
 }
 
+/** Files from Finder, dropped or pasted: absolute paths, quoted when they need it */
+export function finderFilesToPaste(data: DataTransfer): string | null {
+  const paths = Array.from(data.files)
+    .map((f) => window.api?.pathForFile?.(f))
+    .filter((p): p is string => !!p);
+  return paths.length ? `${paths.map(quote).join(" ")} ` : null;
+}
+
 /** Build the text to paste into the terminal, trailing space included. */
 export function fileDragToPaste(e: React.DragEvent): string | null {
   const raw = e.dataTransfer.getData(FILE_DRAG_MIME);
-  if (!raw) {
-    // From Finder: absolute paths, quoted when they need it
-    const paths = Array.from(e.dataTransfer.files)
-      .map((f) => window.api?.pathForFile?.(f))
-      .filter((p): p is string => !!p);
-    return paths.length ? `${paths.map(quote).join(" ")} ` : null;
-  }
+  if (!raw) return finderFilesToPaste(e.dataTransfer);
   try {
     const items = JSON.parse(raw) as FileDragItem[];
     const parts = items

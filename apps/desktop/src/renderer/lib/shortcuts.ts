@@ -62,6 +62,14 @@ const MAC_SHORTCUTS: Shortcut[] = [
     category: "navigation",
   },
   {
+    id: "company-sessions",
+    label: "Company: move between sessions",
+    description: "Option+N goes to the next that needs you. Both work while typing in the chat",
+    keys: "Option+Up / Option+Down",
+    otherKeys: "Alt+Up / Alt+Down",
+    category: "navigation",
+  },
+  {
     id: "project-n",
     label: "Project N",
     description:

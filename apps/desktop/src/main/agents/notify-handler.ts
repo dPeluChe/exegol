@@ -25,6 +25,8 @@ interface AgentEvent {
   sessionId?: string;
   /** The CLI's working folder from the hook payload, empty when absent */
   cwd?: string;
+  /** The tool's name on tool_use, never its input */
+  tool?: string;
   payload?: Record<string, unknown>;
 }
 

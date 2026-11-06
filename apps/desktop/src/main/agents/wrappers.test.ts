@@ -128,8 +128,15 @@ describe("notifyScript", () => {
     const [name] = readdirSync(dir);
     const parsed = JSON.parse(readFileSync(join(dir, name as string), "utf-8"));
     rmSync(home, { recursive: true, force: true });
-    return parsed as { sessionId: string; cwd: string };
+    return parsed as { sessionId: string; cwd: string; tool: string };
   };
+
+  it("carries the tool's name, never what a tool input says", () => {
+    const payload = (name: string) =>
+      `{"tool_name":${name},"tool_input":{"command":"echo \\"tool_name\\":\\"Fake\\""}}`;
+    expect(event(payload('"Bash"')).tool).toBe("Bash");
+    expect(event(payload('"rm -rf"')).tool).toBe("");
+  });
 
   it("carries the session id and the top-level cwd, escapes kept valid", () => {
     const payload = JSON.stringify({

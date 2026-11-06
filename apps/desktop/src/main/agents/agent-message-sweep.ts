@@ -1,6 +1,10 @@
+import { getDb } from "../db/client";
+import { getAgent, isAgentQuiet } from "../db/queries/agents";
+import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
+import { getNotificationBus } from "../notifications/bus";
 import { isEchoingInjection } from "./agent-message-injection";
-import { isAgentAwaitingApproval, queuedAgentIds } from "./agent-message-queue";
+import { isAgentAwaitingApproval, needsUser, queuedAgentIds } from "./agent-message-queue";
 
 // Delivery waits for a turn boundary, but only providers with hooks (claude,
 // codex) reliably emit one — opencode's TUI produces nothing the scraper
@@ -42,8 +46,36 @@ export function stopSweep(): void {
   sweepTimer = null;
 }
 
+// A dialog no hook reported raises no attention of its own, and the gate below never types into
+// it: the queue would just wait, unseen. Told once per hold
+const heldNoticed = new Set<string>();
+
+function noticeHeldBehindDialog(agentId: string): void {
+  if (heldNoticed.has(agentId)) return;
+  heldNoticed.add(agentId);
+  logger.warn(`[AgentMsg] ${agentId} has a queued message held behind a dialog on its screen`);
+  try {
+    const db = getDb();
+    const agent = getAgent(db, agentId);
+    if (!agent || isAgentQuiet(db, agentId)) return;
+    const reason = "A message is held behind a dialog";
+    getNotificationBus().emit({
+      type: "agent:notice",
+      title: `${agent.alias ?? agent.cliType}: ${reason}`,
+      body: "Answer the dialog in its terminal to let it through",
+      agentId,
+      projectId: agent.projectId,
+      at: Date.now(),
+    });
+    broadcast("agent:message-held", { agentId, reason });
+  } catch (err) {
+    logger.warn("[AgentMsg] held message notice failed:", err);
+  }
+}
+
 function sweepQuietAgents(deliver: (agentId: string) => void): void {
   const agentIds = queuedAgentIds();
+  for (const id of heldNoticed) if (!agentIds.includes(id)) heldNoticed.delete(id);
   if (agentIds.length === 0) {
     stopSweep();
     return;
@@ -56,7 +88,13 @@ function sweepQuietAgents(deliver: (agentId: string) => void): void {
     const announces = boundarySignalling.has(agentId);
     if (quietFor < (announces ? BOUNDARY_STALL_MS : QUIET_MS)) continue;
     if (isEchoingInjection(agentId)) continue;
-    if (isAgentAwaitingApproval(agentId)) continue;
+    if (needsUser(agentId)) {
+      if (!isAgentAwaitingApproval(agentId) && quietFor >= BOUNDARY_STALL_MS) {
+        noticeHeldBehindDialog(agentId);
+      }
+      continue;
+    }
+    heldNoticed.delete(agentId);
     if (announces) {
       logger.warn(
         `[AgentMsg] ${agentId} announces turn boundaries but none arrived in ${BOUNDARY_STALL_MS / 1000}s — delivering anyway`,
@@ -84,4 +122,5 @@ export function msSinceAgentOutput(agentId: string): number {
 export function forgetSweepState(agentId: string): void {
   lastOutputAt.delete(agentId);
   boundarySignalling.delete(agentId);
+  heldNoticed.delete(agentId);
 }

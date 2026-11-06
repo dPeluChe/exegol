@@ -99,6 +99,7 @@ TS=$(date +%s)
 # "claude --resume" needs after the PTY dies (a reboot leaves no exit output)
 SID=""
 CWD=""
+TOOL=""
 if [ ! -t 0 ]; then
   # Drain all of it (stopping early would break Claude's pipe); the id sits near the start
   INPUT=$(cat)
@@ -110,8 +111,13 @@ if [ ! -t 0 ]; then
   if [ "$AFTER" != "$HEAD" ]; then
     CWD=$(printf '%s' "$AFTER" | tr -d '\\n' | sed -nE 's/^[[:space:]]*:[[:space:]]*"(([^"\\\\]|\\\\.)*)".*/\\1/p')
   fi
+  # Only the name of the tool, the first top-level one; what it was given never leaves the payload
+  AFTER="\${HEAD#*\\"tool_name\\"}"
+  if [ "$AFTER" != "$HEAD" ]; then
+    TOOL=$(printf '%s' "$AFTER" | tr -d '\\n' | sed -nE 's/^[[:space:]]*:[[:space:]]*"([A-Za-z0-9_-]+)".*/\\1/p')
+  fi
 fi
-echo "{\\"type\\":\\"$EVENT_TYPE\\",\\"agentId\\":\\"$EXEGOL_AGENT_ID\\",\\"ts\\":$TS,\\"sessionId\\":\\"$SID\\",\\"cwd\\":\\"$CWD\\"}" \\
+echo "{\\"type\\":\\"$EVENT_TYPE\\",\\"agentId\\":\\"$EXEGOL_AGENT_ID\\",\\"ts\\":$TS,\\"sessionId\\":\\"$SID\\",\\"cwd\\":\\"$CWD\\",\\"tool\\":\\"$TOOL\\"}" \\
   > "$EVENT_DIR/\${EXEGOL_AGENT_ID}_\${EVENT_TYPE}_\${TS}.json"
 `;
 }

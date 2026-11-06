@@ -334,6 +334,54 @@ export interface ScreenDialog {
   fingerprint: string;
 }
 
+/** One bubble of a session's chat: never a tool's input or result */
+export type SessionTurn = {
+  id: string;
+  role: "user" | "assistant" | "tool";
+  text: string;
+  /** Unix seconds; null for terminal text */
+  at: number | null;
+};
+
+export type ChatPage = {
+  turns: SessionTurn[];
+  /** Hand it back for what came after; null when a page is the whole text */
+  cursor: string | null;
+  /** `turns` replaces what the reader holds */
+  reset: boolean;
+  /** Read from the terminal: there was no transcript */
+  fromTerminal: boolean;
+  /** The turns are Markdown; terminal text is shown as printed */
+  markdown: boolean;
+  /** Hand it to `agents.chatOlder` for what came before; null at the start. Only with `reset` */
+  older: string | null;
+};
+
+export type OlderChatPage = Pick<ChatPage, "turns" | "older">;
+
+/** How a message typed into a session opens, id included: the chat's way to recognize it */
+export const injectedHeaders = (messageId: string): [string, string] => [
+  `[Exegol message ${messageId} `,
+  `[Exegol notice ${messageId} `,
+];
+
+const INJECTED_HEADER = /^\[Exegol (?:message|notice) (\S+) /;
+
+/** The message a turn was typed in for, read from its header; null for any other turn */
+export const injectedMessageId = (text: string): string | null =>
+  INJECTED_HEADER.exec(text)?.[1] ?? null;
+
+/** What a session does, by the last tool its hooks named */
+export type DeskActivity = "edits" | "command" | "browser" | "thinking" | "message";
+
+export function toolActivity(tool: string): DeskActivity {
+  if (/^(Edit|MultiEdit|Write|NotebookEdit|apply_patch)$/.test(tool)) return "edits";
+  if (/^(Bash|shell|exec_command)$/.test(tool)) return "command";
+  if (/^(WebFetch|WebSearch)$/.test(tool) || tool.includes("browser_")) return "browser";
+  if (tool.endsWith("agent_send")) return "message";
+  return "thinking";
+}
+
 /** A prompt the user queued for an agent's next turn boundary (T200.4) */
 export interface FollowUpItem {
   id: string;
@@ -378,6 +426,18 @@ export interface PlanUsage {
   /** The last good reading, served while the source fails or rate-limits */
   stale: boolean;
 }
+
+/** What a Company desk shows that the agent row does not hold */
+export interface DeskFacts {
+  /** Changed files in its folder; null when that is not a git repo */
+  changedFiles: number | null;
+  port: number | null;
+  /** Linked with another agent, either direction */
+  linked: boolean;
+}
+
+/** A session that finished on its own, for Company's Done since you left */
+export type DoneSession = Pick<Agent, "id" | "alias" | "taskDescription" | "cliType">;
 
 /** A CLI's installed version against its newest release (Doctor's cliUpdates) */
 export interface CliUpdateStatus {

@@ -1,6 +1,9 @@
 import type { AgentCliType } from "@exegol/shared";
 import { getProviderRegistry } from "./registry";
 
+/** What may come from a hook or a command line and name a file */
+export const SESSION_ID_RE = /^[A-Za-z0-9-]{8,64}$/;
+
 /**
  * The session id the PROVIDER knows this run by — the one its own on-disk store
  * files it under, and the one its resume flag takes.

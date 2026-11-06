@@ -274,6 +274,20 @@ describe("assertSafePath", () => {
     expect(canonical.endsWith(join("src", "main.ts"))).toBe(true);
   });
 
+  it("lets through the transcripts Company reads", async () => {
+    tmpDir = await mkdtemp(join(tmpdir(), "pg-assert-"));
+    const claude = join(tmpDir, ".claude", "projects");
+    const codex = join(tmpDir, ".codex", "sessions");
+    const claudeFile = join(claude, "-Users-me-code-app", "0f3c9a2e-1b7d-4c55-9f10.jsonl");
+    const codexFile = join(codex, "2026", "11", "05", "rollout-2026-11-05T10-00-00-019a.jsonl");
+    await expect(assertSafePath(claudeFile, { allowedBases: [claude] })).resolves.toContain(
+      "-Users-me-code-app",
+    );
+    await expect(assertSafePath(codexFile, { allowedBases: [codex] })).resolves.toContain(
+      "rollout-",
+    );
+  });
+
   it("refuses bidi chars with reason 'bidi-chars'", async () => {
     tmpDir = await mkdtemp(join(tmpdir(), "pg-assert-"));
     const bad = join(tmpDir, "bad‮name.ts");

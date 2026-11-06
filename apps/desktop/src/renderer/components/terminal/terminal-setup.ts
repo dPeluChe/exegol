@@ -2,6 +2,7 @@ import { CLIPBOARD_IMAGE, type LiveSnapshot } from "@exegol/shared";
 import { FitAddon } from "@xterm/addon-fit";
 import { SerializeAddon } from "@xterm/addon-serialize";
 import { type ITerminalOptions, Terminal } from "@xterm/xterm";
+import { hasClipboardImage } from "../../lib/clipboard-image";
 import { isDictationChord } from "../../lib/dictation/shortcut";
 import { appChord, chordKey, IS_MAC } from "../../lib/keymap";
 import { isPaneSwitcherMounted } from "../../lib/pane-switcher-control";
@@ -245,8 +246,7 @@ export function setupTerminalSession(
     // image saved to a file and its path typed in. The cliType is read now: a terminal can have
     // become an agent since setup
     const handlePaste = async (e: ClipboardEvent) => {
-      const items = e.clipboardData?.items;
-      if (!items || ![...items].some((item) => item.type.startsWith("image/"))) return;
+      if (!hasClipboardImage(e.clipboardData)) return;
       e.preventDefault();
       e.stopPropagation();
       const cliType = useAgentStore.getState().agents[deps.agentId]?.cliType ?? deps.cliType;

@@ -12,6 +12,18 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ### Added
 - Agents no longer act on a browser pane another agent is driving, `browser_open` no longer loads over a pane you are reading, and agents can close the panes they opened
 - Agents get usage instructions from Exegol's MCP server and three new browser tools: wait for text or a url, hover, and scroll; they can also go back, forward or reload and take a full-page screenshot
+- Company chat loads earlier messages, opens links and file paths on click, and shows the CLI and time on each turn; Chat and Terminal keep their own panel width, and the panel sits left or right
+- The Dashboard reopens on the tab you left
+- Antigravity in the Company chat reads as a conversation: prompts, activity and formatted answers. Long replies are no longer cut short
+- The Company chat has a dictation button, and dictation no longer goes missing while its status has not loaded
+- Company chat reads opencode and Devin from their own databases: real turns and tools, earlier messages too. The session panel has text size controls for Chat and Terminal
+- Company chat has a Send button and says when a message was typed in the terminal; using the panel keeps it on that session
+- Company chat takes pasted images and files, pasted or dropped, keeps a draft per session, and Option+Up/Down or Option+N move between sessions while typing
+- Company desks are compact rows: icon, name and badges, then state; plain terminals take less and show what they run; tabs of a project sit in dotted groups, and rooms pack without gaps
+- Sidebar and rooms show open PRs and issues with their own icons
+- Company chat renders Markdown (tables, lists, code) and its panel resizes with a bar; rooms and sessions list what needs you first, then the most recent
+- Company chat: the selected session reads as a chat beside its terminal, with messages from other agents and their delivery state; type at the prompt or queue for the turn end, answer a question with its buttons (the input waits meanwhile), copy a summary. Claude Code and Codex read from their transcripts, other CLIs from terminal text
+- Company replaces the Dashboard home: a room per project, a desk per session with its state, activity and badges, a Today strip, P for the next one that needs you, Enter to open it in its layout. Watching and the full session list stay as modes
 - GitHub in the top bar works in workspaces whose root has no remote: PRs and issues of every repo inside, grouped by repo with a filter, and tasks run in that repo's folder and worktree; with nothing to show, the button says why (no gh, not logged in, no remote)
 - Hold-to-talk dictation keeps listening briefly after the key comes up, so the last word is not cut
 - Two new agent CLIs: Grok (`grok`, sessions listed and resumed by id) and Cursor (`cursor-agent`), with YOLO, model and install or update from Settings

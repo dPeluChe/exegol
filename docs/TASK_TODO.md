@@ -266,18 +266,30 @@ references in the research doc, section "Company and chat"). One PR per phase, i
 - [ ] Usage follow-ups: merge `usage_limits` (setting) into `budgets` (needs a table rebuild, the
   project column is NOT NULL; 0 budget rows in the real DB today); `budgets.hardStop` has no effect
   while `BudgetsCard` shows "scheduled runs blocked"; budget windows are UTC, usage days are local
-- [ ] Phase 4, Company replaces the Dashboard (Cmd+1): one room per project with live sessions,
+- [x] Phase 4, Company replaces the Dashboard (Cmd+1): one room per project with live sessions,
   a desk per session (state, activity label from the hook's tool name: edits, command, browser,
   thinking, question, message; badges: CLI update, worktree clean or changed files, dev server
   port, browser pane, PR, agent link), a "Today" strip (needs you, stuck, can wait, done), P jumps to
   the next one that needs you, "Open project" and "Open in its layout"; Watching (pins) stays as a
   mode. No emojis in the UI
-- [ ] Phase 5, chat panel per session: bubbles are turns, from the Claude transcript
+- [x] Phase 5, chat panel per session: bubbles are turns, from the Claude transcript
   (`~/.claude/projects/*.jsonl`) and the Codex rollout, tailed by byte offset; other CLIs get the
   terminal text between turn boundaries. Input goes to the PTY as typed (bracketed paste + Enter)
   when the CLI is at its prompt, and waits for the turn end when it is busy (same boundary rule as
   agent_send); a question shows its options and each sends only its key; agent_send messages appear
   as "other agent" bubbles with their delivery state; Copy summary
+  Done with deviations: capped to the last 200 turns, not virtualized; Send to another agent left out
+  (no existing path); a peer message typed into the session shows once, as the peer's. See 2611.md
+- [ ] Company chat follow-ups: `terminalTurns` and `parseTerminalToChat` stay apart for now (one cuts
+  by turn boundary, the other guesses roles from prompts) and could share a base; persist the Codex
+  hook session id (`storeHookSessionId` for every CLI), so a Codex chat works before its next event
+- [ ] Company `desk-facts` runs git status, lsof and ps every 60 s: mark folders dirty on tool_use or
+  a turn boundary and read only those
+- [ ] One chat source per provider in the history providers, in place of PROVIDERS, STORES and the
+  agy branch in `session-chat.ts`, with one `chatTarget(agent)`
+- [ ] SQLite and transcript parsing for the chat move off the main thread; stat before reading
+- [ ] Cap the chat history held in the renderer and shorten its gcTime
+- [ ] Gate the 2 s dialog poll once proven safe
 - [x] Phase 6 (`feat/project-signals`), sidebar: PR badge and a needs-you dot per project; interruption
   level per project (All, Only what needs me, Nothing) for notifications, toasts and attention items,
   the Today strip reads it in phase 4; a session's own mute stays; Activity is the event feed (warnings

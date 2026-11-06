@@ -104,6 +104,15 @@ interface Window {
     onPrWatch: (
       callback: (event: { agentId: string; projectId: string; reason?: string }) => void,
     ) => () => void;
+    /** What a turn is doing, from the hook's tool name; never its input */
+    onAgentActivity: (
+      callback: (event: {
+        agentId: string;
+        activity: import("@exegol/shared").DeskActivity | null;
+      }) => void,
+    ) => () => void;
+    onMessageHeld: (callback: (event: { agentId: string; reason: string }) => void) => () => void;
+    onChatUpdated: (callback: (event: { agentId: string }) => void) => () => void;
     onStuckTurn: (
       callback: (event: { agentId: string; projectId: string; reason: string }) => void,
     ) => () => void;

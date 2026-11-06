@@ -22,6 +22,7 @@ import { applyRecoveredCrashes, RECOVERY_KEY } from "../lib/session-recovery";
 import { switchSection } from "../lib/switch-section";
 import { trpcMutate } from "../lib/trpc-client";
 import { useAppStore } from "./app";
+import { noteDeskActivity } from "./desk-activity";
 import { useNotificationPrefsStore } from "./notification-prefs";
 import { useWatchStore } from "./watch";
 import { collectPaneIds, useWorkspaceStore } from "./workspace";
@@ -48,12 +49,19 @@ export interface AttentionItem {
   reason: string;
   timestamp: number;
   read: boolean;
+  /** Raised by the stuck-turn sweep: Company shows it apart from other info items */
+  stuck?: boolean;
   pinned: boolean;
   /** Agent browser: the pane the agent needs the user in (clears on hand-back, not on running) */
   paneId?: string;
 }
 
-export type AttentionCause = { level: AttentionLevel; reason: string; paneId?: string };
+export type AttentionCause = {
+  level: AttentionLevel;
+  reason: string;
+  paneId?: string;
+  stuck?: boolean;
+};
 
 function statusToAttention(
   status: string,
@@ -92,6 +100,13 @@ export function startAgentStatusPush(queryClient: QueryClient): void {
   });
   // "info": action_needed clears on the next running push, and a stuck turn is still running
   const offStuckTurn = window.api.onStuckTurn(({ agentId, reason }) =>
+    useAgentStore.getState().addAttentionItem(agentId, { level: "info", reason, stuck: true }),
+  );
+  const offActivity = window.api.onAgentActivity(({ agentId, activity }) =>
+    noteDeskActivity(agentId, activity),
+  );
+  // "info": action_needed clears on the next running push, and a dialog is not a question it asked
+  const offMessageHeld = window.api.onMessageHeld(({ agentId, reason }) =>
     useAgentStore.getState().addAttentionItem(agentId, { level: "info", reason }),
   );
   const stopMcp = window.api.onMcpStatus((e) => queryClient.setQueryData(MCP_STATUS_KEY, e));
@@ -173,6 +188,8 @@ export function startAgentStatusPush(queryClient: QueryClient): void {
     stopRecovery();
     offPrWatch();
     offStuckTurn();
+    offActivity();
+    offMessageHeld();
     stopMcp();
     stopFollowUps();
     stopTurns();
@@ -516,6 +533,7 @@ export const useAgentStore = create<AgentStore>()(
         removedIds.add(id);
         // A closed session leaves Watching too ("session gone" strips were left behind)
         useWatchStore.getState().unwatch(id);
+        noteDeskActivity(id, null);
         set((state) => {
           const { [id]: _, ...rest } = state.agents;
           const focusedAgentId = state.focusedAgentId === id ? null : state.focusedAgentId;
@@ -680,6 +698,7 @@ export const useAgentStore = create<AgentStore>()(
             read: isRead,
             pinned: existing?.pinned ?? false,
             ...(cause?.paneId ? { paneId: cause.paneId } : {}),
+            ...(cause?.stuck ? { stuck: true } : {}),
           };
           const countDelta = isRead ? 0 : wasUnread ? 0 : 1;
           return {

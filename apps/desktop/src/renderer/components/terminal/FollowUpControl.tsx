@@ -23,6 +23,38 @@ export function useFollowUps(agentId: string, enabled: boolean): FollowUpItem[] 
   return data;
 }
 
+function useRemoveFollowUp(agentId: string) {
+  return useMutation({
+    mutationFn: (itemId: string) => trpcMutate("agents.removeFollowUp", { id: agentId, itemId }),
+    onError: toastError("Not removed"),
+  });
+}
+
+/** What waits for the next turn, each with its way out */
+export function FollowUpList({ agentId, items }: { agentId: string; items: FollowUpItem[] }) {
+  const remove = useRemoveFollowUp(agentId);
+  return (
+    <ol className="max-h-48 space-y-1 overflow-y-auto text-[11px]">
+      {items.map((item, i) => (
+        <li key={item.id} className="flex items-start gap-1 rounded bg-white/5 px-1.5 py-1">
+          <span className="shrink-0 text-text-muted tabular-nums">{i + 1}.</span>
+          <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-text-primary">
+            {item.text}
+          </span>
+          <button
+            type="button"
+            onClick={() => remove.mutate(item.id)}
+            className="shrink-0 rounded p-0.5 text-text-muted hover:bg-white/10 hover:text-text-primary"
+            title="Remove"
+          >
+            <X className="h-3 w-3" />
+          </button>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
 /** Follow-up queue + Steer for a live agent (terminal toolbar, Watching card): queued prompts are
  *  typed at its next turn boundary; Steer interrupts the turn and types now */
 export function FollowUpControl({ agentId, className }: { agentId: string; className?: string }) {
@@ -119,10 +151,6 @@ function FollowUpPanel({
     },
     onError: toastError("Steer failed"),
   });
-  const remove = useMutation({
-    mutationFn: (itemId: string) => trpcMutate("agents.removeFollowUp", { id: agentId, itemId }),
-    onError: toastError("Not removed"),
-  });
   const busy = queue.isPending || steer.isPending;
   const trimmed = text.trim();
   const btn = "rounded px-2 py-0.5 text-[11px] disabled:opacity-50";
@@ -133,24 +161,7 @@ function FollowUpPanel({
         Follow-ups
       </div>
       {items.length > 0 ? (
-        <ol className="max-h-48 space-y-1 overflow-y-auto">
-          {items.map((item, i) => (
-            <li key={item.id} className="flex items-start gap-1 rounded bg-white/5 px-1.5 py-1">
-              <span className="shrink-0 text-text-muted tabular-nums">{i + 1}.</span>
-              <span className="min-w-0 flex-1 whitespace-pre-wrap break-words text-text-primary">
-                {item.text}
-              </span>
-              <button
-                type="button"
-                onClick={() => remove.mutate(item.id)}
-                className="shrink-0 rounded p-0.5 text-text-muted hover:bg-white/10 hover:text-text-primary"
-                title="Remove"
-              >
-                <X className="h-3 w-3" />
-              </button>
-            </li>
-          ))}
-        </ol>
+        <FollowUpList agentId={agentId} items={items} />
       ) : (
         <p className="text-text-muted">
           Nothing queued. A follow-up is typed when the agent ends its turn.

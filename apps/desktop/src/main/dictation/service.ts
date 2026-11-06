@@ -122,9 +122,14 @@ async function vocabularyFor(
   );
 }
 
+let loggedStatus = "";
+
 export async function dictationStatus(db: Database.Database): Promise<DictationStatus> {
   const [{ entry, ready }, engine] = await Promise.all([pickModel(db), probeEngine()]);
   const mic = micStatus();
+  const line = `engine ${engine.ok ? "ok" : "unavailable"}, mic ${mic}, model ${ready ? "ready" : "missing"}`;
+  if (line !== loggedStatus) logger.info(`[Dictation] status: ${line}`);
+  loggedStatus = line;
   return {
     platform: process.platform,
     mic,

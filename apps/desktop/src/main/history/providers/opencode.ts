@@ -1,8 +1,8 @@
 import { readdir, readFile, stat } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import { z } from "zod";
 import { mapWithConcurrency } from "../../lib/concurrency";
+import { xdgDataDir } from "../../lib/xdg-data";
 import { cliListing, realpathOr } from "../cli-list";
 import { FILE_CONCURRENCY, mentionsAnyCwd } from "../pool";
 import {
@@ -110,7 +110,7 @@ export const opencodeHistory: LocalHistoryProvider = {
 };
 
 async function listFromStore(cwds: string[], since: number): Promise<LocalSession[]> {
-  const root = join(homedir(), ".local", "share", "opencode", "storage", "session");
+  const root = join(xdgDataDir(), "opencode", "storage", "session");
 
   let projectDirs: string[];
   try {

@@ -79,10 +79,10 @@ export const currentAnalyser = (): AnalyserNode | null =>
 const store = () => useDictationStore.getState();
 const toast = useToastStore.getState;
 
-/** Dashboard: the watched session whose mirror has the focus, and its pane in its project */
+/** Dashboard: the session whose mirror has the focus, Watching's or Company's, and its pane */
 function focusedMirror(): FocusSnapshot["mirror"] {
-  const card = document.activeElement?.closest<HTMLElement>("[data-mirror-agent-id]");
-  const agentId = card?.dataset.mirrorAgentId;
+  const agentId =
+    document.activeElement?.closest<HTMLElement>("[data-mirror-agent-id]")?.dataset.mirrorAgentId;
   const agent = agentId ? useAgentStore.getState().agents[agentId] : undefined;
   if (!agentId || !agent) return undefined;
   return {
@@ -249,7 +249,11 @@ async function readSettings(): Promise<DictationSettings> {
 }
 
 export async function startDictation(): Promise<void> {
-  if (run || store().phase === "transcribing") return;
+  if (run || store().phase === "transcribing") {
+    const stage = `phase=${store().phase} run=${!!run}`;
+    window.api.reportError?.("dictation", `start ignored: ${stage}`, "");
+    return;
+  }
   const { target, field, anchor } = snapshot();
   store().set({
     phase: "starting",
@@ -290,7 +294,10 @@ export async function startDictation(): Promise<void> {
     const [settings, status] = await Promise.all([readSettings(), loadStatus()]);
     if (gone()) return;
     current.settings = settings;
-    if (!status.engineAvailable) return reset();
+    if (!status.engineAvailable) {
+      window.api.reportError?.("dictation", "start ignored: no speech engine", "");
+      return reset();
+    }
     if (!current.settings.enabled) throw new Error("Dictation is off in Settings > Dictation");
     if (!status.model.ready) return endWith({ phase: "no-model" });
     trpcMutate("dictation.warm", { projectId: target.projectId }).catch(() => {});
@@ -511,7 +518,10 @@ export function chordDown(): void {
     void stopDictation("chord");
     return;
   }
-  if (phase === "transcribing") return;
+  if (phase === "transcribing") {
+    window.api.reportError?.("dictation", "start ignored: phase=transcribing", "");
+    return;
+  }
   pressedAt = Date.now();
   holdCandidate = true;
   void startDictation();

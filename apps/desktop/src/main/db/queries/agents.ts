@@ -3,6 +3,7 @@ import {
   type AgentCreate,
   type AgentStatus,
   agentRowSchema,
+  type DoneSession,
   type HistoryEntry,
   LIVE_STATUSES,
 } from "@exegol/shared";
@@ -692,35 +693,71 @@ export function countLiveAgentsInWorktree(
   return row.n;
 }
 
-/** Distinct folders live agents work in (`AGENT_FOLDER_SQL`) */
-export function listLiveAgentFolders(db: Database.Database): string[] {
-  const rows = db
+/** Each live agent with the folder it works in (`AGENT_FOLDER_SQL`) */
+export function listLiveAgentFolderRows(
+  db: Database.Database,
+): { id: string; cwd: string | null }[] {
+  return db
     .prepare(
-      `SELECT DISTINCT ${AGENT_FOLDER_SQL} AS cwd
+      `SELECT a.id, ${AGENT_FOLDER_SQL} AS cwd
        FROM agents a
        LEFT JOIN worktrees w ON w.id = a.worktree_id
        JOIN projects p ON p.id = a.project_id
        WHERE a.status IN (${liveIn()})`,
     )
-    .all(...LIVE_STATUSES) as { cwd: string | null }[];
-  return rows.flatMap((r) => (r.cwd ? [r.cwd] : []));
+    .all(...LIVE_STATUSES) as { id: string; cwd: string | null }[];
+}
+
+/** Distinct folders live agents work in (`AGENT_FOLDER_SQL`) */
+export function listLiveAgentFolders(db: Database.Database): string[] {
+  return [...new Set(listLiveAgentFolderRows(db).flatMap((r) => (r.cwd ? [r.cwd] : [])))];
+}
+
+/** Sessions that finished on their own after `sinceMs`: a crash or a stop is not done */
+export function listCompletedSince(db: Database.Database, sinceMs: number): DoneSession[] {
+  const rows = db
+    .prepare(
+      `SELECT id, alias, task_description, cli_type FROM agents
+       WHERE status = 'completed' AND status_changed_at > ? AND archived_at IS NULL
+         AND cli_type != 'shell'
+       ORDER BY status_changed_at DESC LIMIT 50`,
+    )
+    .all(sinceMs) as {
+    id: string;
+    alias: string | null;
+    task_description: string;
+    cli_type: DoneSession["cliType"];
+  }[];
+  return rows.map((r) => ({
+    id: r.id,
+    alias: r.alias,
+    taskDescription: r.task_description,
+    cliType: r.cli_type,
+  }));
+}
+
+interface LiveProjectSession {
+  id: string;
+  cliType: string;
+  cwd: string;
+  worktreeRepo: string | null;
 }
 
 /** A project's live agents, each with its folder (`AGENT_FOLDER_SQL`) and its worktree's repo */
 export function listLiveProjectSessions(
   db: Database.Database,
   projectId: string,
-): { id: string; cwd: string; worktreeRepo: string | null }[] {
+): LiveProjectSession[] {
   return db
     .prepare(
-      `SELECT a.id, ${AGENT_FOLDER_SQL} AS cwd,
+      `SELECT a.id, a.cli_type AS cliType, ${AGENT_FOLDER_SQL} AS cwd,
               CASE WHEN w.id IS NOT NULL THEN COALESCE(w.repo_path, p.path) END AS worktreeRepo
        FROM agents a
        LEFT JOIN worktrees w ON w.id = a.worktree_id
        JOIN projects p ON p.id = a.project_id
        WHERE a.project_id = ? AND a.status IN (${liveIn()})`,
     )
-    .all(projectId, ...LIVE_STATUSES) as { id: string; cwd: string; worktreeRepo: string | null }[];
+    .all(projectId, ...LIVE_STATUSES) as LiveProjectSession[];
 }
 
 /** Worktree paths a live agent, or one of `agentIds` (a race awaiting its pick), is bound to */

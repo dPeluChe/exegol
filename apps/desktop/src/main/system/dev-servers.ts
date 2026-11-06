@@ -145,6 +145,23 @@ export async function listDevServers(db: Database.Database): Promise<DevServer[]
     );
 }
 
+/** Each live agent's lowest listening port: `listDevServers`' agent match, with none of its
+ *  per-process reads */
+export async function listAgentPorts(db: Database.Database): Promise<Map<string, number>> {
+  const ports = new Map<string, number>();
+  const listeners = await listTcpListeners(String(userInfo().uid));
+  if (listeners.length === 0) return ports;
+  const agentOf = new Map(listLiveAgentPids(db).map((a) => [a.pid, a.id]));
+  const pids = new Set(agentOf.keys());
+  const { parentOf } = await readProcTable();
+  for (const { pid, port } of [...listeners].sort((a, b) => a.port - b.port)) {
+    const ancestor = findAncestorIn(pid, parentOf, pids);
+    const agentId = ancestor ? agentOf.get(ancestor) : undefined;
+    if (agentId && !ports.has(agentId)) ports.set(agentId, port);
+  }
+  return ports;
+}
+
 async function startTime(pid: number): Promise<string | null> {
   try {
     const { stdout } = await execFileAsync("ps", ["-o", "lstart=", "-p", String(pid)], {

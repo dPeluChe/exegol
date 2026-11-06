@@ -28,10 +28,13 @@ import { clearAgentLinks, clearAgentMessageQueue, isEchoingInjection } from "./a
 import type { OutputProcessor } from "./agent-output-processor";
 import { handleParallelAgentExit } from "./agent-parallel-orchestration";
 import { detectCliSelfUpdate } from "./cli-self-update";
-import { noteHookCwd } from "./hook-cwd";
+import { noteHookCwd, noteHookSession } from "./hook-cwd";
+import { clearHookTool, noteHookTool } from "./hook-tool";
 import { handleLostSession } from "./lost-session-exit";
 import { detachOutputPipeline } from "./output-pipeline";
+import { SESSION_ID_RE } from "./provider-session-id";
 import { noteSessionActivity } from "./session-activity";
+import { noteChatBoundary } from "./session-chat";
 import {
   type AgentContext,
   broadcastAgentStatus,
@@ -201,7 +204,9 @@ function trackTurn(
   maps: SessionMaps,
   event: AgentSignalType,
 ): void {
+  if (event === "turn_started" || event === "finished") noteChatBoundary(agent.id, agent.cliType);
   if (event === "turn_started") {
+    clearHookTool(agent.id);
     try {
       const cwd = maps.initialSnapshots.get(agent.id)?.cwd ?? getAgentCwd(db, agent.id);
       if (cwd) startTurn(agent.id, cwd);
@@ -228,8 +233,6 @@ const FILE_EVENT_SIGNALS: Record<string, string> = {
 
 const TERMINAL_STATUSES = new Set(["completed", "failed", "stopped", "crashed"]);
 
-const SESSION_ID_RE = /^[A-Za-z0-9-]{8,64}$/;
-
 /**
  * Keep the latest Claude session id for resume. The startup-banner parse this
  * replaced stopped matching (Claude Code no longer prints the id), so crashed
@@ -252,11 +255,15 @@ function storeHookSessionId(db: Database.Database, agentId: string, sessionId: s
 export function dispatchAgentFileEvent(
   db: Database.Database,
   maps: SessionMaps,
-  event: { type: string; agentId: string; sessionId?: string; cwd?: string },
+  event: { type: string; agentId: string; sessionId?: string; cwd?: string; tool?: string },
 ): void {
-  // Before the OSC short-circuit: OSC carries no session id or folder, hooks do
-  if (event.sessionId) storeHookSessionId(db, event.agentId, event.sessionId);
+  // Before the OSC short-circuit: OSC carries no session id, folder or tool, hooks do
+  if (event.sessionId) {
+    storeHookSessionId(db, event.agentId, event.sessionId);
+    noteHookSession(event.agentId, event.sessionId);
+  }
   noteHookCwd(event.agentId, event.cwd);
+  if (event.type === "tool_use") noteHookTool(event.agentId, event.tool);
   if (oscDeliveredAgents.has(event.agentId)) return;
   const sigType = FILE_EVENT_SIGNALS[event.type];
   if (!sigType) return;

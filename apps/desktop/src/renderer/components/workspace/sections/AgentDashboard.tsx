@@ -1,114 +1,22 @@
 import { type Agent, LIVE_STATUSES } from "@exegol/shared";
-import { cn, ScrollArea } from "@exegol/ui";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  AlertCircle,
-  AlertTriangle,
-  Archive,
-  CheckCircle,
-  ChevronDown,
-  ChevronRight,
-  ChevronUp,
-  Clock,
-  Coins,
-  Cpu,
-  MessagesSquare,
-  Plus,
-  Send,
-  Square,
-  XCircle,
-} from "lucide-react";
-import { memo, useCallback, useMemo, useState } from "react";
+import { ScrollArea } from "@exegol/ui";
+import { useQuery } from "@tanstack/react-query";
+import { Cpu, Plus } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
 import { useFleetSync } from "../../../hooks/use-fleet-sync";
-import { useNow } from "../../../hooks/use-now";
-import { submitToAgent } from "../../../lib/agent-input";
-import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
-import { type AgentState, isWorking, jumpToAgent, useAgentStore } from "../../../stores/agents";
-import { useAppStore } from "../../../stores/app";
+import { useMountEffect } from "../../../hooks/use-mount-effect";
+import { IS_MAC } from "../../../lib/keymap";
+import { trpcInvoke } from "../../../lib/trpc-client";
+import { type AgentState, jumpToAgent, useAgentStore } from "../../../stores/agents";
+import { type DashboardMode, useAppStore } from "../../../stores/app";
 import { useWatchStore } from "../../../stores/watch";
-import { ResumeButton } from "../../agents/ResumeButton";
-import { AccessModeBadge } from "../../common/AccessModeBadge";
-import { AgentIcon } from "../../common/AgentIcon";
-import { AgentSpinner } from "../../common/AgentSpinner";
 import { FilterChip } from "../../common/FilterChip";
-import { McpStatusIndicator } from "../../common/McpStatusIndicator";
-import { ProjectChip, type ProjectMeta } from "../../common/ProjectChip";
-import { QuietBadge } from "../../common/QuietControls";
-import { SessionAlias } from "../../common/SessionAlias";
-import { WatchToggle } from "../../common/WatchToggle";
-import { TerminalInstance } from "../../terminal/TerminalInstance";
-import { AgentMessagesPanel, useAgentMessages } from "./AgentMessages";
-import { FleetCardMenu } from "./DashboardMenus";
+import type { ProjectMeta } from "../../common/ProjectChip";
+import { SegmentedTabs } from "../../common/SegmentedTabs";
+import { CompanySection } from "./CompanySection";
+import { FleetGroups, type GroupBy } from "./FleetGroups";
 import { WatchingSection } from "./WatchingSection";
 import { WorktreesCard } from "./WorktreesCard";
-
-const STATUS_CONFIG: Record<
-  string,
-  { icon: typeof Cpu; color: string; bg: string; label: string }
-> = {
-  running: {
-    icon: Cpu,
-    color: "text-green-400",
-    bg: "border-green-500/30 bg-green-500/5",
-    label: "Running",
-  },
-  spawning: {
-    icon: Clock,
-    color: "text-blue-400",
-    bg: "border-blue-400/30 bg-blue-400/5",
-    label: "Starting",
-  },
-  waiting_input: {
-    icon: AlertTriangle,
-    color: "text-amber-400",
-    bg: "border-amber-500/30 bg-amber-500/5",
-    label: "Waiting",
-  },
-  completed: {
-    icon: CheckCircle,
-    color: "text-text-muted",
-    bg: "border-border",
-    label: "Completed",
-  },
-  failed: {
-    icon: XCircle,
-    color: "text-red-400",
-    bg: "border-red-500/30 bg-red-500/5",
-    label: "Failed",
-  },
-  crashed: {
-    icon: AlertCircle,
-    color: "text-red-500",
-    bg: "border-red-500/30 bg-red-500/5",
-    label: "Crashed",
-  },
-  stopped: { icon: Square, color: "text-text-muted", bg: "border-border", label: "Stopped" },
-};
-
-const DEFAULT_STATUS = {
-  icon: Cpu,
-  color: "text-text-muted",
-  bg: "border-border",
-  label: "Unknown",
-};
-
-function elapsedStr(startedAt: number, now: number): string {
-  const s = Math.floor(now / 1000 - startedAt);
-  if (s < 60) return `${s}s`;
-  if (s < 3600) return `${Math.floor(s / 60)}m`;
-  return `${Math.floor(s / 3600)}h ${Math.floor((s % 3600) / 60)}m`;
-}
-
-/** Leaf timer: only this span re-renders as time passes, not the whole grid. */
-function Elapsed({ startedAt }: { startedAt: number }) {
-  const now = useNow();
-  return (
-    <span className="flex items-center gap-0.5">
-      <Clock className="h-2.5 w-2.5" />
-      {elapsedStr(startedAt, now)}
-    </span>
-  );
-}
 
 // ─── Data ───────────────────────────────────────────────────────────────
 
@@ -121,54 +29,36 @@ interface ProjectInfo {
   color?: string | null;
 }
 
-type GroupBy = "state" | "project";
-
 // ─── Component ──────────────────────────────────────────────────────────
+
+const MODE_TABS: { id: DashboardMode; label: string }[] = [
+  { id: "company", label: "Company" },
+  { id: "watching", label: "Watching" },
+  { id: "all", label: "All sessions" },
+];
 
 export function AgentDashboard() {
   const storeAgents = useAgentStore((s) => s.agents);
   const attentionItems = useAgentStore((s) => s.attentionItems);
   const [groupBy, setGroupBy] = useState<GroupBy>("state");
-  // With sessions pinned, the dashboard is for watching them; the full fleet is
-  // already in the sidebar's Agents list, so it waits behind a toggle
+  // Pinned sessions open it on Watching, until a tab is picked
   const watchingCount = useWatchStore((s) => s.watched.length);
-  const [showAll, setShowAll] = useState(false);
-  const showFleet = watchingCount === 0 || showAll;
+  const picked = useAppStore((s) => s.dashboardMode);
+  const mode: DashboardMode = picked ?? (watchingCount > 0 ? "watching" : "company");
+  const setMode = useAppStore((s) => s.setDashboardMode);
+
+  // Closing the dashboard is what "left" means; Company reads the last stamp as it mounts
+  useMountEffect(() => {
+    const stamp = () => useAppStore.getState().setCompanySeenAt(Date.now());
+    window.addEventListener("pagehide", stamp);
+    return () => {
+      window.removeEventListener("pagehide", stamp);
+      stamp();
+    };
+  });
 
   // The fleet is hydrated into the store app-wide (useFleetSync); same query, same cache
   const activeRows = useFleetSync<ActiveAgent>();
-
-  const queryClient = useQueryClient();
-  const [archiving, setArchiving] = useState(false);
-  const archiveEnded = useCallback(async () => {
-    setArchiving(true);
-    try {
-      await trpcMutate("agents.archiveEnded", {});
-      // The dashboard renders from the store, so the rows must leave the VIEW
-      // too — but flagged rather than removed, or every ended agent's open
-      // terminal pane is treated as stale and reset to the launcher.
-      const store = useAgentStore.getState();
-      for (const a of Object.values(store.agents)) {
-        if (!LIVE_STATUSES.has(a.status)) store.markArchived(a.id);
-      }
-      queryClient.invalidateQueries({ queryKey: ["recentSessions"] });
-    } finally {
-      setArchiving(false);
-    }
-  }, [queryClient]);
-
-  /** One card at a time: "Archive all" is the bulk broom, this is the shrug at a
-   *  single finished session you have already read. */
-  const archiveOne = useCallback(
-    async (agentId: string) => {
-      await trpcMutate("agents.archive", { id: agentId });
-      // Flagged, not removed: a removed row makes an open terminal pane look
-      // stale and WorkspacePane converts it to empty, losing the transcript.
-      useAgentStore.getState().markArchived(agentId);
-      queryClient.invalidateQueries({ queryKey: ["recentSessions"] });
-    },
-    [queryClient],
-  );
 
   const { data: projects } = useQuery({
     queryKey: ["projects"],
@@ -188,80 +78,26 @@ export function AgentDashboard() {
     return m;
   }, [projects, activeRows]);
 
-  const { groups, total, runningCount, unreadCount } = useMemo(() => {
-    const all = Object.values(storeAgents)
-      .filter((a) => !a.archived)
-      .sort((a, b) => {
-        const aActive = LIVE_STATUSES.has(a.status) ? 0 : 1;
-        const bActive = LIVE_STATUSES.has(b.status) ? 0 : 1;
-        if (aActive !== bActive) return aActive - bActive;
-        return (b.startedAt ?? 0) - (a.startedAt ?? 0);
-      });
-    const unread = (id: string) => {
-      const item = attentionItems[id];
-      return !!item && !item.read;
-    };
-
-    let running = 0;
-    let unreadTotal = 0;
-    const buckets: Record<string, AgentState[]> = { needs: [], working: [], idle: [], recent: [] };
-    const byProject = new Map<string, AgentState[]>();
-
-    for (const a of all) {
-      if (a.status === "running") running++;
-      const isUnread = unread(a.id);
-      if (isUnread) unreadTotal++;
-      if (groupBy === "state") {
-        const key = isUnread
-          ? "needs"
-          : isWorking(a)
-            ? "working"
-            : LIVE_STATUSES.has(a.status)
-              ? "idle"
-              : "recent";
-        buckets[key]?.push(a);
-      } else {
-        const list = byProject.get(a.projectId) ?? [];
-        list.push(a);
-        byProject.set(a.projectId, list);
-      }
-    }
-
-    const result: Array<{
-      key: string;
-      title: string;
-      color: string | null;
-      agents: AgentState[];
-      unread: Set<string>;
-    }> = [];
-    const unreadSet = new Set(all.filter((a) => unread(a.id)).map((a) => a.id));
-    if (groupBy === "state") {
-      const titles: Record<string, string> = {
-        needs: "Needs attention",
-        working: "Working",
-        idle: "Idle — at prompt",
-        recent: "Recent",
-      };
-      for (const key of ["needs", "working", "idle", "recent"]) {
-        const agents = buckets[key] ?? [];
-        if (agents.length) {
-          result.push({ key, title: titles[key] ?? key, color: null, agents, unread: unreadSet });
-        }
-      }
-    } else {
-      for (const [projectId, agents] of byProject) {
-        const meta = projectMeta.get(projectId);
-        result.push({
-          key: projectId,
-          title: meta?.name ?? projectId.slice(0, 12),
-          color: meta?.color ?? null,
-          agents,
-          unread: unreadSet,
-        });
-      }
-    }
-    return { groups: result, total: all.length, runningCount: running, unreadCount: unreadTotal };
-  }, [storeAgents, attentionItems, groupBy, projectMeta]);
+  const all = useMemo(
+    () =>
+      Object.values(storeAgents)
+        .filter((a) => !a.archived)
+        .sort((a, b) => {
+          const aActive = LIVE_STATUSES.has(a.status) ? 0 : 1;
+          const bActive = LIVE_STATUSES.has(b.status) ? 0 : 1;
+          if (aActive !== bActive) return aActive - bActive;
+          return (b.startedAt ?? 0) - (a.startedAt ?? 0);
+        }),
+    [storeAgents],
+  );
+  const unread = useMemo(
+    () =>
+      new Set(
+        all.filter((a) => attentionItems[a.id] && !attentionItems[a.id]?.read).map((a) => a.id),
+      ),
+    [all, attentionItems],
+  );
+  const runningCount = all.filter((a) => a.status === "running").length;
 
   const navigateToAgent = useCallback((agent: AgentState) => {
     jumpToAgent(agent.id, agent.projectId);
@@ -273,7 +109,7 @@ export function AgentDashboard() {
     window.dispatchEvent(new CustomEvent("exegol:spawn-agent"));
   };
 
-  if (total === 0) {
+  if (all.length === 0) {
     return (
       <div className="flex h-full flex-col items-center justify-center gap-4 bg-bg-primary p-8">
         <Cpu className="h-10 w-10 text-text-muted/30" />
@@ -311,433 +147,65 @@ export function AgentDashboard() {
   }
 
   return (
-    <ScrollArea className="h-full">
-      <div className="space-y-6 p-4">
-        {/* Summary bar + group toggle */}
-        <div className="flex items-center gap-4 text-xs text-text-muted">
-          <span className="rounded bg-white/5 px-1.5 py-0.5 text-[10px] uppercase tracking-wider">
-            All projects
-          </span>
-          <span className="flex items-center gap-1.5">
-            <Cpu className="h-3.5 w-3.5" />
-            <span className="font-medium text-text-primary">{total}</span> agents
-          </span>
-          <span className="flex items-center gap-1.5">
-            <span className="h-2 w-2 rounded-full bg-green-500" />
-            {runningCount} running
-          </span>
+    <div className="flex h-full flex-col">
+      <div className="flex items-center gap-4 p-4 pb-3 text-xs text-text-muted">
+        <div className="shrink-0">
+          <SegmentedTabs tabs={MODE_TABS} active={mode} onChange={setMode} label="Dashboard view" />
+        </div>
+        <span className="flex items-center gap-1.5">
+          <Cpu className="h-3.5 w-3.5" />
+          <span className="font-medium text-text-primary">{all.length}</span> agents
+        </span>
+        <span className="flex items-center gap-1.5">
+          <span className="h-2 w-2 rounded-full bg-green-500" />
+          {runningCount} running
+        </span>
+        {mode !== "company" && (
           <span className="flex items-center gap-1.5">
             <span className="h-2 w-2 rounded-full bg-amber-500" />
-            {unreadCount} need attention
+            {unread.size} need attention
           </span>
+        )}
+        {mode === "company" && (
+          <span className="ml-auto">
+            P next that needs you, {IS_MAC ? "Option" : "Alt"}+Up/Down moves between sessions, Enter
+            opens it in its layout
+          </span>
+        )}
+        {mode === "all" && (
           <div className="ml-auto flex items-center gap-1">
-            {watchingCount > 0 && (
-              <FilterChip active={showAll} onClick={() => setShowAll((v) => !v)}>
-                Show all agents
-              </FilterChip>
-            )}
-            {showFleet && (
-              <>
-                <FilterChip active={groupBy === "state"} onClick={() => setGroupBy("state")}>
-                  By state
-                </FilterChip>
-                <FilterChip active={groupBy === "project"} onClick={() => setGroupBy("project")}>
-                  By project
-                </FilterChip>
-              </>
-            )}
+            <FilterChip active={groupBy === "state"} onClick={() => setGroupBy("state")}>
+              By state
+            </FilterChip>
+            <FilterChip active={groupBy === "project"} onClick={() => setGroupBy("project")}>
+              By project
+            </FilterChip>
           </div>
-        </div>
-
-        <WatchingSection projectMeta={projectMeta} onOpenAgent={navigateToAgent} />
-
-        {showFleet && (
-          <>
-            <WorktreesCard />
-
-            {groups.map((group) => (
-              <div key={group.key}>
-                <h3 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wider text-text-muted">
-                  <span
-                    className={cn("h-1.5 w-1.5 rounded-full", !group.color && "bg-accent")}
-                    style={group.color ? { backgroundColor: group.color } : undefined}
-                  />
-                  {group.title}
-                  <span className="font-normal">({group.agents.length})</span>
-                  {/* Ended sessions pile up forever — a list you cannot clear is a
-                  list you stop reading. Archive keeps the row (scoring, oplog,
-                  resume handle); it only leaves the view. */}
-                  {group.key === "recent" && (
-                    <button
-                      type="button"
-                      onClick={archiveEnded}
-                      disabled={archiving}
-                      className="ml-auto flex items-center gap-1 rounded border border-border px-1.5 py-0.5 text-[10px] font-normal normal-case tracking-normal text-text-muted transition-colors hover:border-accent/40 hover:text-text-secondary disabled:opacity-50"
-                    >
-                      <Archive className="h-3 w-3" />
-                      Archive all
-                    </button>
-                  )}
-                </h3>
-                {group.key === "recent" ? (
-                  <RecentByDay
-                    agents={group.agents}
-                    renderCard={(agent) => (
-                      <AgentCard
-                        key={agent.id}
-                        agent={agent}
-                        projectMeta={projectMeta.get(agent.projectId)}
-                        hasUnread={group.unread.has(agent.id)}
-                        onOpenAgent={navigateToAgent}
-                        onArchiveAgent={archiveOne}
-                      />
-                    )}
-                  />
-                ) : (
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                    {group.agents.map((agent) => (
-                      <AgentCard
-                        key={agent.id}
-                        agent={agent}
-                        projectMeta={
-                          groupBy === "state" ? projectMeta.get(agent.projectId) : undefined
-                        }
-                        hasUnread={group.unread.has(agent.id)}
-                        onOpenAgent={navigateToAgent}
-                        onArchiveAgent={LIVE_STATUSES.has(agent.status) ? undefined : archiveOne}
-                      />
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </>
         )}
       </div>
-    </ScrollArea>
-  );
-}
-
-/**
- * Ended sessions by the day they started, each day collapsed: dozens of crashed cards after a
- * restart pulled the eye away from the live ones. A day header says how many and how many failed.
- */
-function RecentByDay({
-  agents,
-  renderCard,
-}: {
-  agents: AgentState[];
-  renderCard: (agent: AgentState) => React.ReactNode;
-}) {
-  const [open, setOpen] = useState<Set<string>>(new Set());
-  const days = new Map<string, AgentState[]>();
-  for (const a of [...agents].sort((x, y) => (y.startedAt ?? 0) - (x.startedAt ?? 0))) {
-    const key = dayLabel(a.startedAt);
-    days.set(key, [...(days.get(key) ?? []), a]);
-  }
-  return (
-    <div className="space-y-1">
-      {[...days.entries()].map(([day, list]) => {
-        const failed = list.filter((a) => a.status === "failed" || a.status === "crashed").length;
-        const isOpen = open.has(day);
-        return (
-          <div key={day}>
-            <button
-              type="button"
-              onClick={() =>
-                setOpen((prev) => {
-                  const next = new Set(prev);
-                  if (next.has(day)) next.delete(day);
-                  else next.add(day);
-                  return next;
-                })
-              }
-              className="flex w-full items-center gap-2 rounded-md px-1 py-1 text-left text-[11px] text-text-secondary hover:bg-white/5"
-            >
-              {isOpen ? <ChevronDown className="h-3 w-3" /> : <ChevronRight className="h-3 w-3" />}
-              <span className="font-medium">{day}</span>
-              <span className="text-text-muted">
-                {list.length} session{list.length === 1 ? "" : "s"}
-              </span>
-              {failed > 0 && (
-                <span className="text-[10px] text-red-400/80">{failed} crashed or failed</span>
-              )}
-            </button>
-            {isOpen && (
-              <div className="mt-1 grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                {list.map(renderCard)}
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
-function dayLabel(startedAt: number | null): string {
-  if (!startedAt) return "Earlier";
-  const d = new Date(startedAt * 1000);
-  const today = new Date();
-  const yesterday = new Date(today.getTime() - 86_400_000);
-  if (d.toDateString() === today.toDateString()) return "Today";
-  if (d.toDateString() === yesterday.toDateString()) return "Yesterday";
-  return d.toLocaleDateString(undefined, { weekday: "short", day: "numeric", month: "short" });
-}
-
-// Memo: the dashboard regroups on every push; a card re-renders only when its own agent changes
-const AgentCard = memo(function AgentCard({
-  agent,
-  projectMeta,
-  hasUnread,
-  onOpenAgent,
-  onArchiveAgent,
-}: {
-  agent: AgentState;
-  /** Set only in by-state grouping — shows which project the card belongs to. */
-  projectMeta?: ProjectMeta;
-  hasUnread: boolean;
-  onOpenAgent: (agent: AgentState) => void;
-  /** Set only for ended sessions — a live agent has nothing to dismiss. */
-  onArchiveAgent?: (agentId: string) => void;
-}) {
-  const onClick = () => onOpenAgent(agent);
-  const onArchive = onArchiveAgent ? () => onArchiveAgent(agent.id) : undefined;
-  const config = STATUS_CONFIG[agent.status] ?? DEFAULT_STATUS;
-  const canPeek = LIVE_STATUSES.has(agent.status);
-  const [peekOpen, setPeekOpen] = useState(false);
-  const [messagesOpen, setMessagesOpen] = useState(false);
-  const { data: messages = [] } = useAgentMessages(agent.id);
-
-  return (
-    <FleetCardMenu agent={agent} onOpen={onClick} onArchive={onArchive}>
-      <div
-        className={cn(
-          "group relative flex flex-col rounded-xl border p-3 transition-all",
-          // Ended sessions stay quiet: a wall of red cards drowned the live ones (the icon keeps the state)
-          canPeek ? config.bg : "border-border bg-bg-secondary/40",
-          "cursor-pointer hover:shadow-lg hover:shadow-black/10",
-        )}
-      >
-        {/* Covers the card so a click anywhere opens it; the card's own controls sit above it as siblings */}
-        <button
-          type="button"
-          onClick={onClick}
-          aria-label={`Open ${agent.alias ?? agent.cliType}`}
-          className="absolute inset-0 rounded-xl"
-        />
-        {/* Clicks fall through to the button; controls and titled badges (tooltips) still take the pointer.
-          The alias pencil shows on card hover because its own hover target is now pass-through. */}
-        <div className="pointer-events-none relative flex items-start gap-3 group-hover:[&_.group\/alias_button]:inline-block [&_[title]]:pointer-events-auto [&_button]:pointer-events-auto [&_input]:pointer-events-auto">
-          {/* Left: icon + spinner */}
-          <div className="flex flex-col items-center gap-1.5 pt-0.5">
-            <AgentIcon provider={agent.cliType} size={28} />
-            {!hasUnread && isWorking(agent) && (
-              <AgentSpinner agentId={agent.id} className="text-accent" />
-            )}
-          </div>
-
-          {/* Center: info */}
-          <div className="min-w-0 flex-1">
-            <AgentCardTitle agent={agent} projectMeta={projectMeta} hasUnread={hasUnread} />
-            <p className="mt-0.5 truncate text-xs text-text-muted">{agent.taskDescription}</p>
-            {agent.currentStep && (
-              <p className="mt-0.5 truncate text-[10px] text-text-muted/70 italic">
-                {agent.currentStep}
+      {mode === "company" ? (
+        <CompanySection projectMeta={projectMeta} />
+      ) : (
+        <ScrollArea className="min-h-0 flex-1">
+          <div className="space-y-6 p-4 pt-0">
+            {mode === "all" ? (
+              <FleetGroups
+                agents={all}
+                unread={unread}
+                groupBy={groupBy}
+                projectMeta={projectMeta}
+                onOpenAgent={navigateToAgent}
+              />
+            ) : watchingCount > 0 ? (
+              <WatchingSection projectMeta={projectMeta} onOpenAgent={navigateToAgent} />
+            ) : (
+              <p className="py-8 text-center text-xs text-text-muted">
+                No pinned sessions. Use Watch on a session to keep its terminal here.
               </p>
             )}
-            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px] text-text-muted">
-              {agent.startedAt && <Elapsed startedAt={agent.startedAt} />}
-              <AgentTokenUsage usage={agent.tokenUsage} />
-              <AccessModeBadge mode={agent.accessMode} variant="inline" />
-              <McpStatusIndicator agentId={agent.id} accessMode={agent.accessMode} />
-              {agent.branchName && (
-                <span className="truncate rounded bg-white/5 px-1 py-0.5 font-mono text-[9px]">
-                  {agent.branchName}
-                </span>
-              )}
-              {messages.length > 0 && (
-                <MessagesToggle
-                  count={messages.length}
-                  open={messagesOpen}
-                  onToggle={() => setMessagesOpen((v) => !v)}
-                />
-              )}
-              {canPeek && (
-                <PeekControls
-                  agentId={agent.id}
-                  peekOpen={peekOpen}
-                  onTogglePeek={() => setPeekOpen((v) => !v)}
-                />
-              )}
-              {onArchive && <EndedSessionActions agent={agent} onArchive={onArchive} />}
-            </div>
           </div>
-        </div>
-
-        {peekOpen && <PeekPanel agent={agent} />}
-        {messagesOpen && messages.length > 0 && (
-          <AgentMessagesPanel agentId={agent.id} messages={messages} />
-        )}
-      </div>
-    </FleetCardMenu>
-  );
-});
-
-/** What this agent said to the others and they to it (agent_send), with delivery state */
-function MessagesToggle({
-  count,
-  open,
-  onToggle,
-}: {
-  count: number;
-  open: boolean;
-  onToggle: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onToggle}
-      aria-expanded={open}
-      className={cn(
-        "flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] hover:bg-white/10 hover:text-text-primary",
-        open ? "text-accent" : "text-text-muted",
+        </ScrollArea>
       )}
-      title="Messages between this agent and the others"
-    >
-      <MessagesSquare className="h-3 w-3" />
-      {count}
-    </button>
-  );
-}
-
-function AgentCardTitle({
-  agent,
-  projectMeta,
-  hasUnread,
-}: {
-  agent: AgentState;
-  projectMeta?: ProjectMeta;
-  hasUnread: boolean;
-}) {
-  const config = STATUS_CONFIG[agent.status] ?? DEFAULT_STATUS;
-  const StatusIcon = config.icon;
-  return (
-    <div className="flex items-center gap-2">
-      <SessionAlias agent={agent} />
-      <QuietBadge agent={agent} />
-      {agent.alias && <span className="shrink-0 text-[10px] text-text-muted">{agent.cliType}</span>}
-      <span className={cn("flex items-center gap-1 text-[10px]", config.color)}>
-        <StatusIcon className="h-3 w-3" />
-        {agent.suspended ? "Suspended" : hasUnread ? "Needs input" : config.label}
-      </span>
-      {projectMeta && <ProjectChip project={projectMeta} className="ml-auto text-[9px]" />}
-    </div>
-  );
-}
-
-function AgentTokenUsage({ usage }: { usage: AgentState["tokenUsage"] }) {
-  if (!(usage.input > 0 || usage.output > 0)) return null;
-  return (
-    <span className="flex items-center gap-0.5">
-      <Coins className="h-2.5 w-2.5" />
-      {((usage.input + usage.output) / 1000).toFixed(1)}k
-      {usage.cost > 0 && (
-        <span className="ml-0.5 text-text-muted/60">${usage.cost.toFixed(3)}</span>
-      )}
-    </span>
-  );
-}
-
-function PeekControls({
-  agentId,
-  peekOpen,
-  onTogglePeek,
-}: {
-  agentId: string;
-  peekOpen: boolean;
-  onTogglePeek: () => void;
-}) {
-  return (
-    <>
-      <WatchToggle agentId={agentId} className="text-[10px]" />
-      <button
-        type="button"
-        onClick={onTogglePeek}
-        className="ml-auto flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] text-text-muted hover:bg-white/10 hover:text-text-primary"
-        title="Peek at the terminal and reply inline"
-      >
-        {peekOpen ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-        Peek
-      </button>
-    </>
-  );
-}
-
-function EndedSessionActions({ agent, onArchive }: { agent: AgentState; onArchive: () => void }) {
-  return (
-    <>
-      <ResumeButton agent={agent} className="ml-auto" />
-      <button
-        type="button"
-        onClick={onArchive}
-        className="flex items-center gap-0.5 rounded px-1 py-0.5 text-[10px] text-text-muted opacity-0 transition-opacity hover:bg-white/10 hover:text-text-primary group-hover:opacity-100"
-        title="Archive — keeps the session, removes the card"
-      >
-        <Archive className="h-3 w-3" />
-      </button>
-    </>
-  );
-}
-
-/** T156 peek-and-reply: live read-only terminal + one-line reply to the PTY.
- *  liveFeed streams real output (colors, TUIs) without stdin or PTY resize —
- *  the pane in the Agents tab keeps sole ownership of the terminal size. */
-function PeekPanel({ agent }: { agent: AgentState }) {
-  const [reply, setReply] = useState("");
-
-  const send = () => {
-    const text = reply.trim();
-    if (!text) return;
-    submitToAgent(agent.id, text);
-    setReply("");
-  };
-
-  return (
-    <div className="relative mt-2 border-t border-border pt-2">
-      <div className="h-52 overflow-hidden rounded-md border border-border bg-black/40 p-1">
-        <TerminalInstance
-          key={`peek-${agent.id}`}
-          agentId={agent.id}
-          cliType={agent.cliType}
-          readOnly
-          liveFeed
-        />
-      </div>
-      <div className="mt-1.5 flex items-center gap-1.5">
-        <input
-          value={reply}
-          onChange={(e) => setReply(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === "Enter") {
-              e.preventDefault();
-              send();
-            }
-          }}
-          placeholder="Reply without leaving the dashboard…"
-          aria-label="Reply to agent"
-          className="h-7 flex-1 rounded-md border border-border bg-bg-primary px-2 text-[11px] text-text-primary placeholder:text-text-muted focus:border-accent/50 focus:outline-none"
-        />
-        <button
-          type="button"
-          onClick={send}
-          disabled={!reply.trim()}
-          aria-label="Send reply"
-          className="flex h-7 w-7 items-center justify-center rounded-md border border-border text-text-muted hover:bg-white/5 hover:text-text-primary disabled:opacity-40"
-        >
-          <Send className="h-3 w-3" />
-        </button>
-      </div>
     </div>
   );
 }

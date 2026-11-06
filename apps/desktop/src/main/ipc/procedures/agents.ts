@@ -4,6 +4,7 @@ import { z } from "zod";
 import { saveActiveView } from "../../agents/active-view";
 import { isAgentAwaitingApproval } from "../../agents/agent-message-queue";
 import { folderExists } from "../../agents/auto-resume";
+import { deskFacts } from "../../agents/desk-facts";
 import {
   FOLLOW_UP_MAX_CHARS,
   FollowUpError,
@@ -14,6 +15,7 @@ import {
 } from "../../agents/follow-up-queue";
 import { hookCwdOf } from "../../agents/hook-cwd";
 import { setIdleExempt } from "../../agents/idle-exempt";
+import { chatTurns, olderChatTurns } from "../../agents/session-chat";
 import { broadcastShellClosed } from "../../agents/spawn-env";
 import { forgetAgentStatusWrites } from "../../agents/status-writes";
 import {
@@ -31,6 +33,7 @@ import {
   deleteShellRow,
   getAgentLastCwd,
   listActiveAgents,
+  listCompletedSince,
   setAgentAlias,
   setAgentPrWatch,
 } from "../../db/queries/agents";
@@ -68,6 +71,11 @@ export const agentRouter = router({
   /** T156: cross-project non-terminal agents (project name + group color). */
   // At once, even mid-recovery: the sidebar lists sessions while they reconnect (recoveryState)
   listActive: publicProcedure.query(({ ctx }) => listActiveAgents(ctx.db)),
+
+  deskFacts: publicProcedure.query(({ ctx }) => deskFacts(ctx.db)),
+  doneSince: publicProcedure
+    .input(z.object({ since: z.number().nonnegative() }))
+    .query(({ ctx, input }) => listCompletedSince(ctx.db, input.since)),
   /** Startup reattach progress; `recovery:progress` pushes each change */
   recoveryState: publicProcedure.query(() => getRecoveryState()),
   /** The view on screen: the next startup reattaches its sessions first */
@@ -166,6 +174,13 @@ export const agentRouter = router({
     }),
   /** Which live agents have the Exegol MCP tools connected (pushed on mcp:status after this) */
   mcpStatus: publicProcedure.query(({ ctx }) => ({ agents: getMcpAgentStates(ctx.db) })),
+  /** The session as a chat: `cursor` from the last page, nothing but ids comes from the renderer */
+  chatTurns: publicProcedure
+    .input(z.object({ agentId: z.string(), cursor: z.string().max(64).optional() }))
+    .query(({ ctx, input }) => chatTurns(ctx.db, input.agentId, input.cursor)),
+  chatOlder: publicProcedure
+    .input(z.object({ agentId: z.string(), before: z.string().max(64) }))
+    .query(({ ctx, input }) => olderChatTurns(ctx.db, input.agentId, input.before)),
   /** T200.4: the user's follow-up queue, typed at the agent's turn boundary (in memory) */
   followUps: publicProcedure
     .input(z.object({ id: z.string() }))

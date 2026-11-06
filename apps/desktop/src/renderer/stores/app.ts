@@ -32,6 +32,23 @@ interface AppStore {
   openProjects: () => void;
   closeProjects: () => void;
 
+  /** When Company was last left (ms): "Done since you left" counts from here */
+  companySeenAt: number;
+  setCompanySeenAt: (at: number) => void;
+
+  /** The Dashboard tab last open; null until one is picked */
+  dashboardMode: DashboardMode | null;
+  setDashboardMode: (mode: DashboardMode) => void;
+  /** Which side of Company the session panel sits on */
+  companySessionSide: CompanySide;
+  toggleCompanySessionSide: () => void;
+  /** Company chat text, px */
+  companyChatFont: number;
+  stepCompanyChatFont: (delta: number) => void;
+  /** Width of the session panel per view, percent of Company */
+  companySessionSizes: Record<CompanyView, number>;
+  setCompanySessionSize: (view: CompanyView, percent: number) => void;
+
   /** Sidebar collapse state */
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
@@ -82,6 +99,14 @@ export function projectOrderFromTabKeys(keys: string[]): string[] {
  * v2 (T120): a persisted 'settings' view would rehydrate sidebarless. v3: the welcome tour.
  * v4: the sidebar orders projects, not tabs. v5: one sidebar view selector, no Projects split
  */
+export type DashboardMode = "company" | "watching" | "all";
+/** Chat text is laid out in Tailwind's px sizes: this scales the whole of it */
+export const DEFAULT_CHAT_FONT = 12;
+const MIN_CHAT_FONT = 10;
+const MAX_CHAT_FONT = 20;
+export type CompanyView = "chat" | "terminal";
+export type CompanySide = "left" | "right";
+
 export function migrateAppStore(persisted: unknown, fromVersion: number): AppStore {
   if (!persisted || typeof persisted !== "object") return persisted as AppStore;
   const state = persisted as {
@@ -183,6 +208,24 @@ export const useAppStore = create<AppStore>()(
       onboardingComplete: false,
       setOnboardingComplete: (complete) => set({ onboardingComplete: complete }),
 
+      companySeenAt: Date.now(),
+      setCompanySeenAt: (at) => set({ companySeenAt: at }),
+      dashboardMode: null,
+      setDashboardMode: (mode) => set({ dashboardMode: mode }),
+      companySessionSide: "left",
+      toggleCompanySessionSide: () =>
+        set((s) => ({ companySessionSide: s.companySessionSide === "left" ? "right" : "left" })),
+      companyChatFont: DEFAULT_CHAT_FONT,
+      stepCompanyChatFont: (delta) =>
+        set((s) => ({
+          companyChatFont: Math.min(
+            MAX_CHAT_FONT,
+            Math.max(MIN_CHAT_FONT, s.companyChatFont + delta),
+          ),
+        })),
+      companySessionSizes: { chat: 30, terminal: 55 },
+      setCompanySessionSize: (view, percent) =>
+        set((s) => ({ companySessionSizes: { ...s.companySessionSizes, [view]: percent } })),
       welcomeTourSeen: false,
       setWelcomeTourSeen: (seen) => set({ welcomeTourSeen: seen }),
     }),
@@ -201,6 +244,11 @@ export const useAppStore = create<AppStore>()(
         sidebarActiveOnly: state.sidebarActiveOnly,
         projectsOrder: state.projectsOrder,
         claudePlanUsage: state.claudePlanUsage,
+        companySeenAt: state.companySeenAt,
+        dashboardMode: state.dashboardMode,
+        companySessionSide: state.companySessionSide,
+        companySessionSizes: state.companySessionSizes,
+        companyChatFont: state.companyChatFont,
       }),
     },
   ),

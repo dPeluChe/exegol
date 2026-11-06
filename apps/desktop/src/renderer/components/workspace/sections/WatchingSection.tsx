@@ -1,15 +1,6 @@
 import { LIVE_STATUSES } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import {
-  ArrowUpRight,
-  ChevronDown,
-  GripVertical,
-  Maximize2,
-  Minimize2,
-  PinOff,
-  RefreshCw,
-  X,
-} from "lucide-react";
+import { ArrowUpRight, ChevronDown, GripVertical, PinOff, RefreshCw, X } from "lucide-react";
 import {
   type Dispatch,
   type DragEvent,
@@ -23,12 +14,7 @@ import { useShallow } from "zustand/react/shallow";
 import { kickTerminal } from "../../../lib/dispatch-refit";
 import { rememberMirrorFocus } from "../../../lib/pane-focus";
 import { type AgentState, useAgentStore } from "../../../stores/agents";
-import {
-  DEFAULT_CARD_FONT,
-  MAX_OPEN_MIRRORS,
-  stepCardFont,
-  useWatchStore,
-} from "../../../stores/watch";
+import { MAX_OPEN_MIRRORS, useWatchStore } from "../../../stores/watch";
 import { AgentQuestion } from "../../agents/AgentQuestion";
 import { ResumeButton } from "../../agents/ResumeButton";
 import { AgentIcon } from "../../common/AgentIcon";
@@ -36,10 +22,11 @@ import { FilterChip } from "../../common/FilterChip";
 import { ProjectChip, type ProjectMeta } from "../../common/ProjectChip";
 import { SessionAlias } from "../../common/SessionAlias";
 import { StatusDot } from "../../common/StatusDot";
-import { ErrorBoundary, paneFallback } from "../../ErrorBoundary";
+import { CardSizeControls } from "../../terminal/CardSizeControls";
 import { CliUpdateControl } from "../../terminal/CliUpdateControl";
 import { FollowUpControl } from "../../terminal/FollowUpControl";
-import { TerminalInstance, type TerminalInstanceHandle } from "../../terminal/TerminalInstance";
+import { MirrorFrame } from "../../terminal/MirrorFrame";
+import type { TerminalInstanceHandle } from "../../terminal/TerminalInstance";
 import { WatchCardMenu } from "./DashboardMenus";
 import { WatchGoneCard, WatchGoneStrip } from "./WatchGoneStrip";
 
@@ -337,6 +324,7 @@ const WatchCard = memo(function WatchCard({
       onCollapse={collapse}
     >
       <div
+        data-watching-card
         style={{ height: FULL_HEIGHT }}
         className={cn(
           "flex min-w-0 flex-1 flex-col rounded-xl border bg-bg-secondary/40",
@@ -408,30 +396,18 @@ const WatchCard = memo(function WatchCard({
         {live ? (
           // Focusing the mirror keeps it open after the question is answered and
           // clears the attention badge, as reading it in its pane would.
-          <div
+          <MirrorFrame
+            agent={agent}
+            terminalRef={terminalRef}
+            cardFont={cardFont}
+            menuOnRightButton
             className="mx-2 mb-2 min-h-0 flex-1 overflow-hidden rounded-md border border-border bg-black/40 p-1"
-            data-mirror-agent-id={agent.id}
-            // Our menu takes the right button: a TUI tracking the mouse must not get the press
-            onMouseDownCapture={(e) => {
-              if (e.button === 2) e.stopPropagation();
-            }}
             onFocusCapture={() => {
               rememberMirrorFocus(agent.id);
               if (!openedByUser) toggleOpen(agent.id);
               if (needsInput) useAgentStore.getState().markAttentionRead(agent.id);
             }}
-          >
-            <ErrorBoundary fallback={paneFallback}>
-              <TerminalInstance
-                ref={terminalRef}
-                key={`mirror-${agent.id}`}
-                agentId={agent.id}
-                cliType={agent.cliType}
-                mirror
-                cardFont={cardFont}
-              />
-            </ErrorBoundary>
-          </div>
+          />
         ) : (
           <div className="mx-3 mb-2 flex items-center gap-2 text-[11px] text-text-muted">
             <span>Session ended ({agent.status}).</span>
@@ -442,43 +418,3 @@ const WatchCard = memo(function WatchCard({
     </WatchCardMenu>
   );
 });
-
-/**
- * A-/A+ and "fit session to card": a plain mirror shows the owner pane's grid
- * shrunk to fit, which gets tiny side by side. Sizing the session to the card
- * reads at a normal font; the pane takes the size back when it is shown again.
- */
-function CardSizeControls({ agentId }: { agentId: string }) {
-  const cardFont = useWatchStore((s) => s.cardFont[agentId]);
-  const setCardFont = useWatchStore((s) => s.setCardFont);
-  const sizing = cardFont !== undefined;
-  const step = (delta: number) => stepCardFont(agentId, delta);
-  const btn =
-    "rounded px-1 py-0.5 text-[10px] text-text-muted hover:bg-white/10 hover:text-text-primary";
-
-  return (
-    <div className="flex shrink-0 items-center gap-0.5">
-      <button type="button" onClick={() => step(-1)} className={btn} title="Smaller text">
-        A−
-      </button>
-      {sizing && (
-        <span className="w-5 text-center text-[10px] tabular-nums text-accent">{cardFont}</span>
-      )}
-      <button type="button" onClick={() => step(1)} className={btn} title="Larger text">
-        A+
-      </button>
-      <button
-        type="button"
-        onClick={() => setCardFont(agentId, sizing ? null : DEFAULT_CARD_FONT)}
-        className={cn(btn, sizing && "text-accent")}
-        title={
-          sizing
-            ? "Stop sizing the session here: show the pane's layout, scaled to fit"
-            : "Fit the session to this card: readable text, but it changes the session's width, and a CLI that redraws in place (Claude) can leave overlapped lines when you switch between the card and its pane"
-        }
-      >
-        {sizing ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
-      </button>
-    </div>
-  );
-}
