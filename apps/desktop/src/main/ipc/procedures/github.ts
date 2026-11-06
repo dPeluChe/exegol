@@ -1,5 +1,3 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { acceptsFollowUps, type GitHubIssue, type GitHubRepoRef } from "@exegol/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
@@ -24,12 +22,11 @@ import {
   projectRepos,
   sessionsByRepo,
 } from "../../integrations/github/repos";
+import { execFileAsync } from "../../lib/exec-file";
 import { logger } from "../../lib/logger";
 import { pathKey } from "../../lib/worktree-safety";
 import { getApiKey } from "../../security/keystore";
 import { publicProcedure, router } from "../trpc";
-
-const execFileAsync = promisify(execFile);
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 

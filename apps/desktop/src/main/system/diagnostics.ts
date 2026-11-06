@@ -1,4 +1,3 @@
-import { execFile } from "node:child_process";
 import {
   closeSync,
   existsSync,
@@ -10,16 +9,14 @@ import {
 } from "node:fs";
 import { homedir, type as osType, release, tmpdir } from "node:os";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import type { BugDiagnostics } from "@exegol/shared";
 import type Database from "libsql";
+import { execFileAsync } from "../lib/exec-file";
 import { flushLogSync, LOG_DIR } from "../lib/logger";
 import { EXEGOL_REPO_SLUG, EXEGOL_REPO_URL } from "../lib/repo";
 import { SIDECAR_LOG_PATH, SIDECAR_VERSION } from "../terminal/pty-sidecar-protocol";
 import { consoleTail } from "./console-capture";
 import { runDoctorChecks } from "./doctor";
-
-const execFileAsync = promisify(execFile);
 
 /** GitHub rejects issue bodies past 65536 chars; leave room for the header. */
 const MAX_BODY = 60_000;

@@ -1,14 +1,11 @@
-import { execFile } from "node:child_process";
 import { readdir, readFile, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import type { PlanUsage, PlanWindow } from "@exegol/shared";
 import { dayDirs } from "../history/providers/codex";
 import { readTail } from "../history/read-head";
+import { execFileAsync } from "../lib/exec-file";
 import { logger } from "../lib/logger";
-
-const execFileAsync = promisify(execFile);
 
 const CLAUDE_USAGE_URL = "https://api.anthropic.com/api/oauth/usage";
 const CLAUDE_KEYCHAIN_SERVICE = "Claude Code-credentials";

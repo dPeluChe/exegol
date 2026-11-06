@@ -1,12 +1,11 @@
-import { execFile } from "node:child_process";
 import { closeSync, existsSync, openSync, readSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
-import { promisify } from "node:util";
 import type { IdeInfo } from "@exegol/shared";
 import { findOnPath } from "../agents/spawn-env";
 import { mapWithConcurrency } from "../lib/concurrency";
+import { execFileAsync } from "../lib/exec-file";
 import {
   IDE_LAUNCH,
   type IdeLaunch,
@@ -17,8 +16,6 @@ import {
   plistBundleId,
   scriptTarget,
 } from "./catalog";
-
-const execFileAsync = promisify(execFile);
 
 type IdeId = IdeInfo["id"];
 

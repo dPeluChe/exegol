@@ -1,10 +1,9 @@
 import { existsSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import type { ZodType } from "zod";
-import { findOnPath } from "../agents/spawn-env";
+import { execCli, findOnPath } from "../agents/spawn-env";
 import { childEnv } from "../lib/child-env";
 import { mapWithConcurrency } from "../lib/concurrency";
-import { execFileAsync } from "../lib/exec-file";
 import { AsyncLruCache } from "../lib/lru-cache";
 import { parseJson } from "../lib/parse-json";
 import { StoreUnavailable } from "./types";
@@ -36,7 +35,7 @@ export function cliListing<T>(
     if (!existsSync(cwd)) return [];
     let stdout: string;
     try {
-      ({ stdout } = await execFileAsync(bin, args, {
+      ({ stdout } = await execCli(bin, args, {
         cwd,
         env: childEnv(),
         timeout: LIST_TIMEOUT_MS,

@@ -1,11 +1,9 @@
-import { execFile } from "node:child_process";
 import { existsSync, lstatSync, readFileSync, realpathSync } from "node:fs";
 import { dirname, isAbsolute, join, resolve } from "node:path";
-import { promisify } from "node:util";
 import { isPathInside } from "../security/path-guard";
+import { execFileAsync } from "./exec-file";
 
 // No electron or logger imports: scripts/clean-build.ts uses this too.
-const execFileAsync = promisify(execFile);
 
 /** Deleted in every checkout by the MCP setup, so it never counts as work */
 export const ALWAYS_CHANGED = ".agents/mcp_config.json";

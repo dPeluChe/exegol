@@ -1,4 +1,4 @@
-import { exec, execSync } from "node:child_process";
+import { type ExecFileOptions, exec, execSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { homedir, userInfo } from "node:os";
 import { delimiter, join } from "node:path";
@@ -15,7 +15,9 @@ import type Database from "libsql";
 import { getDb } from "../db/client";
 import { createOplogEntry, getAgent, insertActivity, isAgentQuiet, stopAgent } from "../db/queries";
 import { broadcast } from "../lib/event-bus";
+import { execFileAsync } from "../lib/exec-file";
 import { logger } from "../lib/logger";
+import { launchFor } from "../lib/win-launch";
 import { resolveClaimGuardPath } from "../mcp/exegol-mcp-config";
 import { getNotificationBus } from "../notifications/bus";
 import { getApiKey } from "../security/keystore";
@@ -413,8 +415,9 @@ export function findOnPath(command: string): string | null {
   if (command.includes("/") || command.includes("\\")) {
     return existsSync(command) ? command : null;
   }
+  // PATHEXT first: npm leaves a POSIX script with no extension beside its `.cmd`
   const exts =
-    process.platform === "win32" ? ["", ...(process.env.PATHEXT ?? ".EXE;.CMD").split(";")] : [""];
+    process.platform === "win32" ? [...(process.env.PATHEXT ?? ".EXE;.CMD").split(";"), ""] : [""];
   for (const dir of _getFullPath().split(delimiter)) {
     if (!dir) continue;
     for (const ext of exts) {
@@ -424,6 +427,19 @@ export function findOnPath(command: string): string | null {
   }
   return null;
 }
+
+/** Runs a CLI on any system: on Windows it is found on PATH, and a `.cmd` goes through cmd.exe */
+export function execCli(bin: string, argv: string[], options: ExecFileOptions) {
+  const utf8 = { ...options, encoding: "utf8" as const };
+  if (process.platform !== "win32") return execFileAsync(bin, argv, utf8);
+  const found = findOnPath(bin) ?? bin;
+  const { command, args, verbatim } = launchFor([found, ...argv], "win32", process.env.ComSpec);
+  return execFileAsync(command, args, { ...utf8, windowsVerbatimArguments: verbatim });
+}
+
+/** The options a repo's hook script runs with: Windows' own shell, not cmd.exe unasked */
+export const hookShell = () =>
+  process.platform === "win32" ? { shell: loginShell(), windowsHide: true } : {};
 
 /** The binary to launch for a provider command: itself, or the new name it moved to (kilo) */
 export function resolveCommand(command: string): string {

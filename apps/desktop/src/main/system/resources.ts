@@ -1,11 +1,10 @@
-import { execFile } from "node:child_process";
 import { existsSync } from "node:fs";
 import { readFile } from "node:fs/promises";
 import * as os from "node:os";
-import { promisify } from "node:util";
 import type { MetricsSnapshot } from "@exegol/shared";
 import { app, BrowserWindow } from "electron";
 import { broadcast } from "../lib/event-bus";
+import { execFileAsync } from "../lib/exec-file";
 import { getNotificationBus } from "../notifications/bus";
 import { getPtyHost } from "../terminal/pty-host";
 import { readPidFile } from "../terminal/pty-sidecar-discovery";
@@ -13,8 +12,6 @@ import type { SessionMemoryResult } from "../terminal/pty-sidecar-protocol";
 import { readProcessMetrics } from "./process-metrics";
 import { type ProcRow, readProcessTable, readProcessUsage } from "./process-table";
 import { duBytes } from "./storage";
-
-const execFileAsync = promisify(execFile);
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
 

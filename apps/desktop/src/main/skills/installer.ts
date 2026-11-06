@@ -1,8 +1,3 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
-
-const execFileAsync = promisify(execFile);
-
 import { createHash } from "node:crypto";
 import {
   cpSync,
@@ -24,6 +19,7 @@ import type {
   SkillLockFile,
   SkillSource,
 } from "@exegol/shared";
+import { execFileAsync } from "../lib/exec-file";
 import { logger } from "../lib/logger";
 import { getTrustLevel } from "./curated-registry";
 import { getCanonicalSkillsDir, getProjectSkillsDir } from "./paths";

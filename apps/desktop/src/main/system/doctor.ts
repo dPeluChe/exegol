@@ -41,7 +41,7 @@ export type { DoctorCategory, DoctorCheck, DoctorReport, DoctorStatus } from "@e
 function checkCommandAvailable(command: string): Promise<boolean> {
   const cmd = process.platform === "win32" ? `where "${command}"` : `which "${command}"`;
   return new Promise((resolve) =>
-    exec(cmd, { env: shellEnv(), timeout: 3_000 }, (err) => resolve(!err)),
+    exec(cmd, { env: shellEnv(), timeout: 3_000, windowsHide: true }, (err) => resolve(!err)),
   );
 }
 

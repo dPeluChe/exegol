@@ -1,10 +1,6 @@
-import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
-import { promisify } from "node:util";
-import { _getFullPath } from "../agents/spawn-env";
+import { _getFullPath, execCli } from "../agents/spawn-env";
 import { childEnv } from "./child-env";
-
-const execFileAsync = promisify(execFile);
 
 export interface PrintResult {
   text: string;
@@ -22,7 +18,7 @@ export async function runClaudePrint(
   model: string,
   timeoutMs: number,
 ): Promise<PrintResult> {
-  const run = execFileAsync(
+  const run = execCli(
     "claude",
     [
       "-p",
@@ -37,8 +33,12 @@ export async function runClaudePrint(
       "",
       "--no-session-persistence",
     ],
-    // The login shell's PATH: launched from Finder, the app's own lacks ~/.local/bin
-    { cwd: tmpdir(), env: { ...childEnv(), PATH: _getFullPath() }, timeout: timeoutMs },
+    {
+      // The login shell's PATH: launched from Finder, the app's own lacks ~/.local/bin
+      env: { ...childEnv(), PATH: _getFullPath() },
+      cwd: tmpdir(),
+      timeout: timeoutMs,
+    },
   );
   run.child.stdin?.end(prompt);
   let stdout: string;

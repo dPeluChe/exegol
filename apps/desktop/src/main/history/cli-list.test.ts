@@ -3,9 +3,13 @@ import { describe, expect, it, vi } from "vitest";
 import { z } from "zod";
 
 // node as a portable echo: Windows has no /bin/echo
-vi.mock("../agents/spawn-env", () => ({
-  findOnPath: (command: string) => (command === "echo" ? process.execPath : null),
-}));
+vi.mock("../agents/spawn-env", async () => {
+  const { execFileAsync } = await import("../lib/exec-file");
+  return {
+    findOnPath: (command: string) => (command === "echo" ? process.execPath : null),
+    execCli: execFileAsync,
+  };
+});
 const echo = (text: string) => ["-e", "console.log(process.argv.at(-1))", text];
 
 import { cliListing, eachCwd, forgetCliListing } from "./cli-list";

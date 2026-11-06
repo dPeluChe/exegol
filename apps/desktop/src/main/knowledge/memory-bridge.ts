@@ -100,7 +100,7 @@ export function importMemoryBridgeAsSeed(
   let currentCategory: MemoryCategory | null = null;
   let imported = 0;
 
-  for (const line of raw.split("\n")) {
+  for (const line of raw.split(/\r?\n/)) {
     const heading = line.match(/^##\s+(.+)$/);
     if (heading?.[1]) {
       currentCategory = LABEL_TO_CATEGORY.get(heading[1].trim().toLowerCase()) ?? null;
