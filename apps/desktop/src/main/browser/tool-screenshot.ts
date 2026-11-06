@@ -40,11 +40,12 @@ export async function handleScreenshot(
   db: Database.Database,
   ctx: BrowserToolContext,
   pane: BrowserPaneHandle,
+  args: Record<string, unknown>,
 ) {
   const { page, needsUser, loadFailed } = await inspect(db, ctx, pane);
   if (!page) return pageUnavailable(pane, needsUser, loadFailed);
   touch(db, ctx, pane);
-  const jpeg = await pane.capture();
+  const jpeg = await pane.capture(args.full_page === true);
   // The page may have left the allowed hosts while it was being captured
   const url = pane.getUrl();
   if (isOutsideAllowlist(url, allowedHostsOf(db, ctx.projectId))) {

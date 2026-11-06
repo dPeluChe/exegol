@@ -1,10 +1,11 @@
 import { hostOf, isOutsideAllowlist, LOCAL_HOST_PATTERNS } from "@exegol/shared";
 import type Database from "libsql";
 import { getProject } from "../db/queries/projects";
+import { HISTORY_ACTIONS, SCROLL_TARGETS } from "../mcp/browser-tool-defs";
 import { ExegolToolError } from "../mcp/exegol-protocol";
 import { getPaneControl } from "./control";
 import { isLogLevel } from "./log-ring";
-import { type ActionResult, actionScript, type PageAction } from "./page-actions";
+import { type ActionResult, actionScript, type PageAction, scrollScript } from "./page-actions";
 import {
   guardedEvalScript,
   isPageChangedError,
@@ -162,16 +163,29 @@ export async function handleLogs(
   };
 }
 
+const oneOf = <T extends string>(list: readonly T[], raw: unknown): raw is T =>
+  list.includes(raw as T);
+
 export async function handleNavigate(
   db: Database.Database,
   ctx: BrowserToolContext,
   pane: BrowserPaneHandle,
   args: Record<string, unknown>,
 ) {
-  const url = checkUrlArg(db, ctx, args.url);
+  if (args.action !== undefined && !oneOf(HISTORY_ACTIONS, args.action)) {
+    throw new ExegolToolError(`action must be one of ${HISTORY_ACTIONS.join(", ")}`, -32602);
+  }
   touch(db, ctx, pane);
   const mark = markAction(pane, args.snapshot);
-  pane.loadUrl(url);
+  if (args.action === undefined) {
+    pane.loadUrl(checkUrlArg(db, ctx, args.url));
+  } else if (!pane.history(args.action)) {
+    return {
+      status: "no_history",
+      pane: pane.paneId,
+      hint: `There is no page to go ${args.action} to.`,
+    };
+  }
   return pageSummary(db, ctx, pane, mark);
 }
 
@@ -184,6 +198,20 @@ async function runGuarded<T>(run: () => Promise<T>): Promise<T> {
   }
 }
 
+function requireRef(raw: unknown): string {
+  const ref = parseRef(raw);
+  if (!ref) {
+    throw new ExegolToolError("ref must look like e12.k3x (from browser_snapshot)", -32602);
+  }
+  return ref;
+}
+
+const staleRef = (ref: string) =>
+  new ExegolToolError(
+    `${ref} is not on the page anymore (it changed or navigated): take a new browser_snapshot`,
+    -32025,
+  );
+
 export async function runAction(
   db: Database.Database,
   ctx: BrowserToolContext,
@@ -192,10 +220,7 @@ export async function runAction(
   act: PageAction,
   snapshot: unknown,
 ) {
-  const ref = parseRef(refArg);
-  if (!ref) {
-    throw new ExegolToolError("ref must look like e12.k3x (from browser_snapshot)", -32602);
-  }
+  const ref = requireRef(refArg);
   const { page, host, needsUser, loadFailed } = await inspect(db, ctx, pane);
   if (!page) return pageUnavailable(pane, needsUser, loadFailed);
   touch(db, ctx, pane);
@@ -215,15 +240,10 @@ export async function runAction(
       status: "obscured",
       pane: pane.paneId,
       untrusted_page_content: { covered_by: r.by },
-      hint: "Another element is on top of this one, so a user could not click it: close what covers it (a dialog, a menu, a banner), or pass force: true to click it anyway.",
+      hint: "Another element is on top of this one, so a user could not reach it: close what covers it (a dialog, a menu, a banner), or pass force: true to go ahead anyway.",
     };
   }
-  if (r?.error === "stale_ref") {
-    throw new ExegolToolError(
-      `${ref} is not on the page anymore (it changed or navigated): take a new browser_snapshot`,
-      -32025,
-    );
-  }
+  if (r?.error === "stale_ref") throw staleRef(ref);
   if (r?.error === "no_option") {
     return {
       status: "no_option",
@@ -236,6 +256,7 @@ export async function runAction(
     throw new ExegolToolError(`${act.action} failed on ${ref}: ${r?.error ?? "no result"}`, -32026);
   }
   if (r.submitted === "enter") pane.sendKey("Enter", []);
+  if (r.hoverAt) pane.moveMouse(r.hoverAt.x, r.hoverAt.y);
   return pageSummary(db, ctx, pane, mark, { submitted: r.submitted, actualValue: r.actual });
 }
 
@@ -265,6 +286,31 @@ export async function handlePress(
   const mark = markAction(pane, args.snapshot, page);
   pane.sendKey(key.keyCode, key.modifiers);
   return pageSummary(db, ctx, pane, mark);
+}
+
+export async function handleScroll(
+  db: Database.Database,
+  ctx: BrowserToolContext,
+  pane: BrowserPaneHandle,
+  args: Record<string, unknown>,
+) {
+  const ref = args.ref === undefined ? null : requireRef(args.ref);
+  const to = args.to ?? "down";
+  if (!oneOf(SCROLL_TARGETS, to)) {
+    throw new ExegolToolError(`to must be one of ${SCROLL_TARGETS.join(", ")}`, -32602);
+  }
+  const { page, host, needsUser, loadFailed } = await inspect(db, ctx, pane);
+  if (!page) return pageUnavailable(pane, needsUser, loadFailed);
+  touch(db, ctx, pane);
+  const mark = markAction(pane, args.snapshot, page);
+  const r = (await runGuarded(() => pane.runIsolated(scrollScript(ref, to, host)))) as {
+    ok?: boolean;
+    error?: string;
+    atEnd?: boolean;
+  } | null;
+  if (r?.error === "stale_ref") throw staleRef(ref as string);
+  if (!r?.ok) throw new ExegolToolError(`scroll failed: ${r?.error ?? "no result"}`, -32026);
+  return pageSummary(db, ctx, pane, mark, { atEnd: r.atEnd });
 }
 
 export async function handleEval(

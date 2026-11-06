@@ -108,6 +108,11 @@ export const HOST_GUARD = (expectedHost: string) =>
   `if (location.host !== ${JSON.stringify(expectedHost)}) throw new Error("exegol:page_changed");`;
 
 export const PAGE_COMMON = `
+const refEl = (ref) => {
+  const st = globalThis.__exegol;
+  const el = st && ref.split(".")[1] === st.doc ? st.refs.get(ref)?.deref() : null;
+  return el && el.isConnected ? el : null;
+};
 const vis = (el) => {
   const r = el.getBoundingClientRect();
   if (r.width === 0 && r.height === 0) return false;

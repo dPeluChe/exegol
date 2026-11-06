@@ -96,6 +96,8 @@ function fakePane(
     loadState: () => ({ failure: null, stopped: false }),
     capture: async () => Buffer.from("jpeg"),
     sendKey: () => {},
+    moveMouse: () => {},
+    history: () => true,
     lastHttpStatus: () => 200,
     logs: new LogRing(),
   };

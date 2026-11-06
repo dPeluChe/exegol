@@ -64,10 +64,18 @@ const RESTORE_SCRIPT = `(() => {
   delete window.__exegolShot;
 })()`;
 
+export interface FullPageLimit {
+  width: number;
+  height: number;
+}
+
 /** The whole page, scrolled strip by strip and stitched: a webview's surface is the size of its
  *  element, so CDP's captureBeyondViewport repeated the visible area (seen at a 390x844 frame).
  *  The page sees the scroll and the hidden bars while it runs */
-async function captureFullPage(wc: WebContents): Promise<NativeImage> {
+export async function captureFullPage(
+  wc: WebContents,
+  limit: FullPageLimit = { width: Number.POSITIVE_INFINITY, height: FULL_PAGE_MAX_HEIGHT },
+): Promise<NativeImage> {
   const run = <T>(code: string) =>
     withTimeout(
       wc.executeJavaScriptInIsolatedWorld(SHOT_WORLD_ID, [{ code }], true) as Promise<T>,
@@ -79,6 +87,8 @@ async function captureFullPage(wc: WebContents): Promise<NativeImage> {
     const strips: Buffer[] = [];
     let width = 0;
     let scale = 1;
+    let shrink = 1;
+    let outWidth = 0;
     let total = plan.total;
     for (const stop of tileStops(plan.total, plan.view)) {
       if (stop >= total) break;
@@ -88,15 +98,22 @@ async function captureFullPage(wc: WebContents): Promise<NativeImage> {
       if (stop === 0) {
         width = size.width;
         scale = size.height / plan.vh;
-        total = Math.min(plan.total, Math.floor(FULL_PAGE_MAX_HEIGHT / scale));
+        shrink = Math.min(1, limit.width / width);
+        total = Math.min(plan.total, Math.floor(limit.height / (scale * shrink)));
+        outWidth = Math.round(width * shrink);
         await run(HIDE_BARS_SCRIPT);
       }
       const crop = tileCrop(stop, real, { ...plan, total }, scale, size.height);
       if (!crop) break;
-      strips.push(image.crop({ x: 0, y: crop.y, width, height: crop.height }).toBitmap());
+      const strip = image.crop({ x: 0, y: crop.y, width, height: crop.height });
+      // Strip by strip: at full size a tall page holds hundreds of MB in the main process
+      strips.push((shrink < 1 ? strip.resize({ width: outWidth }) : strip).toBitmap());
     }
     const bitmap = Buffer.concat(strips);
-    return nativeImage.createFromBitmap(bitmap, { width, height: bitmap.length / (width * 4) });
+    return nativeImage.createFromBitmap(bitmap, {
+      width: outWidth,
+      height: bitmap.length / (outWidth * 4),
+    });
   } finally {
     await run(RESTORE_SCRIPT).catch(() => undefined);
   }
