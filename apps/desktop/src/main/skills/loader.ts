@@ -1,4 +1,3 @@
-import { execSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { basename, dirname, join } from "node:path";
 import type {
@@ -9,6 +8,7 @@ import type {
   SkillSource,
 } from "@exegol/shared";
 import { SKILL_CATEGORIES } from "@exegol/shared";
+import { commandOnPath } from "../agents/spawn-env";
 import { logger } from "../lib/logger";
 
 // ─── Frontmatter parser ──────────────────────────────────────────────────────
@@ -24,7 +24,7 @@ function parseFrontmatter(content: string): ParsedSkillFile {
 
   const meta: Record<string, string> = {};
   const yamlBlock = match[1] ?? "";
-  for (const line of yamlBlock.split("\n")) {
+  for (const line of yamlBlock.split(/\r?\n/)) {
     const idx = line.indexOf(":");
     if (idx > 0) {
       meta[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
@@ -58,13 +58,7 @@ function isBinAvailable(bin: string): boolean {
   const cached = binCache.get(bin);
   if (cached && Date.now() - cached.ts < BIN_CACHE_TTL) return cached.ok;
 
-  let ok: boolean;
-  try {
-    execSync(`command -v ${bin}`, { stdio: "ignore", timeout: 3_000 });
-    ok = true;
-  } catch {
-    ok = false;
-  }
+  const ok = commandOnPath(bin);
   binCache.set(bin, { ok, ts: Date.now() });
   return ok;
 }

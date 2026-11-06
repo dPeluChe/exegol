@@ -1,4 +1,4 @@
-import { parseTaskBoard } from "../../../../lib/markdown-tasks";
+import { parseTaskBoard, splitLines } from "../../../../lib/markdown-tasks";
 import { trpcInvoke } from "../../../../lib/trpc-client";
 
 interface WriteFileMutation {
@@ -45,11 +45,11 @@ export async function archiveCompletedTasks({
   }
 
   const sortedLines = completed.map((t) => t.line).sort((a, b) => b - a);
-  const lines = content.split("\n");
+  const { lines, eol } = splitLines(content);
   for (const line of sortedLines) {
     lines.splice(line, 1);
   }
-  return lines.join("\n");
+  return lines.join(eol);
 }
 
 interface CreateTodoArgs {

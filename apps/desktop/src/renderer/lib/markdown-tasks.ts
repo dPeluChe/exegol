@@ -127,10 +127,15 @@ function cleanTaskText(text: string): string {
     .trim();
 }
 
+/** Git on Windows checks out CRLF by default; an edit keeps the file's own endings */
+export function splitLines(content: string): { lines: string[]; eol: string } {
+  return { lines: content.split(/\r?\n/), eol: content.includes("\r\n") ? "\r\n" : "\n" };
+}
+
 // ─── Main parser ────────────────────────────────────────────────────────────
 
 export function parseTaskBoard(content: string, filePath: string): TaskBoard {
-  const lines = content.split("\n");
+  const { lines } = splitLines(content);
   const columns: Record<TaskColumn, TaskItem[]> = {
     backlog: [],
     todo: [],
@@ -198,7 +203,7 @@ export function parseTaskBoard(content: string, filePath: string): TaskBoard {
 
 /** Toggle a task's checkbox */
 export function toggleTask(content: string, lineNumber: number): string {
-  const lines = content.split("\n");
+  const { lines, eol } = splitLines(content);
   const line = lines[lineNumber];
   if (!line) return content;
 
@@ -207,12 +212,12 @@ export function toggleTask(content: string, lineNumber: number): string {
 
   const isCompleted = match[2]?.toLowerCase() === "x";
   lines[lineNumber] = `${match[1]}- [${isCompleted ? " " : "x"}] ${match[3]}`;
-  return lines.join("\n");
+  return lines.join(eol);
 }
 
 /** Move a task from one column to another by rewriting the file */
 export function moveTask(content: string, taskLine: number, targetColumn: TaskColumn): string {
-  const lines = content.split("\n");
+  const { lines, eol } = splitLines(content);
   const taskLineContent = lines[taskLine];
   if (!taskLineContent) return content;
 
@@ -271,7 +276,7 @@ export function moveTask(content: string, taskLine: number, targetColumn: TaskCo
   }
 
   lines.splice(insertAt, 0, updatedTask);
-  return lines.join("\n");
+  return lines.join(eol);
 }
 
 /** Add a new task to a specific column */
@@ -281,7 +286,7 @@ export function addTask(
   column: TaskColumn,
   tags: string[] = [],
 ): string {
-  const lines = content.split("\n");
+  const { lines, eol } = splitLines(content);
   const tagStr = tags.length > 0 ? ` ${tags.map((t) => `#${t}`).join(" ")}` : "";
   const newLine = `- [ ] ${text}${tagStr}`;
 
@@ -312,14 +317,14 @@ export function addTask(
     lines.splice(targetIndex + 1, 0, newLine);
   }
 
-  return lines.join("\n");
+  return lines.join(eol);
 }
 
 /** Remove a task from the file */
 export function removeTask(content: string, taskLine: number): string {
-  const lines = content.split("\n");
+  const { lines, eol } = splitLines(content);
   if (taskLine >= 0 && taskLine < lines.length) {
     lines.splice(taskLine, 1);
   }
-  return lines.join("\n");
+  return lines.join(eol);
 }

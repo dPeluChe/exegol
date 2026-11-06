@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import type { ZodType } from "zod";
-import { findOnPath } from "../agents/spawn-env";
+import { cliLaunch, findOnPath } from "../agents/spawn-env";
 import { childEnv } from "../lib/child-env";
 import { mapWithConcurrency } from "../lib/concurrency";
 import { execFileAsync } from "../lib/exec-file";
@@ -36,8 +36,10 @@ export function cliListing<T>(
     if (!existsSync(cwd)) return [];
     let stdout: string;
     try {
-      ({ stdout } = await execFileAsync(bin, args, {
+      const { command: file, args: argv, verbatim } = cliLaunch(bin, args);
+      ({ stdout } = await execFileAsync(file, argv, {
         cwd,
+        windowsVerbatimArguments: verbatim,
         env: childEnv(),
         timeout: LIST_TIMEOUT_MS,
         maxBuffer: LIST_MAX_BUFFER,

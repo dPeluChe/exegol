@@ -1,9 +1,7 @@
-import { execFile } from "node:child_process";
 import { chmod, lstat, mkdir, readdir, rename, rm, stat } from "node:fs/promises";
 import { join, posix, win32 } from "node:path";
-import { promisify } from "node:util";
+import { execFileAsync } from "../lib/exec-file";
 
-const execFileAsync = promisify(execFile);
 const EXTRACT_TIMEOUT_MS = 10 * 60_000;
 
 export class UnsafeArchiveError extends Error {}

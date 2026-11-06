@@ -1,8 +1,6 @@
-import { execFile } from "node:child_process";
 import type { Dirent } from "node:fs";
 import { lstat, readdir, rm, statfs } from "node:fs/promises";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import type {
   BrowserPartitionUsage,
   StorageCategory,
@@ -12,6 +10,7 @@ import type {
   StorageRow,
 } from "@exegol/shared";
 import { createLimiter, mapWithConcurrency } from "../lib/concurrency";
+import { execFileAsync } from "../lib/exec-file";
 
 export interface StoragePaths {
   exegolDir: string;
@@ -21,7 +20,6 @@ export interface StoragePaths {
 
 const CACHE_MS = 30_000;
 const fsLimit = createLimiter(32);
-const execFileAsync = promisify(execFile);
 // Only what clearBrowserCache clears (clearCache, clearCodeCaches): GPU caches stay in use
 const PARTITION_CACHE_DIRS = ["Cache", "Code Cache"];
 const DB_FILES = ["exegol.db", "exegol.db-wal", "exegol.db-shm"];

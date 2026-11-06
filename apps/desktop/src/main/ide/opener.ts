@@ -1,16 +1,14 @@
-import { execFile, spawn } from "node:child_process";
-import { promisify } from "node:util";
+import { spawn } from "node:child_process";
 import { type IdeInfo, ideLabel } from "@exegol/shared";
 import type Database from "libsql";
 import { quoteArg, shellKind } from "../agents/shell-dialect";
 import { loginShell } from "../agents/spawn-env";
 import { getProject } from "../db/queries/projects";
 import { getAppSettings } from "../db/queries/settings";
+import { execFileAsync } from "../lib/exec-file";
 import { launchFor } from "../lib/win-launch";
 import { IDE_LAUNCH, targetArgs } from "./catalog";
 import { detectIdes } from "./detect";
-
-const execFileAsync = promisify(execFile);
 
 /** Quoted for the shell an Exegol terminal runs (PowerShell or cmd.exe on Windows) */
 function shellEscape(s: string): string {

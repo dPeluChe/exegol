@@ -1,13 +1,5 @@
-import { execFile } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
-import { promisify } from "node:util";
-import { TRPCError } from "@trpc/server";
-import { shell } from "electron";
-import { z } from "zod";
-
-const execFileAsync = promisify(execFile);
-
 import {
   DEFAULT_WORKTREE_COPY,
   type FolderInspection,
@@ -16,6 +8,9 @@ import {
   parseWorktreeCopy,
   projectCreateSchema,
 } from "@exegol/shared";
+import { TRPCError } from "@trpc/server";
+import { shell } from "electron";
+import { z } from "zod";
 import { coreRust } from "../../agents/spawn-env";
 import { getWorktreeName, removeManagedWorktree } from "../../agents/worktrees";
 import { copyCookiesForHosts, markCookiesMigrated } from "../../browser/browser-cookies";
@@ -47,6 +42,7 @@ import {
 import { runArchiveHook } from "../../hooks/project-hooks";
 import { openInIde, resolveIde } from "../../ide/opener";
 import { runNative } from "../../lib/concurrency";
+import { execFileAsync } from "../../lib/exec-file";
 import { logger } from "../../lib/logger";
 import { isPathAllowed } from "../../security/path-guard";
 import {

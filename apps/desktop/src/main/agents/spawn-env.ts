@@ -16,6 +16,7 @@ import { getDb } from "../db/client";
 import { createOplogEntry, getAgent, insertActivity, isAgentQuiet, stopAgent } from "../db/queries";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
+import { type Launch, launchFor } from "../lib/win-launch";
 import { resolveClaimGuardPath } from "../mcp/exegol-mcp-config";
 import { getNotificationBus } from "../notifications/bus";
 import { getApiKey } from "../security/keystore";
@@ -393,7 +394,7 @@ let resolvedPath: string | null = null;
 /** Resolve the login-shell PATH off the main thread so the first spawn or Doctor run doesn't block on it. */
 export function warmShellPath(): void {
   if (process.platform === "win32") return;
-  exec(shellPathCommand(), { timeout: SHELL_PATH_TIMEOUT_MS }, (err, stdout) => {
+  exec(shellPathCommand(), { timeout: SHELL_PATH_TIMEOUT_MS, windowsHide: true }, (err, stdout) => {
     // Overwrites a sync fallback too: the real shell PATH wins whenever it arrives
     if (!err && stdout.trim()) {
       resolvedPath = stdout.trim();
@@ -413,8 +414,9 @@ export function findOnPath(command: string): string | null {
   if (command.includes("/") || command.includes("\\")) {
     return existsSync(command) ? command : null;
   }
+  // PATHEXT first: npm leaves a POSIX script with no extension beside its `.cmd`
   const exts =
-    process.platform === "win32" ? ["", ...(process.env.PATHEXT ?? ".EXE;.CMD").split(";")] : [""];
+    process.platform === "win32" ? [...(process.env.PATHEXT ?? ".EXE;.CMD").split(";"), ""] : [""];
   for (const dir of _getFullPath().split(delimiter)) {
     if (!dir) continue;
     for (const ext of exts) {
@@ -424,6 +426,16 @@ export function findOnPath(command: string): string | null {
   }
   return null;
 }
+
+/** A CLI as `execFile` can start it: on Windows found on PATH, and through cmd.exe if a `.cmd` */
+export function cliLaunch(command: string, args: string[]): Launch {
+  if (process.platform !== "win32") return { command, args, verbatim: false };
+  return launchFor([findOnPath(command) ?? command, ...args], "win32", process.env.ComSpec);
+}
+
+/** The options a repo's hook script runs with: Windows' own shell, not cmd.exe unasked */
+export const hookShell = () =>
+  process.platform === "win32" ? { shell: loginShell(), windowsHide: true } : {};
 
 /** The binary to launch for a provider command: itself, or the new name it moved to (kilo) */
 export function resolveCommand(command: string): string {

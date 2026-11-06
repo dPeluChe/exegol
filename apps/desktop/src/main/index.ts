@@ -71,6 +71,9 @@ app.setName("Exegol");
 app.disableDomainBlockingFor3DAPIs();
 enableShortcutsPortal();
 
+// Windows ties notifications and taskbar grouping to the installer's shortcut by this id
+if (process.platform === "win32") app.setAppUserModelId("com.exegol.desktop");
+
 const primaryInstance = installDeepLinkHandling();
 if (primaryInstance) startLogFile();
 registerPreviewScheme();

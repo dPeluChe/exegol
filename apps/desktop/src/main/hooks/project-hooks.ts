@@ -4,6 +4,7 @@
 import { exec } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
+import { hookShell } from "../agents/spawn-env";
 import { logger } from "../lib/logger";
 import { inspectCommand } from "../security/command-guard";
 
@@ -76,7 +77,7 @@ function runHook(
 
     exec(
       script,
-      { cwd: opts.cwd, env, timeout: HOOK_TIMEOUT_MS, maxBuffer: 1024 * 1024 },
+      { cwd: opts.cwd, env, timeout: HOOK_TIMEOUT_MS, maxBuffer: 1024 * 1024, ...hookShell() },
       (err, stdout, stderr) => {
         if (err) {
           logger.warn(`[Hooks] Failed: ${script}`, { error: err.message, stderr });

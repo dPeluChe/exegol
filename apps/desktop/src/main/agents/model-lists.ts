@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { MODEL_ID_PATTERN } from "@exegol/shared";
 import { logger } from "../lib/logger";
 import { getProviderRegistry } from "./registry";
-import { _getFullPath, resolveCommand } from "./spawn-env";
+import { _getFullPath, cliLaunch, resolveCommand } from "./spawn-env";
 
 type Parse = (stdout: string) => string[];
 
@@ -40,13 +40,16 @@ const LIST_COMMANDS: Partial<Record<string, { args: string[]; parse: Parse }>> =
 const TTL_MS = 60 * 60 * 1000;
 const cache = new Map<string, { at: number; models: string[] }>();
 
-function run(command: string, args: string[]): Promise<string> {
+function run(bin: string, argv: string[]): Promise<string> {
+  const { command, args, verbatim } = cliLaunch(bin, argv);
   return new Promise((resolve, reject) =>
     execFile(
       command,
       args,
       {
         env: { ...process.env, PATH: _getFullPath() },
+        windowsHide: true,
+        windowsVerbatimArguments: verbatim,
         timeout: 15_000,
         maxBuffer: 4 * 1024 * 1024,
       },

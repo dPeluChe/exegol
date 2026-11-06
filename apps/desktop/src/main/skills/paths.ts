@@ -12,6 +12,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { samePath } from "@exegol/shared";
 import { logger } from "../lib/logger";
 
 // ─── Canonical paths ────────────────────────────────────────────────────────
@@ -98,7 +99,7 @@ function migrateLegacyDir(): void {
   // If it's already a symlink (to something else), remove and recreate
   if (legacyStat.isSymbolicLink()) {
     rmSync(LEGACY_DIR);
-    symlinkSync(CANONICAL_DIR, LEGACY_DIR);
+    symlinkSync(CANONICAL_DIR, LEGACY_DIR, "junction");
     logger.info("[SkillPaths] Re-pointed legacy symlink to canonical dir");
     return;
   }
@@ -118,7 +119,7 @@ function migrateLegacyDir(): void {
 
     // Replace legacy dir with symlink
     rmSync(LEGACY_DIR, { recursive: true });
-    symlinkSync(CANONICAL_DIR, LEGACY_DIR);
+    symlinkSync(CANONICAL_DIR, LEGACY_DIR, "junction");
     logger.info("[SkillPaths] Replaced legacy dir with symlink");
   }
 }
@@ -153,7 +154,7 @@ function ensureAgentSymlink(configDir: string, skillsSubdir: string): void {
   }
 
   try {
-    symlinkSync(CANONICAL_DIR, skillsDir);
+    symlinkSync(CANONICAL_DIR, skillsDir, "junction");
     logger.info(`[SkillPaths] Created symlink: ${skillsDir} -> canonical`);
   } catch (err) {
     logger.warn(`[SkillPaths] Failed to create symlink at ${skillsDir}:`, err);
@@ -198,7 +199,7 @@ function isSymlinkTo(linkPath: string, target: string): boolean {
   try {
     const stat = lstatSync(linkPath);
     if (!stat.isSymbolicLink()) return false;
-    return readlinkSync(linkPath) === target;
+    return samePath(readlinkSync(linkPath), target);
   } catch {
     return false;
   }

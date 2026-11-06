@@ -1,9 +1,9 @@
-import { exec } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import type { PipelineStatusEvent } from "@exegol/shared";
 import { stripAnsi } from "../agents/status-parser";
 import { getScrollbackPath } from "../ipc/procedures/scrollback";
 import { broadcast } from "../lib/event-bus";
+import { execFileAsync } from "../lib/exec-file";
 
 export function broadcastPipelineStatus(event: PipelineStatusEvent): void {
   broadcast("pipeline:status-changed", event);
@@ -34,34 +34,27 @@ interface GitSyncStatus {
   message: string;
 }
 
-export function checkGitSync(projectPath: string): Promise<GitSyncStatus> {
-  return new Promise((resolve) => {
-    exec(
-      "git status --porcelain",
-      { cwd: projectPath, encoding: "utf-8", timeout: 5_000 },
-      (err1, dirtyOut) => {
-        const uncommitted = !err1 && dirtyOut.trim().length > 0;
-
-        exec(
-          "git rev-list @{u}..HEAD --count 2>/dev/null",
-          { cwd: projectPath, encoding: "utf-8", timeout: 5_000 },
-          (err2, aheadOut) => {
-            const ahead = err2 ? 0 : Number.parseInt(aheadOut.trim(), 10) || 0;
-
-            const issues: string[] = [];
-            if (uncommitted) issues.push("uncommitted changes");
-            if (ahead > 0) issues.push(`${ahead} unpushed commit${ahead > 1 ? "s" : ""}`);
-
-            resolve({
-              clean: !uncommitted && ahead === 0,
-              uncommittedChanges: uncommitted,
-              unpushedCommits: ahead,
-              message:
-                issues.length > 0 ? `Warning: ${issues.join(" and ")}` : "Repository is up to date",
-            });
-          },
-        );
-      },
+export async function checkGitSync(projectPath: string): Promise<GitSyncStatus> {
+  const git = (args: string[]) =>
+    execFileAsync("git", args, { cwd: projectPath, encoding: "utf-8", timeout: 5_000 }).then(
+      (r) => r.stdout,
+      () => null,
     );
-  });
+  const [dirty, aheadOut] = await Promise.all([
+    git(["status", "--porcelain"]),
+    git(["rev-list", "@{u}..HEAD", "--count"]),
+  ]);
+  const uncommitted = !!dirty?.trim();
+  const ahead = Number.parseInt(aheadOut?.trim() ?? "", 10) || 0;
+
+  const issues: string[] = [];
+  if (uncommitted) issues.push("uncommitted changes");
+  if (ahead > 0) issues.push(`${ahead} unpushed commit${ahead > 1 ? "s" : ""}`);
+
+  return {
+    clean: !uncommitted && ahead === 0,
+    uncommittedChanges: uncommitted,
+    unpushedCommits: ahead,
+    message: issues.length > 0 ? `Warning: ${issues.join(" and ")}` : "Repository is up to date",
+  };
 }

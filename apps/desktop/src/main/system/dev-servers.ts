@@ -1,14 +1,11 @@
-import { execFile } from "node:child_process";
 import { userInfo } from "node:os";
-import { promisify } from "node:util";
 import type { DevServer } from "@exegol/shared";
 import type Database from "libsql";
 import { listLiveAgentPids } from "../db/queries/agents";
+import { execFileAsync } from "../lib/exec-file";
 import { logger } from "../lib/logger";
 import { isProcessAlive } from "../terminal/pty-sidecar-discovery";
 import { getProcessCwds, isInside, listTcpListeners } from "./ports";
-
-const execFileAsync = promisify(execFile);
 
 /** `ps` etime: [[dd-]hh:]mm:ss */
 export function parseEtime(etime: string): number | null {

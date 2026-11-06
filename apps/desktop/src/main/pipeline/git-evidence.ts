@@ -1,10 +1,8 @@
-import { execFile } from "node:child_process";
 import { copyFile, mkdtemp, rm, stat, utimes } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { promisify } from "node:util";
+import { execFileAsync } from "../lib/exec-file";
 
-const execFileAsync = promisify(execFile);
 const MAX_DIFF_BYTES = 16 * 1024 * 1024;
 
 export async function git(

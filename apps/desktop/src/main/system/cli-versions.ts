@@ -43,11 +43,15 @@ export async function readBinaryVersion(binPath: string, fresh = false): Promise
 
 function runVersion(binPath: string): Promise<string | null> {
   return new Promise((resolve) => {
-    exec(`"${binPath}" --version`, { env: shellEnv(), timeout: 3_000 }, (err, stdout) => {
-      if (err) return resolve(null);
-      const m = stdout.trim().match(/\d+\.\d+[.\w-]*/);
-      resolve(m ? m[0] : null);
-    });
+    exec(
+      `"${binPath}" --version`,
+      { env: shellEnv(), timeout: 3_000, windowsHide: true },
+      (err, stdout) => {
+        if (err) return resolve(null);
+        const m = stdout.trim().match(/\d+\.\d+[.\w-]*/);
+        resolve(m ? m[0] : null);
+      },
+    );
   });
 }
 
@@ -65,7 +69,7 @@ export const parsePathHits = (stdout: string): string[] => [
 export function findAllOnPath(command: string): Promise<string[]> {
   const cmd = process.platform === "win32" ? `where "${command}"` : `which -a "${command}"`;
   return new Promise((resolve) =>
-    exec(cmd, { env: shellEnv(), timeout: 3_000 }, (err, stdout) =>
+    exec(cmd, { env: shellEnv(), timeout: 3_000, windowsHide: true }, (err, stdout) =>
       resolve(err ? [] : parsePathHits(stdout)),
     ),
   );

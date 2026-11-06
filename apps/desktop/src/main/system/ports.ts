@@ -1,11 +1,8 @@
-import { execFile } from "node:child_process";
 import { readFile, readlink, stat } from "node:fs/promises";
 import { join } from "node:path";
-import { promisify } from "node:util";
+import { execFileAsync } from "../lib/exec-file";
 import { logger } from "../lib/logger";
 import { AsyncLruCache } from "../lib/lru-cache";
-
-const execFileAsync = promisify(execFile);
 
 interface DetectedPort {
   port: number;
