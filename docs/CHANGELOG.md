@@ -41,6 +41,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Browser panes search from the address bar: `?telnyx`, or words that are not an address, open a Google search; `localhost:3000`, `example.com` and full URLs still go straight there
 
 ### Fixed
+- A question a CLI asks in its own picker (Devin, Claude) marks the session as needing you and alerts, also in CLIs with no hook for it
 - Company: Cmd+1 and any return to the view keep the session and the Chat or Terminal view you left
 - Terminal paths: a path outside the project, a folder and a path wrapped over rows are now links; outside the project or on a folder a click shows it in Finder, nothing is read or opened
 - A window saved a few pixels off its monitor no longer reopens small and unmaximized, which resized the terminals on screen

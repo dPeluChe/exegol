@@ -46,7 +46,7 @@ export function stopSweep(): void {
   sweepTimer = null;
 }
 
-// A dialog no hook reported raises no attention of its own, and the gate below never types into
+// A numbered dialog with no selection raises no attention of its own, and the gate below never types into
 // it: the queue would just wait, unseen. Told once per hold
 const heldNoticed = new Set<string>();
 
@@ -117,6 +117,11 @@ export function ensureSweep(deliver: (agentId: string) => void): void {
 export function msSinceAgentOutput(agentId: string): number {
   const last = lastOutputAt.get(agentId);
   return last === undefined ? Number.POSITIVE_INFINITY : Date.now() - last;
+}
+
+/** When the session last printed, for readers that only look after something changed */
+export function lastAgentOutput(agentId: string): number | undefined {
+  return lastOutputAt.get(agentId);
 }
 
 export function forgetSweepState(agentId: string): void {

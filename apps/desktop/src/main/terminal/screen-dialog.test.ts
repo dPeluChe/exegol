@@ -69,4 +69,51 @@ describe("readScreenDialog", () => {
       readScreenDialog(["1. a", "2. b", "more output", "and more", "and more", "x", "y"]),
     ).toBeNull();
   });
+
+  const picker = [
+    "── Cmd+, · Spaces panel ──",
+    "¿Qué hace Cmd+, (el atajo de menú de Settings)?",
+    "❯ 1 Sí, Cmd+, abre settings",
+    "    El problema está en el cableado nuevo del botón",
+    "  2 No, Cmd+, tampoco hace nada",
+    "    openSettings falla en runtime",
+    "  3 Aún no lo pruebo",
+    "    Lo pruebo y te digo",
+    "  Other (type your own)",
+    "─".repeat(60),
+    "  enter to select · esc to cancel",
+  ];
+
+  it("reads a picker with help lines and an unnumbered Other, as Devin draws it", () => {
+    const d = readScreenDialog([...Array(10).fill("text"), ...picker, ...Array(5).fill("")]);
+    expect(d?.picked).toBe(true);
+    expect(d?.question).toBe("¿Qué hace Cmd+, (el atajo de menú de Settings)?");
+    expect(d?.options.map((o) => o.label)).toEqual([
+      "Sí, Cmd+, abre settings",
+      "No, Cmd+, tampoco hace nada",
+      "Aún no lo pruebo",
+    ]);
+  });
+
+  it("reads a picker with the selection moved down, in Claude's numbered form", () => {
+    const d = readScreenDialog([
+      "Which approach?",
+      "  1. First",
+      "     why first",
+      "❯ 2. Second",
+      "     why second",
+      "  3. Type something.",
+    ]);
+    expect(d?.options.map((o) => o.key)).toEqual(["1", "2", "3"]);
+    expect(d?.picked).toBe(true);
+  });
+
+  it("marks a numbered list in an answer as not picked", () => {
+    const d = readScreenDialog(["Two options:", "1. Keep it", "2. Remove it"]);
+    expect(d?.picked).toBe(false);
+  });
+
+  it("does not read a prompt line that merely starts with a number", () => {
+    expect(readScreenDialog(["some output", "❯ 3 files changed", "  esc to cancel"])).toBeNull();
+  });
 });
