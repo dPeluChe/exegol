@@ -1,4 +1,5 @@
 import type { PipelineRun, PipelineRunStatus, PipelineStepResult } from "@exegol/shared";
+import { pathBase } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import {
   CheckCircle,
@@ -165,9 +166,7 @@ export function PipelineRunView({ runId, onClose }: { runId: string; onClose: ()
           {run.worktreePath && (
             <div className="flex items-center gap-1 rounded bg-white/5 px-2 py-0.5">
               <GitBranch className="h-3 w-3 text-text-muted" />
-              <span className="text-[9px] text-text-muted">
-                {run.worktreePath.split("/").pop()}
-              </span>
+              <span className="text-[9px] text-text-muted">{pathBase(run.worktreePath)}</span>
             </div>
           )}
         </div>

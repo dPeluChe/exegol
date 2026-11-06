@@ -1,4 +1,4 @@
-import { LIVE_STATUSES } from "@exegol/shared";
+import { LIVE_STATUSES, pathBase } from "@exegol/shared";
 import type { AgentState } from "../stores/agents";
 import { useCloseConfirmStore } from "../stores/close-confirm";
 import type { CloseTarget, Pane } from "../stores/workspace";
@@ -13,8 +13,6 @@ export interface CloseSummary {
 }
 
 const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
-
-const baseName = (path: string) => path.split("/").filter(Boolean).pop() ?? path;
 
 /** The session's name, "Terminal" for a shell with none of its own */
 function terminalName(agent: AgentState): string {
@@ -50,7 +48,7 @@ function describePane(
     return { name: page ? `Browser ${page}` : "Browser", effect: "closes the page" };
   }
   if (pane.type === "files") {
-    const file = pane.openFile ? ` ${baseName(pane.openFile)}` : "";
+    const file = pane.openFile ? ` ${pathBase(pane.openFile)}` : "";
     return {
       name: `Files${file}`,
       effect: unsaved ? "unsaved changes are lost" : "closes the viewer",

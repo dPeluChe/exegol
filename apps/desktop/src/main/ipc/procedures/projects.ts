@@ -1,6 +1,6 @@
 import { execFile } from "node:child_process";
 import { existsSync, statSync } from "node:fs";
-import { isAbsolute } from "node:path";
+import { isAbsolute, resolve } from "node:path";
 import { promisify } from "node:util";
 import { TRPCError } from "@trpc/server";
 import { shell } from "electron";
@@ -310,7 +310,7 @@ export const projectRouter = router({
         const base =
           (input.agentId ? getWorktreeByAgentId(ctx.db, input.agentId)?.path : undefined) ??
           project.path;
-        const resolved = input.file.startsWith("/") ? input.file : `${base}/${input.file}`;
+        const resolved = resolve(base, input.file);
         if (!existsSync(resolved)) {
           throw new TRPCError({ code: "NOT_FOUND", message: `File not found: ${input.file}` });
         }

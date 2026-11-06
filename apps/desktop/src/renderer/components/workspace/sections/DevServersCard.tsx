@@ -1,4 +1,5 @@
 import type { DevServer } from "@exegol/shared";
+import { pathSegments } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { ChevronDown, ChevronRight, ExternalLink, Network, RefreshCw, Square } from "lucide-react";
 import { useState } from "react";
@@ -92,7 +93,7 @@ export function DevServersCard() {
 }
 
 function ServerRow({ server: s, onStop }: { server: DevServer; onStop: () => void }) {
-  const where = s.project?.name ?? s.cwd?.split("/").slice(-2).join("/") ?? "";
+  const where = s.project?.name ?? (s.cwd ? pathSegments(s.cwd).slice(-2).join("/") : "");
   return (
     <div className="group flex items-center gap-2 rounded px-1.5 py-1 text-[11px] hover:bg-white/5">
       <div className="flex w-28 shrink-0 flex-wrap gap-1">

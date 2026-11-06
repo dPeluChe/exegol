@@ -1,4 +1,5 @@
 import type { LauncherFolder, ProjectDetect } from "@exegol/shared";
+import { pathBase } from "@exegol/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import type { LauncherAction } from "../../lib/launcher";
@@ -47,7 +48,7 @@ export function useRunPins(projectId: string) {
 
 /** A shell named after where it runs: what it runs is its live step, gone once it exits */
 export function terminalNameFor(folder: LauncherFolder): string {
-  return folder.rel ? (folder.rel.split("/").pop() ?? "Terminal") : "Terminal";
+  return folder.rel ? pathBase(folder.rel) : "Terminal";
 }
 
 /** What the launcher's pane buttons and keys do in its folder */

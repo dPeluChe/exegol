@@ -1,3 +1,4 @@
+import { pathBase } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import Editor, { loader } from "@monaco-editor/react";
 import { Code2, Eye, ListTree, RefreshCw } from "lucide-react";
@@ -64,7 +65,7 @@ const EXT_TO_MONACO_LANG: Record<string, string> = {
 
 function getMonacoLanguage(fileName: string): string {
   const ext = fileName.slice(fileName.lastIndexOf(".")).toLowerCase();
-  const base = fileName.split("/").pop()?.toLowerCase() ?? "";
+  const base = pathBase(fileName).toLowerCase();
   if (base === "dockerfile") return "dockerfile";
   if (base === ".env" || base.startsWith(".env.")) return "shell";
   return EXT_TO_MONACO_LANG[ext] ?? "plaintext";

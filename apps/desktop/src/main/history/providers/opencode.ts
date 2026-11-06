@@ -1,5 +1,5 @@
 import { readdir, readFile, stat } from "node:fs/promises";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { z } from "zod";
 import { mapWithConcurrency } from "../../lib/concurrency";
 import { xdgDataDir } from "../../lib/xdg-data";
@@ -158,13 +158,7 @@ async function readSession(
 
     return {
       provider: "opencode",
-      sessionId:
-        parsed.id ??
-        path
-          .split("/")
-          .pop()
-          ?.replace(/\.json$/, "") ??
-        path,
+      sessionId: parsed.id ?? basename(path).replace(/\.json$/, "") ?? path,
       title: normalizeTitle(parsed.title),
       cwd: parsed.directory,
       branch: null,

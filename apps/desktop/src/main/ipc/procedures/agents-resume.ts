@@ -1,4 +1,5 @@
 // agents router, spawn and resume part: spawn, resume after a lost sidecar, shell folders, Watching pins.
+import { isAbsolute } from "node:path";
 import type { ResumableSession, SpawnPreview } from "@exegol/shared";
 import { agentCliTypeSchema, agentCreateSchema } from "@exegol/shared";
 import { TRPCError } from "@trpc/server";
@@ -137,8 +138,7 @@ export const agentSpawnProcedures = {
           .string()
           .min(1)
           .max(4096)
-          .startsWith("/")
-          .refine((c) => !c.includes("\0"), "NUL in path"),
+          .refine((c) => isAbsolute(c) && !c.includes("\0"), "Not an absolute path"),
       }),
     )
     .mutation(({ ctx, input }) => {

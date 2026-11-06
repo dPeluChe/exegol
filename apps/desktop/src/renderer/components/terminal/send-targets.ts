@@ -1,4 +1,4 @@
-import { type AgentStatus, LIVE_STATUSES } from "@exegol/shared";
+import { type AgentStatus, LIVE_STATUSES, pathBase } from "@exegol/shared";
 import { isPasteTarget } from "../../lib/agent-input";
 
 /** A live session that can receive a selection, with the project it belongs to */
@@ -39,8 +39,6 @@ interface SessionLike {
 const atShellPrompt = (a: SessionLike) =>
   a.cliType === "shell" || (!!a.launchedInShell && a.status === "idle");
 
-const basename = (path: string) => path.replace(/\/+$/, "").split("/").pop() || path;
-
 function toTarget(a: SessionLike, folders: ReadonlyMap<string, string>): SendTarget | null {
   if (atShellPrompt(a)) {
     if (!LIVE_STATUSES.has(a.status) || a.archived || a.suspended) return null;
@@ -50,7 +48,7 @@ function toTarget(a: SessionLike, folders: ReadonlyMap<string, string>): SendTar
       name: "Terminal",
       cliType: "shell",
       projectId: a.projectId,
-      ...(cwd ? { folder: basename(cwd) } : {}),
+      ...(cwd ? { folder: pathBase(cwd) } : {}),
     };
   }
   if (!isPasteTarget(a)) return null;

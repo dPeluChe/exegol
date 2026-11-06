@@ -1,3 +1,4 @@
+import { basename } from "node:path";
 import type { PipelineRun } from "@exegol/shared";
 import type Database from "libsql";
 import { coreRust } from "../agents/spawn-env";
@@ -23,7 +24,7 @@ export async function cleanupPipelineWorktree(
     }
     const project = getProject(db, run.projectId);
     if (project) {
-      const wtName = worktreePath.split("/").pop() ?? "";
+      const wtName = basename(worktreePath);
       removeManagedWorktree(project.path, wtName, worktreePath, false);
       logger.info("[Pipeline] Cleaned up worktree after completion");
     }

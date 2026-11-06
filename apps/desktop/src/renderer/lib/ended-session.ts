@@ -1,4 +1,5 @@
 import type { AgentStatus } from "@exegol/shared";
+import { pathBase, samePath } from "@exegol/shared";
 
 /** What an ended session's pane offers; `reopen` is a shell's own Resume */
 export type EndedAction =
@@ -63,17 +64,14 @@ export function endedKeyAction(
   return action ? { action } : null;
 }
 
-const trimSlash = (p: string) => (p.length > 1 ? p.replace(/\/+$/, "") : p);
-
 /** The folder's name when it is not the project root (a worktree, a shell's subfolder) */
 export function folderLabel(
   folder: string | null | undefined,
   projectPath: string | null | undefined,
 ): string | null {
   if (!folder) return null;
-  const f = trimSlash(folder);
-  if (projectPath && f === trimSlash(projectPath)) return null;
-  return f.slice(f.lastIndexOf("/") + 1) || f;
+  if (projectPath && samePath(folder, projectPath)) return null;
+  return pathBase(folder);
 }
 
 /** "Claude Code ended", the session's name, "project / folder" */

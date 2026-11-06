@@ -1,3 +1,4 @@
+import { isUnderPath, pathBelow } from "@exegol/shared";
 /** The floating file window's place in the app window (CSS px from the top-left) */
 export interface WindowRect {
   x: number;
@@ -58,11 +59,10 @@ export function dragRect(
 
 /** Inside `root` (a folder, with or without its trailing slash) */
 export function underRoot(path: string, root: string): boolean {
-  return path.startsWith(root.endsWith("/") ? root : `${root}/`);
+  return isUnderPath(path, root);
 }
 
 /** The header's label: relative to the project when inside it, else the full path */
 export function displayPath(path: string, projectPath?: string): string {
-  if (!projectPath || !underRoot(path, projectPath)) return path;
-  return path.slice(projectPath.replace(/\/$/, "").length + 1);
+  return (projectPath && pathBelow(path, projectPath)) || path;
 }

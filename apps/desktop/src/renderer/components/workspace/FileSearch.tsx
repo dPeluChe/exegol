@@ -1,3 +1,4 @@
+import { pathBase } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import { FileText, Search, TextSearch, X } from "lucide-react";
@@ -156,7 +157,7 @@ function SearchResults({
         className="flex w-full items-baseline gap-1.5 px-3 py-0.5 text-left hover:bg-white/5"
         title={n.relativePath}
       >
-        <span className="shrink-0 text-text-primary">{n.relativePath.split("/").pop()}</span>
+        <span className="shrink-0 text-text-primary">{pathBase(n.relativePath)}</span>
         <span className="truncate text-[10px] text-text-muted">{n.relativePath}</span>
       </button>
     ));

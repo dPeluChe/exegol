@@ -1,3 +1,4 @@
+import { pathBase, pathBelow, pathParent, pathSegments, pathSep } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useQueryClient } from "@tanstack/react-query";
@@ -95,9 +96,7 @@ function FileContextMenu({
 
   const handleCreate = useCallback(
     (type: "file" | "folder") => {
-      const parentDir = menu.isDirectory
-        ? menu.targetPath
-        : menu.targetPath.replace(/\/[^/]+$/, "");
+      const parentDir = menu.isDirectory ? menu.targetPath : pathParent(menu.targetPath);
       onClose();
       onStartCreate(parentDir, type);
     },
@@ -221,16 +220,11 @@ export function FileExplorer({
   // The initial file's folders start open so it is visible in the tree
   const [expandedDirs, setExpandedDirs] = useState<Set<string>>(() => {
     const open = new Set([rootPath, ...(view?.expanded ?? [])]);
-    if (initialFile?.startsWith(`${rootPath}/`)) {
-      const parts = initialFile
-        .slice(rootPath.length + 1)
-        .split("/")
-        .slice(0, -1);
-      let dir = rootPath;
-      for (const part of parts) {
-        dir = `${dir}/${part}`;
-        open.add(dir);
-      }
+    const sep = pathSep(rootPath);
+    let dir = rootPath;
+    for (const part of pathSegments(pathBelow(initialFile ?? "", rootPath) ?? "").slice(0, -1)) {
+      dir = `${dir}${sep}${part}`;
+      open.add(dir);
     }
     return open;
   });
@@ -451,7 +445,7 @@ export function FileExplorer({
         open={!!pendingSelect}
         onOpenChange={(open) => !open && setPendingSelect(null)}
         title="Discard unsaved changes?"
-        description={`${selectedFile?.split("/").pop() ?? "The file"} has changes that were not saved.`}
+        description={`${selectedFile ? pathBase(selectedFile) : "The file"} has changes that were not saved.`}
         confirmLabel="Discard"
         variant="destructive"
         onConfirm={() => pendingSelect && applySelect(pendingSelect.path, pendingSelect.line)}
@@ -459,7 +453,7 @@ export function FileExplorer({
       <ConfirmDialog
         open={!!pendingDelete}
         onOpenChange={(open) => !open && setPendingDelete(null)}
-        title={`Delete ${pendingDelete?.split("/").pop() ?? ""}?`}
+        title={`Delete ${pendingDelete ? pathBase(pendingDelete) : ""}?`}
         description={pendingDelete ?? ""}
         confirmLabel="Delete"
         variant="destructive"
@@ -584,7 +578,7 @@ function DirectoryNode({
           ) : (
             <Folder className="h-3.5 w-3.5 shrink-0 text-accent" />
           )}
-          <span className="truncate font-medium">{path.split("/").pop()}</span>
+          <span className="truncate font-medium">{pathBase(path)}</span>
         </button>
       )}
       {/* It failed silently: an unreadable root left the whole pane blank */}
@@ -703,12 +697,12 @@ function RenameDialog({
 }) {
   const [name, setName] = useState("");
   const [error, setError] = useState<string | null>(null);
-  const current = path?.split("/").pop() ?? "";
+  const current = path ? pathBase(path) : "";
   const dir = path ? path.slice(0, path.length - current.length) : "";
 
   const submit = async () => {
     const next = name.trim();
-    if (!path || !next || next === current || next.includes("/")) return onClose();
+    if (!path || !next || next === current || /[\\/]/.test(next)) return onClose();
     try {
       await trpcMutate("files.rename", { from: path, to: `${dir}${next}` });
       onRenamed(path, `${dir}${next}`);

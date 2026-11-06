@@ -1,3 +1,4 @@
+import { pathBase } from "@exegol/shared";
 import { Button, cn } from "@exegol/ui";
 import { Archive, FolderOpen, Github } from "lucide-react";
 import type { TaskColumn, TaskItem } from "../../../../lib/markdown-tasks";
@@ -40,7 +41,7 @@ export function TasksToolbar({
   return (
     <div className="flex h-9 shrink-0 items-center gap-3 border-b border-border bg-bg-secondary px-3">
       <span className="truncate text-[10px] text-text-muted" title={filePath}>
-        {filePath.split("/").pop()}
+        {pathBase(filePath)}
       </span>
       {/* Filter toggle */}
       <div className="flex items-center rounded-md border border-border">

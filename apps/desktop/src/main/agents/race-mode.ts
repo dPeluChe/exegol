@@ -1,3 +1,4 @@
+import { basename } from "node:path";
 import type { LoserCleanupResult, ParallelRun } from "@exegol/shared";
 import type Database from "libsql";
 import { getAgent, getProject } from "../db/queries";
@@ -90,7 +91,7 @@ export async function cleanupLoserWorktrees(
     }
 
     try {
-      const worktreeName = worktree.path.replace(/\/+$/, "").split("/").pop() ?? "";
+      const worktreeName = basename(worktree.path);
       // force only when the user explicitly confirmed deleting dirty state —
       // the clean path respects git's own guards (worktree locks).
       removeManagedWorktree(project.path, worktreeName, worktree.path, opts.force ?? false);
