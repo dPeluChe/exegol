@@ -1,8 +1,12 @@
+import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { is } from "@electron-toolkit/utils";
-import { app, BrowserWindow } from "electron";
+import { app, BrowserWindow, screen } from "electron";
 import windowStateKeeper from "electron-window-state";
+import { z } from "zod";
 import { logger } from "../lib/logger";
+import { parseJson } from "../lib/parse-json";
+import { fitSavedWindow } from "../lib/window-fit";
 import { registerMainWindow } from "../windows/floating";
 import { getMainWindow, setMainWindowRef } from "../windows/main-window-ref";
 import { registerMainWindowForSettings } from "../windows/settings";
@@ -33,8 +37,34 @@ function installFocusRelay(): void {
   );
 }
 
+const savedWindow = z
+  .object({
+    x: z.number(),
+    y: z.number(),
+    width: z.number(),
+    height: z.number(),
+  })
+  .passthrough();
+
+/** electron-window-state resets to its defaults, maximized state included, for a window a few
+ *  pixels off a display: that resizes every live terminal on screen, so fix the file first */
+function keepSavedWindow(): void {
+  const file = join(app.getPath("userData"), "window-state.json");
+  try {
+    const saved = parseJson(readFileSync(file, "utf-8"), savedWindow);
+    const displays = screen.getAllDisplays().map((d) => d.bounds);
+    const fitted = saved && fitSavedWindow(saved, displays);
+    if (!fitted) return;
+    writeFileSync(file, JSON.stringify(fitted));
+    logger.info("[Window] saved position was off its display: moved back onto it");
+  } catch {
+    // First launch: no file yet
+  }
+}
+
 export function createWindow(): void {
   installFocusRelay();
+  keepSavedWindow();
   const state = windowStateKeeper({
     defaultWidth: 1400,
     defaultHeight: 900,
