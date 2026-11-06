@@ -46,17 +46,17 @@ const savedWindow = z
   })
   .passthrough();
 
-/** electron-window-state resets to its defaults, maximized state included, for a window a few
- *  pixels off a display: that resizes every live terminal on screen, so fix the file first */
+/** electron-window-state resets a window a few pixels off a display to its defaults, unmaximized,
+ *  which resizes every live terminal on screen: fix the file before it reads it */
 function keepSavedWindow(): void {
   const file = join(app.getPath("userData"), "window-state.json");
   try {
     const saved = parseJson(readFileSync(file, "utf-8"), savedWindow);
     const displays = screen.getAllDisplays().map((d) => d.bounds);
-    const fitted = saved && fitSavedWindow(saved, displays);
+    const fitted = saved && fitSavedWindow(saved, displays, screen.getPrimaryDisplay().bounds);
     if (!fitted) return;
     writeFileSync(file, JSON.stringify(fitted));
-    logger.info("[Window] saved position was off its display: moved back onto it");
+    logger.info("[Window] saved position was off its display: moved onto one");
   } catch {
     // First launch: no file yet
   }

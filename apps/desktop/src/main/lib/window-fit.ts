@@ -1,41 +1,36 @@
-export interface Bounds {
-  x: number;
-  y: number;
-  width: number;
-  height: number;
-}
+import type { Rectangle } from "electron";
 
 /** Less than this on a display and the title bar may be out of reach */
 const MIN_VISIBLE = { width: 100, height: 40 };
 
-const overlap = (a: Bounds, b: Bounds): { width: number; height: number } => ({
-  width: Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x),
-  height: Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y),
-});
-
-const contains = (d: Bounds, w: Bounds): boolean =>
+const contains = (d: Rectangle, w: Rectangle): boolean =>
   w.x >= d.x && w.y >= d.y && w.x + w.width <= d.x + d.width && w.y + w.height <= d.y + d.height;
+
+/** Visible area of the window on a display, 0 when too little shows to reach it */
+function visibleArea(w: Rectangle, d: Rectangle): number {
+  const width = Math.min(w.x + w.width, d.x + d.width) - Math.max(w.x, d.x);
+  const height = Math.min(w.y + w.height, d.y + d.height) - Math.max(w.y, d.y);
+  return width < MIN_VISIBLE.width || height < MIN_VISIBLE.height ? 0 : width * height;
+}
 
 const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(value, max));
 
-/** A saved window that hangs off its display, moved fully onto the display showing most of it.
- *  Null when there is nothing to fix: it already fits, or no display really shows it */
-export function fitSavedWindow<T extends Bounds>(
+/** Onto the display showing most of it, else the primary one. Null when it already fits */
+export function fitSavedWindow<T extends Rectangle>(
   saved: T,
-  displays: Bounds[],
-): (T & { displayBounds: Bounds }) | null {
+  displays: Rectangle[],
+  primary: Rectangle,
+): T | null {
   if (displays.some((d) => contains(d, saved))) return null;
-  let best: Bounds | null = null;
+  let best = primary;
   let bestArea = 0;
   for (const display of displays) {
-    const { width, height } = overlap(saved, display);
-    if (width < MIN_VISIBLE.width || height < MIN_VISIBLE.height) continue;
-    if (width * height > bestArea) {
+    const area = visibleArea(saved, display);
+    if (area > bestArea) {
       best = display;
-      bestArea = width * height;
+      bestArea = area;
     }
   }
-  if (!best) return null;
   const width = Math.min(saved.width, best.width);
   const height = Math.min(saved.height, best.height);
   return {
@@ -44,6 +39,5 @@ export function fitSavedWindow<T extends Bounds>(
     height,
     x: clamp(saved.x, best.x, best.x + best.width - width),
     y: clamp(saved.y, best.y, best.y + best.height - height),
-    displayBounds: best,
   };
 }
