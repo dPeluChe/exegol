@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Agents get usage instructions from Exegol's MCP server and three new browser tools: wait for text or a url, hover, and scroll; they can also go back, forward or reload and take a full-page screenshot
 - GitHub in the top bar works in workspaces whose root has no remote: PRs and issues of every repo inside, grouped by repo with a filter, and tasks run in that repo's folder and worktree; with nothing to show, the button says why (no gh, not logged in, no remote)
 - Hold-to-talk dictation keeps listening briefly after the key comes up, so the last word is not cut
 - Two new agent CLIs: Grok (`grok`, sessions listed and resumed by id) and Cursor (`cursor-agent`), with YOLO, model and install or update from Settings

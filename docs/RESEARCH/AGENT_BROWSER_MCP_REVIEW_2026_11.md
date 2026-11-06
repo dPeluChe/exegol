@@ -49,13 +49,18 @@ Run live as an agent (`browser_*` over the shim, Exegol 0.5.29) against two loca
 
 1. Split to under 500 lines per file (this PR).
 2. Honest results: load failures, bounded load, what changed after an action, full pointer sequence on click, compact snapshot with shadow DOM and iframes, screenshot background.
-3. MCP `instructions`, intent-first descriptions, annotations, `server/discover`, version negotiation, `browser_wait`, scroll, hover, close.
-4. Pane ownership between agents, reads while the user has control, `browser_eval` hidden where off.
+3. MCP `instructions`, intent-first descriptions, annotations, `server/discover`, version negotiation, `browser_wait`, scroll, hover.
+4. Pane ownership between agents, `browser_close` (closing needs ownership, so it moved here from 3), reads while the user has control, `browser_eval` hidden where off.
+
+Two protocol points stay as they are. Exegol's -32020..-32029 sit in the range the spec reserves, but they are socket codes between shim and server and never reach the MCP wire, so nothing was renumbered. The shim answers a tool error as `isError` content, the form MCP asks for, so keeping the code through it would add nothing an agent reads.
 
 Decision kept for the user: whether `browser_eval` should default to on for local hosts.
 
 ## Left for later (found while simplifying the split)
 
+- `browser_wait` does not keep `isAgentActing` alive: a wait past 15 s stops auto-closing page dialogs. Touching the pane would make a read tool claim it, so this belongs with pane ownership (PR 4).
+- `browser_wait` polls `innerText` every 200 ms. A MutationObserver would avoid re-reading an unchanged page, but it misses CSS-only changes and must re-arm after a navigation.
+- `tools/list` answers `ttlMs: 0` because the list follows the app. A short TTL or `listChanged` would save round trips for clients that honor them; no client's behavior was checked.
 - `mcp/exegol-identity.ts` `ancestorPids` forks up to 3 `ps` before any SQL. Asking the DB with `[ppid]` first avoids them for a CLI with no wrapper, but it changes which row wins for a nested agent, so it needs its own change.
 - `browser/tool-screenshot.ts` runs about 53 synchronous filesystem calls per capture in the main process. Move to `fs.promises`, create the folder once, prune every Nth capture.
 - `browser/tool-handlers.ts` `handleEval` accepts `args.code`, which the schema does not declare. Drop it with the tool description pass.

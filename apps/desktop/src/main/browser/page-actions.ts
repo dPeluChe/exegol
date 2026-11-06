@@ -1,3 +1,4 @@
+import type { SCROLL_TARGETS } from "../mcp/browser-tool-defs";
 import { HOST_GUARD, PAGE_COMMON } from "./page-scripts";
 
 export type PageAction =
@@ -14,9 +15,8 @@ export interface ActionResult {
   options?: string[];
   /** The field holds something else than what was typed (a mask, maxlength): page data */
   actual?: string;
-  /** Where a real mouse should move, in the top page's coordinates */
-  x?: number;
-  y?: number;
+  /** Where a real mouse should go, in the top page's coordinates */
+  hoverAt?: { x: number; y: number };
   /** "enter": no form around, so the caller sends a real Enter */
   submitted?: "form" | "enter";
 }
@@ -30,10 +30,8 @@ export function actionScript(ref: string, act: PageAction, expectedHost: string)
   return `((ref, act) => {
 ${HOST_GUARD(expectedHost)}
 ${PAGE_COMMON}
-const st = globalThis.__exegol;
-if (!st || ref.split(".")[1] !== st.doc) return { error: "stale_ref" };
-const el = st.refs.get(ref)?.deref();
-if (!el || !el.isConnected) return { error: "stale_ref" };
+const el = refEl(ref);
+if (!el) return { error: "stale_ref" };
 el.scrollIntoView({ block: "center", inline: "center" });
 if (el.disabled) return { error: "disabled" };
 // The scroll above is ours: only what the page does next counts
@@ -57,8 +55,16 @@ if (act.action === "click" || act.action === "hover") {
   el.dispatchEvent(new win.PointerEvent("pointerenter", { ...at, bubbles: false }));
   el.dispatchEvent(new win.MouseEvent("mouseenter", { ...at, bubbles: false }));
   pointer("pointermove", 0); mouse("mousemove", 0);
-  // :hover answers only to a real mouse, which the caller sends; a frame has its own coordinates
-  if (act.action === "hover") return win === window ? { ok: true, x, y } : { ok: true };
+  // :hover answers only to a real mouse, which the caller sends
+  if (act.action === "hover") {
+    const hoverAt = { x, y };
+    for (let w = win; w !== window; w = w.parent) {
+      const frame = w.frameElement.getBoundingClientRect();
+      hoverAt.x += frame.left;
+      hoverAt.y += frame.top;
+    }
+    return { ok: true, hoverAt };
+  }
   const pressed = pointer("pointerdown", 1);
   const down = pressed ? mouse("mousedown", 1) : true;
   if (down && typeof el.focus === "function") el.focus();
@@ -120,30 +126,31 @@ return { error: "unknown_action" };
 })(${JSON.stringify(ref)}, ${JSON.stringify(act)})`;
 }
 
-export type ScrollTarget = "down" | "up" | "top" | "bottom";
+export type ScrollTarget = (typeof SCROLL_TARGETS)[number];
 
-/** The inner panel under the middle of the viewport when an app scrolls one, else the page */
 export function scrollScript(ref: string | null, to: ScrollTarget, expectedHost: string): string {
   return `((ref, to) => {
 ${HOST_GUARD(expectedHost)}
 ${PAGE_COMMON}
 watchChanges(true);
 if (ref) {
-  const st = globalThis.__exegol;
-  const el = st && ref.split(".")[1] === st.doc ? st.refs.get(ref)?.deref() : null;
-  if (!el || !el.isConnected) return { error: "stale_ref" };
+  const el = refEl(ref);
+  if (!el) return { error: "stale_ref" };
   el.scrollIntoView({ block: "center", behavior: "instant" });
   return { ok: true };
 }
-let box = document.elementFromPoint(innerWidth / 2, innerHeight / 2);
-while (box && box !== document.body && box !== document.documentElement) {
-  const overflow = getComputedStyle(box).overflowY;
-  if ((overflow === "auto" || overflow === "scroll") && box.scrollHeight > box.clientHeight) break;
-  box = box.parentElement;
+// An app shell scrolls an inner panel, not the document
+let box = document.scrollingElement;
+const { body, documentElement } = document;
+for (let el = document.elementFromPoint(innerWidth / 2, innerHeight / 2); el && el !== body && el !== documentElement; el = el.parentElement) {
+  const overflow = getComputedStyle(el).overflowY;
+  if ((overflow === "auto" || overflow === "scroll") && el.scrollHeight > el.clientHeight) {
+    box = el;
+    break;
+  }
 }
-if (!box || box === document.body || box === document.documentElement) box = document.scrollingElement;
 const step = box.clientHeight * 0.8;
-const top = to === "top" ? 0 : to === "bottom" ? box.scrollHeight : box.scrollTop + (to === "down" ? step : -step);
+const top = { top: 0, bottom: box.scrollHeight, down: box.scrollTop + step, up: box.scrollTop - step }[to];
 box.scrollTo({ top, behavior: "instant" });
 return { ok: true, atEnd: box.scrollTop + box.clientHeight >= box.scrollHeight - 1 };
 })(${JSON.stringify(ref)}, ${JSON.stringify(to)})`;
@@ -158,9 +165,10 @@ export interface WaitCondition {
 export function waitScript(condition: WaitCondition, expectedHost: string): string {
   return `((c) => {
 ${HOST_GUARD(expectedHost)}
+if (c.url !== undefined && !location.href.includes(c.url)) return false;
+// innerText forces a layout of the whole page: only when a text is asked for
+if (c.text === undefined && c.gone === undefined) return true;
 const shown = document.body ? document.body.innerText : "";
-return (c.text === undefined || shown.includes(c.text)) &&
-  (c.gone === undefined || !shown.includes(c.gone)) &&
-  (c.url === undefined || location.href.includes(c.url));
+return (c.text === undefined || shown.includes(c.text)) && (c.gone === undefined || !shown.includes(c.gone));
 })(${JSON.stringify(condition)})`;
 }

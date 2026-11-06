@@ -55,6 +55,8 @@ import { forwardPaneZoomKeys } from "./zoom-keys";
 const PANE_ID_RE = /^[A-Za-z0-9_-]{1,64}$/;
 const OPEN_TIMEOUT_MS = 15_000;
 const SCREENSHOT_MAX_WIDTH = 1280;
+/** A taller image reaches the model shrunk until it cannot be read */
+const AGENT_FULL_PAGE = { width: SCREENSHOT_MAX_WIDTH, height: 4096 };
 const registrationWaiters = new Map<string, () => void>();
 const pendingOpens = new Map<string, (r: { paneId?: string; error?: string }) => void>();
 
@@ -111,13 +113,11 @@ function handleFor(r: Registered, wc: WebContents): BrowserPaneHandle {
     awaitLoad: () => awaitPageLoad(wc),
     loadState: () => loadOf(wc.id),
     capture: async (fullPage) => {
+      if (fullPage) return opaqueJpeg(await captureFullPage(wc, AGENT_FULL_PAGE), 80);
       // Right after a navigation there may be no frame to copy yet
-      let img = fullPage
-        ? await captureFullPage(wc)
-        : await wc.capturePage().catch(() => delay(300).then(() => wc.capturePage()));
-      if (img.getSize().width > SCREENSHOT_MAX_WIDTH)
-        img = img.resize({ width: SCREENSHOT_MAX_WIDTH });
-      return opaqueJpeg(img, 80);
+      const img = await wc.capturePage().catch(() => delay(300).then(() => wc.capturePage()));
+      const fits = img.getSize().width <= SCREENSHOT_MAX_WIDTH;
+      return opaqueJpeg(fits ? img : img.resize({ width: SCREENSHOT_MAX_WIDTH }), 80);
     },
     moveMouse: (x, y) => {
       markAgentInput(wc.id);

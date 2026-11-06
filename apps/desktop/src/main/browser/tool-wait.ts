@@ -1,5 +1,6 @@
 import { hostOf } from "@exegol/shared";
 import type Database from "libsql";
+import { delay } from "../lib/timeout";
 import { ExegolToolError } from "../mcp/exegol-protocol";
 import {
   clearWaiting,
@@ -8,17 +9,27 @@ import {
   type WakeReason,
   waitForHandBack,
 } from "./control";
+import { waitScript } from "./page-actions";
+import { isPageChangedError } from "./page-scripts";
 import {
   aliasOf,
+  type BrowserPaneHandle,
   type BrowserToolContext,
+  inspect,
   logAction,
   notifyNeedsUser,
+  pageUnavailable,
   requireHost,
   resolvePane,
 } from "./tool-guards";
 import { markAction, pageSummary } from "./tool-outcome";
 
 const WAIT_POLL_MS = 25_000;
+const PAGE_POLL_MS = 200;
+/** A full inspect reads the page and the DB: about once a second, or on a new URL */
+const INSPECT_EVERY = 5;
+const DEFAULT_PAGE_WAIT_S = 5;
+const MAX_PAGE_WAIT_S = 20;
 /** A wait not polled for this long was abandoned (the agent moved on): the next call starts over */
 const WAIT_STALE_MS = 30_000;
 const DEFAULT_WAIT_MIN = 10;
@@ -141,5 +152,52 @@ export async function handleWait(
     pane: pane.paneId,
     remainingSeconds: Math.round((current.deadline - Date.now()) / 1000),
     hint: "Still waiting for the user. Call browser_wait_for_user again with the same reason.",
+  };
+}
+
+const optionalText = (raw: unknown): string | undefined =>
+  typeof raw === "string" && raw ? raw : undefined;
+
+export async function handlePageWait(
+  db: Database.Database,
+  ctx: BrowserToolContext,
+  pane: BrowserPaneHandle,
+  args: Record<string, unknown>,
+) {
+  const condition = {
+    text: optionalText(args.text),
+    gone: optionalText(args.gone),
+    url: optionalText(args.url),
+  };
+  if (!condition.text && !condition.gone && !condition.url) {
+    throw new ExegolToolError("pass text, gone or url", -32602);
+  }
+  const asked = Number(args.timeout_seconds);
+  const seconds = asked > 0 ? Math.min(asked, MAX_PAGE_WAIT_S) : DEFAULT_PAGE_WAIT_S;
+  const deadline = Date.now() + seconds * 1000;
+  const mark = markAction(pane, args.snapshot);
+  let checked: { url: string; host: string } | null = null;
+  let polls = 0;
+  while (Date.now() < deadline) {
+    try {
+      if (checked?.url !== pane.getUrl() || ++polls % INSPECT_EVERY === 0) {
+        const { page, host, needsUser, loadFailed } = await inspect(db, ctx, pane);
+        if (!page || needsUser) return pageUnavailable(pane, needsUser, loadFailed);
+        checked = { url: pane.getUrl(), host };
+      }
+      const met = await pane.runIsolated(waitScript(condition, checked.host));
+      if (met === true) return pageSummary(db, ctx, pane, mark);
+    } catch (err) {
+      // Mid-navigation there is nothing to read yet: the next poll does
+      if (!isPageChangedError(err) && !(err instanceof ExegolToolError && err.code === -32021)) {
+        throw err;
+      }
+    }
+    await delay(PAGE_POLL_MS);
+  }
+  return {
+    status: "timed_out",
+    pane: pane.paneId,
+    hint: `It did not happen in ${seconds} s. browser_snapshot shows the page, browser_logs its errors.`,
   };
 }

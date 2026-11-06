@@ -8,6 +8,7 @@ import {
 import type Database from "libsql";
 import { getAgent } from "../db/queries/agents";
 import { getProjectBrowserHosts } from "../db/queries/projects";
+import type { HISTORY_ACTIONS } from "../mcp/browser-tool-defs";
 import { ExegolToolError } from "../mcp/exegol-protocol";
 import { getPaneControl, lastPaneOf, noteAgentAction, setNeedsUser } from "./control";
 import type { PageLoad } from "./load-state";
@@ -21,7 +22,7 @@ import {
   snapshotScript,
 } from "./page-scripts";
 
-export type HistoryAction = "back" | "forward" | "reload";
+export type HistoryAction = (typeof HISTORY_ACTIONS)[number];
 
 /** One live browser pane as the tools see it. The host only hands out panes whose webview runs
  *  in the asked project's own partition, so a pane id from another project never resolves */
@@ -40,7 +41,6 @@ export interface BrowserPaneHandle {
   /** JPEG, at most 1280px wide */
   capture(fullPage: boolean): Promise<Buffer>;
   sendKey(keyCode: string, modifiers: string[]): void;
-  /** Viewport coordinates of the page */
   moveMouse(x: number, y: number): void;
   /** False when there is nowhere to go */
   history(action: HistoryAction): boolean;

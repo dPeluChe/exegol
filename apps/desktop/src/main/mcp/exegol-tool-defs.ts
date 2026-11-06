@@ -4,6 +4,7 @@ import {
   BROWSER_TOOL_DEFS,
   BROWSER_WRITE_TOOLS,
   type ExegolToolDef,
+  type ToolBody,
 } from "./browser-tool-defs";
 
 export type ExegolAccessMode = "read" | "plan" | "write";
@@ -49,9 +50,10 @@ export const SEARCH_ONLY_TOOLS = new Set<ExegolToolName>([
 
 const MEMORY_CATEGORY_VALUES = [...MEMORY_CATEGORIES];
 
-const TOOLS: ExegolToolDef<ExegolToolName>[] = [
+const OWN_TOOLS: ToolBody<ExegolToolName>[] = [
   {
     name: "memory_search",
+    title: "Search project memory",
     description: "Hybrid RRF search over this project's memory store. Returns top facts.",
     inputSchema: {
       type: "object",
@@ -64,6 +66,7 @@ const TOOLS: ExegolToolDef<ExegolToolName>[] = [
   },
   {
     name: "memory_list",
+    title: "List project memory",
     description:
       "List this project's most relevant memories (no query needed — use this to see " +
       "what the store knows). Optional category filter and limit (default 10, max 30).",
@@ -77,6 +80,7 @@ const TOOLS: ExegolToolDef<ExegolToolName>[] = [
   },
   {
     name: "memory_save",
+    title: "Save to project memory",
     description:
       "Record a fact into this project's memory store. The store decides whether to " +
       "reinforce an existing fact, supersede a contradicting one, or create a new entry.",
@@ -91,6 +95,7 @@ const TOOLS: ExegolToolDef<ExegolToolName>[] = [
   },
   {
     name: "knowledge_get",
+    title: "Read project knowledge",
     description:
       "Read this project's knowledge base. `section` is 'brief' (PROJECT.md) or " +
       "'digest' (auto-generated structure summary); omit for both.",
@@ -103,6 +108,7 @@ const TOOLS: ExegolToolDef<ExegolToolName>[] = [
   },
   {
     name: "agents_list",
+    title: "List agents",
     description:
       "List the live agents you can message: those of your project, or every project with " +
       "all_projects. The response ALWAYS has both keys: `self` (YOUR session id + name — sign " +
@@ -119,6 +125,7 @@ const TOOLS: ExegolToolDef<ExegolToolName>[] = [
   },
   {
     name: "agent_send",
+    title: "Message an agent",
     description:
       "Send a text message to another live agent, addressed by session name (alias) or " +
       "id. Exegol delivers it at the target's next turn boundary (never mid-generation) " +
@@ -157,6 +164,7 @@ const TOOLS: ExegolToolDef<ExegolToolName>[] = [
   },
   {
     name: "message_status",
+    title: "Check a message",
     description:
       "Check what happened to a message you sent (or received) when a call timed out and " +
       "you can't tell whether it went through. Returns state: delivered | queued " +
@@ -171,6 +179,7 @@ const TOOLS: ExegolToolDef<ExegolToolName>[] = [
   },
   {
     name: "message_cancel",
+    title: "Cancel a message",
     description:
       "Withdraw a message you sent that has NOT been delivered yet (still queued for the " +
       "target's next turn boundary). Use it when an assignment turns out to be wrong instead " +
@@ -185,6 +194,7 @@ const TOOLS: ExegolToolDef<ExegolToolName>[] = [
   },
   {
     name: "messages_check",
+    title: "Check for messages",
     description:
       "Fetch the full body of messages too long to paste into your terminal. When another " +
       "agent sends you something large, Exegol delivers a one-line pointer and holds the body " +
@@ -194,6 +204,7 @@ const TOOLS: ExegolToolDef<ExegolToolName>[] = [
   },
   {
     name: "claim_paths",
+    title: "Claim files",
     description:
       "Reserve files or directories before editing them, so two agents never write the same " +
       "file — ENFORCED for sessions Exegol can intercept (their file-editing tools are " +
@@ -221,6 +232,7 @@ const TOOLS: ExegolToolDef<ExegolToolName>[] = [
   },
   {
     name: "release_paths",
+    title: "Release files",
     description:
       "Give back path claims once you are done, so another agent can take them. Omit `paths` " +
       "to release everything you hold.",
@@ -231,6 +243,7 @@ const TOOLS: ExegolToolDef<ExegolToolName>[] = [
   },
   {
     name: "list_claims",
+    title: "List file claims",
     description:
       "Who currently holds which paths in this project. Call it BEFORE handing out work: it " +
       "turns 'hope nobody else is in this file' into a fact.",
@@ -238,6 +251,7 @@ const TOOLS: ExegolToolDef<ExegolToolName>[] = [
   },
   {
     name: "agent_link",
+    title: "Link to an agent",
     description:
       "Register an Exegol-ENFORCED link: when YOUR current turn ends, Exegol automatically " +
       "notifies the target agent (with your identity attached) — use this for 'when I " +
@@ -258,7 +272,6 @@ const TOOLS: ExegolToolDef<ExegolToolName>[] = [
       required: ["target"],
     },
   },
-  ...BROWSER_TOOL_DEFS,
 ];
 
 // Narrower than SEARCH_ONLY_TOOLS: those change no repo files, these change nothing at all
@@ -271,35 +284,17 @@ const READ_ONLY = new Set<ExegolToolName>([
   "list_claims",
 ]);
 
-const TITLES: Partial<Record<ExegolToolName, string>> = {
-  memory_search: "Search project memory",
-  memory_list: "List project memory",
-  memory_save: "Save to project memory",
-  knowledge_get: "Read project knowledge",
-  agents_list: "List agents",
-  agent_send: "Message an agent",
-  message_status: "Check a message",
-  message_cancel: "Cancel a message",
-  messages_check: "Check for messages",
-  claim_paths: "Claim files",
-  release_paths: "Release files",
-  list_claims: "List file claims",
-  agent_link: "Link to an agent",
-};
-
-export const EXEGOL_TOOL_DEFS: ExegolToolDef<ExegolToolName>[] = TOOLS.map((t) =>
-  t.annotations
-    ? t
-    : {
-        ...t,
-        title: TITLES[t.name],
-        annotations: {
-          readOnlyHint: READ_ONLY.has(t.name),
-          destructiveHint: false,
-          openWorldHint: false,
-        },
-      },
-);
+export const EXEGOL_TOOL_DEFS: ExegolToolDef<ExegolToolName>[] = [
+  ...OWN_TOOLS.map((t) => ({
+    ...t,
+    annotations: {
+      readOnlyHint: READ_ONLY.has(t.name),
+      destructiveHint: false,
+      openWorldHint: false,
+    },
+  })),
+  ...BROWSER_TOOL_DEFS,
+];
 
 /** Tool defs visible at the given access mode (display-only in the shim — the
  *  server re-derives the mode from the DB and enforces it on every call). */

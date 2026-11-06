@@ -39,7 +39,6 @@ interface Scene {
   http?: number;
   onAction?: (logs: LogRing) => void;
   canGo?: boolean;
-  /** browser_wait: the poll it first holds on */
   metOnPoll?: number;
 }
 
@@ -60,7 +59,7 @@ function fakePane(scene: Scene) {
         return reads.length > 1 ? reads.shift() : reads[0];
       }
       if (code.includes("watchChanges(true);\n})()")) return null;
-      if (code.includes("(c.url === undefined")) return ++polls >= (scene.metOnPoll ?? 1);
+      if (code.includes("c.gone === undefined")) return ++polls >= (scene.metOnPoll ?? 1);
       scene.onAction?.(logs);
       return scene.action ?? { ok: true };
     },
@@ -89,7 +88,7 @@ describe("what an action reports", () => {
       openPane: async () => pane,
       devServerUrl: async () => null,
     });
-  const run = async (scene: Scene, tool: string, args = {}) => {
+  const run = async (scene: Scene, tool: BrowserToolName, args = {}) => {
     const { pane, ...seen } = fakePane(scene);
     useHost(pane);
     const r = await callBrowserTool(db, tool, { ref: "e1.doc1", ...args }, ctx);
@@ -249,7 +248,10 @@ describe("what an action reports", () => {
   });
 
   it("a hover moves the real mouse where the element is, so CSS :hover answers", async () => {
-    const { r, moves } = await run({ action: { ok: true, x: 40, y: 60 } }, "browser_hover");
+    const { r, moves } = await run(
+      { action: { ok: true, hoverAt: { x: 40, y: 60 } } },
+      "browser_hover",
+    );
     expect(r.status).toBe("ok");
     expect(moves).toEqual([[40, 60]]);
   });
@@ -276,7 +278,15 @@ describe("what an action reports", () => {
   it("a wait polls until the page shows it", async () => {
     const { r } = await run({ metOnPoll: 3 }, "browser_wait", { text: "Saved" });
     expect(r.status).toBe("ok");
-    expect(r.waited_ms).toBeGreaterThanOrEqual(400);
+  });
+
+  it("a wait stops at a login instead of running out the clock", async () => {
+    const { r } = await run(
+      { metOnPoll: 1e9, reads: [signals({ hasPasswordField: true })] },
+      "browser_wait",
+      { text: "Saved" },
+    );
+    expect(r.status).toBe("needs_user");
   });
 
   it("a wait that never happens times out, and one with no condition is refused", async () => {

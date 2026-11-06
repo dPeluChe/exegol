@@ -31,11 +31,10 @@ import {
   handlePress,
   handleScroll,
   handleSnapshot,
-  handleWaitFor,
   runAction,
 } from "./tool-handlers";
 import { handleScreenshot } from "./tool-screenshot";
-import { clearAgentWaits, handleWait } from "./tool-wait";
+import { clearAgentWaits, handlePageWait, handleWait } from "./tool-wait";
 
 const MAX_TYPE_CHARS = 5_000;
 const BROWSER_TOOLS: readonly string[] = [...BROWSER_READ_TOOLS, ...BROWSER_WRITE_TOOLS];
@@ -146,7 +145,7 @@ export async function callBrowserTool(
         result = await handleScroll(db, ctx, pane, args);
         break;
       case "browser_wait":
-        result = await handleWaitFor(db, ctx, pane, args);
+        result = await handlePageWait(db, ctx, pane, args);
         break;
       case "browser_eval":
         result = await handleEval(db, ctx, pane, args);
