@@ -101,13 +101,6 @@ export function removeFollowUp(agentId: string, id: string): boolean {
   return true;
 }
 
-/** Its CLI exited to the shell: nothing queued may reach the shell prompt */
-export function dropFollowUps(agentId: string): void {
-  let dropped = 0;
-  while (takeQueued(agentId, (p) => !!p.onDelivered)) dropped++;
-  if (dropped) notifyFollowUps(agentId);
-}
-
 /** At its input prompt; a terminal whose CLI exited back to the shell is idle too, but not there */
 function atPrompt(db: Database.Database, agentId: string): boolean {
   const agent = getAgent(db, agentId);
