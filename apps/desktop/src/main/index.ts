@@ -1,5 +1,6 @@
 import { app, dialog, globalShortcut, shell } from "electron";
-import { seedAgentLinkCache, stopSweep } from "./agents/agent-messaging";
+import { stopSweep } from "./agents/agent-message-sweep";
+import { seedAgentLinkCache } from "./agents/agent-messaging";
 import { startIdleSuspend } from "./agents/idle-suspend-sweep";
 import { getAgentManager } from "./agents/manager";
 import { cleanupOldEvents, startNotifyHandler, stopNotifyHandler } from "./agents/notify-handler";
@@ -15,7 +16,8 @@ import { cleanupStaleData, runStartupRecovery } from "./bootstrap/recovery";
 import { installSignalHandlers, runTeardown } from "./bootstrap/shutdown";
 import { endMark, startMark } from "./bootstrap/startup-timings";
 import { createWindow, showMainWindow } from "./bootstrap/window";
-import { installAgentBrowser, migrateBrowserCookies } from "./browser/electron-host";
+import { migrateBrowserCookies } from "./browser/browser-cookies";
+import { installAgentBrowser } from "./browser/electron-host";
 import { closeDatabase, getDb, initializeDatabase } from "./db/client";
 import { getAppSettings } from "./db/queries/settings";
 import { stopEngine } from "./dictation/engine";

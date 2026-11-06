@@ -1,7 +1,7 @@
 import { mcpServerConfigSchema } from "@exegol/shared";
 import { z } from "zod";
-import { EXEGOL_TOOL_DEFS } from "../../mcp/exegol-protocol";
 import { getExegolMcpServerInfo, getRecentMcpActivity } from "../../mcp/exegol-server";
+import { EXEGOL_TOOL_DEFS } from "../../mcp/exegol-tool-defs";
 import type { McpServerConfig, McpServerState, McpTool } from "../../mcp/registry";
 import { publicProcedure, router } from "../trpc";
 

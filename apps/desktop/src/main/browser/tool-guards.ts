@@ -1,12 +1,14 @@
 import { checkAgentUrl, isOutsideAllowlist, needsUserReason } from "@exegol/shared";
 import type Database from "libsql";
 import { getAgent } from "../db/queries/agents";
-import { getProject } from "../db/queries/projects";
+import { getProjectBrowserHosts } from "../db/queries/projects";
 import { ExegolToolError } from "../mcp/exegol-protocol";
 import { getPaneControl, lastPaneOf, noteAgentAction, setNeedsUser } from "./control";
 import type { LogRing } from "./log-ring";
 import { detectNeedsUser, type NeedsUser } from "./needs-user";
 import { type RawSignals, type RawSnapshot, signalsScript, snapshotScript } from "./page-scripts";
+
+const LOAD_SETTLE_MS = 400;
 
 /** One live browser pane as the tools see it. The host only hands out panes whose webview runs
  *  in the asked project's own partition, so a pane id from another project never resolves */
@@ -73,7 +75,34 @@ export function logAction(
 }
 
 export function allowedHostsOf(db: Database.Database, projectId: string): string[] {
-  return getProject(db, projectId)?.browserHosts ?? [];
+  return getProjectBrowserHosts(db, projectId);
+}
+
+export const PAGE_CHANGED =
+  "The page changed (navigated to another host) before the action ran: take a new browser_snapshot.";
+
+export const settle = () => new Promise((r) => setTimeout(r, LOAD_SETTLE_MS));
+
+/** A read that got no page: the login it stopped at, or an error */
+export function pageUnavailable(pane: BrowserPaneHandle, needsUser: NeedsUser | null | undefined) {
+  if (needsUser) return needsUserResult(pane, needsUser);
+  throw new ExegolToolError("Could not read the page", -32021);
+}
+
+/** Where the pane is after an action: the url, and the page's title as page data */
+export async function pageSummary(
+  db: Database.Database,
+  ctx: BrowserToolContext,
+  pane: BrowserPaneHandle,
+) {
+  const { page, needsUser } = await inspect(db, ctx, pane);
+  if (needsUser) return needsUserResult(pane, needsUser);
+  return {
+    status: "ok",
+    pane: pane.paneId,
+    url: page?.url,
+    untrusted_page_content: { title: page?.title.slice(0, 300) ?? "" },
+  };
 }
 
 export function aliasOf(db: Database.Database, agentId: string): string | null {

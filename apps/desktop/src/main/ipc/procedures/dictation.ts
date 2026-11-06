@@ -6,7 +6,7 @@ import {
 } from "@exegol/shared";
 import { clipboard, ipcMain, shell } from "electron";
 import { z } from "zod";
-import { insertTextInBrowserPane, markDictationPage } from "../../browser/electron-host";
+import { insertTextInBrowserPane, markDictationPage } from "../../browser/pane-dictation";
 import { getProject } from "../../db/queries/projects";
 import {
   clearDictations,

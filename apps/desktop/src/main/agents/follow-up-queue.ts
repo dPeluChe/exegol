@@ -5,14 +5,14 @@ import { logger } from "../lib/logger";
 import { getPtyHost } from "../terminal/pty-host";
 import { injectNow, isEchoingInjection, sanitizeAgentMessage } from "./agent-message-injection";
 import {
-  enqueue,
   isAgentAwaitingApproval,
   listFollowUps,
-  msSinceAgentOutput,
   notifyFollowUps,
   queuedFor,
   takeQueued,
-} from "./agent-messaging";
+} from "./agent-message-queue";
+import { msSinceAgentOutput } from "./agent-message-sweep";
+import { enqueue } from "./agent-messaging";
 import { interruptKeyOf } from "./cli-catalog";
 
 export { listFollowUps };

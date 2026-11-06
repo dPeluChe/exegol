@@ -22,6 +22,8 @@ vi.mock("../terminal/pty-host", () => ({
 import { createAgentLink, listLinksFrom } from "../db/queries/agent-links";
 import { getMessageDelivery, markStaleQueuedUndeliverable } from "../db/queries/messages";
 import { noteTurnStarted, SUBMIT_CONFIRM_MS, SUBMIT_RETRIES } from "./agent-message-injection";
+import { setAgentAwaitingApproval } from "./agent-message-queue";
+import { stopSweep } from "./agent-message-sweep";
 import {
   cancelQueuedMessage,
   checkAgentMessages,
@@ -36,8 +38,6 @@ import {
   seedAgentLinkCache,
   sendAgentMessage,
   sendSystemMessage,
-  setAgentAwaitingApproval,
-  stopSweep,
 } from "./agent-messaging";
 
 function setupDb(): Database.Database {

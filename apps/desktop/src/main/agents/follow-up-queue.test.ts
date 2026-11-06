@@ -21,13 +21,12 @@ vi.mock("../terminal/pty-host", () => ({
   }),
 }));
 
+import { setAgentAwaitingApproval } from "./agent-message-queue";
+import { noteAgentOutput, stopSweep } from "./agent-message-sweep";
 import {
   clearAgentMessageQueue,
   deliverPendingAgentMessages,
-  noteAgentOutput,
   sendAgentMessage,
-  setAgentAwaitingApproval,
-  stopSweep,
 } from "./agent-messaging";
 import { listFollowUps, queueFollowUp, removeFollowUp, steerFollowUp } from "./follow-up-queue";
 
