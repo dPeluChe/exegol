@@ -1,9 +1,11 @@
 import { linkFileKind } from "@exegol/shared";
+import type { IBufferRange } from "@xterm/xterm";
 import { editKeys, hasClickModifier, IS_MAC } from "../../lib/keymap";
 
 /**
  * What a terminal row links to: http(s) URLs (scheme'd or bare `github.com/x`) and file paths
- * (absolute, `~/`, relative to the session cwd, with an optional `:line` or `:line:col`).
+ * (absolute, `~/`, relative to the session cwd, with an optional `:line` or `:line:col`) and
+ * folders (a trailing `/`, or an absolute path with no extension).
  * Paths only become links once main confirms the file exists (terminal-link-resolver).
  */
 
@@ -17,10 +19,21 @@ export interface LinkMatch {
   col?: number;
   /** URL matches: what opens (a bare domain gets https://) */
   url?: string;
+  /** 1-based inclusive cells of a path printed across rows (terminal-link-wrap) */
+  range?: IBufferRange;
 }
 
-const FILE_LINK_RE =
-  /(?:^|[\s"'`(<[])((?:\.{1,2}\/|\/)?(?:[\w@~+-][\w.@~+-]*\/)+[\w.@~+-]+\.[A-Za-z][A-Za-z0-9]{0,7}|[\w@~+-][\w.@~+-]*\.[A-Za-z][A-Za-z0-9]{0,7})(?::(\d{1,6})(?::(\d{1,4}))?)?(?=$|[\s"'`)>\],:;!?]|\.(?:$|\s))/g;
+const SEGMENT = "[\\w.@~+-]+";
+const EXTENSION = "\\.[A-Za-z][A-Za-z0-9]{0,7}";
+const FILE_LINK_RE = new RegExp(
+  `(?:^|[\\s"'\`(<[])(${[
+    `\\/?(?:${SEGMENT}\\/)+${SEGMENT}${EXTENSION}`,
+    `[\\w@~+-][\\w.@~+-]*${EXTENSION}`,
+    `\\/?(?:${SEGMENT}\\/)+`,
+    `(?:~\\/|\\/${SEGMENT}\\/)(?:${SEGMENT}\\/)*[\\w.@~+-]*[\\w@~+-]`,
+  ].join("|")})(?::(\\d{1,6})(?::(\\d{1,4}))?)?(?=$|[\\s"'\`)>\\],:;!?]|\\.(?:$|\\s))`,
+  "g",
+);
 
 /** Small allowlist so `foo.ts` / `config.json` never read as domains; no `sh`/`app`, which are
  *  file extensions (`install.sh`) */
@@ -101,6 +114,8 @@ function overlaps(matches: LinkMatch[], index: number, length: number): boolean 
 }
 
 export type LinkAction = "pane" | "browser" | "peek" | "system" | "ide" | "reveal";
+/** `reveal`: a folder or a file outside the project, Finder on every click */
+export type LinkKind = "url" | "file" | "reveal";
 /** `mod`: Cmd+click (Ctrl+click off macOS); `modShift`: Cmd+Shift+click */
 export type LinkClick = "plain" | "mod" | "modShift";
 
@@ -114,7 +129,8 @@ export function linkClick(
 
 /** Plain click keeps the user in Exegol; the modifier hands a URL to the browser, a file to the
  *  IDE (Shift: Finder) */
-export function linkAction(kind: "url" | "file", click: LinkClick, path = ""): LinkAction {
+export function linkAction(kind: LinkKind, click: LinkClick, path = ""): LinkAction {
+  if (kind === "reveal") return "reveal";
   if (kind === "url") return click === "plain" ? "pane" : "browser";
   if (click === "mod") return "ide";
   if (click === "modShift") return "reveal";
@@ -132,13 +148,9 @@ const ACTION_LABEL: Record<LinkAction, (mac: boolean) => string> = {
 };
 
 /** The hover tooltip: the target, then what each click does */
-export function linkHint(
-  kind: "url" | "file",
-  target: string,
-  label = target,
-  mac = IS_MAC,
-): string {
+export function linkHint(kind: LinkKind, target: string, label = target, mac = IS_MAC): string {
   const say = (click: LinkClick) => ACTION_LABEL[linkAction(kind, click, target)](mac);
+  if (kind === "reveal") return `${label}\nClick: ${say("plain")}`;
   const hint = `${label}\nClick: ${say("plain")} · ${editKeys("Cmd+click", mac)}: ${say("mod")}`;
   if (kind === "url") return hint;
   return `${hint} · ${editKeys("Cmd+Shift+click", mac)}: ${say("modShift")}`;
@@ -157,8 +169,6 @@ export function cellAt(
   if (col < 0 || col >= cols || row < 0 || row >= rows) return null;
   return { col, y: viewportY + row + 1 };
 }
-
-export const covers = (m: LinkMatch, col: number) => col >= m.index && col < m.index + m.length;
 
 /** Where a URL opens in a tab: its link preview pane, else a browser pane the user already has
  *  there (not one floating in its own window); undefined = split a new preview pane */

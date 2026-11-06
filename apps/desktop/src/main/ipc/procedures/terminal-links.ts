@@ -1,6 +1,6 @@
 import { constants, realpathSync } from "node:fs";
 import { open, realpath, stat } from "node:fs/promises";
-import { homedir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { isAbsolute } from "node:path";
 import { linkFileKind } from "@exegol/shared";
 import { TRPCError } from "@trpc/server";
@@ -29,6 +29,7 @@ const linkInput = z.object({
 const linkText = z.string().min(1).max(1024);
 
 type LinkOpen = "reveal" | "external" | "ide";
+type LinkTarget = { path: string; inProject: boolean };
 
 /** Only listed documents and media go to a default app; anything else (scripts, apps,
  *  .webloc/.url/.html that run or redirect) is revealed in Finder, whatever the renderer asked */
@@ -45,35 +46,52 @@ function sessionCwd(ctx: Ctx, input: z.infer<typeof linkInput>): string | null {
   return isPathInside(realpathSafeSync(own), realpathSafeSync(input.cwd)) ? input.cwd : own;
 }
 
+/** Where a printed path outside the project can still be shown in Finder */
+let revealRoots: Promise<string[]> | undefined;
+const getRevealRoots = () =>
+  (revealRoots ??= Promise.all([homedir(), tmpdir(), "/tmp"].map(realpathSafe)));
+
+/** Checked before any realpath: a printed path must not wake a network mount */
+const ON_A_MOUNT = /^\/(?:Volumes|net|Network)\//;
+
 /**
  * A link reaches a file only when its realpath is inside the session's own project or one of
  * that project's worktrees and passes the path guard (sensitive names, symlinks out). Session
- * output is never trusted: an agent can print anything. Returns the canonical realpath, the only
- * path read or opened.
+ * output is never trusted: an agent can print anything. Anything else under the reveal roots
+ * comes back with `inProject: false` and can only be revealed, which runs and reads nothing.
+ * Returns the canonical realpath, the only path read or opened.
  */
 async function linkAccess(ctx: Ctx, input: z.infer<typeof linkInput>) {
   const agent = getAgent(ctx.db, input.agentId);
   const project = agent ? getProject(ctx.db, agent.projectId) : null;
   const cwd = sessionCwd(ctx, input);
-  if (!project || !cwd) return async (_text: string): Promise<string | null> => null;
-  const bases = await Promise.all(
-    [project.path, ...listWorktrees(ctx.db, project.id).map((w) => w.path)].map(realpathSafe),
-  );
-  return async (text: string): Promise<string | null> => {
-    try {
-      return await assertSafePathIn(resolveLinkPath(text, cwd, homedir()), bases);
-    } catch {
-      return null;
-    }
+  if (!project || !cwd) return async (_text: string): Promise<LinkTarget | null> => null;
+  const [bases, roots] = await Promise.all([
+    Promise.all(
+      [project.path, ...listWorktrees(ctx.db, project.id).map((w) => w.path)].map(realpathSafe),
+    ),
+    getRevealRoots(),
+  ]);
+  const allowed = [...bases, ...roots];
+  const inBases = (path: string) => bases.some((base) => isPathInside(base, path));
+  return async (text: string): Promise<LinkTarget | null> => {
+    const target = resolveLinkPath(text, cwd, homedir());
+    if (ON_A_MOUNT.test(target) && !inBases(target)) return null;
+    const path = await assertSafePathIn(target, allowed).catch(() => null);
+    return path ? { path, inProject: inBases(path) } : null;
   };
 }
 
 const forbidden = () => new TRPCError({ code: "FORBIDDEN", message: "Not a project file" });
 
-async function requireAccess(ctx: Ctx, input: z.infer<typeof linkInput> & { text: string }) {
-  const path = await (await linkAccess(ctx, input))(input.text);
-  if (!path) throw forbidden();
-  return path;
+async function requirePath(
+  ctx: Ctx,
+  input: z.infer<typeof linkInput> & { text: string },
+  { reveal = false } = {},
+) {
+  const target = await (await linkAccess(ctx, input))(input.text);
+  if (!target || !(reveal || target.inProject)) throw forbidden();
+  return target.path;
 }
 
 /** The checked path must still be itself when acting on it: a swap to a symlink since the check
@@ -105,17 +123,20 @@ export async function openPinned(path: string) {
 }
 
 export const terminalLinksRouter = router({
-  /** One call per terminal viewport: which printed paths are project files. Anything outside is
-   *  not a link, existing or not */
+  /** One call per terminal viewport: which printed paths are project files. A folder, or a file
+   *  outside the project, is `revealOnly`; the rest is not a link, existing or not */
   resolve: publicProcedure
     .input(linkInput.extend({ texts: z.array(linkText).max(300) }))
     .query(async ({ ctx, input }) => {
       const access = await linkAccess(ctx, input);
       return mapWithConcurrency(input.texts, 16, async (text) => {
         try {
-          const path = await access(text);
-          if (!path || !(await stat(path)).isFile()) return { text, path: null };
-          return { text, path };
+          const target = await access(text);
+          if (!target) return { text, path: null };
+          const found = await stat(target.path);
+          if (!found.isFile() && !found.isDirectory()) return { text, path: null };
+          const revealOnly = !target.inProject || found.isDirectory();
+          return { text, path: target.path, revealOnly };
         } catch {
           return { text, path: null };
         }
@@ -126,7 +147,7 @@ export const terminalLinksRouter = router({
   read: publicProcedure
     .input(linkInput.extend({ text: linkText }))
     .query(async ({ ctx, input }) => {
-      const path = await requireAccess(ctx, input);
+      const path = await requirePath(ctx, input);
       return { ...(await readForViewer(path, { svgAsImage: true, open: openPinned })), path };
     }),
 
@@ -139,7 +160,7 @@ export const terminalLinksRouter = router({
       }),
     )
     .mutation(async ({ ctx, input }) => {
-      const path = await requireAccess(ctx, input);
+      const path = await requirePath(ctx, input, { reveal: input.how === "reveal" });
       const how = linkOpenAction(path, input.how);
       if (how === "ide") {
         const { ide, customPath } = resolveIde(ctx.db, getAgent(ctx.db, input.agentId)?.projectId);

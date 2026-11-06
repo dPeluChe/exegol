@@ -1,7 +1,11 @@
-export type FetchResolved = (
-  texts: string[],
-  cwd: string | undefined,
-) => Promise<Array<{ text: string; path: string | null }>>;
+export interface ResolvedRow {
+  text: string;
+  path: string | null;
+  /** A folder, or a file outside the project: every click shows it in Finder */
+  revealOnly?: boolean;
+}
+
+export type FetchResolved = (texts: string[], cwd: string | undefined) => Promise<ResolvedRow[]>;
 
 const FOUND_TTL_MS = 5 * 60_000;
 /** Short: an agent prints a path, then creates the file */
@@ -15,7 +19,7 @@ const MAX_ENTRIES = 5_000;
  * cache. A cwd change (a shell `cd`) drops what was learned.
  */
 export class LinkPathResolver {
-  private cache = new Map<string, { path: string | null; at: number }>();
+  private cache = new Map<string, ResolvedRow & { at: number }>();
   private inflight = new Map<string, Promise<void>>();
   private cwd: string | undefined;
   private generation = 0;
@@ -35,7 +39,7 @@ export class LinkPathResolver {
     texts: string[],
     cwd: string | undefined,
     viewport: () => string[],
-  ): Promise<Map<string, string | null>> {
+  ): Promise<Map<string, ResolvedRow | null>> {
     if (cwd !== this.cwd) {
       this.cwd = cwd;
       this.generation++;
@@ -52,7 +56,7 @@ export class LinkPathResolver {
           if (generation !== this.generation) return;
           if (this.cache.size > MAX_ENTRIES) this.cache.clear();
           const at = this.now();
-          for (const row of rows) this.cache.set(row.text, { path: row.path, at });
+          for (const row of rows) this.cache.set(row.text, { ...row, at });
         })
         .catch(() => {})
         .finally(() => {
@@ -61,6 +65,11 @@ export class LinkPathResolver {
       for (const t of batch) this.inflight.set(t, request);
     }
     await Promise.all(texts.map((t) => this.inflight.get(t)));
-    return new Map(texts.map((t) => [t, this.cache.get(t)?.path ?? null]));
+    return new Map(
+      texts.map((t) => {
+        const row = this.cache.get(t);
+        return [t, row?.path ? row : null];
+      }),
+    );
   }
 }

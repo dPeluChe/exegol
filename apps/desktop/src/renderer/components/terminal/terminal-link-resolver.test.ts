@@ -18,7 +18,7 @@ describe("LinkPathResolver", () => {
     ]);
     expect(fetch).toHaveBeenCalledTimes(1);
     expect(fetch.mock.calls[0]?.[0]).toEqual(["src/a.ts", "src/b.ts", "nope.ts"]);
-    expect(first.get("src/a.ts")).toBe("/repo/src/a.ts");
+    expect(first.get("src/a.ts")?.path).toBe("/repo/src/a.ts");
     expect(second.get("nope.ts")).toBeNull();
     await resolver.resolve(["src/b.ts"], undefined, viewport);
     expect(fetch).toHaveBeenCalledTimes(1);

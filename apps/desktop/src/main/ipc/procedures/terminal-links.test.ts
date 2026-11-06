@@ -10,7 +10,10 @@ const otherProject = join(root, "other");
 mkdirSync(join(project, "src"), { recursive: true });
 mkdirSync(outside);
 mkdirSync(otherProject);
-writeFileSync(join(otherProject, "notes.md"), "#");
+const otherNotes = join(otherProject, "notes.md");
+writeFileSync(otherNotes, "#");
+mkdirSync(join(outside, ".ssh"));
+writeFileSync(join(outside, ".ssh", "config"), "x");
 writeFileSync(join(project, "src", "app.ts"), "export {};");
 writeFileSync(join(outside, "secret.txt"), "nope");
 symlinkSync(join(outside, "secret.txt"), join(project, "escape.txt"));
@@ -37,16 +40,44 @@ describe("terminalLinks access", () => {
     expect(await resolved(["src/app.ts"])).toEqual([join(project, "src", "app.ts")]);
   });
 
-  it("does not linkify paths outside the session's project, even ones that exist", async () => {
+  it("offers only Finder for what exists outside the session's project", async () => {
+    const texts = [join(outside, "secret.txt"), "escape.txt"];
+    const rows = await caller.resolve({ agentId: "a1", texts });
+    expect(rows.map((r) => r.revealOnly)).toEqual([true, true]);
+    expect(rows[0]?.path).toBe(join(outside, "secret.txt"));
+  });
+
+  it("offers only Finder for a folder, in or out of the project", async () => {
+    const rows = await caller.resolve({ agentId: "a1", texts: ["src/", `${outside}/`] });
+    expect(rows.map((r) => r.revealOnly)).toEqual([true, true]);
+  });
+
+  it("never links sensitive paths, a missing path or a place out of reach", async () => {
     expect(
       await resolved([
-        "../outside/secret.txt",
-        join(outside, "secret.txt"),
-        "escape.txt",
+        join(outside, ".ssh", "config"),
         "~/.exegol/hooks/a1.json",
-        join(otherProject, "notes.md"),
+        "/etc/hosts",
+        "/Volumes/nas/a.mp4",
       ]),
-    ).toEqual([null, null, null, null, null]);
+    ).toEqual([null, null, null, null]);
+  });
+
+  it("reveals outside the project but refuses to open or read it there", async () => {
+    const { shell } = await import("electron");
+    await caller.open({ agentId: "a1", text: otherNotes, how: "reveal" });
+    expect(shell.showItemInFolder).toHaveBeenCalledWith(otherNotes);
+    for (const how of ["external", "ide"] as const) {
+      await expect(caller.open({ agentId: "a1", text: otherNotes, how })).rejects.toThrow(
+        /Not a project file/,
+      );
+    }
+    await expect(caller.read({ agentId: "a1", text: otherNotes })).rejects.toThrow(
+      /Not a project file/,
+    );
+    await expect(caller.open({ agentId: "a1", text: "/etc/hosts", how: "reveal" })).rejects.toThrow(
+      /Not a project file/,
+    );
   });
 
   it("reads a project file through the pinned fd", async () => {

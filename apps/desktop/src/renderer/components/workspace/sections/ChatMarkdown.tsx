@@ -7,7 +7,7 @@ import {
 } from "react";
 import { type Components, defaultRemarkPlugins, Streamdown } from "streamdown";
 import { isHttpUrl } from "../../../lib/browser-viewports";
-import { openTerminalFile, openTerminalUrl } from "../../terminal/terminal-link-actions";
+import { openTerminalUrl, openUnresolvedFile } from "../../terminal/terminal-link-actions";
 import { findFileMatches, type LinkMatch } from "../../terminal/terminal-links";
 
 interface MarkdownNode {
@@ -67,7 +67,7 @@ function ChatLink({
       type="button"
       title={target}
       onClick={() =>
-        file ? openTerminalFile(agentId, file, "plain") : openTerminalUrl(agentId, target, "mod")
+        file ? openUnresolvedFile(agentId, file, "plain") : openTerminalUrl(agentId, target, "mod")
       }
       className="break-all text-left text-accent underline decoration-accent/40 hover:decoration-accent"
     >

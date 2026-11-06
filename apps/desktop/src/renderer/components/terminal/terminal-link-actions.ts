@@ -6,7 +6,7 @@ import { openInBrowser } from "../../lib/open-in-browser";
 import { runIdeResult } from "../../lib/open-in-ide";
 import { focusNewPane } from "../../lib/pane-focus";
 import { parentDir } from "../../lib/split-terminal";
-import { trpcMutate } from "../../lib/trpc-client";
+import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { findAgentPane, focusPane, useAgentStore } from "../../stores/agents";
 import {
   closeTerminalPeek,
@@ -20,6 +20,7 @@ import {
   getProjectState,
   useWorkspaceStore,
 } from "../../stores/workspace";
+import type { ResolvedRow } from "./terminal-link-resolver";
 import { type LinkClick, type LinkMatch, linkAction, linkBrowserPane } from "./terminal-links";
 
 /** A PiP window has no workspace to open a pane or a peek in */
@@ -87,9 +88,14 @@ export function openTerminalUrl(agentId: string, url: string, click: LinkClick):
   showInPreviewPane(target.tabId, target.paneId, target.projectId, url);
 }
 
-export function openTerminalFile(agentId: string, match: LinkMatch, click: LinkClick): void {
+export function openTerminalFile(
+  agentId: string,
+  match: LinkMatch,
+  click: LinkClick,
+  kind: "file" | "reveal" = "file",
+): void {
   const cwd = sessionCwd(agentId);
-  const action = linkAction("file", click, match.text);
+  const action = linkAction(kind, click, match.text);
   const target = action === "peek" ? workspaceTarget(agentId) : null;
   if (target) {
     peekTerminalFile({ agentId, text: match.text, cwd, line: match.line });
@@ -99,6 +105,20 @@ export function openTerminalFile(agentId: string, match: LinkMatch, click: LinkC
     { agentId, cwd, text: match.text, line: match.line },
     action === "reveal" || action === "ide" ? action : "external",
   );
+}
+
+/** A link with no resolver behind it: main says whether it opens or only shows in Finder */
+export function openUnresolvedFile(agentId: string, match: LinkMatch, click: LinkClick): void {
+  trpcInvoke<ResolvedRow[]>("terminalLinks.resolve", {
+    agentId,
+    cwd: sessionCwd(agentId),
+    texts: [match.text],
+  })
+    .then(([row]) => {
+      if (!row?.path) throw new Error("File not found");
+      openTerminalFile(agentId, match, click, row.revealOnly ? "reveal" : "file");
+    })
+    .catch(toastError("Could not open the file"));
 }
 
 /** Main resolves the link and opens it; an IDE without a GUI comes back as a terminal command */
