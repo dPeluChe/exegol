@@ -87,9 +87,14 @@ export function openTerminalUrl(agentId: string, url: string, click: LinkClick):
   showInPreviewPane(target.tabId, target.paneId, target.projectId, url);
 }
 
-export function openTerminalFile(agentId: string, match: LinkMatch, click: LinkClick): void {
+export function openTerminalFile(
+  agentId: string,
+  match: LinkMatch,
+  click: LinkClick,
+  kind: "file" | "reveal" = "file",
+): void {
   const cwd = sessionCwd(agentId);
-  const action = linkAction("file", click, match.text);
+  const action = linkAction(kind, click, match.text);
   const target = action === "peek" ? workspaceTarget(agentId) : null;
   if (target) {
     peekTerminalFile({ agentId, text: match.text, cwd, line: match.line });
