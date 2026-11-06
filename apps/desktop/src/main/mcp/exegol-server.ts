@@ -11,6 +11,7 @@ import type Database from "libsql";
 import { forgetBrowserAgent } from "../browser/agent-browser-tools";
 import { listLiveAgentClis } from "../db/queries/agents";
 import { findBlockingClaim } from "../db/queries/path-claims";
+import { getProject } from "../db/queries/projects";
 import { isNamedPipe } from "../lib/ipc-endpoint";
 import { logger } from "../lib/logger";
 import { getNotificationBus } from "../notifications/bus";
@@ -90,7 +91,10 @@ export async function handleRequest(
     if (resolved.ok) markConnected(conn, resolved.context.agentId);
     socket.write(
       encodeResponse(req.id, {
-        tools: getToolDefsForAccessMode(resolved.ok ? resolved.context.accessMode : "read"),
+        tools: getToolDefsForAccessMode(
+          resolved.ok ? resolved.context.accessMode : "read",
+          resolved.ok && !!getProject(db, resolved.context.projectId)?.browserEval,
+        ),
       }),
     );
     return;

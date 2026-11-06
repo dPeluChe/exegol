@@ -304,5 +304,11 @@ export function installAgentBrowser(db: Database.Database): void {
     livePanes,
     openPane,
     devServerUrl: (projectId) => devServerUrl(db, projectId),
+    closePane: (paneId) => {
+      const win = getMainWindow();
+      if (!win || win.isDestroyed()) return false;
+      win.webContents.send("browser:close-request", paneId);
+      return true;
+    },
   });
 }

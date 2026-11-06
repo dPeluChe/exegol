@@ -296,11 +296,15 @@ export const EXEGOL_TOOL_DEFS: ExegolToolDef<ExegolToolName>[] = [
   ...BROWSER_TOOL_DEFS,
 ];
 
-/** Tool defs visible at the given access mode (display-only in the shim — the
- *  server re-derives the mode from the DB and enforces it on every call). */
+/** Tool defs visible at the given access mode (display-only in the shim: the server re-derives
+ *  the mode from the DB and enforces it on every call, browser_eval's project setting included) */
 export function getToolDefsForAccessMode(
   accessMode: ExegolAccessMode,
+  browserEval = true,
 ): ExegolToolDef<ExegolToolName>[] {
-  if (accessMode === "write") return EXEGOL_TOOL_DEFS;
-  return EXEGOL_TOOL_DEFS.filter((t) => SEARCH_ONLY_TOOLS.has(t.name));
+  const tools = browserEval
+    ? EXEGOL_TOOL_DEFS
+    : EXEGOL_TOOL_DEFS.filter((t) => t.name !== "browser_eval");
+  if (accessMode === "write") return tools;
+  return tools.filter((t) => SEARCH_ONLY_TOOLS.has(t.name));
 }

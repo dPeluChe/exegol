@@ -3,7 +3,7 @@ import type Database from "libsql";
 import { getProject } from "../db/queries/projects";
 import { HISTORY_ACTIONS, SCROLL_TARGETS } from "../mcp/browser-tool-defs";
 import { ExegolToolError } from "../mcp/exegol-protocol";
-import { getPaneControl } from "./control";
+import { getPaneControl, lastPaneOf, markOpenedBy } from "./control";
 import { isLogLevel } from "./log-ring";
 import { type ActionResult, actionScript, type PageAction, scrollScript } from "./page-actions";
 import {
@@ -14,6 +14,7 @@ import {
   watchScript,
 } from "./page-scripts";
 import {
+  actBlocked,
   allowedHostsOf,
   type BrowserPaneHandle,
   type BrowserToolContext,
@@ -26,7 +27,6 @@ import {
   requireHost,
   resolvePane,
   touch,
-  userHasControl,
   visibleEntries,
 } from "./tool-guards";
 import { markAction, pageSummary, snapshotView } from "./tool-outcome";
@@ -54,6 +54,8 @@ export async function handleList(db: Database.Database, ctx: BrowserToolContext)
               ? (c.alias ?? c.agentId)
               : null,
         waitingForUser: !!c?.waiting,
+        canAct: !actBlocked(p, ctx.agentId),
+        openedByYou: c?.openedBy === ctx.agentId,
       };
     }),
     allowedHosts: [...LOCAL_HOST_PATTERNS, ...allowed],
@@ -61,6 +63,17 @@ export async function handleList(db: Database.Database, ctx: BrowserToolContext)
       ? { hint: 'No pane is live: browser_open opens one (url, or "dev" for the dev server).' }
       : {}),
   };
+}
+
+// A pane nobody named may be what the user is reading
+function paneToReuse(ctx: BrowserToolContext, requested: unknown): BrowserPaneHandle | null {
+  const live = requireHost().livePanes(ctx.projectId);
+  if (requested) return resolvePane(live, ctx, requested);
+  const last = lastPaneOf(
+    ctx.agentId,
+    live.map((p) => p.paneId),
+  );
+  return live.find((p) => p.paneId === last) ?? null;
 }
 
 export async function handleOpen(
@@ -88,19 +101,17 @@ export async function handleOpen(
     target = dev;
   }
   const url = checkUrlArg(db, ctx, target);
-  const reuse =
-    readOnly || args.new_pane === true
-      ? null
-      : resolvePane(h.livePanes(ctx.projectId), ctx, args.pane, { lenient: true });
+  const reuse = readOnly || args.new_pane === true ? null : paneToReuse(ctx, args.pane);
+  const blocked = reuse && actBlocked(reuse, ctx.agentId);
+  if (blocked) return blocked;
   let pane: BrowserPaneHandle;
   if (reuse) {
-    const blocked = userHasControl(reuse);
-    if (blocked) return blocked;
     pane = reuse;
     touch(db, ctx, pane);
     pane.loadUrl(url);
   } else {
     pane = await h.openPane({ projectId: ctx.projectId, agentId: ctx.agentId, url });
+    markOpenedBy(pane.paneId, ctx.projectId, ctx.agentId);
     touch(db, ctx, pane);
   }
   const result = await pageSummary(db, ctx, pane, markAction(pane, args.snapshot));
@@ -111,6 +122,34 @@ export async function handleOpen(
     outcome: result.status,
   });
   return result;
+}
+
+export function handleClose(
+  db: Database.Database,
+  ctx: BrowserToolContext,
+  args: Record<string, unknown>,
+) {
+  const h = requireHost();
+  const pane = resolvePane(h.livePanes(ctx.projectId), ctx, args.pane);
+  if (getPaneControl(pane.paneId)?.openedBy !== ctx.agentId) {
+    return {
+      status: "not_yours",
+      pane: pane.paneId,
+      hint: "You did not open this pane, so it stays: the user or another agent may be using it.",
+    };
+  }
+  const blocked = actBlocked(pane, ctx.agentId);
+  if (blocked) return blocked;
+  if (!h.closePane(pane.paneId)) {
+    throw new ExegolToolError("Exegol's window is closed: no pane can close", -32603);
+  }
+  logAction(db, ctx, {
+    tool: "browser_close",
+    paneId: pane.paneId,
+    host: hostOf(pane.getUrl()),
+    outcome: "closed",
+  });
+  return { status: "closed", pane: pane.paneId };
 }
 
 const count = (raw: unknown): number => {
@@ -130,7 +169,6 @@ export async function handleSnapshot(
     textOffset: count(args.text_offset),
   };
   const { page, needsUser, loadFailed } = await inspect(db, ctx, pane, opts);
-  touch(db, ctx, pane);
   if (!page) return pageUnavailable(pane, needsUser, loadFailed);
   return snapshotView(pane, page, opts, needsUser);
 }
@@ -147,7 +185,6 @@ export async function handleLogs(
     const { needsUser } = await inspect(db, ctx, pane);
     if (needsUser) return needsUserResult(pane, needsUser);
   }
-  touch(db, ctx, pane);
   const since = count(args.since);
   const level = isLogLevel(args.level) ? args.level : undefined;
   const limit = Number.isFinite(Number(args.limit)) ? Number(args.limit) : undefined;

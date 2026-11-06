@@ -87,6 +87,7 @@ describe("what an action reports", () => {
       livePanes: () => [pane],
       openPane: async () => pane,
       devServerUrl: async () => null,
+      closePane: () => true,
     });
   const run = async (scene: Scene, tool: BrowserToolName, args = {}) => {
     const { pane, ...seen } = fakePane(scene);

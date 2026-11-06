@@ -58,7 +58,11 @@ Decision kept for the user: whether `browser_eval` should default to on for loca
 
 ## Left for later (found while simplifying the split)
 
-- `browser_wait` does not keep `isAgentActing` alive: a wait past 15 s stops auto-closing page dialogs. Touching the pane would make a read tool claim it, so this belongs with pane ownership (PR 4).
+- A read can still raise or clear `needs_user` on a pane another agent holds or the user took over, because `inspect` sets it. It changes an alert, not who drives.
+- Floating or docking a pane loses `openedBy` and the lease: they live with the webview, not the pane. The agent then gets `not_yours` on close.
+- A write with no `pane` on the only pane open still acts on it, even if the agent never used it. It needs a ref from a snapshot, except `browser_navigate`.
+- A running session keeps the tool list it read, so turning `browser_eval` on reaches new sessions only.
+- `browser_wait` does not keep `isAgentActing` alive: a wait past 15 s stops auto-closing page dialogs. `noteRead` while polling would fix it, at the cost of a store push each time.
 - `browser_wait` polls `innerText` every 200 ms. A MutationObserver would avoid re-reading an unchanged page, but it misses CSS-only changes and must re-arm after a navigation.
 - `tools/list` answers `ttlMs: 0` because the list follows the app. A short TTL or `listChanged` would save round trips for clients that honor them; no client's behavior was checked.
 - `mcp/exegol-identity.ts` `ancestorPids` forks up to 3 `ps` before any SQL. Asking the DB with `[ppid]` first avoids them for a CLI with no wrapper, but it changes which row wins for a nested agent, so it needs its own change.

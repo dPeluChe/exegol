@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { isOutsideAllowlist } from "@exegol/shared";
 import type Database from "libsql";
 import { EXEGOL_DIR, ExegolToolError } from "../mcp/exegol-protocol";
+import { getPaneControl } from "./control";
 import {
   allowedHostsOf,
   type BrowserPaneHandle,
@@ -11,7 +12,6 @@ import {
   needsUserResult,
   PAGE_CHANGED,
   pageUnavailable,
-  touch,
 } from "./tool-guards";
 
 const MAX_INLINE_IMAGE_BYTES = 1_500_000;
@@ -43,8 +43,9 @@ export async function handleScreenshot(
   args: Record<string, unknown>,
 ) {
   const { page, needsUser, loadFailed } = await inspect(db, ctx, pane);
-  if (!page) return pageUnavailable(pane, needsUser, loadFailed);
-  touch(db, ctx, pane);
+  // A login the user is filling in holds what they type, like a one-time code
+  const typing = needsUser && getPaneControl(pane.paneId)?.userHasControl;
+  if (!page || typing) return pageUnavailable(pane, needsUser, loadFailed);
   const jpeg = await pane.capture(args.full_page === true);
   // The page may have left the allowed hosts while it was being captured
   const url = pane.getUrl();
