@@ -41,8 +41,8 @@ export async function handleScreenshot(
   ctx: BrowserToolContext,
   pane: BrowserPaneHandle,
 ) {
-  const { page, needsUser } = await inspect(db, ctx, pane);
-  if (!page) return pageUnavailable(pane, needsUser);
+  const { page, needsUser, loadFailed } = await inspect(db, ctx, pane);
+  if (!page) return pageUnavailable(pane, needsUser, loadFailed);
   touch(db, ctx, pane);
   const jpeg = await pane.capture();
   // The page may have left the allowed hosts while it was being captured

@@ -1,14 +1,25 @@
-import { checkAgentUrl, isOutsideAllowlist, needsUserReason } from "@exegol/shared";
+import {
+  checkAgentUrl,
+  hostOf,
+  isHostAllowed,
+  isOutsideAllowlist,
+  needsUserReason,
+} from "@exegol/shared";
 import type Database from "libsql";
 import { getAgent } from "../db/queries/agents";
 import { getProjectBrowserHosts } from "../db/queries/projects";
 import { ExegolToolError } from "../mcp/exegol-protocol";
 import { getPaneControl, lastPaneOf, noteAgentAction, setNeedsUser } from "./control";
-import type { LogRing } from "./log-ring";
+import type { PageLoad } from "./load-state";
+import type { BrowserLogEntry, LogRing } from "./log-ring";
 import { detectNeedsUser, type NeedsUser } from "./needs-user";
-import { type RawSignals, type RawSnapshot, signalsScript, snapshotScript } from "./page-scripts";
-
-const LOAD_SETTLE_MS = 400;
+import {
+  type RawSignals,
+  type RawSnapshot,
+  type SnapshotOptions,
+  signalsScript,
+  snapshotScript,
+} from "./page-scripts";
 
 /** One live browser pane as the tools see it. The host only hands out panes whose webview runs
  *  in the asked project's own partition, so a pane id from another project never resolves */
@@ -19,7 +30,11 @@ export interface BrowserPaneHandle {
   getTitle(): string;
   runIsolated(code: string): Promise<unknown>;
   runMain(code: string, timeoutMs: number): Promise<unknown>;
-  loadUrl(url: string): Promise<void>;
+  /** Starts the load: awaitLoad and loadState tell how it went */
+  loadUrl(url: string): void;
+  /** Waits for the load in progress, bounded. True when it is still going on after that */
+  awaitLoad(): Promise<boolean>;
+  loadState(): Pick<PageLoad, "failure" | "stopped">;
   /** JPEG, at most 1280px wide */
   capture(): Promise<Buffer>;
   sendKey(keyCode: string, modifiers: string[]): void;
@@ -81,28 +96,37 @@ export function allowedHostsOf(db: Database.Database, projectId: string): string
 export const PAGE_CHANGED =
   "The page changed (navigated to another host) before the action ran: take a new browser_snapshot.";
 
-export const settle = () => new Promise((r) => setTimeout(r, LOAD_SETTLE_MS));
+/** Log entries the project may see: a page outside its hosts keeps its console to itself */
+export const visibleEntries = (entries: BrowserLogEntry[], allowed: string[]): BrowserLogEntry[] =>
+  entries.filter((e) => !e.page || isHostAllowed(e.page, allowed));
 
-/** A read that got no page: the login it stopped at, or an error */
-export function pageUnavailable(pane: BrowserPaneHandle, needsUser: NeedsUser | null | undefined) {
-  if (needsUser) return needsUserResult(pane, needsUser);
-  throw new ExegolToolError("Could not read the page", -32021);
-}
-
-/** Where the pane is after an action: the url, and the page's title as page data */
-export async function pageSummary(
+/** The main document failed to load: what the pane shows is Chromium's error page, not the site */
+export function loadFailedResult(
   db: Database.Database,
   ctx: BrowserToolContext,
   pane: BrowserPaneHandle,
 ) {
-  const { page, needsUser } = await inspect(db, ctx, pane);
-  if (needsUser) return needsUserResult(pane, needsUser);
+  const { failure } = pane.loadState();
+  if (!failure) return null;
+  const outside = isOutsideAllowlist(failure.url, allowedHostsOf(db, ctx.projectId));
   return {
-    status: "ok",
+    status: "load_failed",
     pane: pane.paneId,
-    url: page?.url,
-    untrusted_page_content: { title: page?.title.slice(0, 300) ?? "" },
+    url: outside ? `(outside the allowed hosts: ${hostOf(failure.url)})` : failure.url,
+    error: failure.error,
+    hint: "The page did not load, so there is nothing to read or act on. Check that the server is running and the URL is right, then browser_navigate.",
   };
+}
+
+/** A read that got no page: the load that failed, the login it stopped at, or an error */
+export function pageUnavailable(
+  pane: BrowserPaneHandle,
+  needsUser: NeedsUser | null,
+  loadFailed: ReturnType<typeof loadFailedResult>,
+) {
+  if (loadFailed) return loadFailed;
+  if (needsUser) return needsUserResult(pane, needsUser);
+  throw new ExegolToolError("Could not read the page", -32021);
 }
 
 export function aliasOf(db: Database.Database, agentId: string): string | null {
@@ -201,6 +225,7 @@ interface Inspected<T> {
   /** host:port the page was on when read, for the in-page guard of what follows */
   host: string;
   needsUser: NeedsUser | null;
+  loadFailed: ReturnType<typeof loadFailedResult>;
 }
 
 /** Reads the page the pane is on (the small signals, or the full snapshot) and checks it against
@@ -209,20 +234,22 @@ export async function inspect(
   db: Database.Database,
   ctx: BrowserToolContext,
   pane: BrowserPaneHandle,
-  full: true,
+  snapshot: SnapshotOptions,
 ): Promise<Inspected<RawSnapshot>>;
 export async function inspect(
   db: Database.Database,
   ctx: BrowserToolContext,
   pane: BrowserPaneHandle,
-  full?: false,
+  snapshot?: undefined,
 ): Promise<Inspected<RawSignals>>;
 export async function inspect(
   db: Database.Database,
   ctx: BrowserToolContext,
   pane: BrowserPaneHandle,
-  full = false,
+  snapshot?: SnapshotOptions,
 ): Promise<Inspected<RawSignals>> {
+  const loadFailed = loadFailedResult(db, ctx, pane);
+  if (loadFailed) return { page: null, host: "", needsUser: null, loadFailed };
   const allowed = allowedHostsOf(db, ctx.projectId);
   const flag = (n: NeedsUser | null) =>
     setNeedsUser(pane.paneId, ctx.projectId, n ? { host: n.host, kind: n.reason } : null);
@@ -230,9 +257,9 @@ export async function inspect(
   if (isOutsideAllowlist(url, allowed)) {
     const n = detectNeedsUser({ url, hasCaptcha: false, hasPasswordField: false }, allowed);
     flag(n);
-    return { page: null, host: "", needsUser: n };
+    return { page: null, host: "", needsUser: n, loadFailed: null };
   }
-  const raw = (await pane.runIsolated(full ? snapshotScript() : signalsScript())) as
+  const raw = (await pane.runIsolated(snapshot ? snapshotScript(snapshot) : signalsScript())) as
     | RawSignals
     | RawSnapshot
     | null;
@@ -247,7 +274,12 @@ export async function inspect(
   } catch {
     /* about:blank and the like: the guard compares "" */
   }
-  return { page: n?.reason === "outside_allowlist" ? null : raw, host: pageHost, needsUser: n };
+  return {
+    page: n?.reason === "outside_allowlist" ? null : raw,
+    host: pageHost,
+    needsUser: n,
+    loadFailed: null,
+  };
 }
 
 export function touch(db: Database.Database, ctx: BrowserToolContext, pane: BrowserPaneHandle) {

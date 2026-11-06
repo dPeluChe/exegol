@@ -13,11 +13,10 @@ import {
   type BrowserToolContext,
   logAction,
   notifyNeedsUser,
-  pageSummary,
   requireHost,
   resolvePane,
-  settle,
 } from "./tool-guards";
+import { markAction, pageSummary } from "./tool-outcome";
 
 const WAIT_POLL_MS = 25_000;
 /** A wait not polled for this long was abandoned (the agent moved on): the next call starts over */
@@ -114,8 +113,9 @@ export async function handleWait(
         hint: "The browser pane was closed. Open one with browser_open if you still need it.",
       };
     }
-    await settle();
-    const summary = await pageSummary(db, ctx, pane).catch(() => ({ status: "ok" }));
+    const summary = await pageSummary(db, ctx, pane, markAction(pane, false)).catch(() => ({
+      status: "ok",
+    }));
     return {
       ...summary,
       status: "handed_back",

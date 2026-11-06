@@ -13,6 +13,7 @@ import {
 import { logger } from "../lib/logger";
 import { withTimeout } from "../lib/timeout";
 import { type TilePlan, tileCrop, tileStops } from "./full-page-tiles";
+import { opaqueJpeg } from "./page-image";
 
 export type ScreenshotTarget = "file" | "clipboard";
 export type ScreenshotResult = "saved" | "copied" | "canceled" | "failed";
@@ -141,7 +142,7 @@ export async function savePaneScreenshot(
   const jpeg = /\.jpe?g$/i.test(picked.filePath);
   const path = jpeg || /\.png$/i.test(picked.filePath) ? picked.filePath : `${picked.filePath}.png`;
   try {
-    await writeFile(path, jpeg ? image.toJPEG(90) : image.toPNG());
+    await writeFile(path, jpeg ? opaqueJpeg(image, 90) : image.toPNG());
   } catch (err) {
     // The code only: the message carries the chosen path (a home path)
     logger.warn(`[Browser] screenshot not saved (${host}): ${(err as { code?: string }).code}`);

@@ -17,8 +17,8 @@ import {
 import { projectsToMigrate, selectCookiesToCopy, toSetDetails } from "./cookie-migration";
 import { LogRing } from "./log-ring";
 import { detectNeedsUser } from "./needs-user";
+import { actionScript } from "./page-actions";
 import {
-  actionScript,
   formatSnapshot,
   guardedEvalScript,
   parseKey,
@@ -35,10 +35,15 @@ const page = (over: Partial<RawSnapshot> = {}): RawSnapshot => ({
   text: "Welcome",
   elements: [{ ref: "e1.doc1", role: "button", name: "Save", tag: "button" }],
   more: false,
+  offscreen: 0,
+  nextOffset: null,
+  textLength: 7,
+  framesSkipped: 0,
   hasPasswordField: false,
   hasCaptcha: false,
   loggedIn: false,
   focusSecret: false,
+  mutations: null,
   ...over,
 });
 
@@ -83,10 +88,12 @@ function fakePane(
       evals.push(code);
       return 42;
     },
-    loadUrl: async (u: string) => {
+    loadUrl: (u: string) => {
       loaded.push(u);
       url = u;
     },
+    awaitLoad: async () => false,
+    loadState: () => ({ failure: null, stopped: false }),
     capture: async () => Buffer.from("jpeg"),
     sendKey: () => {},
     lastHttpStatus: () => 200,

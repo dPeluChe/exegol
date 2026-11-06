@@ -37,7 +37,6 @@ import { clearAgentWaits, handleWait } from "./tool-wait";
 
 const MAX_TYPE_CHARS = 5_000;
 const BROWSER_TOOLS: readonly string[] = [...BROWSER_READ_TOOLS, ...BROWSER_WRITE_TOOLS];
-
 export const isBrowserTool = (tool: string): tool is BrowserToolName =>
   BROWSER_TOOLS.includes(tool);
 
@@ -71,7 +70,7 @@ export async function callBrowserTool(
   try {
     switch (tool) {
       case "browser_snapshot":
-        result = await handleSnapshot(db, ctx, pane);
+        result = await handleSnapshot(db, ctx, pane, args);
         break;
       case "browser_screenshot":
         result = await handleScreenshot(db, ctx, pane);
@@ -83,29 +82,53 @@ export async function callBrowserTool(
         result = await handleNavigate(db, ctx, pane, args);
         break;
       case "browser_click":
-        result = await runAction(db, ctx, pane, args.ref, { action: "click" });
+        result = await runAction(
+          db,
+          ctx,
+          pane,
+          args.ref,
+          {
+            action: "click",
+            force: args.force === true,
+          },
+          args.snapshot,
+        );
         break;
       case "browser_type": {
         const text = typeof args.text === "string" ? args.text : "";
         if (text.length > MAX_TYPE_CHARS) {
           throw new ExegolToolError(`text too long (max ${MAX_TYPE_CHARS})`, -32602);
         }
-        result = await runAction(db, ctx, pane, args.ref, {
-          action: "type",
-          text,
-          submit: args.submit === true,
-          append: args.append === true,
-        });
+        result = await runAction(
+          db,
+          ctx,
+          pane,
+          args.ref,
+          {
+            action: "type",
+            text,
+            submit: args.submit === true,
+            append: args.append === true,
+          },
+          args.snapshot,
+        );
         break;
       }
       case "browser_press":
         result = await handlePress(db, ctx, pane, args);
         break;
       case "browser_select":
-        result = await runAction(db, ctx, pane, args.ref, {
-          action: "select",
-          value: String(args.value ?? ""),
-        });
+        result = await runAction(
+          db,
+          ctx,
+          pane,
+          args.ref,
+          {
+            action: "select",
+            value: String(args.value ?? ""),
+          },
+          args.snapshot,
+        );
         break;
       case "browser_eval":
         result = await handleEval(db, ctx, pane, args);
@@ -127,9 +150,7 @@ export async function callBrowserTool(
     if (!(err instanceof ExegolToolError)) logger.warn(`[AgentBrowser] ${tool} failed:`, err);
     throw err;
   }
-  if (tool !== "browser_logs" && tool !== "browser_snapshot") {
-    const status = (result as { status?: string } | null)?.status ?? "ok";
-    logAction(db, ctx, { tool, paneId: pane.paneId, host: hostOf(pane.getUrl()), outcome: status });
-  }
+  const status = (result as { status?: string } | null)?.status ?? "ok";
+  logAction(db, ctx, { tool, paneId: pane.paneId, host: hostOf(pane.getUrl()), outcome: status });
   return withDialogNotes(result, takeDialogNotes(pane.paneId));
 }

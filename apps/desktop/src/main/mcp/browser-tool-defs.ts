@@ -32,6 +32,9 @@ const PANE_ARG = {
     description: "Pane id from browser_list. Omit to use the pane you used last (or the only one).",
   },
 };
+const SNAPSHOT_ARG = {
+  snapshot: { type: "boolean", description: "Also return a browser_snapshot of the result" },
+} as const;
 const REF_ARG = {
   ref: { type: "string", description: "Element ref from browser_snapshot, e.g. e12.k3x" },
 };
@@ -61,6 +64,7 @@ export const BROWSER_TOOL_DEFS: ExegolToolDef<BrowserToolName>[] = [
       properties: {
         url: { type: "string", description: 'http(s) URL on an allowed host, or "dev"' },
         new_pane: { type: "boolean", description: "Open a new pane instead of reusing one" },
+        ...SNAPSHOT_ARG,
         ...PANE_ARG,
       },
       required: ["url"],
@@ -70,10 +74,19 @@ export const BROWSER_TOOL_DEFS: ExegolToolDef<BrowserToolName>[] = [
     name: "browser_snapshot",
     description:
       "Read the page: URL, title, visible text (trimmed) and interactive elements with refs " +
-      "(e12.k3x) and roles. Sees what the user did in the pane too. Call it before acting and " +
-      "again after the page navigates (refs belong to one page). A needs_user field means a " +
-      `human step (login, captcha): call browser_wait_for_user. ${UNTRUSTED}`,
-    inputSchema: { type: "object", properties: { ...PANE_ARG } },
+      "(e12.k3x) and roles, around the viewport by default. Sees what the user did in the pane " +
+      "too, and reaches open shadow DOM and same-origin iframes. Call it before acting and again " +
+      "after the page navigates (refs belong to one page). A needs_user field means a human " +
+      `step (login, captcha): call browser_wait_for_user. ${UNTRUSTED}`,
+    inputSchema: {
+      type: "object",
+      properties: {
+        full: { type: "boolean", description: "The whole page, not just around the viewport" },
+        offset: { type: "number", description: "Skip this many elements (next_offset)" },
+        text_offset: { type: "number", description: "Start the text at this character" },
+        ...PANE_ARG,
+      },
+    },
   },
   {
     name: "browser_screenshot",
@@ -123,20 +136,32 @@ export const BROWSER_TOOL_DEFS: ExegolToolDef<BrowserToolName>[] = [
     description: `Go to a URL in the pane (write mode). ${BROWSER_SCOPE}`,
     inputSchema: {
       type: "object",
-      properties: { url: { type: "string" }, ...PANE_ARG },
+      properties: { url: { type: "string" }, ...SNAPSHOT_ARG, ...PANE_ARG },
       required: ["url"],
     },
   },
   {
     name: "browser_click",
-    description: "Click an element by ref from your last browser_snapshot (write mode).",
-    inputSchema: { type: "object", properties: { ...REF_ARG, ...PANE_ARG }, required: ["ref"] },
+    description:
+      "Click an element by ref from your last browser_snapshot (write mode), with the pointer " +
+      "events a user's click fires. Returns changed: false if the page did not react, and " +
+      "obscured if something covers the element.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        ...REF_ARG,
+        force: { type: "boolean", description: "Click even if something covers it" },
+        ...SNAPSHOT_ARG,
+        ...PANE_ARG,
+      },
+      required: ["ref"],
+    },
   },
   {
     name: "browser_type",
     description:
       "Set the text of an input, textarea or editable element by ref (write mode). submit: true " +
-      "submits its form. Never type passwords or other credentials: logins are the user's " +
+      "submits its form, or presses Enter when there is none. Never type passwords or other credentials: logins are the user's " +
       "(browser_wait_for_user). Exegol refuses fields it recognizes as passwords, but that check " +
       "is a hint, not a guarantee: the rule is yours to keep.",
     inputSchema: {
@@ -149,6 +174,7 @@ export const BROWSER_TOOL_DEFS: ExegolToolDef<BrowserToolName>[] = [
           description: "Add to the current value instead of replacing it",
         },
         submit: { type: "boolean" },
+        ...SNAPSHOT_ARG,
         ...PANE_ARG,
       },
       required: ["ref", "text"],
@@ -161,7 +187,7 @@ export const BROWSER_TOOL_DEFS: ExegolToolDef<BrowserToolName>[] = [
       "Shift+Tab, Control+a. Refused while a password field has the focus.",
     inputSchema: {
       type: "object",
-      properties: { key: { type: "string" }, ...PANE_ARG },
+      properties: { key: { type: "string" }, ...SNAPSHOT_ARG, ...PANE_ARG },
       required: ["key"],
     },
   },
@@ -170,7 +196,7 @@ export const BROWSER_TOOL_DEFS: ExegolToolDef<BrowserToolName>[] = [
     description: "Choose an option of a <select> by its value or label (write mode).",
     inputSchema: {
       type: "object",
-      properties: { ...REF_ARG, value: { type: "string" }, ...PANE_ARG },
+      properties: { ...REF_ARG, value: { type: "string" }, ...SNAPSHOT_ARG, ...PANE_ARG },
       required: ["ref", "value"],
     },
   },

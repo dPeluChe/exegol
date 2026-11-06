@@ -1,6 +1,7 @@
 import { hostOf, isOutsideAllowlist } from "@exegol/shared";
 import { type Session, type WebContents, webContents } from "electron";
 import { forgetPane } from "./control";
+import { freshLoad, LOAD_BUDGET_MS, type PageLoad, shouldStopLoad } from "./load-state";
 import { type BrowserLogEntry, LogRing, toLogLevel } from "./log-ring";
 import { forgetPaneDialogs } from "./page-dialogs";
 import { trackPageEvents } from "./page-events";
@@ -10,9 +11,47 @@ import { blocksAgentRequest, logUrl } from "./request-guard";
 
 const rings = new Map<number, LogRing>();
 const httpStatus = new Map<number, number>();
+const loads = new Map<number, PageLoad>();
 const projectBySession = new WeakMap<Session, string>();
 
 export const lastHttpStatusOf = (wcId: number): number | null => httpStatus.get(wcId) ?? null;
+
+export const loadOf = (wcId: number): PageLoad => loads.get(wcId) ?? freshLoad(Date.now());
+
+const updateLoad = (wcId: number, change: Partial<PageLoad>): void => {
+  loads.set(wcId, { ...loadOf(wcId), ...change });
+};
+
+/** Electron holds page scripts until the main frame finishes, so a resource that never answers
+ *  would hang every tool on the pane: past the budget the load is stopped (see shouldStopLoad).
+ *  True when it goes on regardless, for a server that has not answered yet */
+export async function awaitPageLoad(wc: WebContents): Promise<boolean> {
+  if (wc.isDestroyed() || !wc.isLoadingMainFrame()) return false;
+  const left = loadOf(wc.id).startedAt + LOAD_BUDGET_MS - Date.now();
+  if (left > 0) {
+    await new Promise<void>((resolve) => {
+      const finish = () => {
+        clearTimeout(timer);
+        wc.off("did-stop-loading", finish);
+        wc.off("destroyed", finish);
+        resolve();
+      };
+      const timer = setTimeout(finish, left);
+      wc.once("did-stop-loading", finish);
+      wc.once("destroyed", finish);
+    });
+  }
+  if (wc.isDestroyed() || !wc.isLoadingMainFrame()) return false;
+  if (!shouldStopLoad(loadOf(wc.id), Date.now())) return true;
+  updateLoad(wc.id, { stopped: true });
+  pushLog(wc.id, {
+    kind: "load",
+    level: "error",
+    text: `load stopped after ${LOAD_BUDGET_MS / 1000} s: a resource never finished`,
+  });
+  wc.stop();
+  return false;
+}
 
 export function ringOf(wcId: number): LogRing {
   let ring = rings.get(wcId);
@@ -30,11 +69,7 @@ export function pageUrlOf(wcId: number): string {
 
 /** Each entry remembers the host of the page it came from: the tool hides the ones logged while
  *  the pane was on a site outside the project's hosts */
-export function pushLog(
-  wcId: number,
-  entry: Omit<BrowserLogEntry, "seq" | "at">,
-  pageUrl?: string,
-) {
+function pushLog(wcId: number, entry: Omit<BrowserLogEntry, "seq" | "at">, pageUrl?: string) {
   const ring = rings.get(wcId);
   if (!ring) return;
   ring.push({ ...entry, page: hostOf(pageUrl ?? pageUrlOf(wcId)) ?? undefined });
@@ -72,8 +107,8 @@ function guardWebview(wc: WebContents): void {
     } else if (projectId) {
       pushLog(wc.id, {
         kind: "load",
-        level: "warning",
-        text: "popup blocked",
+        level: "error",
+        text: "popup blocked: it leads outside the allowed hosts",
         url: hostOf(url) ?? "",
       });
     }
@@ -115,8 +150,13 @@ export function trackWebview(wc: WebContents): void {
       line: d.lineNumber,
     });
   });
+  wc.on("did-start-navigation", (details) => {
+    if (details.isMainFrame && !details.isSameDocument) loads.set(id, freshLoad(Date.now()));
+  });
+  wc.on("dom-ready", () => updateLoad(id, { domReady: true }));
   wc.on("did-navigate", (_e, url, code) => {
     httpStatus.set(id, code);
+    updateLoad(id, { committedAt: Date.now() });
     if (code >= 400) {
       pushLog(
         id,
@@ -128,11 +168,13 @@ export function trackWebview(wc: WebContents): void {
   wc.on("did-fail-load", (_e, code, desc, url, isMainFrame) => {
     // -3 is an aborted load: a redirect or a new navigation, not a failure
     if (!isMainFrame || code === -3) return;
+    updateLoad(id, { failure: { error: desc || `net error ${code}`, url } });
     pushLog(id, { kind: "load", level: "error", text: `${desc} (${code})`, url }, url);
   });
   wc.once("destroyed", () => {
     rings.delete(id);
     httpStatus.delete(id);
+    loads.delete(id);
     for (const paneId of removePanesOf(id)) {
       forgetDictationPage(paneId);
       forgetPaneDialogs(paneId);

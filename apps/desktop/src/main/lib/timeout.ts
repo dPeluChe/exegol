@@ -1,3 +1,6 @@
+export const delay = (ms: number): Promise<void> =>
+  new Promise((resolve) => setTimeout(resolve, ms));
+
 /** Rejects with `onTimeout()` (or "<what> timed out") once `ms` pass; the timer never outlives `p` */
 export function withTimeout<T>(
   p: Promise<T>,

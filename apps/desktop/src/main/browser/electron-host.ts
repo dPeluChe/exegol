@@ -17,12 +17,14 @@ import {
   isPreviewSession,
 } from "../files-preview/preview-host";
 import { broadcast } from "../lib/event-bus";
+import { delay } from "../lib/timeout";
 import { ExegolToolError } from "../mcp/exegol-protocol";
 import { getNotificationBus } from "../notifications/bus";
 import { getProjectPorts } from "../system/ports";
 import { getMainWindow } from "../windows/main-window-ref";
 import { handBack, listPaneStates, onBrowserControlChange, takeOver } from "./control";
 import { installPageEvents, markAgentInput, takeOverPageDialogs } from "./page-events";
+import { opaqueJpeg } from "./page-image";
 import { installPagePermissions } from "./page-permissions";
 import {
   AGENT_WORLD_ID,
@@ -39,10 +41,11 @@ import {
 } from "./pane-registry";
 import { type BrowserPaneHandle, setBrowserHost, setNeedsUserNotifier } from "./tool-guards";
 import {
+  awaitPageLoad,
   hookSession,
   lastHttpStatusOf,
+  loadOf,
   pageUrlOf,
-  pushLog,
   ringOf,
   trackWebview,
 } from "./webview-tracking";
@@ -76,39 +79,42 @@ function registerPane(
   return true;
 }
 
+async function loadedFor(wc: WebContents): Promise<void> {
+  if (await awaitPageLoad(wc)) {
+    throw new ExegolToolError("The page is still loading: try again in a few seconds", -32021);
+  }
+}
+
 function handleFor(r: Registered, wc: WebContents): BrowserPaneHandle {
   return {
     paneId: r.paneId,
     projectId: r.projectId,
     getUrl: () => wc.getURL(),
     getTitle: () => wc.getTitle(),
-    runIsolated: (code) =>
-      toolTimeout(
+    runIsolated: async (code) => {
+      await loadedFor(wc);
+      return toolTimeout(
         wc.executeJavaScriptInIsolatedWorld(AGENT_WORLD_ID, [{ code }], true),
         ISOLATED_TIMEOUT_MS,
         "The page script",
-      ),
-    runMain: (code, timeoutMs) =>
-      toolTimeout(wc.executeJavaScript(code, true), timeoutMs, "browser_eval"),
-    loadUrl: async (url) => {
-      try {
-        await wc.loadURL(url);
-      } catch (err) {
-        // A redirect aborts the first load; the page that follows is what the tool reports
-        if (!String(err).includes("ERR_ABORTED")) {
-          pushLog(
-            wc.id,
-            { kind: "load", level: "error", text: String(err).slice(0, 300), url },
-            url,
-          );
-        }
-      }
+      );
     },
+    runMain: async (code, timeoutMs) => {
+      await loadedFor(wc);
+      return toolTimeout(wc.executeJavaScript(code, true), timeoutMs, "browser_eval");
+    },
+    // did-fail-load logs a failure; the promise also waits for every subresource
+    loadUrl: (url) => {
+      wc.loadURL(url).catch(() => {});
+    },
+    awaitLoad: () => awaitPageLoad(wc),
+    loadState: () => loadOf(wc.id),
     capture: async () => {
-      let img = await wc.capturePage();
+      // Right after a navigation there may be no frame to copy yet
+      let img = await wc.capturePage().catch(() => delay(300).then(() => wc.capturePage()));
       if (img.getSize().width > SCREENSHOT_MAX_WIDTH)
         img = img.resize({ width: SCREENSHOT_MAX_WIDTH });
-      return img.toJPEG(80);
+      return opaqueJpeg(img, 80);
     },
     sendKey: (keyCode, modifiers) => {
       const mods = modifiers as ("shift" | "control" | "alt" | "meta")[];
