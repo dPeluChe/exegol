@@ -56,7 +56,10 @@ describe("devinPage", () => {
   const target = { id: null, cwds: ["/repo"], sinceSec: 5 };
   afterAll(() => {
     db.close();
-    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
+    // libsql keeps the file open on Windows past close(), until GC: the temp dir may stay
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {}
   });
 
   it("follows the head's chain, skips other branches, then reads only what came after", () => {

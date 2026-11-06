@@ -72,7 +72,12 @@ describe("opencodePage", () => {
       .run(`m${session}${seq}`, session, seq, seq * 1000, JSON.stringify(said(`t${seq}`)));
   for (let seq = 1; seq <= 90; seq++) add(seq);
   db.close();
-  afterAll(() => rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
+  afterAll(() => {
+    // libsql keeps the file open on Windows past close(), until GC: the temp dir may stay
+    try {
+      rmSync(dir, { recursive: true, force: true });
+    } catch {}
+  });
 
   it("reads the newest top-level session, then only what came after", () => {
     const first = opencodePage(path, ["/w"], 0, undefined);
