@@ -25,19 +25,18 @@ export const isPlainEnter = (input: Electron.Input) =>
 const isEscapeDown = (input: Electron.Input) =>
   input.type === "keyDown" && input.key === "Escape" && !input.isComposing;
 
+const chordKeys = (input: Electron.Input) => ({
+  metaKey: input.meta,
+  ctrlKey: input.control,
+  shiftKey: input.shift,
+  altKey: input.alt,
+  code: input.code,
+});
+
 const isPauseDown = (input: Electron.Input) =>
   input.type === "keyDown" &&
   !input.isAutoRepeat &&
-  isDictationPauseKey(
-    {
-      metaKey: input.meta,
-      ctrlKey: input.control,
-      shiftKey: input.shift,
-      altKey: input.alt,
-      code: input.code,
-    },
-    process.platform === "darwin",
-  );
+  isDictationPauseKey(chordKeys(input), process.platform === "darwin");
 
 const hostIsMain = (host: WebContents) => host === getMainWindow()?.webContents;
 
@@ -58,14 +57,7 @@ export function forwardDictationKeys(
     const host = contents.hostWebContents;
     if (!chord || !host || host.isDestroyed()) return;
     const mac = process.platform === "darwin";
-    const keys = {
-      metaKey: input.meta,
-      ctrlKey: input.control,
-      shiftKey: input.shift,
-      altKey: input.alt,
-      code: input.code,
-    };
-    if (input.type === "keyDown" && matchesChord(keys, chord, mac)) {
+    if (input.type === "keyDown" && matchesChord(chordKeys(input), chord, mac)) {
       event.preventDefault();
       if (input.isAutoRepeat) return;
       held = true;
@@ -97,6 +89,15 @@ export function forwardDictationEscape(
   toMain = sendToMain,
 ): void {
   contents.on("before-input-event", (event, input) => {
+    // The chord lives in the windows: no line here means it never reached the app
+    if (
+      chord &&
+      input.type === "keyDown" &&
+      !input.isAutoRepeat &&
+      matchesChord(chordKeys(input), chord, process.platform === "darwin")
+    ) {
+      logger.info(`[Dictation] chord in the ${isMain() ? "main" : "other"} window`);
+    }
     if (isPauseDown(input) && isListening() && !isMain()) {
       event.preventDefault();
       toMain({ kind: "pause" });

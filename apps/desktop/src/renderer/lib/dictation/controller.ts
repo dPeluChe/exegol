@@ -518,7 +518,10 @@ export function chordDown(): void {
     void stopDictation("chord");
     return;
   }
-  if (phase === "transcribing") return;
+  if (phase === "transcribing") {
+    window.api.reportError?.("dictation", "start ignored: phase=transcribing", "");
+    return;
+  }
   pressedAt = Date.now();
   holdCandidate = true;
   void startDictation();
