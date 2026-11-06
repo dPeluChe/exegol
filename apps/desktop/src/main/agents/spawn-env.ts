@@ -1,4 +1,4 @@
-import { exec, execSync } from "node:child_process";
+import { type ExecFileOptions, exec, execSync } from "node:child_process";
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { homedir, userInfo } from "node:os";
 import { delimiter, join } from "node:path";
@@ -15,8 +15,9 @@ import type Database from "libsql";
 import { getDb } from "../db/client";
 import { createOplogEntry, getAgent, insertActivity, isAgentQuiet, stopAgent } from "../db/queries";
 import { broadcast } from "../lib/event-bus";
+import { execFileAsync } from "../lib/exec-file";
 import { logger } from "../lib/logger";
-import { type Launch, launchFor } from "../lib/win-launch";
+import { launchFor } from "../lib/win-launch";
 import { resolveClaimGuardPath } from "../mcp/exegol-mcp-config";
 import { getNotificationBus } from "../notifications/bus";
 import { getApiKey } from "../security/keystore";
@@ -394,7 +395,7 @@ let resolvedPath: string | null = null;
 /** Resolve the login-shell PATH off the main thread so the first spawn or Doctor run doesn't block on it. */
 export function warmShellPath(): void {
   if (process.platform === "win32") return;
-  exec(shellPathCommand(), { timeout: SHELL_PATH_TIMEOUT_MS, windowsHide: true }, (err, stdout) => {
+  exec(shellPathCommand(), { timeout: SHELL_PATH_TIMEOUT_MS }, (err, stdout) => {
     // Overwrites a sync fallback too: the real shell PATH wins whenever it arrives
     if (!err && stdout.trim()) {
       resolvedPath = stdout.trim();
@@ -427,10 +428,13 @@ export function findOnPath(command: string): string | null {
   return null;
 }
 
-/** A CLI as `execFile` can start it: on Windows found on PATH, and through cmd.exe if a `.cmd` */
-export function cliLaunch(command: string, args: string[]): Launch {
-  if (process.platform !== "win32") return { command, args, verbatim: false };
-  return launchFor([findOnPath(command) ?? command, ...args], "win32", process.env.ComSpec);
+/** Runs a CLI on any system: on Windows it is found on PATH, and a `.cmd` goes through cmd.exe */
+export function execCli(bin: string, argv: string[], options: ExecFileOptions) {
+  const utf8 = { ...options, encoding: "utf8" as const };
+  if (process.platform !== "win32") return execFileAsync(bin, argv, utf8);
+  const found = findOnPath(bin) ?? bin;
+  const { command, args, verbatim } = launchFor([found, ...argv], "win32", process.env.ComSpec);
+  return execFileAsync(command, args, { ...utf8, windowsVerbatimArguments: verbatim });
 }
 
 /** The options a repo's hook script runs with: Windows' own shell, not cmd.exe unasked */

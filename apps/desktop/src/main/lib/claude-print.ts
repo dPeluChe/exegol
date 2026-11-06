@@ -1,7 +1,6 @@
 import { tmpdir } from "node:os";
-import { _getFullPath, cliLaunch } from "../agents/spawn-env";
+import { _getFullPath, execCli } from "../agents/spawn-env";
 import { childEnv } from "./child-env";
-import { execFileAsync } from "./exec-file";
 
 export interface PrintResult {
   text: string;
@@ -19,26 +18,28 @@ export async function runClaudePrint(
   model: string,
   timeoutMs: number,
 ): Promise<PrintResult> {
-  const { command, args, verbatim } = cliLaunch("claude", [
-    "-p",
-    "--output-format",
-    "json",
-    "--model",
-    model,
-    "--tools",
-    "",
-    "--strict-mcp-config",
-    "--setting-sources",
-    "",
-    "--no-session-persistence",
-  ]);
-  const run = execFileAsync(command, args, {
-    // The login shell's PATH: launched from Finder, the app's own lacks ~/.local/bin
-    env: { ...childEnv(), PATH: _getFullPath() },
-    cwd: tmpdir(),
-    timeout: timeoutMs,
-    windowsVerbatimArguments: verbatim,
-  });
+  const run = execCli(
+    "claude",
+    [
+      "-p",
+      "--output-format",
+      "json",
+      "--model",
+      model,
+      "--tools",
+      "",
+      "--strict-mcp-config",
+      "--setting-sources",
+      "",
+      "--no-session-persistence",
+    ],
+    {
+      // The login shell's PATH: launched from Finder, the app's own lacks ~/.local/bin
+      env: { ...childEnv(), PATH: _getFullPath() },
+      cwd: tmpdir(),
+      timeout: timeoutMs,
+    },
+  );
   run.child.stdin?.end(prompt);
   let stdout: string;
   try {
