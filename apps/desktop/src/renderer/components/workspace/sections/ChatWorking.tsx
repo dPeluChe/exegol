@@ -1,11 +1,19 @@
+import type { DeskActivity } from "@exegol/shared";
 import { useNow } from "../../../hooks/use-now";
-import { ACTIVITY_LABEL, deskActivity } from "../../../lib/company";
+import { deskActivity } from "../../../lib/company";
 import { formatTimeAgo } from "../../../lib/format";
 import { type AgentState, useAgentStore } from "../../../stores/agents";
 import { useDeskActivityStore } from "../../../stores/desk-activity";
 import { AgentIcon } from "../../common/AgentIcon";
 
 const ORB_DELAYS_MS = [0, 150, 300];
+const ACTIVITY_LABEL: Record<DeskActivity, string> = {
+  edits: "Editing files",
+  command: "Running a command",
+  browser: "Using the browser",
+  thinking: "Thinking",
+  message: "Messaging another session",
+};
 
 function Since({ at }: { at: number }) {
   useNow();

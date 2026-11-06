@@ -306,10 +306,17 @@ export function CompanySection({ projectMeta }: { projectMeta: Map<string, Proje
 
   useCompanyKeys({ pickNext, pick: setPickedId, selected, live });
 
-  // The default selection moves with states: what was on screen stays for the way back
+  // A default moves with states: the one on screen stays for the way back, unless one was picked
   const shownId = useLatest(selected?.id);
-  useMountEffect(() => () => {
-    if (shownId.current) useAppStore.getState().setCompanyPickedId(shownId.current);
+  useMountEffect(() => {
+    requestAnimationFrame(() =>
+      document
+        .querySelector('[aria-pressed="true"][data-desk-id]')
+        ?.scrollIntoView({ block: "nearest" }),
+    );
+    return () => {
+      if (shownId.current && !useAppStore.getState().companyPickedId) setPickedId(shownId.current);
+    };
   });
 
   const sessionPanel = useRef<ImperativePanelHandle>(null);
@@ -334,7 +341,7 @@ export function CompanySection({ projectMeta }: { projectMeta: Map<string, Proje
       defaultSize={sessionSize}
       minSize={20}
       maxSize={70}
-      // Using the panel holds it: the session it shows by default moves as states change
+      // Using the panel holds it: a default selection moves as states change
       onFocusCapture={() => setPickedId(selected.id)}
     >
       <CompanySession
