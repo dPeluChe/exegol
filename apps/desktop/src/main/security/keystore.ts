@@ -36,16 +36,20 @@ export function getApiKey(db: Database.Database, provider: string): string | nul
     return null;
   }
   const value = row.value;
-  let result: string;
-  if (value.startsWith("encrypted:") && safeStorage.isEncryptionAvailable()) {
-    const base64 = value.slice("encrypted:".length);
-    const buffer = Buffer.from(base64, "base64");
-    result = safeStorage.decryptString(buffer);
-  } else {
-    result = value;
-  }
+  // A Linux keyring can be gone on the next login: ciphertext must never reach a provider as a key
+  const result = value.startsWith("encrypted:") ? decrypted(value, provider) : value;
   apiKeyCache.set(provider, result);
   return result;
+}
+
+function decrypted(value: string, provider: string): string | null {
+  try {
+    if (!safeStorage.isEncryptionAvailable()) throw new Error("no keyring");
+    return safeStorage.decryptString(Buffer.from(value.slice("encrypted:".length), "base64"));
+  } catch {
+    logger.warn(`[Keystore] Cannot read the ${provider} key: the system keyring is unavailable`);
+    return null;
+  }
 }
 
 export function deleteApiKey(db: Database.Database, provider: string): void {

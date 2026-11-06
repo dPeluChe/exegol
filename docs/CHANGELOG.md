@@ -41,6 +41,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Browser panes search from the address bar: `?telnyx`, or words that are not an address, open a Google search; `localhost:3000`, `example.com` and full URLs still go straight there
 
 ### Fixed
+- Safety guards know PowerShell and cmd commands and Windows and Linux credential stores, bug reports redact Windows and Linux mount paths, and a lost Linux keyring no longer sends ciphertext as an API key
 - Windows: CLIs installed by npm start from the app, skills with required binaries load and link without admin rights, task boards read CRLF files, the unpushed-commits check works, hooks run in PowerShell, no console windows flash, and notifications are tied to the installed app
 - Windows: subfolder sessions, resume in the last folder, Open in IDE, worktree cleanup, New file and path labels follow the system instead of assuming `/`
 - Windows: drive and backslash paths are links in terminals, Devin's chat reads its store under `%APPDATA%`, Claude transcripts are found directly, dropped files get double quotes, and two sessions in one folder keep their own MCP identity

@@ -14,6 +14,7 @@ type CommandRefusalReason =
   | "fork-bomb"
   | "rm-rf-root"
   | "dd-of-disk"
+  | "win-wipe"
   | "curl-pipe-sh"
   | "bidi-chars";
 
@@ -84,6 +85,13 @@ const CURL_PIPE_SH_RE = new RegExp(
   "i",
 );
 
+// PowerShell's and cmd's own forms of the two above: `iwr x | iex`, `Remove-Item -Recurse C:\\`,
+// `rd /s /q C:\\`, `format C:`
+const IWR_PIPE_IEX_RE =
+  /\b(?:iwr|irm|curl|wget|invoke-webrequest|invoke-restmethod)\b[^;&\n]*\|\s*(?:iex|invoke-expression)\b/i;
+const WIN_WIPE_RE =
+  /\b(?:(?:remove-item|ri|del|erase|rm)\b[^;&|\n]*-r[^;&|\n]*|(?:rd|rmdir|del|erase)\s+\/s\b[^;&|\n]*?|format\s+)\s*["']?(?:[a-z]:[\\/]?|\$env:(?:userprofile|systemroot|windir)|%(?:userprofile|systemroot|windir)%)["']?(?:\s|$)/i;
+
 function firstMatch(input: string, re: RegExp): string | null {
   const m = input.match(re);
   return m ? m[0] : null;
@@ -111,8 +119,11 @@ export function inspectCommand(cmd: string): CommandRefusal {
   const dd = firstMatch(c, DD_OF_DISK_RE);
   if (dd !== null) return { ok: false, reason: "dd-of-disk", matched: dd };
 
-  const pipe = firstMatch(c, CURL_PIPE_SH_RE);
+  const pipe = firstMatch(c, CURL_PIPE_SH_RE) ?? firstMatch(c, IWR_PIPE_IEX_RE);
   if (pipe !== null) return { ok: false, reason: "curl-pipe-sh", matched: pipe };
+
+  const wipe = firstMatch(c, WIN_WIPE_RE);
+  if (wipe !== null) return { ok: false, reason: "win-wipe", matched: wipe };
 
   return { ok: true };
 }
