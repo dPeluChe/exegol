@@ -215,6 +215,7 @@ export function startShellPromotion(db: Database.Database, maps: SessionMaps): (
     return () => {};
   }
   let busy = false;
+  let lastFailure = "";
   let lastRead: { at: number; ids: ReadonlySet<string> } = { at: 0, ids: new Set() };
   const tick = async () => {
     if (busy) return;
@@ -239,8 +240,12 @@ export function startShellPromotion(db: Database.Database, maps: SessionMaps): (
         const session = byId.get(step.id);
         if (session) applyTransition(db, maps, session, step, args[step.id] ?? "");
       }
+      lastFailure = "";
     } catch (err) {
-      logger.warn("[ShellPromotion] Tick failed:", err);
+      // Every 3 s while it lasts: a run of these would push real problems out of a bug report
+      const failure = String(err);
+      if (failure !== lastFailure) logger.warn("[ShellPromotion] Tick failed:", err);
+      lastFailure = failure;
     } finally {
       busy = false;
     }

@@ -83,8 +83,18 @@ describe("createProcessTableReader", () => {
   it("keeps nothing from a failed read", async () => {
     const read = vi.fn().mockRejectedValueOnce(new Error("ps")).mockResolvedValueOnce(row(5));
     const reader = createProcessTableReader(read);
-    await expect(reader({ maxAgeMs: 10_000 })).rejects.toThrow("ps");
+    await expect(reader({ maxAgeMs: 10_000 })).rejects.toThrow("process table");
     expect((await reader({ maxAgeMs: 10_000 }))[0]?.pid).toBe(5);
+  });
+});
+
+describe("a failed read", () => {
+  it("says why, without the output of ps", async () => {
+    const failed = Object.assign(new Error("Command failed"), { killed: true, stdout: "secret" });
+    const reader = createProcessTableReader(() => Promise.reject(failed));
+    const error = await reader().catch((err: Error) => err);
+    expect(error).toMatchObject({ message: "process table: timed out" });
+    expect(error).not.toHaveProperty("stdout");
   });
 });
 

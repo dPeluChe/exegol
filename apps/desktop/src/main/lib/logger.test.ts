@@ -1,4 +1,5 @@
 import { readFileSync, rmSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { afterAll, describe, expect, it, vi } from "vitest";
 
@@ -35,5 +36,11 @@ describe("logger file writes", () => {
       .map((l) => l.slice(l.indexOf("]") + 2));
     expect(lines).toEqual(["one", "two", "three"]);
     expect(read().startsWith("--- Session started")).toBe(true);
+  });
+
+  it("writes the home folder as ~", () => {
+    logger.info(`in ${homedir()}/repo`);
+    flushLogSync();
+    expect(read()).toContain("in ~/repo");
   });
 });

@@ -91,12 +91,8 @@ export async function reattachSidecarAgents(
   const rows = new Map<string, Record<string, unknown>>();
   for (const row of stale) {
     const agentId = row.id as string;
-    const hasSession = sidecarSet.has(agentId);
-    logger.info(
-      `[Reattach] Inspecting ${agentId} (${row.cli_type}, status=${row.status}, sidecar=${hasSession ? "yes" : "NO"})`,
-    );
     // No session in sidecar: the crash sweep marks it crashed
-    if (hasSession) rows.set(agentId, row);
+    if (sidecarSet.has(agentId)) rows.set(agentId, row);
   }
 
   const started = Date.now();
@@ -213,10 +209,7 @@ export async function reattachSidecarAgents(
           const cwd = wt?.worktreePath ?? projectPath;
           // Per-agent file first (no cwd guessing, no sibling collision).
           const token = readPerAgentMcpToken(agentId) ?? (cwd ? readAgentMcpToken(cwd) : null);
-          if (token) {
-            restoreAgentMcpToken(agentId, projectId, token);
-            logger.info(`[Reattach] MCP token re-armed for ${agentId}`);
-          }
+          if (token) restoreAgentMcpToken(agentId, projectId, token);
         } catch (err) {
           logger.warn(`[Reattach] MCP re-arm failed for ${agentId}:`, err);
         }
