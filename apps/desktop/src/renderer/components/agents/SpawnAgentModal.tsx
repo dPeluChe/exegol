@@ -1,4 +1,5 @@
 import type { AgentAccessMode, AgentProvider } from "@exegol/shared";
+import { pathBase } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { X } from "lucide-react";
 import { useEffect, useRef } from "react";
@@ -97,7 +98,7 @@ export function SpawnAgentModal({
             providers={enabledProviders}
             selectedId={form.providerId}
             onChoose={form.chooseProvider}
-            suffix={folder ? `in ${folder.slice(folder.lastIndexOf("/") + 1)}` : undefined}
+            suffix={folder ? `in ${pathBase(folder)}` : undefined}
           />
           <button
             type="button"

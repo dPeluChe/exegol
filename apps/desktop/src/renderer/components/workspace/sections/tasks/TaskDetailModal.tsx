@@ -1,3 +1,4 @@
+import { pathSegments } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { useState } from "react";
 import type { TaskColumn, TaskItem } from "../../../../lib/markdown-tasks";
@@ -90,7 +91,7 @@ export function TaskDetailModal({
             </p>
           ) : (
             <p className="truncate text-[10px] text-text-secondary">
-              {filePath.split("/").slice(-2).join("/")}:{task.line + 1}
+              {pathSegments(filePath).slice(-2).join("/")}:{task.line + 1}
             </p>
           )}
         </div>

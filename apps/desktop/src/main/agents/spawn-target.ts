@@ -9,6 +9,7 @@
  */
 
 import type { Project, Worktree } from "@exegol/shared";
+import { isUnderPath, samePath } from "@exegol/shared";
 import type Database from "libsql";
 import { listWorktrees } from "../db/queries";
 import { slugifyBranchName } from "./spawn-env";
@@ -48,7 +49,7 @@ export function findWorktreeHolding(
 ): Worktree | null {
   return (
     listWorktrees(db, projectId).find(
-      (w) => (dir === w.path || dir.startsWith(`${w.path}/`)) && !removingWorktrees.has(w.path),
+      (w) => (samePath(dir, w.path) || isUnderPath(dir, w.path)) && !removingWorktrees.has(w.path),
     ) ?? null
   );
 }

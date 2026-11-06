@@ -1,4 +1,4 @@
-import { extname } from "node:path";
+import { basename, extname } from "node:path";
 import { execFileAsync } from "../../lib/exec-file";
 import { getProjectPorts } from "../../system/ports";
 
@@ -118,7 +118,7 @@ export async function buildReviewSummary(cwd: string, staged?: boolean): Promise
     const ext = extname(filePath).toLowerCase() || "(no ext)";
     filesByType[ext] = (filesByType[ext] ?? 0) + 1;
 
-    const baseName = filePath.split("/").pop() ?? filePath;
+    const baseName = basename(filePath);
 
     if (SENSITIVE_PATTERNS.some((p) => p.test(filePath))) sensitiveFiles.push(filePath);
     if (BINARY_EXTENSIONS.has(ext)) binaryFiles.push(filePath);

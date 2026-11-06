@@ -1,4 +1,5 @@
 import type { Agent, AgentCreate, Worktree } from "@exegol/shared";
+import { isUnderPath, samePath } from "@exegol/shared";
 import type Database from "libsql";
 import {
   createOplogEntry,
@@ -111,7 +112,7 @@ export function setupAgentCwd(
     cwd = config.cwdOverride;
     logger.info("[AgentManager] Using a start folder override");
     // A folder of the checkout itself (the launcher's "run in") is not a pipeline worktree
-    const inCheckout = cwd === project.path || cwd.startsWith(`${project.path}/`);
+    const inCheckout = samePath(cwd, project.path) || isUnderPath(cwd, project.path);
     // Joined like a reuse: the owner's exit cleanup keeps the worktree while this one lives
     const shared = inCheckout ? null : findWorktreeHolding(db, agent.projectId, cwd);
     if (shared) joinWorktree(db, agent.id, shared, project.path, worktrees);

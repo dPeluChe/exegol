@@ -1,3 +1,4 @@
+import { isAbsolute } from "node:path";
 import { z } from "zod";
 import { getProject, listWorktrees } from "../../db/queries";
 import {
@@ -19,8 +20,7 @@ const DEFAULT_WINDOW_DAYS = 30;
 const CWD = z
   .string()
   .max(4096)
-  .startsWith("/")
-  .refine((c) => !c.includes("\0"), "NUL in path");
+  .refine((c) => isAbsolute(c) && !c.includes("\0"), "Not an absolute path");
 
 /** The launcher's folder while it is inside the project or a worktree, else the project root */
 async function launchFolder(

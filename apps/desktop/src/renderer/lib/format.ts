@@ -1,3 +1,4 @@
+import { pathSegments } from "@exegol/shared";
 /** Relative time: "now", "5m", "3h", "2d" */
 export function formatTimeAgo(unixSeconds: number | null | undefined): string {
   if (!unixSeconds) return "";
@@ -45,6 +46,6 @@ export function formatDuration(from: number | null, to: number | null): string |
 /** Last few segments: enough to recognise the repo without wrapping. */
 export function tailPath(path: string | undefined, segments = 3): string {
   if (!path) return "…";
-  const parts = path.split("/").filter(Boolean);
+  const parts = pathSegments(path);
   return parts.length <= segments ? path : `…/${parts.slice(-segments).join("/")}`;
 }

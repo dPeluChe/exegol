@@ -1,9 +1,9 @@
+import { samePath } from "@exegol/shared";
+
 interface Session {
   cliType: string;
   folder?: string | null;
 }
-
-const trimSlash = (p: string) => (p.length > 1 ? p.replace(/\/+$/, "") : p);
 
 /** Same folder; a session with none recorded ran at the project root */
 export function sameFolder(
@@ -11,7 +11,7 @@ export function sameFolder(
   folder: string,
   projectPath: string,
 ): boolean {
-  return trimSlash(session || projectPath) === trimSlash(folder);
+  return samePath(session || projectPath, folder);
 }
 
 /**

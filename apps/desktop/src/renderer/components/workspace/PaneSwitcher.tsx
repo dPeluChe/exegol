@@ -1,3 +1,4 @@
+import { pathBase } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { LayoutGrid, Rows3 } from "lucide-react";
 import { useMountEffect } from "../../hooks/use-mount-effect";
@@ -16,10 +17,6 @@ import { AgentIcon } from "../common/AgentIcon";
 import { PANE_TYPE_ICONS, tabLabel } from "./tab-bar-helpers";
 
 const PANE_LABEL: Record<string, string> = { git: "Git", empty: "Launcher", terminal: "Terminal" };
-
-function baseName(path: string): string {
-  return path.split("/").filter(Boolean).pop() ?? path;
-}
 
 function AgentPaneLabel({ agentId }: { agentId: string }) {
   const agent = useAgentStore((s) => s.agents[agentId]);
@@ -47,7 +44,7 @@ function PaneLabel({ pane }: { pane: Pane }) {
       ? pageLabel(pane.url) || "Browser"
       : pane.type === "files"
         ? path
-          ? baseName(path)
+          ? pathBase(path)
           : "Files"
         : PANE_LABEL[pane.type];
   return (

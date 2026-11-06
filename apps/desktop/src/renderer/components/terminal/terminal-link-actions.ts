@@ -1,11 +1,10 @@
+import { isUnderPath, pathParent } from "@exegol/shared";
 import { nanoid } from "nanoid";
 import { isHttpUrl } from "../../lib/browser-viewports";
 import { dispatchRefitTerminals } from "../../lib/dispatch-refit";
-import { underRoot } from "../../lib/file-window";
 import { openInBrowser } from "../../lib/open-in-browser";
 import { runIdeResult } from "../../lib/open-in-ide";
 import { focusNewPane } from "../../lib/pane-focus";
-import { parentDir } from "../../lib/split-terminal";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { findAgentPane, focusPane, useAgentStore } from "../../stores/agents";
 import {
@@ -137,8 +136,8 @@ export function openPeekInFilesPane(peek: TerminalLinkPeek, path: string, projec
   const ws = useWorkspaceStore.getState();
   const id = nanoid(8);
   ws.splitPane(where.tabId, where.paneId, "horizontal", "files", { id });
-  const inProject = !!projectPath && underRoot(path, projectPath);
-  ws.updatePane(id, { filePath: inProject ? undefined : parentDir(path), openFile: path });
+  const inProject = !!projectPath && isUnderPath(path, projectPath);
+  ws.updatePane(id, { filePath: inProject ? undefined : pathParent(path), openFile: path });
   closeTerminalPeek();
   dispatchRefitTerminals();
   focusNewPane(id);

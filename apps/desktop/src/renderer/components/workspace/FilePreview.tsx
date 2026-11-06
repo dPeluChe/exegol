@@ -1,3 +1,4 @@
+import { pathBase } from "@exegol/shared";
 import { ExternalLink, FolderSearch, X } from "lucide-react";
 import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { type FileContent, useWriteFile } from "../../hooks/use-trpc";
@@ -171,7 +172,7 @@ export function FilePreview({
         open={conflict}
         onOpenChange={setConflict}
         title="The file changed on disk"
-        description={`${path.split("/").pop()} was modified since you started editing (an agent, or another editor). Overwrite it with your version?`}
+        description={`${pathBase(path)} was modified since you started editing (an agent, or another editor). Overwrite it with your version?`}
         confirmLabel="Overwrite"
         variant="destructive"
         onConfirm={() => save(true)}
@@ -209,7 +210,7 @@ function FilePreviewToolbar({
         <X className="h-3 w-3" />
       </button>
       <span className="min-w-0 truncate text-[10px] text-text-secondary" title={path}>
-        {path.split("/").pop()}
+        {pathBase(path)}
       </span>
       {dirty && (
         <>

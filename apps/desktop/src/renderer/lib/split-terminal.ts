@@ -1,3 +1,4 @@
+import { pathParent } from "@exegol/shared";
 import { nanoid } from "nanoid";
 import { useAgentStore } from "../stores/agents";
 import { toastError } from "../stores/toasts";
@@ -20,15 +21,13 @@ interface PaneFolderFacts {
   sessionDir?: string | null;
 }
 
-export const parentDir = (path: string) => path.slice(0, path.lastIndexOf("/")) || "/";
-
 /** The folder a terminal opened from `pane` starts in; undefined is the project root */
 export function terminalCwdFor(
   pane: Pick<Pane, "type" | "filePath" | "openFile"> | undefined,
   facts: PaneFolderFacts = {},
 ): string | undefined {
   if (pane?.type === "terminal") return facts.shellCwd ?? facts.sessionDir ?? undefined;
-  if (pane?.type === "files") return pane.openFile ? parentDir(pane.openFile) : pane.filePath;
+  if (pane?.type === "files") return pane.openFile ? pathParent(pane.openFile) : pane.filePath;
   if (pane?.type === "git") return pane.filePath;
   return undefined;
 }
