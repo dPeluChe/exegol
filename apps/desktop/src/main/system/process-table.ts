@@ -15,6 +15,12 @@ export interface ProcRow {
   args: string;
 }
 
+/** Never the exec error itself: it carries the output of `ps`, every process's command line */
+function readFailure(err: unknown): Error {
+  const { killed, code } = err as { killed?: boolean; code?: unknown };
+  return new Error(`process table: ${killed ? "timed out" : `failed (${code ?? "unknown"})`}`);
+}
+
 /** Reads the table through `read`: callers at the same time share one read, and one that passes
  *  `maxAgeMs` takes the last result while it is that recent. `recent` never reads */
 export function createProcessTableReader(read: () => Promise<ProcRow[]>, now = Date.now) {
@@ -31,6 +37,9 @@ export function createProcessTableReader(read: () => Promise<ProcRow[]>, now = D
         .then((rows) => {
           last = { at, rows };
           return rows;
+        })
+        .catch((err) => {
+          throw readFailure(err);
         })
         .finally(() => {
           inFlight = null;

@@ -149,11 +149,12 @@ export async function runStartupRecovery(): Promise<void> {
         logger.info(`[Startup] Alive sidecar sessions: ${aliveSessionIds.join(", ")}`);
       }
       if (deadInfo.length > 0) {
-        logger.warn(
-          `[Startup] Dead sidecar sessions (in 60s grace period): ${deadInfo
-            .map((s) => `${s.id}(exit=${s.exitCode ?? "?"}/sig=${s.signal ?? "?"})`)
-            .join(", ")}`,
-        );
+        const line = `[Startup] Dead sidecar sessions (in 60s grace period): ${deadInfo
+          .map((s) => `${s.id}(exit=${s.exitCode ?? "?"}/sig=${s.signal ?? "?"})`)
+          .join(", ")}`;
+        // Exit 0 is a session that ended; anything else stays visible in bug reports
+        if (deadInfo.every((s) => s.exitCode === 0 && !s.signal)) logger.info(line);
+        else logger.warn(line);
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
