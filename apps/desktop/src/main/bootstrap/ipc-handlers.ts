@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { app, clipboard, dialog, ipcMain, webContents } from "electron";
 import { getAgentManager } from "../agents/manager";
-import { isHostedWebview } from "../browser/electron-host";
+import { isHostedWebview } from "../browser/pane-registry";
 import { savePaneScreenshot } from "../browser/screenshot";
 import { broadcast } from "../lib/event-bus";
 import { suppressedNote } from "../lib/log-limiter";

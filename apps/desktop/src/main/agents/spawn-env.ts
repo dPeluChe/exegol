@@ -21,12 +21,8 @@ import { getNotificationBus } from "../notifications/bus";
 import { getApiKey } from "../security/keystore";
 import { type NodeLaunch, nodeLaunch, nodeShellCommand } from "../system/node-launch";
 import { refreshTray } from "../system/tray";
-import {
-  deliverPendingAgentMessages,
-  fireAgentLinks,
-  isAgentAwaitingApproval,
-  setAgentAwaitingApproval,
-} from "./agent-messaging";
+import { isAgentAwaitingApproval, setAgentAwaitingApproval } from "./agent-message-queue";
+import { deliverPendingAgentMessages, fireAgentLinks } from "./agent-messaging";
 import { COMMAND_ALIASES } from "./cli-catalog";
 import { scoreAgent } from "./scoring";
 import { windowsShell } from "./shell-dialect";

@@ -63,7 +63,7 @@ function parseWorktreeCopyColumn(raw: string | null): string[] | null {
   }
 }
 
-function parseHostsColumn(raw: string | null): string[] {
+export function parseHostsColumn(raw: string | null | undefined): string[] {
   if (!raw) return [];
   try {
     const parsed: unknown = JSON.parse(raw);

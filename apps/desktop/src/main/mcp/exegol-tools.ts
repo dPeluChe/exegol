@@ -1,10 +1,4 @@
-/**
- * T145 — Exegol MCP tool handlers: memory_search, memory_save, knowledge_get.
- * Every write is attributed via `context.agentId` (signed by the caller's
- * EXEGOL_AGENT_ID env, forwarded through the shim); access mode (T58) gates
- * which tools a `read`/`plan` agent may call — the store decides, the agent
- * can't corrupt data even if it tries.
- */
+/** T145: the Exegol MCP tool handlers. Identity and access rules: exegol-identity.ts */
 
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -42,17 +36,8 @@ import {
   searchMemories,
 } from "../memory/store";
 import { isPathInside, realpathSafeSync } from "../security/path-guard";
-import {
-  EXEGOL_TOOL_NAMES,
-  type ExegolToolContext,
-  ExegolToolError,
-  type ExegolToolName,
-  SEARCH_ONLY_TOOLS,
-} from "./exegol-protocol";
-
-// Tool definitions live in exegol-protocol.ts (dependency-free) so the shim
-// bundle never drags this module's memory/knowledge/db import graph.
-export { EXEGOL_TOOL_DEFS, getToolDefsForAccessMode } from "./exegol-protocol";
+import { type ExegolToolContext, ExegolToolError, type ExegolToolName } from "./exegol-protocol";
+import { EXEGOL_TOOL_NAMES, SEARCH_ONLY_TOOLS } from "./exegol-tool-defs";
 
 export { ExegolToolError };
 

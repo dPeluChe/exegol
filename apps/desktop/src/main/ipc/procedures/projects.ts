@@ -18,7 +18,7 @@ import {
 } from "@exegol/shared";
 import { coreRust } from "../../agents/spawn-env";
 import { getWorktreeName, removeManagedWorktree } from "../../agents/worktrees";
-import { copyCookiesForHosts, markCookiesMigrated } from "../../browser/electron-host";
+import { copyCookiesForHosts, markCookiesMigrated } from "../../browser/browser-cookies";
 import {
   forgetProjectPermissions,
   forgetSitePermission,

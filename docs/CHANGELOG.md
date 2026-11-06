@@ -36,6 +36,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - The "What's new" dialog shows the update's download progress (a bar and the percent), as the title-bar button does, instead of only "Downloading"
 
 ### Changed
+- MCP and agent browser code split into smaller modules, no behavior change
 - Log files write your home folder as `~`, and reconnecting sessions at startup logs half as many lines
 
 ## [0.5.28] — 2026-10-26 — Terminals look right after a restart and a GPU crash, less background work, smaller app

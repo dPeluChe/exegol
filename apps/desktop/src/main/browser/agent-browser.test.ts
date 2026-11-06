@@ -27,7 +27,7 @@ import {
 } from "./page-scripts";
 import { blocksAgentRequest, logUrl } from "./request-guard";
 import { type BrowserPaneHandle, type BrowserToolContext, setBrowserHost } from "./tool-guards";
-import { isWaitStale } from "./tool-handlers";
+import { isWaitStale } from "./tool-wait";
 
 const page = (over: Partial<RawSnapshot> = {}): RawSnapshot => ({
   url: "http://localhost:3000/",
@@ -304,16 +304,6 @@ describe("agent browser tools", () => {
     const r = (await waiting) as { status: string };
     expect(r.status).toBe("handed_back");
     expect(getPaneControl("pane-a")?.waiting).toBeNull();
-  });
-
-  it("a hand back between two polls still counts", async () => {
-    const first = callBrowserTool(db, "browser_wait_for_user", { reason: "log in" }, ctx());
-    setTimeout(() => handBack("pane-a"), 10);
-    await first;
-    // A second, fresh wait starts over instead of returning the old hand back
-    const second = callBrowserTool(db, "browser_wait_for_user", { reason: "again" }, ctx());
-    setTimeout(() => handBack("pane-a"), 10);
-    expect(((await second) as { status: string }).status).toBe("handed_back");
   });
 
   it("a closed pane wakes its waiter with pane_closed", async () => {

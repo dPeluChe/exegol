@@ -14,7 +14,8 @@ import { logger } from "../lib/logger";
 import { listTcpListeners } from "../system/ports";
 import { type ProcRow, readProcessTable } from "../system/shell-clis";
 import { getPtyHost } from "../terminal/pty-host";
-import { isAgentAwaitingApproval, msSinceAgentOutput } from "./agent-messaging";
+import { isAgentAwaitingApproval } from "./agent-message-queue";
+import { msSinceAgentOutput } from "./agent-message-sweep";
 import { keepWorktreeOnExit } from "./agent-worktree-ops";
 import { idleExempt, idleExemptReported } from "./idle-exempt";
 import {

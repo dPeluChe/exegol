@@ -1,6 +1,6 @@
 import type { Project, ProjectCreate } from "@exegol/shared";
 import type Database from "libsql";
-import { mapProjectRow, nanoid } from "./helpers";
+import { mapProjectRow, nanoid, parseHostsColumn } from "./helpers";
 
 export function listProjects(db: Database.Database): Project[] {
   const rows = db
@@ -12,6 +12,14 @@ export function listProjects(db: Database.Database): Project[] {
 export function getProject(db: Database.Database, id: string): Project | null {
   const row = db.prepare("SELECT * FROM projects WHERE id = ?").get(id);
   return row ? mapProjectRow(row as Record<string, unknown>) : null;
+}
+
+/** Called per subresource while an agent drives a pane: only the one column */
+export function getProjectBrowserHosts(db: Database.Database, id: string): string[] {
+  const row = db.prepare("SELECT browser_hosts FROM projects WHERE id = ?").get(id) as
+    | { browser_hosts: string | null }
+    | undefined;
+  return parseHostsColumn(row?.browser_hosts);
 }
 
 export function createProject(db: Database.Database, data: ProjectCreate): Project {

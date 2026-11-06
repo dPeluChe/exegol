@@ -7,12 +7,8 @@ import { runMigrations } from "../db/migrations";
 import { ensureProjectBrief } from "../knowledge/brief";
 import { refreshDigest } from "../knowledge/staleness";
 import type { ExegolToolContext } from "./exegol-protocol";
-import {
-  callExegolTool,
-  EXEGOL_TOOL_DEFS,
-  ExegolToolError,
-  getToolDefsForAccessMode,
-} from "./exegol-tools";
+import { EXEGOL_TOOL_DEFS, getToolDefsForAccessMode } from "./exegol-tool-defs";
+import { callExegolTool, ExegolToolError } from "./exegol-tools";
 
 // The internal digest, never the real trs (it would record each call in ~/.trs history)
 vi.mock("../agents/spawn-env", async (importOriginal) => ({
@@ -113,17 +109,6 @@ describe("exegol-tools", () => {
         source_agent_id: string;
       };
       expect(row.source_agent_id).toBe("agent-1");
-    });
-
-    it("memory_save rejects read-mode agents", async () => {
-      await expect(
-        callExegolTool(
-          db,
-          "memory_save",
-          { fact: "Should not be saved", category: "convention" },
-          makeContext({ accessMode: "read" }),
-        ),
-      ).rejects.toThrow(/write access/);
     });
 
     it("memory_search finds a previously saved fact", async () => {

@@ -5,8 +5,8 @@ import {
   BROWSER_READ_TOOLS,
   BROWSER_WRITE_TOOLS,
   type BrowserToolName,
-  ExegolToolError,
-} from "../mcp/exegol-protocol";
+} from "../mcp/browser-tool-defs";
+import { ExegolToolError } from "../mcp/exegol-protocol";
 import { forgetAgentControl } from "./control";
 import {
   pageDialogBlockedResult,
@@ -23,18 +23,17 @@ import {
   userHasControl,
 } from "./tool-guards";
 import {
-  clearAgentWaits,
   handleEval,
   handleList,
   handleLogs,
   handleNavigate,
   handleOpen,
   handlePress,
-  handleScreenshot,
   handleSnapshot,
-  handleWait,
   runAction,
 } from "./tool-handlers";
+import { handleScreenshot } from "./tool-screenshot";
+import { clearAgentWaits, handleWait } from "./tool-wait";
 
 const MAX_TYPE_CHARS = 5_000;
 const BROWSER_TOOLS: readonly string[] = [...BROWSER_READ_TOOLS, ...BROWSER_WRITE_TOOLS];
