@@ -12,6 +12,7 @@ import { useMountEffect } from "../../../hooks/use-mount-effect";
 import { isClaudeQuestion } from "../../../lib/claude-question";
 import { hasClipboardImage } from "../../../lib/clipboard-image";
 import { answersPrompt } from "../../../lib/dictation/target";
+import { fileDragToPaste, finderFilesToPaste, hasFileDragData } from "../../../lib/file-drag";
 import {
   appendChatPage,
   type ChatHistory,
@@ -156,6 +157,12 @@ function ChatInput({ agent, onTerminal }: { agent: AgentState; onTerminal: () =>
   const atPrompt = agent.status === "waiting_input" || agent.status === "idle";
   const queued = useFollowUps(agent.id, accepts);
 
+  // From the map: a saved image lands after renders that may have changed the draft
+  const attach = (text: string) => {
+    const now = drafts.get(agent.id) ?? "";
+    setDraft(`${now}${now && !now.endsWith(" ") ? " " : ""}${text}`);
+  };
+  const [dropping, setDropping] = useState(false);
   const [typed, setTyped] = useState<string | null>(null);
   const send = useMutation({
     mutationFn: (text: string) =>
@@ -184,7 +191,23 @@ function ChatInput({ agent, onTerminal }: { agent: AgentState; onTerminal: () =>
   }
 
   return (
-    <div className="flex flex-col gap-1.5 border-t border-border p-2">
+    // biome-ignore lint/a11y/noStaticElementInteractions: a drop target, the input inside takes the keyboard
+    <div
+      className={cn("flex flex-col gap-1.5 border-t border-border p-2", dropping && "bg-accent/10")}
+      onDragOver={(e) => {
+        if (!hasFileDragData(e)) return;
+        e.preventDefault();
+        setDropping(true);
+      }}
+      onDragLeave={() => setDropping(false)}
+      onDrop={(e) => {
+        setDropping(false);
+        const text = fileDragToPaste(e);
+        if (!text) return;
+        e.preventDefault();
+        attach(text);
+      }}
+    >
       {dialog ? (
         <AgentQuestion agentId={agent.id} enabled={accepts} />
       ) : (
@@ -213,11 +236,14 @@ function ChatInput({ agent, onTerminal }: { agent: AgentState; onTerminal: () =>
             setTyped(null);
           }}
           onPaste={(e) => {
-            if (!hasClipboardImage(e.clipboardData)) return;
+            const files = finderFilesToPaste(e.clipboardData);
+            if (!files && !hasClipboardImage(e.clipboardData)) return;
             e.preventDefault();
-            void window.api.terminal.saveClipboardImage().then((path) => {
-              if (path) setDraft(`${draft}${draft && !draft.endsWith(" ") ? " " : ""}${path} `);
-            });
+            if (files) attach(files);
+            else
+              void window.api.terminal.saveClipboardImage().then((path) => {
+                if (path) attach(`${path} `);
+              });
           }}
           onKeyDown={(e) => {
             if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
