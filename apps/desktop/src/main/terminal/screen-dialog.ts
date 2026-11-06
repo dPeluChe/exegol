@@ -99,7 +99,7 @@ function readPlainList(lines: string[], last: number): ScreenDialog | null {
   });
   const inOrder = options.every((o, i) => o.key === String(i + 1));
   if (options.length < 2 || !inOrder) return null;
-  const picked = lines.slice(start, end + 1).some((l) => /^[\s│|]*[❯›>]/.test(l));
+  const picked = lines.slice(start, end + 1).some((l) => /^[\s│|]*[❯›]/.test(l));
   return dialogAt(lines, start, options, picked);
 }
 

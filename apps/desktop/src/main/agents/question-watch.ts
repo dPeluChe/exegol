@@ -1,11 +1,11 @@
 import type { AgentStatus, ScreenDialog } from "@exegol/shared";
 import type Database from "libsql";
-import { isAgentQuiet } from "../db/queries";
 import { logger } from "../lib/logger";
 import { getNotificationBus } from "../notifications/bus";
 import { getPtyHost } from "../terminal/pty-host";
 import { isAgentAwaitingApproval } from "./agent-message-queue";
 import { lastAgentOutput } from "./agent-message-sweep";
+import { questionStep, type Watched } from "./question-step";
 import { broadcastAgentStatus } from "./spawn-env";
 import { writeAgentStatus } from "./status-writes";
 
@@ -13,44 +13,20 @@ const CHECK_MS = 3_000;
 const ANSWERED_STEP = "Working";
 const ASKED_STEP = "Waiting for your answer";
 
-type Row = { id: string; project_id: string; cli_type: string; status: AgentStatus };
-
-interface Watched {
-  /** Output stamp of the last read: nothing new on screen, nothing to read */
-  readAt?: number;
-  /** Seen once, not alerted: a dialog counts when it holds still for two reads */
-  seen?: string;
-  /** The dialog already alerted, and whether this watch moved the status for it */
-  alerted?: string;
-  movedStatus?: boolean;
-}
-
-export type QuestionStep = "none" | "alert" | "resolved";
-
-/** One read of a session's screen; pure so the two-read rule and the release stay testable */
-export function questionStep(state: Watched, dialog: ScreenDialog | null): QuestionStep {
-  if (!dialog?.picked) {
-    state.seen = undefined;
-    if (!state.alerted) return "none";
-    state.alerted = undefined;
-    return "resolved";
-  }
-  if (dialog.fingerprint === state.alerted) return "none";
-  if (dialog.fingerprint !== state.seen) {
-    state.seen = dialog.fingerprint;
-    return "none";
-  }
-  state.seen = undefined;
-  state.alerted = dialog.fingerprint;
-  return "alert";
-}
+type Row = {
+  id: string;
+  project_id: string;
+  cli_type: string;
+  status: AgentStatus;
+  muted: number | null;
+};
 
 const watched = new Map<string, Watched>();
 
 function liveSessions(db: Database.Database): Row[] {
   return db
     .prepare(
-      `SELECT id, project_id, cli_type, status FROM agents
+      `SELECT id, project_id, cli_type, status, muted FROM agents
        WHERE archived_at IS NULL AND suspended_at IS NULL AND cli_type != 'shell'
          AND status IN ('running', 'idle', 'waiting_input')`,
     )
@@ -97,7 +73,8 @@ export function checkQuestions(db: Database.Database): void {
     const output = lastAgentOutput(row.id);
     if (output === state.readAt && !state.seen) continue;
     state.readAt = output;
-    if (isAgentAwaitingApproval(row.id) || isAgentQuiet(db, row.id)) continue;
+    // A hook's approval alerted by itself; once this watch alerted, the flag is its own
+    if (row.muted === 1 || (isAgentAwaitingApproval(row.id) && !state.alerted)) continue;
     const dialog = host.screenDialog(row.id);
     const step = questionStep(state, dialog);
     if (step === "alert" && dialog) alert(db, row, state, dialog);
