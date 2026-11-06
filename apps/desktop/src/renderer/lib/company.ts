@@ -28,6 +28,14 @@ export function deskActivity(
   return activity ?? "thinking";
 }
 
+export const ACTIVITY_LABEL: Record<DeskActivity, string> = {
+  edits: "Editing files",
+  command: "Running a command",
+  browser: "Using the browser",
+  thinking: "Thinking",
+  message: "Messaging another session",
+};
+
 export interface Room {
   projectId: string;
   desks: AgentState[];

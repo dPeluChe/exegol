@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Company chat: a working row with animated orbs says what the session is doing during a turn
 - Agents no longer act on a browser pane another agent is driving, `browser_open` no longer loads over a pane you are reading, and agents can close the panes they opened
 - Agents get usage instructions from Exegol's MCP server and three new browser tools: wait for text or a url, hover, and scroll; they can also go back, forward or reload and take a full-page screenshot
 - Company chat loads earlier messages, opens links and file paths on click, and shows the CLI and time on each turn; Chat and Terminal keep their own panel width, and the panel sits left or right
@@ -40,6 +41,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Browser panes search from the address bar: `?telnyx`, or words that are not an address, open a Google search; `localhost:3000`, `example.com` and full URLs still go straight there
 
 ### Fixed
+- Company: Cmd+1 and any return to the view keep the session and the Chat or Terminal view you left
 - Terminal paths: a path outside the project, a folder and a path wrapped over rows are now links; outside the project or on a folder a click shows it in Finder, nothing is read or opened
 - A window saved a few pixels off its monitor no longer reopens small and unmaximized, which resized the terminals on screen
 - Agent browser results stop reporting success for what did not happen: a failed load, a click covered by another element, a click the page ignored, a popup that was blocked or a load held up by a resource that never ends; clicks and typing fire the events real input does, so menus and custom widgets respond, and screenshots of pages with no background are no longer black

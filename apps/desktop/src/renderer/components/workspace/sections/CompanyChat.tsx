@@ -35,6 +35,7 @@ import { DictationWidget } from "../../layout/StatusBarDictation";
 import { FollowUpList, useFollowUps } from "../../terminal/FollowUpControl";
 import { DELIVERY, peerName, useAgentMessages } from "./AgentMessages";
 import { ChatMarkdown } from "./ChatMarkdown";
+import { ChatWorking } from "./ChatWorking";
 
 const FALLBACK_POLL_MS = 15_000;
 const NO_TURNS: ChatHistory["turns"] = [];
@@ -341,6 +342,7 @@ export function CompanyChat({
               formatted={!!chat?.markdown}
             />
           ))}
+          <ChatWorking agent={agent} />
         </div>
       </div>
       <ChatInput agent={agent} onTerminal={onTerminal} />

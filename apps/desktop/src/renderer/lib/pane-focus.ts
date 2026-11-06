@@ -105,6 +105,9 @@ export function focusDashboard(): void {
       const shown = [...cards].map((el) => el.dataset.mirrorAgentId ?? "");
       const target = mirrorToFocus(lastMirror, shown);
       (document.activeElement as HTMLElement | null)?.blur();
+      document
+        .querySelector('[aria-pressed="true"][data-desk-id]')
+        ?.scrollIntoView({ block: "nearest" });
       if (!target) return;
       window.dispatchEvent(new CustomEvent("exegol:focus-mirror", { detail: { agentId: target } }));
     }),
