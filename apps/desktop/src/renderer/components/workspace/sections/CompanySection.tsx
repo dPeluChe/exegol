@@ -301,7 +301,7 @@ export function CompanySection({ projectMeta }: { projectMeta: Map<string, Proje
     if (next) setPickedId(next);
   };
 
-  useCompanyKeys({ pickNext, selected, live });
+  useCompanyKeys({ pickNext, pick: setPickedId, selected, live });
 
   const sessionPanel = useRef<ImperativePanelHandle>(null);
   const [view, setView] = useState<CompanyView>("chat");

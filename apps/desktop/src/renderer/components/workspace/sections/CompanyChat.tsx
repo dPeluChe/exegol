@@ -10,6 +10,7 @@ import { Copy, SendHorizontal } from "lucide-react";
 import { memo, useMemo, useState } from "react";
 import { useMountEffect } from "../../../hooks/use-mount-effect";
 import { isClaudeQuestion } from "../../../lib/claude-question";
+import { hasClipboardImage } from "../../../lib/clipboard-image";
 import { answersPrompt } from "../../../lib/dictation/target";
 import {
   appendChatPage,
@@ -133,8 +134,16 @@ const Bubble = memo(function Bubble({
   );
 });
 
+// Moving between sessions remounts the input: what was being typed waits for the way back
+const drafts = new Map<string, string>();
+
 function ChatInput({ agent, onTerminal }: { agent: AgentState; onTerminal: () => void }) {
-  const [draft, setDraft] = useState("");
+  const [draft, setDraftText] = useState(() => drafts.get(agent.id) ?? "");
+  const setDraft = (text: string) => {
+    setDraftText(text);
+    if (text) drafts.set(agent.id, text);
+    else drafts.delete(agent.id);
+  };
   const accepts = acceptsFollowUps(agent);
   const dialog = useScreenDialog(agent.id, accepts);
   const attention = useAgentStore((s) => s.attentionItems[agent.id]);
@@ -195,12 +204,20 @@ function ChatInput({ agent, onTerminal }: { agent: AgentState; onTerminal: () =>
       )}
       <div className="flex items-end gap-1.5">
         <textarea
+          data-chat-input
           value={draft}
           rows={2}
           disabled={asks}
           onChange={(e) => {
             setDraft(e.target.value);
             setTyped(null);
+          }}
+          onPaste={(e) => {
+            if (!hasClipboardImage(e.clipboardData)) return;
+            e.preventDefault();
+            void window.api.terminal.saveClipboardImage().then((path) => {
+              if (path) setDraft(`${draft}${draft && !draft.endsWith(" ") ? " " : ""}${path} `);
+            });
           }}
           onKeyDown={(e) => {
             if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;

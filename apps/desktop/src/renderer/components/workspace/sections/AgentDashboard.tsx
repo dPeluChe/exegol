@@ -23,6 +23,7 @@ import { useFleetSync } from "../../../hooks/use-fleet-sync";
 import { useMountEffect } from "../../../hooks/use-mount-effect";
 import { useNow } from "../../../hooks/use-now";
 import { submitToAgent } from "../../../lib/agent-input";
+import { IS_MAC } from "../../../lib/keymap";
 import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
 import { type AgentState, isWorking, jumpToAgent, useAgentStore } from "../../../stores/agents";
 import { type DashboardMode, useAppStore } from "../../../stores/app";
@@ -271,7 +272,10 @@ export function AgentDashboard() {
           </span>
         )}
         {mode === "company" && (
-          <span className="ml-auto">P next that needs you, Enter opens it in its layout</span>
+          <span className="ml-auto">
+            P next that needs you, {IS_MAC ? "Option" : "Alt"}+Up/Down moves between sessions, Enter
+            opens it in its layout
+          </span>
         )}
         {mode === "all" && (
           <div className="ml-auto flex items-center gap-1">

@@ -104,6 +104,12 @@ export function nextNeedsYou(needs: string[], selected: string | null): string |
   return needs[(needs.indexOf(selected ?? "") + 1) % needs.length] ?? null;
 }
 
+/** The session `step` places from the selection, round the list */
+export function stepDesk(ids: string[], selected: string | null, step: number): string | null {
+  const at = ids.indexOf(selected ?? "");
+  return ids[(Math.max(at, 0) + step + ids.length) % ids.length] ?? null;
+}
+
 /** Sessions sharing a tab with a browser pane */
 export function besideBrowser(workspace: ProjectWorkspace | undefined): Set<string> {
   const ids = new Set<string>();

@@ -13,6 +13,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Company chat loads earlier messages, opens links and file paths on click, and shows the CLI and time on each turn; Chat and Terminal keep their own panel width, and the panel sits left or right
 - The Dashboard reopens on the tab you left
 - Company chat has a Send button and says when a message was typed in the terminal; using the panel keeps it on that session
+- Company chat takes pasted images, keeps a draft per session, and Option+Up/Down or Option+N move between sessions while typing
 - Company desks are compact rows: icon, name and badges, then state; plain terminals take less and show what they run; tabs of a project sit in dotted groups, and rooms pack without gaps
 - Sidebar and rooms show open PRs and issues with their own icons
 - Company chat renders Markdown (tables, lists, code) and its panel resizes with a bar; rooms and sessions list what needs you first, then the most recent

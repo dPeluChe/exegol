@@ -8,6 +8,7 @@ import {
   deskState,
   groupByTab,
   nextNeedsYou,
+  stepDesk,
   todayStrip,
 } from "./company";
 
@@ -131,6 +132,14 @@ describe("todayStrip", () => {
       { ...ctx, outdated: new Set(["claude-code"]) },
     );
     expect(ids(strip.canWait)).toEqual(["a"]);
+  });
+});
+
+describe("stepDesk", () => {
+  it("moves both ways round the list", () => {
+    expect(stepDesk(["a", "b", "c"], "c", 1)).toBe("a");
+    expect(stepDesk(["a", "b", "c"], "a", -1)).toBe("c");
+    expect(stepDesk([], null, 1)).toBeNull();
   });
 });
 
