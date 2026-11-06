@@ -1,9 +1,9 @@
 import { open, readdir, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { Agent, ChatPage, OlderChatPage } from "@exegol/shared";
+import { type Agent, type ChatPage, LIVE_STATUSES, type OlderChatPage } from "@exegol/shared";
 import type Database from "libsql";
-import { getAgent, getAgentCwd } from "../db/queries/agents";
+import { getAgent, getAgentCwd, listAgents } from "../db/queries/agents";
 import { claudeProjectDir } from "../history/providers/claude-code";
 import { dayDirs } from "../history/providers/codex";
 import { broadcast } from "../lib/event-bus";
@@ -11,6 +11,7 @@ import { setBounded } from "../lib/set-bounded";
 import { assertSafePath } from "../security/path-guard";
 import { getPtyHost } from "../terminal/pty-host";
 import { hookCwdOf, hookSessionOf } from "./hook-cwd";
+import { olderOpencodePage, opencodeDbPath, opencodePage } from "./opencode-chat";
 import { providerSessionId, SESSION_ID_RE } from "./provider-session-id";
 import {
   type LineParser,
@@ -150,6 +151,21 @@ export function noteChatBoundary(agentId: string, cliType: string): void {
   pushTimers.set(agentId, timer);
 }
 
+/** The folders to look in. opencode files sessions by folder only: with two of its sessions live
+ *  in one folder either could be the other's, so those stay on terminal text */
+function opencodeFolders(db: Database.Database, agent: Agent): string[] {
+  const own = getAgentCwd(db, agent.id);
+  const shared = listAgents(db, agent.projectId).some(
+    (a) =>
+      a.id !== agent.id &&
+      a.cliType === "opencode" &&
+      LIVE_STATUSES.has(a.status) &&
+      getAgentCwd(db, a.id) === own,
+  );
+  if (shared) return [];
+  return [...new Set([hookCwdOf(agent.id), own])].filter((cwd): cwd is string => !!cwd);
+}
+
 const NOTHING: ChatPage = {
   turns: [],
   cursor: null,
@@ -166,6 +182,13 @@ export async function chatTurns(
 ): Promise<ChatPage> {
   const agent = getAgent(db, agentId);
   if (!agent) return NOTHING;
+
+  if (agent.cliType === "opencode") {
+    const cwds = opencodeFolders(db, agent);
+    const since = (agent.startedAt ?? 0) * 1000;
+    const page = cwds.length > 0 ? opencodePage(opencodeDbPath(), cwds, since, cursor) : null;
+    if (page) return { ...page, fromTerminal: false };
+  }
 
   const provider = PROVIDERS[agent.cliType];
   const path = provider ? await transcriptPath(db, agent, provider) : null;
@@ -192,6 +215,7 @@ export async function olderChatTurns(
 ): Promise<OlderChatPage> {
   const nothing = { turns: [], older: null };
   const agent = getAgent(db, agentId);
+  if (agent?.cliType === "opencode") return olderOpencodePage(opencodeDbPath(), before);
   const provider = agent && PROVIDERS[agent.cliType];
   const path = agent && provider ? await transcriptPath(db, agent, provider) : null;
   if (!provider || !path) return nothing;

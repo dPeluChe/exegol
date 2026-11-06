@@ -42,6 +42,9 @@ interface AppStore {
   /** Which side of Company the session panel sits on */
   companySessionSide: CompanySide;
   toggleCompanySessionSide: () => void;
+  /** Company chat text, px */
+  companyChatFont: number;
+  stepCompanyChatFont: (delta: number) => void;
   /** Width of the session panel per view, percent of Company */
   companySessionSizes: Record<CompanyView, number>;
   setCompanySessionSize: (view: CompanyView, percent: number) => void;
@@ -97,6 +100,10 @@ export function projectOrderFromTabKeys(keys: string[]): string[] {
  * v4: the sidebar orders projects, not tabs. v5: one sidebar view selector, no Projects split
  */
 export type DashboardMode = "company" | "watching" | "all";
+/** Chat text is laid out in Tailwind's px sizes: this scales the whole of it */
+export const DEFAULT_CHAT_FONT = 12;
+const MIN_CHAT_FONT = 10;
+const MAX_CHAT_FONT = 20;
 export type CompanyView = "chat" | "terminal";
 export type CompanySide = "left" | "right";
 
@@ -208,6 +215,14 @@ export const useAppStore = create<AppStore>()(
       companySessionSide: "left",
       toggleCompanySessionSide: () =>
         set((s) => ({ companySessionSide: s.companySessionSide === "left" ? "right" : "left" })),
+      companyChatFont: DEFAULT_CHAT_FONT,
+      stepCompanyChatFont: (delta) =>
+        set((s) => ({
+          companyChatFont: Math.min(
+            MAX_CHAT_FONT,
+            Math.max(MIN_CHAT_FONT, s.companyChatFont + delta),
+          ),
+        })),
       companySessionSizes: { chat: 30, terminal: 55 },
       setCompanySessionSize: (view, percent) =>
         set((s) => ({ companySessionSizes: { ...s.companySessionSizes, [view]: percent } })),
@@ -233,6 +248,7 @@ export const useAppStore = create<AppStore>()(
         dashboardMode: state.dashboardMode,
         companySessionSide: state.companySessionSide,
         companySessionSizes: state.companySessionSizes,
+        companyChatFont: state.companyChatFont,
       }),
     },
   ),

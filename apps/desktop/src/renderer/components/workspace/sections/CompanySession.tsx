@@ -1,11 +1,13 @@
 import { ArrowLeftRight, ExternalLink } from "lucide-react";
 import { type AgentState, jumpToAgent, useAgentStore } from "../../../stores/agents";
 import { type CompanyView, useAppStore } from "../../../stores/app";
+import { useWatchStore } from "../../../stores/watch";
 import { AgentIcon } from "../../common/AgentIcon";
 import { SegmentedTabs } from "../../common/SegmentedTabs";
 import { SessionAlias } from "../../common/SessionAlias";
 import { WatchToggle } from "../../common/WatchToggle";
 import { ErrorBoundary, paneFallback } from "../../ErrorBoundary";
+import { CardSizeControls } from "../../terminal/CardSizeControls";
 import { MirrorFrame } from "../../terminal/MirrorFrame";
 import { CompanyChat } from "./CompanyChat";
 
@@ -14,6 +16,24 @@ const VIEWS: { id: CompanyView; label: string }[] = [
   { id: "terminal", label: "Terminal" },
 ];
 const PANEL_ID = "company-session-panel";
+
+function ChatSizeControls() {
+  const font = useAppStore((s) => s.companyChatFont);
+  const step = useAppStore((s) => s.stepCompanyChatFont);
+  const btn =
+    "rounded px-1 py-0.5 text-[10px] text-text-muted hover:bg-white/10 hover:text-text-primary";
+  return (
+    <div className="flex shrink-0 items-center gap-0.5">
+      <button type="button" onClick={() => step(-1)} className={btn} title="Smaller text">
+        A−
+      </button>
+      <span className="w-5 text-center text-[10px] tabular-nums text-text-muted">{font}</span>
+      <button type="button" onClick={() => step(1)} className={btn} title="Larger text">
+        A+
+      </button>
+    </div>
+  );
+}
 
 /** The selected desk: its turns as a chat, or its mirror. A plain shell has no turns */
 export function CompanySession({
@@ -29,6 +49,7 @@ export function CompanySession({
 }) {
   const side = useAppStore((s) => s.companySessionSide);
   const toggleSide = useAppStore((s) => s.toggleCompanySessionSide);
+  const cardFont = useWatchStore((s) => s.cardFont[agent.id]);
   const hasChat = agent.cliType !== "shell";
   const view = hasChat ? picked : "terminal";
   return (
@@ -57,18 +78,27 @@ export function CompanySession({
           Open in its layout
         </button>
       </div>
-      {hasChat && (
-        <div className="border-b border-border p-1.5">
-          <SegmentedTabs
-            tabs={VIEWS}
-            active={view}
-            onChange={onPick}
-            compact
-            label="Session view"
-            panelId={PANEL_ID}
-          />
-        </div>
-      )}
+      <div className="flex items-center gap-2 border-b border-border p-1.5">
+        {hasChat && (
+          <div className="min-w-0 flex-1">
+            <SegmentedTabs
+              tabs={VIEWS}
+              active={view}
+              onChange={onPick}
+              compact
+              label="Session view"
+              panelId={PANEL_ID}
+            />
+          </div>
+        )}
+        {view === "chat" ? (
+          <ChatSizeControls />
+        ) : (
+          <div className="ml-auto">
+            <CardSizeControls agentId={agent.id} />
+          </div>
+        )}
+      </div>
       {view === "chat" ? (
         <div id={PANEL_ID} role="tabpanel" className="min-h-0 flex-1 overflow-hidden">
           <ErrorBoundary fallback={paneFallback}>
@@ -78,6 +108,7 @@ export function CompanySession({
       ) : (
         <MirrorFrame
           agent={agent}
+          cardFont={cardFont}
           id={PANEL_ID}
           role={hasChat ? "tabpanel" : undefined}
           className="min-h-0 flex-1 overflow-hidden bg-black/40 p-1"

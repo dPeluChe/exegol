@@ -112,7 +112,12 @@ function jsonLine(line: string): Record<string, unknown> | null {
   }
 }
 
-const textTurn = (id: string, role: SessionTurn["role"], text: string, at: number | null) => {
+export const textTurn = (
+  id: string,
+  role: SessionTurn["role"],
+  text: string,
+  at: number | null,
+) => {
   const clean = text.trim().slice(0, MAX_TURN_CHARS);
   return clean ? [{ id, role, text: clean, at }] : [];
 };

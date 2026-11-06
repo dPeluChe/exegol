@@ -25,6 +25,7 @@ import {
 } from "../../../lib/session-chat";
 import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
 import { type AgentState, useAgentStore } from "../../../stores/agents";
+import { DEFAULT_CHAT_FONT, useAppStore } from "../../../stores/app";
 import { toastError } from "../../../stores/toasts";
 import { AgentQuestion, useScreenDialog } from "../../agents/AgentQuestion";
 import { AgentIcon } from "../../common/AgentIcon";
@@ -294,8 +295,10 @@ export function CompanyChat({
     if (chat?.older && bubbles.length < shown + SHOWN_STEP) older.mutate(chat.older);
   };
 
+  const zoom = useAppStore((s) => s.companyChatFont) / DEFAULT_CHAT_FONT;
+
   return (
-    <div className="flex h-full min-h-0 flex-col">
+    <div className="flex h-full min-h-0 flex-col" style={{ zoom }}>
       <div className="flex items-center gap-2 px-2.5 pt-1.5 text-[10px] text-text-muted">
         <span className="flex-1">{chat?.fromTerminal ? "From the terminal" : ""}</span>
         <button

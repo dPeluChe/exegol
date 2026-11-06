@@ -249,7 +249,11 @@ async function readSettings(): Promise<DictationSettings> {
 }
 
 export async function startDictation(): Promise<void> {
-  if (run || store().phase === "transcribing") return;
+  if (run || store().phase === "transcribing") {
+    const stage = `phase=${store().phase} run=${!!run}`;
+    window.api.reportError?.("dictation", `start ignored: ${stage}`, "");
+    return;
+  }
   const { target, field, anchor } = snapshot();
   store().set({
     phase: "starting",
@@ -290,7 +294,10 @@ export async function startDictation(): Promise<void> {
     const [settings, status] = await Promise.all([readSettings(), loadStatus()]);
     if (gone()) return;
     current.settings = settings;
-    if (!status.engineAvailable) return reset();
+    if (!status.engineAvailable) {
+      window.api.reportError?.("dictation", "start ignored: no speech engine", "");
+      return reset();
+    }
     if (!current.settings.enabled) throw new Error("Dictation is off in Settings > Dictation");
     if (!status.model.ready) return endWith({ phase: "no-model" });
     trpcMutate("dictation.warm", { projectId: target.projectId }).catch(() => {});
