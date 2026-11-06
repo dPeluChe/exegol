@@ -55,7 +55,7 @@ export async function dirSize(
 
 /** Disk use of a large tree via `du -sk` (no links followed), null when it fails or times out */
 export async function duBytes(path: string): Promise<number | null> {
-  if (process.platform === "win32") return dirSize(path).catch(() => null);
+  if (process.platform === "win32") return (await dirSize(path)) || null;
   try {
     const { stdout } = await execFileAsync("du", ["-sk", path], { timeout: 10_000 });
     const kb = Number.parseInt(stdout.split(/\s/)[0] ?? "", 10);

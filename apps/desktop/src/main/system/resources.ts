@@ -9,7 +9,7 @@ import { getNotificationBus } from "../notifications/bus";
 import { getPtyHost } from "../terminal/pty-host";
 import { readPidFile } from "../terminal/pty-sidecar-discovery";
 import type { SessionMemoryResult } from "../terminal/pty-sidecar-protocol";
-import { readProcessMetrics, WIN_TABLE_AGE_MS } from "./process-metrics";
+import { readProcessMetrics } from "./process-metrics";
 import { type ProcRow, readProcessTable, readProcessUsage } from "./process-table";
 import { duBytes } from "./storage";
 
@@ -65,6 +65,8 @@ interface ProjectMetrics {
 const COLLECT_INTERVAL = 10_000; // 10 seconds
 /** The promotion poll reads the full table every 3 s: one this recent is reused, else a light ps */
 const SHARED_PS_AGE_MS = 4_000;
+/** A read there starts PowerShell, a second or two of CPU */
+const WIN_TABLE_AGE_MS = 120_000;
 
 let cachedMetrics: SystemMetrics | null = null;
 let collectorTimer: ReturnType<typeof setInterval> | null = null;

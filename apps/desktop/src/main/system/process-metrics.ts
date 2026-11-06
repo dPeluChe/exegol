@@ -1,8 +1,4 @@
 import { execFileAsync } from "../lib/exec-file";
-import { readProcessTable } from "./process-table";
-
-/** A read starts PowerShell: a second or two of CPU */
-export const WIN_TABLE_AGE_MS = 30_000;
 
 export interface ProcessMetrics {
   cpu: number;
@@ -26,13 +22,8 @@ export function parsePsMetrics(stdout: string): Map<number, ProcessMetrics> {
 
 /** One `ps` for every pid; throws when ps fails (exit 1 when none of them runs) */
 export async function readProcessMetrics(pids: number[]): Promise<Map<number, ProcessMetrics>> {
-  // Memory only on Windows: per-process CPU there needs two samples
-  if (process.platform === "win32") {
-    const rows = await readProcessTable({ maxAgeMs: WIN_TABLE_AGE_MS });
-    const wanted = new Set(pids);
-    const held = rows.filter((r) => wanted.has(r.pid));
-    return new Map(held.map((r) => [r.pid, { cpu: 0, memory: (r.rss ?? 0) * 1024 }]));
-  }
+  // No ps on Windows: per-process CPU there needs two samples; not measured yet
+  if (process.platform === "win32") return new Map();
   const { stdout } = await execFileAsync("ps", ["-o", "pid=,pcpu=,rss=", "-p", pids.join(",")], {
     timeout: 3_000,
   });

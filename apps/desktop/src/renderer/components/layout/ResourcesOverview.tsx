@@ -3,6 +3,7 @@ import { useRef, useState } from "react";
 import { useMountEffect } from "../../hooks/use-mount-effect";
 import { useSystemMetrics } from "../../hooks/use-trpc";
 import type { SystemMetrics } from "../../hooks/use-trpc-resources";
+import { IS_MAC } from "../../lib/keymap";
 
 function barColor(pct: number): string {
   if (pct < 60) return "bg-green-500";
@@ -117,7 +118,7 @@ export function ResourcesOverview() {
             ? `${gb(metrics.disk.total - metrics.disk.free)} of ${gb(metrics.disk.total)}`
             : undefined
         }
-        title="Your data volume"
+        title={IS_MAC ? "Your data volume (/ is the read-only system volume)" : "Your data volume"}
       />
     </div>
   );

@@ -379,7 +379,7 @@ function OllamaStatusSection({
                   <code className="rounded bg-white/5 px-1 py-0.5">brew install ollama</code> or{" "}
                 </>
               )}
-              Download from{" "}
+              {IS_MAC ? "download" : "Download"} from{" "}
               <button
                 type="button"
                 onClick={() => openInBrowser("https://ollama.ai")}
