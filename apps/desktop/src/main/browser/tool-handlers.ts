@@ -1,17 +1,16 @@
-import { hostOf, isHostAllowed, isOutsideAllowlist, LOCAL_HOST_PATTERNS } from "@exegol/shared";
+import { hostOf, isOutsideAllowlist, LOCAL_HOST_PATTERNS } from "@exegol/shared";
 import type Database from "libsql";
 import { getProject } from "../db/queries/projects";
 import { ExegolToolError } from "../mcp/exegol-protocol";
 import { getPaneControl } from "./control";
 import { isLogLevel } from "./log-ring";
+import { type ActionResult, actionScript, type PageAction } from "./page-actions";
 import {
-  actionScript,
-  formatSnapshot,
   guardedEvalScript,
   isPageChangedError,
-  type PageAction,
   parseKey,
   parseRef,
+  watchScript,
 } from "./page-scripts";
 import {
   allowedHostsOf,
@@ -22,14 +21,14 @@ import {
   logAction,
   needsUserResult,
   PAGE_CHANGED,
-  pageSummary,
   pageUnavailable,
   requireHost,
   resolvePane,
-  settle,
   touch,
   userHasControl,
+  visibleEntries,
 } from "./tool-guards";
+import { markAction, pageSummary, snapshotView } from "./tool-outcome";
 
 const EVAL_TIMEOUT_MS = 10_000;
 const MAX_EVAL_RESULT = 20_000;
@@ -98,13 +97,12 @@ export async function handleOpen(
     if (blocked) return blocked;
     pane = reuse;
     touch(db, ctx, pane);
-    await pane.loadUrl(url);
+    pane.loadUrl(url);
   } else {
     pane = await h.openPane({ projectId: ctx.projectId, agentId: ctx.agentId, url });
     touch(db, ctx, pane);
   }
-  await settle();
-  const result = await pageSummary(db, ctx, pane);
+  const result = await pageSummary(db, ctx, pane, markAction(pane, args.snapshot));
   logAction(db, ctx, {
     tool: "browser_open",
     paneId: pane.paneId,
@@ -114,23 +112,26 @@ export async function handleOpen(
   return result;
 }
 
+const count = (raw: unknown): number => {
+  const n = Math.floor(Number(raw));
+  return Number.isFinite(n) && n > 0 ? n : 0;
+};
+
 export async function handleSnapshot(
   db: Database.Database,
   ctx: BrowserToolContext,
   pane: BrowserPaneHandle,
+  args: Record<string, unknown>,
 ) {
-  const { page, needsUser } = await inspect(db, ctx, pane, true);
-  touch(db, ctx, pane);
-  if (!page) return pageUnavailable(pane, needsUser);
-  const { truncated, ...content } = formatSnapshot(page);
-  return {
-    pane: pane.paneId,
-    url: page.url,
-    untrusted_page_content: content,
-    truncated,
-    ...(needsUser ? { needs_user: needsUserResult(pane, needsUser) } : {}),
-    hint: "Act on elements by ref (e12.k3x) with browser_click / browser_type / browser_select. A ref works only on the page it came from: after a navigation, take a new snapshot.",
+  const opts = {
+    full: args.full === true,
+    offset: count(args.offset),
+    textOffset: count(args.text_offset),
   };
+  const { page, needsUser, loadFailed } = await inspect(db, ctx, pane, opts);
+  touch(db, ctx, pane);
+  if (!page) return pageUnavailable(pane, needsUser, loadFailed);
+  return snapshotView(pane, page, opts, needsUser);
 }
 
 export async function handleLogs(
@@ -146,16 +147,14 @@ export async function handleLogs(
     if (needsUser) return needsUserResult(pane, needsUser);
   }
   touch(db, ctx, pane);
-  const since = Number.isFinite(Number(args.since)) ? Math.max(0, Number(args.since)) : undefined;
+  const since = count(args.since);
   const level = isLogLevel(args.level) ? args.level : undefined;
   const limit = Number.isFinite(Number(args.limit)) ? Number(args.limit) : undefined;
   const r = pane.logs.query({ since, level, limit });
   return {
     pane: pane.paneId,
     untrusted_page_content: {
-      entries: r.entries
-        .filter((e) => !e.page || isHostAllowed(e.page, allowed))
-        .map(({ page: _page, ...e }) => e),
+      entries: visibleEntries(r.entries, allowed).map(({ page: _page, ...e }) => e),
     },
     lastSeq: r.lastSeq,
     ...(r.dropped ? { note: "Older entries were dropped (the buffer keeps the last 500)." } : {}),
@@ -171,9 +170,9 @@ export async function handleNavigate(
 ) {
   const url = checkUrlArg(db, ctx, args.url);
   touch(db, ctx, pane);
-  await pane.loadUrl(url);
-  await settle();
-  return pageSummary(db, ctx, pane);
+  const mark = markAction(pane, args.snapshot);
+  pane.loadUrl(url);
+  return pageSummary(db, ctx, pane, mark);
 }
 
 async function runGuarded<T>(run: () => Promise<T>): Promise<T> {
@@ -191,25 +190,33 @@ export async function runAction(
   pane: BrowserPaneHandle,
   refArg: unknown,
   act: PageAction,
+  snapshot: unknown,
 ) {
   const ref = parseRef(refArg);
   if (!ref) {
     throw new ExegolToolError("ref must look like e12.k3x (from browser_snapshot)", -32602);
   }
-  const { page, host, needsUser } = await inspect(db, ctx, pane);
-  if (!page) return pageUnavailable(pane, needsUser);
+  const { page, host, needsUser, loadFailed } = await inspect(db, ctx, pane);
+  if (!page) return pageUnavailable(pane, needsUser, loadFailed);
   touch(db, ctx, pane);
-  const r = (await runGuarded(() => pane.runIsolated(actionScript(ref, act, host)))) as {
-    ok?: boolean;
-    error?: string;
-    options?: string[];
-    value?: string;
-  } | null;
+  const reacts = act.action === "click" || (act.action === "type" && act.submit);
+  const mark = markAction(pane, snapshot, reacts ? page : undefined);
+  const r = (await runGuarded(() =>
+    pane.runIsolated(actionScript(ref, act, host)),
+  )) as ActionResult | null;
   if (r?.error === "password") {
     throw new ExegolToolError(
       "Refused: that looks like a password field. Agents never type passwords: call browser_wait_for_user and let the user log in.",
       -32024,
     );
+  }
+  if (r?.error === "obscured") {
+    return {
+      status: "obscured",
+      pane: pane.paneId,
+      untrusted_page_content: { covered_by: r.by },
+      hint: "Another element is on top of this one, so a user could not click it: close what covers it (a dialog, a menu, a banner), or pass force: true to click it anyway.",
+    };
   }
   if (r?.error === "stale_ref") {
     throw new ExegolToolError(
@@ -217,14 +224,19 @@ export async function runAction(
       -32025,
     );
   }
-  if (!r?.ok) {
-    throw new ExegolToolError(
-      `${act.action} failed on ${ref}: ${r?.error ?? "no result"}${r?.options ? ` (options: ${r.options.join(", ")})` : ""}`,
-      -32026,
-    );
+  if (r?.error === "no_option") {
+    return {
+      status: "no_option",
+      pane: pane.paneId,
+      untrusted_page_content: { options: r.options },
+      hint: "That value is not an option of this select: pick one of options.",
+    };
   }
-  await settle();
-  return pageSummary(db, ctx, pane);
+  if (!r?.ok) {
+    throw new ExegolToolError(`${act.action} failed on ${ref}: ${r?.error ?? "no result"}`, -32026);
+  }
+  if (r.submitted === "enter") pane.sendKey("Enter", []);
+  return pageSummary(db, ctx, pane, mark, { submitted: r.submitted, actualValue: r.actual });
 }
 
 export async function handlePress(
@@ -240,8 +252,8 @@ export async function handlePress(
       -32602,
     );
   }
-  const { page, needsUser } = await inspect(db, ctx, pane);
-  if (!page) return pageUnavailable(pane, needsUser);
+  const { page, needsUser, loadFailed } = await inspect(db, ctx, pane);
+  if (!page) return pageUnavailable(pane, needsUser, loadFailed);
   if (page.focusSecret) {
     throw new ExegolToolError(
       "Refused: a password field has the focus. Agents never type passwords.",
@@ -249,9 +261,10 @@ export async function handlePress(
     );
   }
   touch(db, ctx, pane);
+  await pane.runIsolated(watchScript());
+  const mark = markAction(pane, args.snapshot, page);
   pane.sendKey(key.keyCode, key.modifiers);
-  await settle();
-  return pageSummary(db, ctx, pane);
+  return pageSummary(db, ctx, pane, mark);
 }
 
 export async function handleEval(
@@ -270,8 +283,8 @@ export async function handleEval(
     typeof args.js === "string" ? args.js : typeof args.code === "string" ? args.code : "";
   if (!code.trim()) throw new ExegolToolError("js is required", -32602);
   if (code.length > 20_000) throw new ExegolToolError("js too long (max 20000)", -32602);
-  const { page, host, needsUser } = await inspect(db, ctx, pane);
-  if (!page) return pageUnavailable(pane, needsUser);
+  const { page, host, needsUser, loadFailed } = await inspect(db, ctx, pane);
+  if (!page) return pageUnavailable(pane, needsUser, loadFailed);
   touch(db, ctx, pane);
   let value: unknown;
   try {
