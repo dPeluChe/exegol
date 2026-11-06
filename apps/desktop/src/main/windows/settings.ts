@@ -12,6 +12,7 @@ import { join } from "node:path";
 import { is } from "@electron-toolkit/utils";
 import { BrowserWindow, ipcMain } from "electron";
 import { showMainWindow } from "../bootstrap/window";
+import { logger } from "../lib/logger";
 import { getMainWindow } from "./main-window-ref";
 
 type SettingsTab =
@@ -62,6 +63,7 @@ function dispatchNavigate(win: BrowserWindow, tab: SettingsTab): void {
 }
 
 export function openSettingsWindow(tab?: SettingsTab): void {
+  logger.info(`[Settings] window opened${tab ? ` on ${tab}` : ""}`);
   if (settingsWindow && !settingsWindow.isDestroyed()) {
     if (tab) dispatchNavigate(settingsWindow, tab);
     if (settingsWindow.isMinimized()) settingsWindow.restore();

@@ -91,13 +91,16 @@ export function forwardDictationEscape(
 ): void {
   contents.on("before-input-event", (event, input) => {
     // The chord lives in the windows: no line here means it never reached the app
-    if (
-      chord &&
-      input.type === "keyDown" &&
-      !input.isAutoRepeat &&
-      matchesChord(chordKeys(input), chord, process.platform === "darwin")
-    ) {
-      logger.info(`[Dictation] chord in the ${isMain() ? "main" : "other"} window`);
+    if (input.type === "keyDown" && !input.isAutoRepeat && input.code === "Space") {
+      const keys = chordKeys(input);
+      const where = isMain() ? "main" : "other";
+      if (chord && matchesChord(keys, chord, process.platform === "darwin")) {
+        logger.info(`[Dictation] chord in the ${where} window`);
+      } else if (input.meta || input.control) {
+        // A stuck or remapped modifier looks like a key that never came
+        const mods = `cmd=${input.meta} ctrl=${input.control} shift=${input.shift} alt=${input.alt}`;
+        logger.info(`[Dictation] Space in the ${where} window, not the chord: ${mods}`);
+      }
     }
     if (isPauseDown(input) && isListening() && !isMain()) {
       event.preventDefault();
