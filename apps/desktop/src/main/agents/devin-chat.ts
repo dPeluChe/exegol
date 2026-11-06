@@ -4,12 +4,18 @@ import type Database from "libsql";
 import { z } from "zod";
 import { parseJson } from "../lib/parse-json";
 import { withReadonlyDb } from "../lib/readonly-db";
-import { xdgDataDir } from "../lib/xdg-data";
+import { windowsAppData, xdgDataDir } from "../lib/xdg-data";
 import { textTurn } from "./session-transcript";
 
 const PAGE_NODES = 80;
 
-export const devinDbPath = () => join(xdgDataDir(), "devin", "cli", "sessions.db");
+export const devinDbPath = () =>
+  join(
+    process.platform === "win32" ? windowsAppData() : xdgDataDir(),
+    "devin",
+    "cli",
+    "sessions.db",
+  );
 
 export interface DevinNode {
   node_id: number;

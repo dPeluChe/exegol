@@ -2,13 +2,13 @@ import { execFileSync } from "node:child_process";
 import { type AgentStatus, LIVE_STATUSES } from "@exegol/shared";
 import type Database from "libsql";
 import { logger } from "../lib/logger";
+import { readProcessTable } from "../system/process-table";
 import type { ExegolAccessMode, ExegolToolContext } from "./exegol-protocol";
 import { boundAgents, type McpConnectionState, type TokenEntry } from "./exegol-tokens";
 
 /** One `ps` hop; some CLIs interpose a wrapper. Short timeout: this blocks the main process */
 function parentOf(pid: number): number | null {
-  // Windows has no ps, and starting PowerShell here would block the main process: past hop 0 the
-  // token alone identifies the shim
+  // Windows has no ps and PowerShell would block here: `primeAncestors` read the table first
   if (process.platform === "win32") return null;
   try {
     const out = execFileSync("ps", ["-o", "ppid=", "-p", String(pid)], {
@@ -31,13 +31,33 @@ const PID_WALK_MAX_HOPS = 4;
  */
 function ancestorPids(conn: McpConnectionState | undefined, ppid: number | undefined): number[] {
   if (conn?.ancestors) return conn.ancestors;
-  const chain: number[] = [];
-  let pid: number | null = ppid ?? null;
-  while (pid !== null && chain.length < PID_WALK_MAX_HOPS) {
-    chain.push(pid);
-    pid = chain.length < PID_WALK_MAX_HOPS ? parentOf(pid) : null;
-  }
+  const chain = ppid === undefined ? [] : ancestorChain(ppid, parentOf);
   if (conn) conn.ancestors = chain;
+  return chain;
+}
+
+/** A PTY's PowerShell sits above the CLI, and the walk needs a process table Windows reads in a
+ *  second or two: off the main thread, once per connection and only for a live token. Always a
+ *  fresh read: the chain stays for the connection and an older table can miss the shim's parent */
+export async function primeAncestors(
+  conn: McpConnectionState | undefined,
+  token: string | undefined,
+  ppid: number | undefined,
+): Promise<void> {
+  if (process.platform !== "win32" || !conn || conn.ancestors || ppid === undefined) return;
+  if (!token || !boundAgents(token)?.length) return;
+  const rows = await readProcessTable().catch(() => []);
+  const parents = new Map(rows.map((r) => [r.pid, r.ppid]));
+  conn.ancestors = ancestorChain(ppid, (pid) => parents.get(pid));
+}
+
+export function ancestorChain(ppid: number, parent: (pid: number) => number | null | undefined) {
+  const chain = [ppid];
+  while (chain.length < PID_WALK_MAX_HOPS) {
+    const next = parent(chain.at(-1) as number);
+    if (!next) break;
+    chain.push(next);
+  }
   return chain;
 }
 

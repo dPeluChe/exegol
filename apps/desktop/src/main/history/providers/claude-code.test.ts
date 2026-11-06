@@ -9,7 +9,7 @@ vi.mock("node:os", async (importOriginal) => ({
   homedir: () => home.dir,
 }));
 
-import { claudeCodeHistory, claudeSessionName } from "./claude-code";
+import { claudeCodeHistory, claudeProjectDir, claudeSessionName } from "./claude-code";
 
 // The transcript format is Claude Code's, not ours: a silent change here does
 // not throw, it means the repo's history quietly loses a whole provider.
@@ -142,5 +142,12 @@ describe("claudeCodeHistory", () => {
     expect(await claudeSessionName(REPO, "bare")).toBeNull();
     expect(await claudeSessionName(REPO, "missing")).toBeNull();
     expect(await claudeSessionName(REPO, "../escape")).toBeNull();
+  });
+});
+
+describe("claudeProjectDir", () => {
+  it("encodes a Windows folder as Claude Code does, and keeps the POSIX form", () => {
+    expect(claudeProjectDir("/Users/me/_code_/repo.x")).toBe("-Users-me--code--repo.x");
+    expect(claudeProjectDir("C:\\Users\\me\\repo")).toBe("C--Users-me-repo");
   });
 });

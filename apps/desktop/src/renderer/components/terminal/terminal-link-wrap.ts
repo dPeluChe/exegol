@@ -1,4 +1,4 @@
-import { findFileMatches, type LinkMatch } from "./terminal-links";
+import { findFileMatches, type LinkMatch, NAME_CHAR } from "./terminal-links";
 
 export interface LinkRow {
   text: string;
@@ -9,8 +9,8 @@ export interface LinkRow {
 const MAX_ROWS = 8;
 /** A TUI wraps inside its padding, short of the last column */
 const NEAR_EDGE = 12;
-const PATH_TAIL = /(?:^|\s)\S*\/\S*$/;
-const PATH_HEAD = /^\s*[\w.@~+/-]/;
+const PATH_TAIL = /(?:^|\s)\S*[\\/]\S*$/;
+const PATH_HEAD = new RegExp(`^\\s*(?:${NAME_CHAR}|[\\\\/])`, "u");
 
 function continues(prev: LinkRow, next: LinkRow, cols: number): boolean {
   if (next.wrapped) return true;

@@ -2,8 +2,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "libsql";
-import { afterAll, describe, expect, it } from "vitest";
-import { devinPage, devinTurns, olderDevinPage } from "./devin-chat";
+import { afterAll, describe, expect, it, vi } from "vitest";
+import { devinDbPath, devinPage, devinTurns, olderDevinPage } from "./devin-chat";
 
 const message = (role: string, content: string, extra: object = {}) =>
   JSON.stringify({ role, content, ...extra });
@@ -96,5 +96,18 @@ describe("devinPage", () => {
   it("gives up with nothing to read, for the terminal text to take over", () => {
     expect(devinPage(path, { ...target, sinceSec: 99 }, undefined)).toBeNull();
     expect(devinPage(join(dir, "missing.db"), target, undefined)).toBeNull();
+  });
+});
+
+describe("devinDbPath", () => {
+  it("lives in roaming app data on Windows", () => {
+    vi.stubEnv("APPDATA", join("C:", "Roaming"));
+    const platform = vi.spyOn(process, "platform", "get").mockReturnValue("win32");
+    try {
+      expect(devinDbPath()).toBe(join("C:", "Roaming", "devin", "cli", "sessions.db"));
+    } finally {
+      platform.mockRestore();
+      vi.unstubAllEnvs();
+    }
   });
 });

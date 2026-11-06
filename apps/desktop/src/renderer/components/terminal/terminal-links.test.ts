@@ -193,4 +193,26 @@ describe("findFileMatches: outside the project and folders", () => {
     expect(texts("and/or n/a, run /help")).toEqual([]);
     expect(texts("https://example.com/a/b/")).toEqual([]);
   });
+
+  it("takes Windows drives, backslashes and ~\\ on Windows only", () => {
+    const win = (row: string) => findFileMatches(row, "win32").map((m) => m.text);
+    expect(win("at C:\\repo\\src\\y.ts:12 now")).toEqual(["C:\\repo\\src\\y.ts"]);
+    expect(win("see src\\lib\\y.ts and C:/repo/a.ts")).toEqual(["src\\lib\\y.ts", "C:/repo/a.ts"]);
+    expect(win("in ~\\.exegol\\logs and C:\\Users\\me\\")).toEqual([
+      "~\\.exegol\\logs",
+      "C:\\Users\\me\\",
+    ]);
+    expect(findFileMatches("at C:\\repo\\src\\y.ts", "darwin").map((m) => m.text)).toEqual([]);
+  });
+
+  it("never takes a Windows share", () => {
+    expect(findFileMatches("\\\\server\\share\\a.txt", "win32")).toEqual([]);
+  });
+
+  it("takes accented names on every system", () => {
+    expect(texts("en /Users/josé/año/nota.md y C.md")[0]).toBe("/Users/josé/año/nota.md");
+    expect(findFileMatches("C:\\Users\\José\\nota.md", "win32")[0]?.text).toBe(
+      "C:\\Users\\José\\nota.md",
+    );
+  });
 });
