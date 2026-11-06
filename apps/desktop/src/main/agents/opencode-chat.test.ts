@@ -72,7 +72,7 @@ describe("opencodePage", () => {
       .run(`m${session}${seq}`, session, seq, seq * 1000, JSON.stringify(said(`t${seq}`)));
   for (let seq = 1; seq <= 90; seq++) add(seq);
   db.close();
-  afterAll(() => rmSync(dir, { recursive: true, force: true }));
+  afterAll(() => rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 }));
 
   it("reads the newest top-level session, then only what came after", () => {
     const first = opencodePage(path, ["/w"], 0, undefined);

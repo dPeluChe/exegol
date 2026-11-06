@@ -56,7 +56,7 @@ describe("devinPage", () => {
   const target = { id: null, cwds: ["/repo"], sinceSec: 5 };
   afterAll(() => {
     db.close();
-    rmSync(dir, { recursive: true, force: true });
+    rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 100 });
   });
 
   it("follows the head's chain, skips other branches, then reads only what came after", () => {
