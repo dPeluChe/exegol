@@ -97,6 +97,17 @@ describe("terminalLinks access", () => {
     ]);
     expect(await resolved(["secret.txt"], outside)).toEqual([null]);
   });
+
+  it("never touches a network mount a shell reported as its folder", async () => {
+    for (const cwd of [
+      "/mnt/nas/x",
+      "/media/me/usb",
+      "/run/user/1000/gvfs/smb",
+      "//server/share",
+    ]) {
+      expect(await resolved(["src/app.ts"], cwd)).toEqual([join(project, "src", "app.ts")]);
+    }
+  });
 });
 
 describe("linkOpenAction", () => {

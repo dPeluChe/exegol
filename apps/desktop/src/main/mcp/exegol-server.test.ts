@@ -5,6 +5,7 @@ import { join, resolve } from "node:path";
 import Database from "libsql";
 import { beforeEach, describe, expect, it } from "vitest";
 import { runMigrations } from "../db/migrations";
+import { ancestorChain } from "./exegol-identity";
 import type { JsonRpcResponse } from "./exegol-protocol";
 import {
   handleRequest,
@@ -347,5 +348,30 @@ describe("check_path guard", () => {
     ).run(resolve("/repo/src/auth.ts"));
     const res = await checkPath(registerAgentMcpToken("writer", "p1"), "/repo/src/auth.ts");
     expect(res.allowed).toBe(true);
+  });
+});
+
+describe("ancestorChain", () => {
+  it("climbs the table up to the hop limit and stops at an unknown parent", () => {
+    expect(
+      ancestorChain(
+        5,
+        new Map([
+          [5, 4],
+          [4, 3],
+        ]),
+      ),
+    ).toEqual([5, 4, 3]);
+    expect(
+      ancestorChain(
+        9,
+        new Map([
+          [9, 8],
+          [8, 7],
+          [7, 6],
+          [6, 5],
+        ]),
+      ),
+    ).toEqual([9, 8, 7, 6]);
   });
 });

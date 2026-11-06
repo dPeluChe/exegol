@@ -17,7 +17,7 @@ import { logger } from "../lib/logger";
 import { getNotificationBus } from "../notifications/bus";
 import { realpathSafeSync } from "../security/path-guard";
 import { record } from "./exegol-activity";
-import { resolveContext } from "./exegol-identity";
+import { primeAncestors, resolveContext } from "./exegol-identity";
 import { readsExegolMcpConfig } from "./exegol-mcp-config";
 import {
   createFrameReader,
@@ -78,6 +78,7 @@ export async function handleRequest(
   req: JsonRpcRequest,
   conn?: McpConnectionState,
 ): Promise<void> {
+  await primeAncestors(conn, (req.params as { ppid?: number } | undefined)?.ppid);
   // Shims proxy tools/list so a shim spawned weeks ago lists what the running app has
   if (req.method === "list_tools") {
     const params = req.params as { token?: string; ppid?: number } | undefined;

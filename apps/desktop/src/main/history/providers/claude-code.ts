@@ -5,15 +5,15 @@ import { readHead, readTail } from "../read-head";
 import { type LocalHistoryProvider, type LocalSession, normalizeTitle } from "../types";
 
 /**
- * Claude Code names a project directory after its cwd, replacing BOTH `/` and
- * `_` with `-` (so `/a/_code_/repo` becomes `-a--code--repo`). Dots survive.
+ * Claude Code names a project directory after its cwd, replacing `/` and `_`, and `\\` and `:`
+ * on Windows, with `-` (`/a/_code_/repo` becomes `-a--code--repo`, `C:\\a` `C--a`). Dots survive.
  *
  * The encoding is lossy — `_code_` and `-code-` land on the same directory — so
  * the transcript's own `cwd` field is what actually decides the match; this only
  * tells us where to look.
  */
 export function claudeProjectDir(cwd: string): string {
-  return cwd.replace(/[/_]/g, "-");
+  return cwd.replace(/[/\\:_]/g, "-");
 }
 
 interface HeadLine {

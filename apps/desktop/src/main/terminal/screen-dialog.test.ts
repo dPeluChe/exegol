@@ -116,4 +116,11 @@ describe("readScreenDialog", () => {
   it("does not read a prompt line that merely starts with a number", () => {
     expect(readScreenDialog(["some output", "❯ 3 files changed", "  esc to cancel"])).toBeNull();
   });
+
+  it("reads the > a console without the glyph draws, but not a quoted list", () => {
+    const picked = readScreenDialog(["Which one?", "> 1. First", "  2. Second", "  3. Third"]);
+    expect(picked?.picked).toBe(true);
+    expect(picked?.options.map((o) => o.key)).toEqual(["1", "2", "3"]);
+    expect(readScreenDialog(["He said:", "> 1. First", "> 2. Second"])?.picked).not.toBe(true);
+  });
 });

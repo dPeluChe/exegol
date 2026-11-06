@@ -39,10 +39,16 @@ export function linkOpenAction(path: string, how: LinkOpen): LinkOpen {
   return how;
 }
 
+/** Checked before any realpath: a printed path must not wake a network mount. macOS, Linux and
+ *  gvfs mounts, and a Windows share in either spelling */
+const ON_A_MOUNT =
+  /^(?:\/(?:Volumes|net|Network|mnt|media|run\/media|run\/user\/\d+\/gvfs)\/|\\\\|\/\/)/;
+
 /** Relative paths resolve against main's session folder; a renderer cwd counts only inside it */
 function sessionCwd(ctx: Ctx, input: z.infer<typeof linkInput>): string | null {
   const own = getAgentCwd(ctx.db, input.agentId);
   if (!own || !input.cwd || !isAbsolute(input.cwd)) return own;
+  if (ON_A_MOUNT.test(input.cwd) && !isPathInside(own, input.cwd)) return own;
   return isPathInside(realpathSafeSync(own), realpathSafeSync(input.cwd)) ? input.cwd : own;
 }
 
@@ -50,9 +56,6 @@ function sessionCwd(ctx: Ctx, input: z.infer<typeof linkInput>): string | null {
 let revealRoots: Promise<string[]> | undefined;
 const getRevealRoots = () =>
   (revealRoots ??= Promise.all([homedir(), tmpdir(), "/tmp"].map(realpathSafe)));
-
-/** Checked before any realpath: a printed path must not wake a network mount */
-const ON_A_MOUNT = /^\/(?:Volumes|net|Network)\//;
 
 /**
  * A link reaches a file only when its realpath is inside the session's own project or one of

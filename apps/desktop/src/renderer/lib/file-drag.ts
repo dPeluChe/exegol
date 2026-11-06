@@ -1,3 +1,5 @@
+import { PLATFORM } from "./keymap";
+
 /**
  * T155: drag a file from FileExplorer / GitPane and drop it on a terminal
  * pane — it lands as an `@rel/path ` mention (Claude's native attachment
@@ -24,8 +26,10 @@ export function hasFileDragData(e: React.DragEvent): boolean {
   return types.includes(FILE_DRAG_MIME) || types.includes("Files");
 }
 
-function quote(p: string): string {
-  return /[\s'"]/.test(p) ? `'${p.replace(/'/g, "'\\''")}'` : p;
+/** A path a CLI on this OS reads as one word; Windows quotes only with `"` and names no file with it */
+export function quotePath(p: string, platform = PLATFORM): string {
+  if (!/[\s'"]/.test(p)) return p;
+  return platform === "win32" ? `"${p}"` : `'${p.replace(/'/g, "'\\''")}'`;
 }
 
 /** Files from Finder, dropped or pasted: absolute paths, quoted when they need it */
@@ -33,7 +37,7 @@ export function finderFilesToPaste(data: DataTransfer): string | null {
   const paths = Array.from(data.files)
     .map((f) => window.api?.pathForFile?.(f))
     .filter((p): p is string => !!p);
-  return paths.length ? `${paths.map(quote).join(" ")} ` : null;
+  return paths.length ? `${paths.map((p) => quotePath(p)).join(" ")} ` : null;
 }
 
 /** Build the text to paste into the terminal, trailing space included. */
@@ -43,7 +47,7 @@ export function fileDragToPaste(e: React.DragEvent): string | null {
   try {
     const items = JSON.parse(raw) as FileDragItem[];
     const parts = items
-      .map((i) => (i.relPath ? `@${i.relPath}` : i.absPath ? quote(i.absPath) : null))
+      .map((i) => (i.relPath ? `@${i.relPath}` : i.absPath ? quotePath(i.absPath) : null))
       .filter(Boolean);
     return parts.length ? `${parts.join(" ")} ` : null;
   } catch {

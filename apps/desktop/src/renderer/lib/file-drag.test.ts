@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { FILE_DRAG_MIME, fileDragToPaste, hasFileDragData } from "./file-drag";
+import { FILE_DRAG_MIME, fileDragToPaste, hasFileDragData, quotePath } from "./file-drag";
 
 type Drag = Parameters<typeof fileDragToPaste>[0];
 
@@ -29,5 +29,11 @@ describe("file drops on a terminal", () => {
 
   it("ignores drags that carry no files", () => {
     expect(hasFileDragData(drag({ "text/plain": "hi" }))).toBe(false);
+  });
+
+  it("quotes a path the way the system's shell reads it", () => {
+    expect(quotePath("C:\\My Docs\\a.txt", "win32")).toBe('"C:\\My Docs\\a.txt"');
+    expect(quotePath("C:\\Docs\\a.txt", "win32")).toBe("C:\\Docs\\a.txt");
+    expect(quotePath("/My Docs/it's", "linux")).toBe("'/My Docs/it'\\''s'");
   });
 });

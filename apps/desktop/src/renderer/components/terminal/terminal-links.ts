@@ -1,11 +1,12 @@
 import { linkFileKind } from "@exegol/shared";
 import type { IBufferRange } from "@xterm/xterm";
-import { editKeys, hasClickModifier, IS_MAC } from "../../lib/keymap";
+import { editKeys, hasClickModifier, IS_MAC, PLATFORM } from "../../lib/keymap";
 
 /**
  * What a terminal row links to: http(s) URLs (scheme'd or bare `github.com/x`) and file paths
  * (absolute, `~/`, relative to the session cwd, with an optional `:line` or `:line:col`) and
- * folders (a trailing `/`, or an absolute path with no extension).
+ * folders (a trailing `/`, or an absolute path with no extension). Windows also takes `\\` and a
+ * drive; a `\\\\server` share never matches, so printed output cannot reach for the network.
  * Paths only become links once main confirms the file exists (terminal-link-resolver).
  */
 
@@ -23,17 +24,25 @@ export interface LinkMatch {
   range?: IBufferRange;
 }
 
-const SEGMENT = "[\\w.@~+-]+";
+const NAME_CHAR = "[\\p{L}\\p{N}_.@~+-]";
+const NAME_EDGE = "[\\p{L}\\p{N}_@~+-]";
+const SEGMENT = `${NAME_CHAR}+`;
 const EXTENSION = "\\.[A-Za-z][A-Za-z0-9]{0,7}";
-const FILE_LINK_RE = new RegExp(
-  `(?:^|[\\s"'\`(<[])(${[
-    `\\/?(?:${SEGMENT}\\/)+${SEGMENT}${EXTENSION}`,
-    `[\\w@~+-][\\w.@~+-]*${EXTENSION}`,
-    `\\/?(?:${SEGMENT}\\/)+`,
-    `(?:~\\/|\\/${SEGMENT}\\/)(?:${SEGMENT}\\/)*[\\w.@~+-]*[\\w@~+-]`,
-  ].join("|")})(?::(\\d{1,6})(?::(\\d{1,4}))?)?(?=$|[\\s"'\`)>\\],:;!?]|\\.(?:$|\\s))`,
-  "g",
-);
+
+function fileLinkRe(sep: string, root: string): RegExp {
+  return new RegExp(
+    `(?:^|[\\s"'\`(<[])(${[
+      `${root}?(?:${SEGMENT}${sep})+${SEGMENT}${EXTENSION}`,
+      `${NAME_EDGE}${NAME_CHAR}*${EXTENSION}`,
+      `${root}?(?:${SEGMENT}${sep})+`,
+      `(?:~${sep}|${root}${SEGMENT}${sep})(?:${SEGMENT}${sep})*${NAME_CHAR}*${NAME_EDGE}`,
+    ].join("|")})(?::(\\d{1,6})(?::(\\d{1,4}))?)?(?=$|[\\s"'\`)>\\],:;!?]|\\.(?:$|\\s))`,
+    "gu",
+  );
+}
+
+const POSIX_FILE_RE = fileLinkRe("\\/", "\\/");
+const WINDOWS_FILE_RE = fileLinkRe("[\\\\/]", "(?:[A-Za-z]:)?[\\\\/]");
 
 /** Small allowlist so `foo.ts` / `config.json` never read as domains; no `sh`/`app`, which are
  *  file extensions (`install.sh`) */
@@ -86,15 +95,15 @@ export function findUrlMatches(rowText: string): LinkMatch[] {
   return out.sort((a, b) => a.index - b.index);
 }
 
-export function findFileMatches(rowText: string): LinkMatch[] {
+export function findFileMatches(rowText: string, platform = PLATFORM): LinkMatch[] {
   const urls = findUrlMatches(rowText);
   const out: LinkMatch[] = [];
-  for (const m of rowText.matchAll(FILE_LINK_RE)) {
+  for (const m of rowText.matchAll(platform === "win32" ? WINDOWS_FILE_RE : POSIX_FILE_RE)) {
     const path = m[1];
     if (!path) continue;
     const ext = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
     // A dotted token without slashes whose "extension" is a TLD is a domain, not a file
-    if (BARE_URL_TLDS.has(ext) && !path.includes("/")) continue;
+    if (BARE_URL_TLDS.has(ext) && !/[\\/]/.test(path)) continue;
     const index = (m.index ?? 0) + m[0].indexOf(path);
     const suffix = (m[2] ? m[2].length + 1 : 0) + (m[3] ? m[3].length + 1 : 0);
     if (overlaps(urls, index, path.length)) continue;

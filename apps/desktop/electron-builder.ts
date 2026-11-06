@@ -183,8 +183,8 @@ const config: Configuration = {
     fpm: [
       `${resolve("src/resources/linux/com.exegol.desktop.metainfo.xml")}=/usr/share/metainfo/com.exegol.desktop.metainfo.xml`,
     ],
-    // safeStorage keeps API keys in the desktop keyring (libsecret); without it they fall back
-    depends: ["libsecret-1-0", "libnotify4", "libxss1", "libnss3"],
+    // safeStorage keeps API keys in the desktop keyring (libsecret); without it they fall back. lsof: port badges
+    depends: ["libsecret-1-0", "libnotify4", "libxss1", "libnss3", "lsof"],
   },
   rpm: {
     artifactName: RPM_NAME,
@@ -202,6 +202,7 @@ const config: Configuration = {
       "at-spi2-core",
       "(libuuid or libuuid1)",
       "libsecret",
+      "lsof",
     ],
   },
 

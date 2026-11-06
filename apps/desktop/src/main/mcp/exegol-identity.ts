@@ -2,13 +2,13 @@ import { execFileSync } from "node:child_process";
 import { type AgentStatus, LIVE_STATUSES } from "@exegol/shared";
 import type Database from "libsql";
 import { logger } from "../lib/logger";
+import { readProcessTable } from "../system/process-table";
 import type { ExegolAccessMode, ExegolToolContext } from "./exegol-protocol";
 import { boundAgents, type McpConnectionState, type TokenEntry } from "./exegol-tokens";
 
 /** One `ps` hop; some CLIs interpose a wrapper. Short timeout: this blocks the main process */
 function parentOf(pid: number): number | null {
-  // Windows has no ps, and starting PowerShell here would block the main process: past hop 0 the
-  // token alone identifies the shim
+  // Windows has no ps and PowerShell would block here: `primeAncestors` read the table first
   if (process.platform === "win32") return null;
   try {
     const out = execFileSync("ps", ["-o", "ppid=", "-p", String(pid)], {
@@ -23,6 +23,7 @@ function parentOf(pid: number): number | null {
 }
 
 const PID_WALK_MAX_HOPS = 4;
+const TABLE_MAX_AGE_MS = 5_000;
 
 /**
  * Which session a shim belongs to, when sessions share a token: the shim descends from its CLI,
@@ -38,6 +39,27 @@ function ancestorPids(conn: McpConnectionState | undefined, ppid: number | undef
     pid = chain.length < PID_WALK_MAX_HOPS ? parentOf(pid) : null;
   }
   if (conn) conn.ancestors = chain;
+  return chain;
+}
+
+/** A PTY's PowerShell sits above the CLI, and the walk needs a process table Windows reads in a
+ *  second or two: read off the main thread, once per connection */
+export async function primeAncestors(
+  conn: McpConnectionState | undefined,
+  ppid: number | undefined,
+): Promise<void> {
+  if (process.platform !== "win32" || !conn || conn.ancestors || ppid === undefined) return;
+  const rows = await readProcessTable({ maxAgeMs: TABLE_MAX_AGE_MS }).catch(() => []);
+  conn.ancestors = ancestorChain(ppid, new Map(rows.map((r) => [r.pid, r.ppid])));
+}
+
+export function ancestorChain(ppid: number, parents: Map<number, number>): number[] {
+  const chain = [ppid];
+  while (chain.length < PID_WALK_MAX_HOPS) {
+    const parent = parents.get(chain.at(-1) as number);
+    if (!parent) break;
+    chain.push(parent);
+  }
   return chain;
 }
 
