@@ -26,6 +26,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Browser panes search from the address bar: `?telnyx`, or words that are not an address, open a Google search; `localhost:3000`, `example.com` and full URLs still go straight there
 
 ### Fixed
+- An agent can no longer message a plain terminal: `agent_send` and `agent_link` refuse it (the text would have run as a command) and `agents_list` shows only who can read messages, in your project by default
 - GitHub counts in the sidebar and the GitHub menu skip sub repos you cannot push to, such as an open source project cloned for reference
 - Full-screen CLIs such as opencode no longer show old shell text in their blank areas when you come back to their pane
 - Browser pane: a failed load with an unparsable URL no longer crashes the pane

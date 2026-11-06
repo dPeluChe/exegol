@@ -11,6 +11,7 @@
 import { randomUUID } from "node:crypto";
 import {
   type Agent,
+  acceptsFollowUps,
   type FollowUpItem,
   type FollowUpsChangedEvent,
   LIVE_STATUSES,
@@ -300,9 +301,18 @@ function messageText(raw: string): string {
   return text;
 }
 
-function assertReachable(target: Pick<Agent, "status">): void {
+/** Live, and an agent: a plain terminal would run a pasted message as a command */
+export function assertReachable(
+  target: Pick<Agent, "cliType" | "status" | "launchedInShell">,
+): void {
   if (!LIVE_STATUSES.has(target.status)) {
     throw new AgentMessagingError(`target agent is ${target.status} — not reachable`, -32011);
+  }
+  if (!acceptsFollowUps(target)) {
+    throw new AgentMessagingError(
+      "target is a plain terminal, not an agent: it cannot read messages. Call agents_list.",
+      -32011,
+    );
   }
 }
 
@@ -316,7 +326,7 @@ const agentMessageCount = (queue: readonly PendingMessage[]) =>
  */
 export function enqueue(
   db: Database.Database,
-  target: Pick<Agent, "id" | "status">,
+  target: Pick<Agent, "id" | "cliType" | "status" | "launchedInShell">,
   message: Omit<PendingMessage, "messageId" | "toAgentId">,
   row: { type: "text" | "status"; clientKey?: string | null } | null,
   first = false,
@@ -572,45 +582,44 @@ const PER_AGENT_STATE: Array<{ delete(key: string): unknown }> = [
 ];
 
 /**
- * Drop runtime state for a stopped/removed agent (messages stay in the DB as
- * an audit trail). Each sender waiting on an undelivered message is told the
- * session ended — otherwise it keeps waiting for a reply that can never come
- * (Antonio 2026-08-12: "si cerramos draco ya no debe tener en queue peticiones
- * a él").
+ * Nothing queued can reach this session any more: its session ended, or its CLI went back to the
+ * shell, where a late delivery would run as a command. Each sender waiting on a message is told,
+ * otherwise it keeps waiting for a reply that can never come (Antonio 2026-08-12: "si cerramos
+ * draco ya no debe tener en queue peticiones a él").
  */
-export function clearAgentMessageQueue(db: Database.Database, agentId: string): void {
-  const pending = queues.get(agentId);
-  markUndeliverable(db, pending ?? []);
-  if (pending?.some((p) => p.onDelivered)) {
-    queues.delete(agentId);
-    notifyFollowUps(agentId);
-  }
-  if (pending?.length) {
-    const gone = getAgent(db, agentId);
-    const goneLabel = gone?.alias ?? agentId;
-    const notified = new Set<string>();
-    for (const p of pending) {
-      if (p.system || p.onDelivered || notified.has(p.fromAgentId)) continue;
-      notified.add(p.fromAgentId);
-      try {
-        sendAgentMessage(db, {
-          fromAgentId: agentId,
-          toAgentId: p.fromAgentId,
-          text: `(system) Your message never reached "${goneLabel}" — that session ended before its next turn. Don't wait for a reply; ask the user or pick another agent from agents_list.`,
-          expectsReply: false,
-          system: true,
-        });
-      } catch (err) {
-        logger.warn(`[AgentMsg] Could not notify ${p.fromAgentId} that ${agentId} died: ${err}`);
-      }
+export function failQueuedMessages(db: Database.Database, agentId: string): void {
+  const pending = queues.get(agentId) ?? [];
+  queues.delete(agentId);
+  markUndeliverable(db, pending);
+  if (pending.some((p) => p.onDelivered)) notifyFollowUps(agentId);
+  const label = pending.length ? (getAgent(db, agentId)?.alias ?? agentId) : "";
+  const notified = new Set<string>();
+  for (const p of pending) {
+    if (p.system || p.onDelivered || notified.has(p.fromAgentId)) continue;
+    notified.add(p.fromAgentId);
+    try {
+      sendAgentMessage(db, {
+        fromAgentId: agentId,
+        toAgentId: p.fromAgentId,
+        text: `(system) Your message never reached "${label}" — that session ended before its next turn. Don't wait for a reply; ask the user or pick another agent from agents_list.`,
+        expectsReply: false,
+        system: true,
+      });
+    } catch (err) {
+      logger.warn(`[AgentMsg] Could not notify ${p.fromAgentId} that ${agentId} died: ${err}`);
     }
   }
+  // Nothing left to watch — don't keep a timer alive for an empty fleet.
+  if (queues.size === 0) stopSweep();
+}
+
+/** Drop runtime state for a stopped/removed agent; messages stay in the DB as an audit trail */
+export function clearAgentMessageQueue(db: Database.Database, agentId: string): void {
+  failQueuedMessages(db, agentId);
   // `queues` is the first entry in PER_AGENT_STATE, so the loop clears it too —
   // its rate history and echo window die with it, or a new agent reusing the id
   // would inherit them.
   for (const store of PER_AGENT_STATE) store.delete(agentId);
-  // Nothing left to watch — don't keep a timer alive for an empty fleet.
-  if (queues.size === 0) stopSweep();
   forgetAgentMessageState(agentId);
   forgetAgentInjectionState(agentId);
 }

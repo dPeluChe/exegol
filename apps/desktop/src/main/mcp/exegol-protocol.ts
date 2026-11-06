@@ -368,12 +368,18 @@ export const EXEGOL_TOOL_DEFS: ExegolToolDef[] = [
   {
     name: "agents_list",
     description:
-      "List live agents orchestrated by Exegol (all projects). The response ALWAYS has " +
-      "both keys: `self` (YOUR session id + name — sign with it; `name` may be null) and " +
-      "`agents` (the others: id, name, provider, project, status, task; may be an empty " +
-      "array). Ids and names are stable for the whole session — cache them. Address " +
-      "agent_send by name when set, or by id.",
-    inputSchema: { type: "object", properties: {} },
+      "List the live agents you can message: those of your project, or every project with " +
+      "all_projects. The response ALWAYS has both keys: `self` (YOUR session id + name — sign " +
+      "with it; `name` may be null) and `agents` (the others: id, name, provider, project, " +
+      "status, task; may be an empty array); `inOtherProjects` counts the ones left out. Plain " +
+      "terminals are not listed: they cannot read messages. Ids and names are stable for the " +
+      "whole session — cache them. Address agent_send by name when set, or by id.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        all_projects: { type: "boolean", description: "Default false: only your project" },
+      },
+    },
   },
   {
     name: "agent_send",

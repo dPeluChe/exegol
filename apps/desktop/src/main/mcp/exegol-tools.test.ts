@@ -68,6 +68,36 @@ describe("exegol-tools", () => {
       );
     });
 
+    it("agents_list shows who can read messages, in your project unless asked", async () => {
+      db.prepare(
+        "INSERT INTO projects (id, name, path) VALUES ('proj-2', 'Other', '/tmp/o')",
+      ).run();
+      const insert = db.prepare(
+        "INSERT INTO agents (id, project_id, cli_type, status, task_description) VALUES (?, ?, ?, 'running', 't')",
+      );
+      insert.run("mate", "proj-1", "codex");
+      insert.run("term", "proj-1", "shell");
+      insert.run("far", "proj-2", "claude-code");
+      db.prepare("UPDATE agents SET status = 'running' WHERE id = 'agent-1'").run();
+      const ids = (r: unknown) => (r as { agents: { id: string }[] }).agents.map((a) => a.id);
+
+      const own = await callExegolTool(db, "agents_list", {}, makeContext());
+      expect(ids(own)).toEqual(["mate"]);
+      expect(own).toMatchObject({ self: { id: "agent-1" }, inOtherProjects: 1 });
+
+      const all = await callExegolTool(db, "agents_list", { all_projects: true }, makeContext());
+      expect(ids(all).sort()).toEqual(["far", "mate"]);
+    });
+
+    it("agent_link refuses a plain terminal", async () => {
+      db.prepare(
+        "INSERT INTO agents (id, project_id, cli_type, status, task_description) VALUES ('term', 'proj-1', 'shell', 'running', 't')",
+      ).run();
+      await expect(
+        callExegolTool(db, "agent_link", { target: "term" }, makeContext()),
+      ).rejects.toThrow("plain terminal");
+    });
+
     it("memory_save creates a fact attributed to the calling agent", async () => {
       const result = (await callExegolTool(
         db,
