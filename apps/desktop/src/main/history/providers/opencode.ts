@@ -158,7 +158,7 @@ async function readSession(
 
     return {
       provider: "opencode",
-      sessionId: parsed.id ?? basename(path).replace(/\.json$/, "") ?? path,
+      sessionId: parsed.id ?? basename(path).replace(/\.json$/, ""),
       title: normalizeTitle(parsed.title),
       cwd: parsed.directory,
       branch: null,

@@ -1,4 +1,4 @@
-import { MODEL_ID_PATTERN, MODEL_LAUNCH, YOLO_FLAGS } from "@exegol/shared";
+import { MODEL_ID_PATTERN, MODEL_LAUNCH, pathBase, YOLO_FLAGS } from "@exegol/shared";
 import { providerBinaries } from "../agents/cli-catalog";
 import { getProviderRegistry } from "../agents/registry";
 import type { ProcRow } from "./process-table";
@@ -8,7 +8,7 @@ export { type ProcRow, readProcessTable } from "./process-table";
 /** Interpreters whose script (the next token) names the CLI: `node .../codex` */
 const RUNTIMES = new Set(["node", "bun", "deno", "python", "python3"]);
 
-const base = (t: string) => t.split("/").pop() ?? "";
+const base = pathBase;
 
 /** The command line from the program on: `node /x/codex --y` → [`codex`, `--y`] */
 function programTokens(args: string): string[] {

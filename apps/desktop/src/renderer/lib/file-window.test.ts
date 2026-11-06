@@ -1,12 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  clampRect,
-  defaultRect,
-  displayPath,
-  dragRect,
-  FILE_WINDOW_MIN,
-  underRoot,
-} from "./file-window";
+import { clampRect, defaultRect, displayPath, dragRect, FILE_WINDOW_MIN } from "./file-window";
 
 const vp = { width: 1200, height: 800 };
 
@@ -70,13 +63,5 @@ describe("displayPath", () => {
     expect(displayPath("/p/src/a.ts", "/p/")).toBe("src/a.ts");
     expect(displayPath("/pp/a.ts", "/p")).toBe("/pp/a.ts");
     expect(displayPath("/w/a.ts")).toBe("/w/a.ts");
-  });
-});
-
-describe("underRoot", () => {
-  it("needs a folder boundary", () => {
-    expect(underRoot("/p/a.ts", "/p")).toBe(true);
-    expect(underRoot("/p/a.ts", "/p/")).toBe(true);
-    expect(underRoot("/pp/a.ts", "/p")).toBe(false);
   });
 });

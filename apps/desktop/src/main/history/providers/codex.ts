@@ -184,7 +184,7 @@ async function readRollout(path: string, cwds: string[]): Promise<LocalSession |
     const started = meta.payload?.timestamp ?? meta.timestamp;
     return {
       provider: "codex",
-      sessionId: meta.payload?.session_id ?? basename(path).replace(/\.jsonl$/, "") ?? path,
+      sessionId: meta.payload?.session_id ?? basename(path).replace(/\.jsonl$/, ""),
       // codex records no title of its own, but it does record what the person
       // typed — the only thing that tells two rollouts apart.
       title,
