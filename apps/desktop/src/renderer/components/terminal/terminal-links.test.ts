@@ -1,7 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
   cellAt,
-  covers,
   findFileMatches,
   findUrlMatches,
   linkAction,
@@ -156,16 +155,6 @@ describe("cellAt", () => {
   });
 });
 
-describe("covers", () => {
-  it("spans the match including its :line suffix", () => {
-    const m = { text: "a.ts", index: 4, length: 7 };
-    expect(covers(m, 3)).toBe(false);
-    expect(covers(m, 4)).toBe(true);
-    expect(covers(m, 10)).toBe(true);
-    expect(covers(m, 11)).toBe(false);
-  });
-});
-
 describe("linkBrowserPane", () => {
   const panes = {
     t: { type: "terminal" },
@@ -180,5 +169,28 @@ describe("linkBrowserPane", () => {
   it("skips a floating browser and splits when there is none", () => {
     expect(linkBrowserPane(["t", "f"], panes, { f: {} })).toBeUndefined();
     expect(linkBrowserPane(["t"], panes, {})).toBeUndefined();
+  });
+});
+
+describe("findFileMatches: outside the project and folders", () => {
+  const texts = (row: string) => findFileMatches(row).map((m) => m.text);
+
+  it("takes hidden folders and trailing slashes", () => {
+    expect(texts("in /Users/me/.claude/worktrees/a/b.ts:12")).toEqual([
+      "/Users/me/.claude/worktrees/a/b.ts",
+    ]);
+    expect(texts("folder /private/tmp/scratchpad/music/ (6 files)")).toEqual([
+      "/private/tmp/scratchpad/music/",
+    ]);
+  });
+
+  it("takes an absolute or home path with no extension, without the sentence's dot", () => {
+    expect(texts("saved to ~/.exegol/logs.")).toEqual(["~/.exegol/logs"]);
+    expect(texts("run /usr/local/bin/foo now")).toEqual(["/usr/local/bin/foo"]);
+  });
+
+  it("does not read prose or URLs as folders", () => {
+    expect(texts("and/or n/a, run /help")).toEqual([]);
+    expect(texts("https://example.com/a/b/")).toEqual([]);
   });
 });
