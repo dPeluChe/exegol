@@ -9,17 +9,19 @@ vi.mock("node:os", async (importOriginal) => ({
   homedir: () => home.dir,
 }));
 
-import { gooseHistory } from "./goose";
+import { gooseHistory, gooseSessionsDir } from "./goose";
 
 describe("gooseHistory", () => {
   const REPO = "/Users/me/code/repo";
 
   beforeEach(() => {
     home.dir = mkdtempSync(join(tmpdir(), "exegol-goose-"));
+    vi.stubEnv("APPDATA", home.dir);
+    vi.stubEnv("XDG_DATA_HOME", "");
   });
 
   function write(name: string, header: object): void {
-    const dir = join(home.dir, ".local", "share", "goose", "sessions");
+    const dir = gooseSessionsDir();
     mkdirSync(dir, { recursive: true });
     writeFileSync(join(dir, name), `${JSON.stringify(header)}\n{"role":"user"}\n`);
   }

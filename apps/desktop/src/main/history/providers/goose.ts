@@ -16,7 +16,7 @@ interface GooseHeader {
   description?: string;
 }
 
-const gooseSessionsDir = () =>
+export const gooseSessionsDir = () =>
   process.platform === "win32"
     ? join(windowsAppData(), "Block", "goose", "data", "sessions")
     : join(xdgDataDir(), "goose", "sessions");
