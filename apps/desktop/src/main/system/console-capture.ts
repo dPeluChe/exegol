@@ -1,3 +1,4 @@
+import { pathBase } from "@exegol/shared";
 import type { WebContents } from "electron";
 
 const MAX_ENTRIES = 300;
@@ -25,7 +26,7 @@ function recordConsole(
   line?: number,
 ): void {
   if (level === "debug") return;
-  const where = source ? ` (${source.split("/").pop()}:${line ?? 0})` : "";
+  const where = source ? ` (${pathBase(source)}:${line ?? 0})` : "";
   const text = message.replace(/\s+/g, " ").slice(0, MAX_MESSAGE);
   entries.push(`${new Date().toISOString()} [${level.toUpperCase()}] [${window}] ${text}${where}`);
   if (entries.length > MAX_ENTRIES) entries.shift();

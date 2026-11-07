@@ -1406,6 +1406,34 @@ Core shipped in v0.4.3 (types, spawn injection, modal selector, badge, pipeline 
 
 ---
 
+### T217: Exegol Inbox and shared knowledge (design first) `added: 2026-11-06`
+
+Antonio's idea, to plan and analyze before any code. Related projects (blueprint bases and the landings built on them) share feedback without typing into a live console: a message that waits to be read, worked on and answered.
+
+- One inbox per project, fed by agents of any project: the feedback found while applying a base reaches the base's session as pending, not as an injected prompt. Entering that session shows there is something to read, to work on or to leave for later
+- A personal knowledge inbox: "save this library or skill" from any agent
+- Decide against PRs in the repos: they carry the change but no conversation between agents
+- Tie it to the knowledge base (T140, `.exegol/knowledge`, trs digests, memories), which was started but never given a shape: agents cannot yet consult and update it, and it stays local to Exegol. Plan both together: what lives per project, what is global, what an agent reads and writes through MCP
+- Open: lifecycle of an item (open, accepted, done, answered), who validates it, how it differs from `agent_send`, whether Orbital holds any of it
+
+### T218: Recover sessions after an API or network error `added: 2026-11-06`
+
+A session stopped by an API error, or by moving to another network, retries by itself after about 3 minutes, or gets a retry message. Sessions in that state are identifiable and listed. Detect through hooks and screen rules per CLI, cap the attempts, never retry a turn waiting on a person. Hide's `watch` is a reference for the timing.
+
+### T219: Sessions survive an app update `added: 2026-11-06`
+
+From the Hide comparison. Run the sidecar from a versioned copy outside the bundle; an old sidecar drains while new sessions go to the new one, so a `SIDECAR_VERSION` bump stops killing PTYs. Also removes the Windows stop before install in `installUpdate`. Design, not code, from Hide: its licence is FSL-1.1.
+
+### T220: Unread group in Company and the sidebar `added: 2026-11-06`
+
+Separate "look when free" from "act now": a finished session nobody has seen should not read as waiting. Read state per session.
+
+### T221: Agents watch and message each other without getting in the way `added: 2026-11-06`
+
+- Draft guard: nothing checks whether a person is typing before a message is pasted (`agent-message-injection.ts`). Hold it, or prepend it with a separator
+- Delivery proof through the prompt hook, and a deadline
+- A `watch` role on `agent_link`: the parent hears when a child stops on a question or stalls. To weigh: here or in Orbital
+
 ## Post-launch Backlog — Inspired by Competitors
 
 ### T93 — Mobile Companion App `added: 2026-04-15`

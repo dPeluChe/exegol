@@ -411,14 +411,14 @@ export function commandOnPath(command: string): boolean {
 }
 
 /** Where `command` resolves on the login shell's PATH, or null */
-export function findOnPath(command: string): string | null {
+export function findOnPath(command: string, searchPath = _getFullPath()): string | null {
   if (command.includes("/") || command.includes("\\")) {
     return existsSync(command) ? command : null;
   }
   // PATHEXT first: npm leaves a POSIX script with no extension beside its `.cmd`
   const exts =
     process.platform === "win32" ? [...(process.env.PATHEXT ?? ".EXE;.CMD").split(";"), ""] : [""];
-  for (const dir of _getFullPath().split(delimiter)) {
+  for (const dir of searchPath.split(delimiter)) {
     if (!dir) continue;
     for (const ext of exts) {
       const full = join(dir, command + ext);
