@@ -6,6 +6,7 @@ import { memo, type ReactNode, useMemo, useRef, useState } from "react";
 import { type ImperativePanelHandle, Panel, PanelGroup } from "react-resizable-panels";
 import { useCliUpdates } from "../../../hooks/use-cli-updates";
 import { useCompanyKeys } from "../../../hooks/use-company-keys";
+import { useInboxThreads } from "../../../hooks/use-inbox";
 import { useLatest } from "../../../hooks/use-latest";
 import { useMountEffect } from "../../../hooks/use-mount-effect";
 import { useNow } from "../../../hooks/use-now";
@@ -162,6 +163,7 @@ const Desk = memo(function Desk({
 function RoomCard({
   room,
   meta,
+  waiting,
   deskFacts,
   outdated,
   selectedId,
@@ -169,6 +171,8 @@ function RoomCard({
 }: {
   room: Room;
   meta: ProjectMeta | undefined;
+  /** Inbox threads waiting on this project */
+  waiting: number;
   deskFacts: Record<string, DeskFacts> | undefined;
   outdated: ReadonlySet<string>;
   selectedId: string | null;
@@ -201,6 +205,16 @@ function RoomCard({
           {meta?.name ?? projectId.slice(0, 12)}
         </h3>
         <span className="min-w-0 flex-1 truncate text-[10px] text-text-muted">{summary}</span>
+        {waiting > 0 && (
+          <button
+            type="button"
+            onClick={() => useAppStore.getState().openInbox(projectId)}
+            className="shrink-0 rounded border border-warning/40 px-1.5 py-0.5 text-[10px] text-warning hover:bg-warning/10"
+            title="Inbox threads waiting on this project"
+          >
+            {waiting} inbox
+          </button>
+        )}
         <GitHubCounts prs={prs} issues={overview?.issues ?? []} />
         <button
           type="button"
@@ -295,6 +309,7 @@ export function CompanySection({ projectMeta }: { projectMeta: Map<string, Proje
   });
 
   const unseen = useAgentStore((s) => s.unseenTurns);
+  const inbox = useInboxThreads("active");
   const rooms = useMemo(
     () => buildRooms(Object.values(agents), attention, unseen),
     [agents, attention, unseen],
@@ -402,6 +417,7 @@ export function CompanySection({ projectMeta }: { projectMeta: Map<string, Proje
                       key={room.projectId}
                       room={room}
                       meta={projectMeta.get(room.projectId)}
+                      waiting={inbox.filter((t) => t.scopeId === room.projectId).length}
                       deskFacts={deskFacts}
                       outdated={outdated}
                       selectedId={selected?.id ?? null}

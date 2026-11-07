@@ -39,6 +39,9 @@ interface AppStore {
   /** The Dashboard tab last open; null until one is picked */
   dashboardMode: DashboardMode | null;
   setDashboardMode: (mode: DashboardMode) => void;
+  /** Colabs tab narrowed to one project, from a Company badge. In memory */
+  inboxProject: string | null;
+  openInbox: (projectId: string | null) => void;
   /** The session Company shows, a pick or the default on screen when it was left, and how; held
    *  here, off persist, so leaving the view keeps them */
   companyPickedId: string | null;
@@ -105,7 +108,7 @@ export function projectOrderFromTabKeys(keys: string[]): string[] {
  * v2 (T120): a persisted 'settings' view would rehydrate sidebarless. v3: the welcome tour.
  * v4: the sidebar orders projects, not tabs. v5: one sidebar view selector, no Projects split
  */
-export type DashboardMode = "company" | "watching" | "all";
+export type DashboardMode = "company" | "colabs" | "watching" | "all";
 /** Chat text is laid out in Tailwind's px sizes: this scales the whole of it */
 export const DEFAULT_CHAT_FONT = 12;
 const MIN_CHAT_FONT = 10;
@@ -218,6 +221,8 @@ export const useAppStore = create<AppStore>()(
       setCompanySeenAt: (at) => set({ companySeenAt: at }),
       dashboardMode: null,
       setDashboardMode: (mode) => set({ dashboardMode: mode }),
+      inboxProject: null,
+      openInbox: (projectId) => set({ dashboardMode: "colabs", inboxProject: projectId }),
       companyPickedId: null,
       setCompanyPickedId: (id) =>
         set((s) => (s.companyPickedId === id ? s : { companyPickedId: id })),

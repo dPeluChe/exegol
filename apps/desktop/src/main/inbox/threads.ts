@@ -20,6 +20,7 @@ import {
   takeThread,
   threadsOpenedBySince,
 } from "../db/queries/inbox";
+import { broadcast } from "../lib/event-bus";
 
 const MAX_TITLE_CHARS = 120;
 const MAX_BODY_CHARS = 8_000;
@@ -29,7 +30,18 @@ const MAX_THREADS_PER_HOUR = 10;
 
 export class InboxError extends Error {}
 
-export const PERSON: InboxActor = { authorKind: "user", projectId: null, agentId: null };
+export const PERSON: InboxAuthor = {
+  authorKind: "user",
+  projectId: null,
+  repo: null,
+  agentId: null,
+  cli: null,
+  model: null,
+  branch: null,
+  commit: null,
+};
+
+const notifyChanged = () => broadcast("inbox:changed");
 
 function bounded(value: string, max: number, name: string): string {
   const text = value.trim();
@@ -104,6 +116,7 @@ export function openThread(
     author,
   );
   const thread = getThread(db, key, null) as InboxThread;
+  notifyChanged();
   return { thread, similarClosed: similarClosed(db, author, thread) };
 }
 
@@ -126,6 +139,7 @@ export function replyTo(
   }
   const seq = insertMessage(db, key, bounded(body, MAX_BODY_CHARS, "body"), author);
   if (author.projectId) markRead(db, key, author.projectId, seq);
+  notifyChanged();
   return seq;
 }
 
@@ -136,7 +150,10 @@ export function readThread(
   sinceSeq: number,
 ) {
   const thread = reachable(db, actor, key);
-  if (actor.projectId) markRead(db, key, actor.projectId, thread.lastSeq);
+  if (actor.projectId && thread.lastReadSeq !== thread.lastSeq) {
+    markRead(db, key, actor.projectId, thread.lastSeq);
+    notifyChanged();
+  }
   return {
     thread,
     messages: listMessages(db, key, sinceSeq),
@@ -146,7 +163,9 @@ export function readThread(
 
 export function take(db: Database.Database, actor: InboxActor, key: string): boolean {
   reachable(db, actor, key);
-  return takeThread(db, key);
+  const taken = takeThread(db, key);
+  if (taken) notifyChanged();
+  return taken;
 }
 
 export function close(
@@ -162,6 +181,7 @@ export function close(
     throw new InboxError("The session that opened a thread does not close it");
   }
   closeThread(db, key, status, bounded(resolution, MAX_RESOLUTION_CHARS, "resolution"));
+  notifyChanged();
 }
 
 /** A person's call, only once the thread stopped at the limit */
@@ -170,6 +190,7 @@ export function giveLastTurn(db: Database.Database, key: string): void {
     throw new InboxError(`${key} is not waiting at the turn limit`);
   }
   grantLastTurn(db, key);
+  notifyChanged();
 }
 
 /** The only way a personal thread reaches a project: the row is also the grant */

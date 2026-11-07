@@ -1,9 +1,10 @@
-import { type Agent, LIVE_STATUSES } from "@exegol/shared";
+import { type Agent, inboxPendingState, LIVE_STATUSES } from "@exegol/shared";
 import { ScrollArea } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import { Cpu, Plus } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { useFleetSync } from "../../../hooks/use-fleet-sync";
+import { useInboxThreads } from "../../../hooks/use-inbox";
 import { useMountEffect } from "../../../hooks/use-mount-effect";
 import { IS_MAC } from "../../../lib/keymap";
 import { trpcInvoke } from "../../../lib/trpc-client";
@@ -12,7 +13,8 @@ import { type DashboardMode, useAppStore } from "../../../stores/app";
 import { useWatchStore } from "../../../stores/watch";
 import { FilterChip } from "../../common/FilterChip";
 import type { ProjectMeta } from "../../common/ProjectChip";
-import { SegmentedTabs } from "../../common/SegmentedTabs";
+import { type SegmentedTab, SegmentedTabs } from "../../common/SegmentedTabs";
+import { ColabsSection } from "./ColabsSection";
 import { CompanySection } from "./CompanySection";
 import { FleetGroups, type GroupBy } from "./FleetGroups";
 import { WatchingSection } from "./WatchingSection";
@@ -31,11 +33,48 @@ interface ProjectInfo {
 
 // ─── Component ──────────────────────────────────────────────────────────
 
-const MODE_TABS: { id: DashboardMode; label: string }[] = [
-  { id: "company", label: "Company" },
-  { id: "watching", label: "Watching" },
-  { id: "all", label: "All sessions" },
-];
+// The dashboard spans every project, so starting an agent means picking one
+function startAgentIn(projectId: string) {
+  useAppStore.getState().setActiveProject(projectId);
+  window.dispatchEvent(new CustomEvent("exegol:spawn-agent"));
+}
+
+function NoAgents({ projects }: { projects: ProjectInfo[] | undefined }) {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-4 bg-bg-primary p-8">
+      <Cpu className="h-10 w-10 text-text-muted/30" />
+      <div className="text-center">
+        <p className="text-sm font-medium text-text-primary">No agents running</p>
+        <p className="mt-1 text-xs text-text-muted">
+          The dashboard shows agents from every project. Start one:
+        </p>
+      </div>
+      <div className="flex w-full max-w-sm flex-col gap-1.5">
+        {(projects ?? []).map((p) => (
+          <button
+            key={p.id}
+            type="button"
+            onClick={() => startAgentIn(p.id)}
+            className="flex items-center gap-2 rounded-lg border border-border bg-bg-secondary px-3 py-2 text-left text-xs text-text-primary transition-colors hover:border-accent/40 hover:bg-accent/10"
+          >
+            <Plus className="h-3.5 w-3.5 shrink-0 text-accent" />
+            <span className="min-w-0 flex-1 truncate">{p.name}</span>
+            <span className="shrink-0 text-[10px] text-text-muted">Start agent</span>
+          </button>
+        ))}
+        {projects?.length === 0 && (
+          <p className="text-center text-[11px] text-text-muted">
+            Add a project from the sidebar first.
+          </p>
+        )}
+      </div>
+      {/* Orphaned worktrees are cleaned from here: hiding it with no agents left them stranded */}
+      <div className="w-full max-w-2xl">
+        <WorktreesCard />
+      </div>
+    </div>
+  );
+}
 
 export function AgentDashboard() {
   const storeAgents = useAgentStore((s) => s.agents);
@@ -46,6 +85,7 @@ export function AgentDashboard() {
   const picked = useAppStore((s) => s.dashboardMode);
   const mode: DashboardMode = picked ?? (watchingCount > 0 ? "watching" : "company");
   const setMode = useAppStore((s) => s.setDashboardMode);
+  const inbox = useInboxThreads("active");
 
   // Closing the dashboard is what "left" means; Company reads the last stamp as it mounts
   useMountEffect(() => {
@@ -103,54 +143,23 @@ export function AgentDashboard() {
     jumpToAgent(agent.id, agent.projectId);
   }, []);
 
-  // The dashboard spans every project, so starting an agent means picking one
-  const startAgentIn = (projectId: string) => {
-    useAppStore.getState().setActiveProject(projectId);
-    window.dispatchEvent(new CustomEvent("exegol:spawn-agent"));
-  };
-
-  if (all.length === 0) {
-    return (
-      <div className="flex h-full flex-col items-center justify-center gap-4 bg-bg-primary p-8">
-        <Cpu className="h-10 w-10 text-text-muted/30" />
-        <div className="text-center">
-          <p className="text-sm font-medium text-text-primary">No agents running</p>
-          <p className="mt-1 text-xs text-text-muted">
-            The dashboard shows agents from every project. Start one:
-          </p>
-        </div>
-        <div className="flex w-full max-w-sm flex-col gap-1.5">
-          {(projects ?? []).map((p) => (
-            <button
-              key={p.id}
-              type="button"
-              onClick={() => startAgentIn(p.id)}
-              className="flex items-center gap-2 rounded-lg border border-border bg-bg-secondary px-3 py-2 text-left text-xs text-text-primary transition-colors hover:border-accent/40 hover:bg-accent/10"
-            >
-              <Plus className="h-3.5 w-3.5 shrink-0 text-accent" />
-              <span className="min-w-0 flex-1 truncate">{p.name}</span>
-              <span className="shrink-0 text-[10px] text-text-muted">Start agent</span>
-            </button>
-          ))}
-          {projects?.length === 0 && (
-            <p className="text-center text-[11px] text-text-muted">
-              Add a project from the sidebar first.
-            </p>
-          )}
-        </div>
-        {/* Orphaned worktrees are cleaned from here: hiding it with no agents left them stranded */}
-        <div className="w-full max-w-2xl">
-          <WorktreesCard />
-        </div>
-      </div>
-    );
-  }
+  const modeTabs: SegmentedTab<DashboardMode>[] = [
+    { id: "company", label: "Company" },
+    {
+      id: "colabs",
+      label: "Colabs",
+      count: inbox.length,
+      alert: inbox.some((t) => inboxPendingState(t) === "needs_you"),
+    },
+    { id: "watching", label: "Watching" },
+    { id: "all", label: "All sessions" },
+  ];
 
   return (
     <div className="flex h-full flex-col">
       <div className="flex items-center gap-4 p-4 pb-3 text-xs text-text-muted">
         <div className="shrink-0">
-          <SegmentedTabs tabs={MODE_TABS} active={mode} onChange={setMode} label="Dashboard view" />
+          <SegmentedTabs tabs={modeTabs} active={mode} onChange={setMode} label="Dashboard view" />
         </div>
         <span className="flex items-center gap-1.5">
           <Cpu className="h-3.5 w-3.5" />
@@ -183,8 +192,12 @@ export function AgentDashboard() {
           </div>
         )}
       </div>
-      {mode === "company" ? (
+      {all.length === 0 && mode !== "colabs" ? (
+        <NoAgents projects={projects} />
+      ) : mode === "company" ? (
         <CompanySection projectMeta={projectMeta} />
+      ) : mode === "colabs" ? (
+        <ColabsSection projectMeta={projectMeta} />
       ) : (
         <ScrollArea className="min-h-0 flex-1">
           <div className="space-y-6 p-4 pt-0">
