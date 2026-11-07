@@ -61,6 +61,35 @@ function instructionFor(
   ].join("\n");
 }
 
+function handable(db: Database.Database, key: string, projectId: string): InboxThread {
+  const thread = getThread(db, key, null);
+  if (!thread) throw new InboxError(`No inbox thread ${key} here`);
+  if (isInboxClosed(thread.status)) throw new InboxError(`${key} is closed`);
+  if (atInboxTurnLimit(thread)) throw new InboxError(`${key} waits at the turn limit`);
+  if (thread.scope === "project" && thread.scopeId !== projectId) {
+    throw new InboxError("That session is in another project");
+  }
+  return thread;
+}
+
+function instruction(
+  db: Database.Database,
+  thread: InboxThread,
+  projectId: string,
+  hasInboxTools: boolean,
+): string {
+  // Cursors are per project: one with no tools never read any of it
+  const seen = hasInboxTools ? (getThread(db, thread.id, projectId)?.lastReadSeq ?? 0) : 0;
+  const refs = thread.refs.flatMap((ref) => getThread(db, ref, null) ?? []);
+  const messages = hasInboxTools ? null : listMessages(db, thread.id);
+  return instructionFor(thread, refs, thread.lastSeq - seen, messages);
+}
+
+function claim(db: Database.Database, thread: InboxThread, projectId: string): void {
+  if (thread.scope === "personal") handOver(db, thread.id, projectId);
+  take(db, PERSON, thread.id);
+}
+
 /** The grant and the take come after the queue accepted it: a refused send changes nothing */
 export function sendToSession(
   db: Database.Database,
@@ -68,26 +97,24 @@ export function sendToSession(
   agentId: string,
   hasInboxTools: boolean,
 ): { delivered: boolean } {
-  const thread = getThread(db, key, null);
-  if (!thread) throw new InboxError(`No inbox thread ${key} here`);
-  if (isInboxClosed(thread.status)) throw new InboxError(`${key} is closed`);
-  if (atInboxTurnLimit(thread)) throw new InboxError(`${key} waits at the turn limit`);
   const agent = getAgent(db, agentId);
   if (!agent) throw new InboxError("Session is not running");
-  if (thread.scope === "project" && thread.scopeId !== agent.projectId) {
-    throw new InboxError("That session is in another project");
-  }
-  // Cursors are per project: one with no tools never read any of it
-  const seen = hasInboxTools ? (getThread(db, key, agent.projectId)?.lastReadSeq ?? 0) : 0;
-  const refs = thread.refs.flatMap((ref) => getThread(db, ref, null) ?? []);
-  const text = instructionFor(
-    thread,
-    refs,
-    thread.lastSeq - seen,
-    hasInboxTools ? null : listMessages(db, key),
-  );
+  const thread = handable(db, key, agent.projectId);
+  const text = instruction(db, thread, agent.projectId, hasInboxTools);
   const { delivered } = queueFollowUp(db, agentId, text);
-  if (thread.scope === "personal") handOver(db, key, agent.projectId);
-  take(db, PERSON, key);
+  claim(db, thread, agent.projectId);
   return { delivered };
+}
+
+/** For a new session. A spawn that fails leaves it in progress, still in Pending, sent again */
+export function startSession(
+  db: Database.Database,
+  key: string,
+  projectId: string,
+  hasInboxTools: boolean,
+): { prompt: string; branch: string } {
+  const thread = handable(db, key, projectId);
+  const prompt = instruction(db, thread, projectId, hasInboxTools);
+  claim(db, thread, projectId);
+  return { prompt, branch: `inbox/${key}` };
 }

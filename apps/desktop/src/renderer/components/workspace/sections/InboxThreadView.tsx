@@ -1,5 +1,8 @@
 import {
+  type AgentCliType,
   atInboxTurnLimit,
+  INBOX_BODY_MAX,
+  INBOX_RESOLUTION_MAX,
   INBOX_TURN_LIMIT,
   type InboxCloseStatus,
   type InboxMessage,
@@ -10,7 +13,11 @@ import { Button, ScrollArea } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { useShallow } from "zustand/react/shallow";
+import { useLaunchableProviders } from "../../../hooks/use-providers";
+import { useGitHubOverview } from "../../../hooks/use-trpc-github";
 import { sessionName } from "../../../lib/agent-label";
+import { startInNewTab, takesPrompt } from "../../../lib/github-handoff";
+import { sessionsInRepoFirst, sessionsOfNamedRepo } from "../../../lib/github-repos";
 import { openInBrowser } from "../../../lib/open-in-browser";
 import { isOpenSession } from "../../../lib/sidebar-views";
 import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
@@ -20,17 +27,13 @@ import { INPUT_CLASS } from "../../agents/SpawnOptions";
 import { AgentIcon } from "../../common/AgentIcon";
 import { PickButton } from "../../common/PickButton";
 import type { ProjectMeta } from "../../common/ProjectChip";
+import { inboxPlace } from "../inbox-place";
 
 interface ThreadData {
   thread: InboxThread;
   messages: InboxMessage[];
   refs: InboxThread[];
 }
-
-export const inboxPlace = (thread: InboxThread, meta: ReadonlyMap<string, ProjectMeta>) =>
-  thread.scope === "personal"
-    ? "Personal"
-    : (meta.get(thread.scopeId ?? "")?.name ?? thread.scopeId ?? "");
 
 function authorLabel(m: InboxMessage): string {
   if (m.authorKind === "user") return "You";
@@ -66,7 +69,15 @@ function useAct(id: string) {
   return { busy, act };
 }
 
-function SendToSession({ thread }: { thread: InboxThread }) {
+function SendToSession({
+  thread,
+  repo,
+  homeProject,
+}: {
+  thread: InboxThread;
+  repo: string | null;
+  homeProject: string | null;
+}) {
   const projectId = thread.scope === "personal" ? null : thread.scopeId;
   const sessions = useAgentStore(
     useShallow((s) =>
@@ -76,6 +87,25 @@ function SendToSession({ thread }: { thread: InboxThread }) {
     ),
   );
   const { busy, act } = useAct(thread.id);
+  const tabProject = projectId ?? homeProject;
+  const clis = useLaunchableProviders().filter(takesPrompt);
+  const { data: overview } = useGitHubOverview(repo ? projectId : null);
+  const ordered = sessionsInRepoFirst(sessions, sessionsOfNamedRepo(overview?.repos ?? [], repo));
+
+  const startInTab = async (cliType: AgentCliType) => {
+    if (!tabProject) return;
+    const started = await act<{ prompt: string; branch: string; useWorktree: boolean }>(
+      "inbox.startSession",
+      { projectId: tabProject, cliType },
+    );
+    if (!started) return;
+    const { prompt, branch, useWorktree } = started;
+    await startInNewTab(tabProject, cliType, {
+      taskDescription: prompt,
+      useWorktree,
+      branchName: branch,
+    }).catch(toastError(`${thread.id}: session not started`));
+  };
 
   const send = async (session: AgentState) => {
     const sent = await act<{ delivered: boolean }>("inbox.sendToSession", {
@@ -91,10 +121,10 @@ function SendToSession({ thread }: { thread: InboxThread }) {
   return (
     <div className="flex max-h-32 flex-col overflow-y-auto text-xs">
       <span className="px-3 py-1 text-[10px] text-text-muted">Send to session</span>
-      {sessions.length === 0 && (
+      {ordered.length === 0 && (
         <span className="px-3 py-1 text-text-muted">No open sessions here</span>
       )}
-      {sessions.map((session) => (
+      {ordered.map((session) => (
         <PickButton
           key={session.id}
           name={sessionName(session)}
@@ -104,11 +134,31 @@ function SendToSession({ thread }: { thread: InboxThread }) {
           <AgentIcon provider={session.cliType} size={14} />
         </PickButton>
       ))}
+      {tabProject && <span className="px-3 py-1 text-[10px] text-text-muted">New tab</span>}
+      {tabProject &&
+        clis.map((cli) => (
+          <PickButton
+            key={cli.id}
+            name={cli.name}
+            disabled={busy}
+            onClick={() => void startInTab(cli.id as AgentCliType)}
+          >
+            <AgentIcon provider={cli.id} size={14} fallback={cli.icon} fallbackColor={cli.color} />
+          </PickButton>
+        ))}
     </div>
   );
 }
 
-function Actions({ thread }: { thread: InboxThread }) {
+function Actions({
+  thread,
+  repo,
+  homeProject,
+}: {
+  thread: InboxThread;
+  repo: string | null;
+  homeProject: string | null;
+}) {
   const { busy, act } = useAct(thread.id);
   const [reply, setReply] = useState("");
   const [line, setLine] = useState("");
@@ -130,13 +180,13 @@ function Actions({ thread }: { thread: InboxThread }) {
           </Button>
         </div>
       ) : (
-        <SendToSession thread={thread} />
+        <SendToSession thread={thread} repo={repo} homeProject={homeProject} />
       )}
       <textarea
         value={reply}
         onChange={(e) => setReply(e.target.value)}
         rows={2}
-        maxLength={8_000}
+        maxLength={INBOX_BODY_MAX}
         placeholder="Your message, read when a session opens the thread"
         className={INPUT_CLASS}
       />
@@ -144,7 +194,7 @@ function Actions({ thread }: { thread: InboxThread }) {
         <input
           value={line}
           onChange={(e) => setLine(e.target.value)}
-          maxLength={200}
+          maxLength={INBOX_RESOLUTION_MAX}
           placeholder="One line on how it ended, to close"
           className={INPUT_CLASS}
         />
@@ -165,10 +215,13 @@ function Actions({ thread }: { thread: InboxThread }) {
 export function InboxThreadView({
   id,
   projectMeta,
+  homeProject = null,
   onOpen,
 }: {
   id: string;
   projectMeta: ReadonlyMap<string, ProjectMeta>;
+  /** Where New tab starts a personal thread, which belongs to no project */
+  homeProject?: string | null;
   onOpen: (id: string) => void;
 }) {
   const { data } = useQuery({
@@ -220,7 +273,9 @@ export function InboxThreadView({
           )}
         </div>
       </ScrollArea>
-      {!closed && <Actions thread={thread} />}
+      {!closed && (
+        <Actions thread={thread} repo={messages[0]?.repo ?? null} homeProject={homeProject} />
+      )}
     </div>
   );
 }

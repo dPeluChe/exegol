@@ -6,6 +6,7 @@ import type {
   GitHubRepoStatus,
   GitHubUnavailable,
 } from "@exegol/shared";
+import { pathBase } from "@exegol/shared";
 
 export const UNAVAILABLE_TEXT: Record<GitHubUnavailable, { label: string; title: string }> = {
   "no-gh": { label: "No gh", title: "GitHub CLI (gh) is not installed" },
@@ -52,6 +53,14 @@ export function sessionsInRepoFirst<T extends { id: string }>(
 ): T[] {
   const inside = (s: T) => inRepo.includes(s.id);
   return [...sessions.filter(inside), ...sessions.filter((s) => !inside(s))];
+}
+
+/** Sessions in the repo a thread came from, by the name its messages carry */
+export function sessionsOfNamedRepo(repos: GitHubRepoStatus[], name: string | null): string[] {
+  if (!name) return [];
+  return repos
+    .filter((r) => pathBase(r.name) === name || pathBase(r.folder) === name)
+    .flatMap((r) => r.sessionIds);
 }
 
 /** The repos left out of a list, for its last line */

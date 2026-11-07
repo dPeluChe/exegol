@@ -259,8 +259,10 @@
       "get",
       "lastTurn",
       "list",
+      "open",
       "reply",
-      "sendToSession"
+      "sendToSession",
+      "startSession"
     ],
     "messages": [
       "conversation",

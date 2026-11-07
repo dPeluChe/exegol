@@ -13,6 +13,7 @@ import {
 import { useAgentStore } from "../../stores/agents";
 import { collectPaneIds, selectPanes, selectTabs, useWorkspaceStore } from "../../stores/workspace";
 import { GitHubMenu } from "./GitHubMenu";
+import { InboxMenu } from "./InboxMenu";
 import { tabDotClass, tabSignal } from "./tab-bar-helpers";
 import { WorkspaceTabBar } from "./WorkspaceTabBar";
 
@@ -48,6 +49,7 @@ export function WorkspaceTabs({ activeSection, onSectionChange }: WorkspaceTabsP
       )}
 
       <div className="ml-auto flex h-full shrink-0 items-center gap-0.5 border-l border-border/40 px-1">
+        <InboxMenu key={`inbox-${projectId}`} />
         <GitHubMenu key={projectId} />
         {MAIN_BUTTONS.map(({ id, label, icon: Icon }) => (
           <button

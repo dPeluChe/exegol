@@ -1,6 +1,6 @@
 import type { GitHubOverview, GitHubRepoStatus } from "@exegol/shared";
 import { describe, expect, it } from "vitest";
-import { groupByRepo, sessionsInRepoFirst } from "./github-repos";
+import { groupByRepo, sessionsInRepoFirst, sessionsOfNamedRepo } from "./github-repos";
 
 const status = (folder: string, extra?: Partial<GitHubRepoStatus>): GitHubRepoStatus => ({
   name: `o/${folder}`,
@@ -56,5 +56,18 @@ describe("sessionsInRepoFirst", () => {
   it("moves the repo's sessions up and keeps the order", () => {
     const sessions = [{ id: "a" }, { id: "b" }, { id: "c" }];
     expect(sessionsInRepoFirst(sessions, ["c", "b"]).map((s) => s.id)).toEqual(["b", "c", "a"]);
+  });
+});
+
+describe("sessionsOfNamedRepo", () => {
+  const repos = [
+    { name: "acme/web", folder: "", status: "ok", sessionIds: ["a"] },
+    { name: "acme/api-server", folder: "packages/api", status: "ok", sessionIds: ["b"] },
+  ] as GitHubRepoStatus[];
+
+  it("matches the repo name a message carries, by repo or by folder", () => {
+    expect(sessionsOfNamedRepo(repos, "web")).toEqual(["a"]);
+    expect(sessionsOfNamedRepo(repos, "api")).toEqual(["b"]);
+    expect(sessionsOfNamedRepo(repos, null)).toEqual([]);
   });
 });

@@ -1,5 +1,8 @@
 import {
   atInboxTurnLimit,
+  INBOX_BODY_MAX,
+  INBOX_RESOLUTION_MAX,
+  INBOX_TITLE_MAX,
   INBOX_TURN_LIMIT,
   type InboxActor,
   type InboxAuthor,
@@ -22,9 +25,6 @@ import {
 } from "../db/queries/inbox";
 import { broadcast } from "../lib/event-bus";
 
-const MAX_TITLE_CHARS = 120;
-const MAX_BODY_CHARS = 8_000;
-const MAX_RESOLUTION_CHARS = 200;
 const MAX_REFS = 5;
 const MAX_THREADS_PER_HOUR = 10;
 
@@ -108,11 +108,11 @@ export function openThread(
       scope: target.scope,
       scopeId: projectId,
       ownerProject: projectId,
-      title: bounded(fields.title, MAX_TITLE_CHARS, "title"),
+      title: bounded(fields.title, INBOX_TITLE_MAX, "title"),
       url: fields.url,
       refs: fields.refs,
     },
-    bounded(fields.body, MAX_BODY_CHARS, "body"),
+    bounded(fields.body, INBOX_BODY_MAX, "body"),
     author,
   );
   const thread = getThread(db, key, null) as InboxThread;
@@ -137,7 +137,7 @@ export function replyTo(
       `${key} reached ${INBOX_TURN_LIMIT} agent messages and waits for a person`,
     );
   }
-  const seq = insertMessage(db, key, bounded(body, MAX_BODY_CHARS, "body"), author);
+  const seq = insertMessage(db, key, bounded(body, INBOX_BODY_MAX, "body"), author);
   if (author.projectId) markRead(db, key, author.projectId, seq);
   notifyChanged();
   return seq;
@@ -180,7 +180,7 @@ export function close(
   if (actor.agentId && thread.openerAgent === actor.agentId) {
     throw new InboxError("The session that opened a thread does not close it");
   }
-  closeThread(db, key, status, bounded(resolution, MAX_RESOLUTION_CHARS, "resolution"));
+  closeThread(db, key, status, bounded(resolution, INBOX_RESOLUTION_MAX, "resolution"));
   notifyChanged();
 }
 
