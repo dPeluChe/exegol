@@ -9,6 +9,7 @@ import {
   removeColabMember,
   updateColab,
 } from "../../db/queries/colabs";
+import { countColabActiveThreads } from "../../db/queries/inbox";
 import { getProject } from "../../db/queries/projects";
 import { notifyInboxChanged } from "../../inbox/threads";
 import { publicProcedure, router } from "../trpc";
@@ -56,9 +57,16 @@ export const colabsRouter = router({
       changed(uniqueName(() => updateColab(ctx.db, input.id, input.name, input.purpose))),
     ),
 
-  delete: publicProcedure
-    .input(z.object({ id: z.string() }))
-    .mutation(({ ctx, input }) => changed(deleteColab(ctx.db, input.id))),
+  delete: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
+    const active = countColabActiveThreads(ctx.db, input.id);
+    if (active > 0) {
+      throw new TRPCError({
+        code: "BAD_REQUEST",
+        message: `It has ${active} open thread${active === 1 ? "" : "s"}: close them first`,
+      });
+    }
+    return changed(deleteColab(ctx.db, input.id));
+  }),
 
   addMember: publicProcedure
     .input(member.extend({ role: z.string().trim().max(COLAB_ROLE_MAX) }))

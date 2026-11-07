@@ -1,4 +1,4 @@
-import type { DeskFacts, DoneSession } from "@exegol/shared";
+import { type DeskFacts, type DoneSession, inboxProjectOf } from "@exegol/shared";
 import { cn, ScrollArea } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import { Globe } from "lucide-react";
@@ -417,7 +417,7 @@ export function CompanySection({ projectMeta }: { projectMeta: Map<string, Proje
                       key={room.projectId}
                       room={room}
                       meta={projectMeta.get(room.projectId)}
-                      waiting={inbox.filter((t) => t.scopeId === room.projectId).length}
+                      waiting={inbox.filter((t) => inboxProjectOf(t) === room.projectId).length}
                       deskFacts={deskFacts}
                       outdated={outdated}
                       selectedId={selected?.id ?? null}

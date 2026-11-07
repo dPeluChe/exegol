@@ -31,8 +31,14 @@ export const INBOX_TOOL_DEFS: ToolBody<InboxToolName>[] = [
       properties: {
         target: {
           type: "string",
-          enum: ["project", "personal"],
-          description: "This project's inbox, or the person's own. Default project",
+          enum: ["project", "colab", "personal"],
+          description:
+            "This project's inbox, a colab this project is in, or the person's own. Default project",
+        },
+        colab: { type: "string", description: "With target colab: its name" },
+        to_project: {
+          type: "string",
+          description: "With target colab: the member project it is for, by name. Omit for all",
         },
         title: { type: "string", description: "Short and specific" },
         body: { type: "string" },

@@ -14,6 +14,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - `Cmd+.` no longer stops the focused session: one stray key ended it with no warning. Stop Agent stays in the Command Palette
 
 ### Added
+- Colab inbox: threads to a colab or to one member project, from the inbox menu or `inbox_post`; only members reach them, Send to session offers sessions in member projects, and a starting session is told its colabs.
 - Colabs: create a colab in the Dashboard Colabs tab, with a purpose and members (a project, or a repo inside a workspace, with a role).
 - Tab row: LayoutPresets, Inbox and GitHub follow the terminal button instead of the far right.
 - Inbox: the Inbox and GitHub buttons sit in the tab row beside layouts, Cmd+Shift+I opens the inbox, Active and Archived filters, Personal always there to write to, and a shorter thread view (session chips, New tab and Close folded).

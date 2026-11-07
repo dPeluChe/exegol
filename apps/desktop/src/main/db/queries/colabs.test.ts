@@ -21,8 +21,8 @@ describe("colabs", () => {
     addColabMember(db, id, { projectId: "irma", repo: "lizaceves-landing", role: "clone of it" });
 
     expect(listColabs(db)[0]?.members).toEqual([
-      { projectId: "blue", repo: "labs-landings-base", role: "blueprint" },
-      { projectId: "irma", repo: "lizaceves-landing", role: "clone of it" },
+      { projectId: "blue", projectName: "blue", repo: "labs-landings-base", role: "blueprint" },
+      { projectId: "irma", projectName: "irma", repo: "lizaceves-landing", role: "clone of it" },
     ]);
 
     removeColabMember(db, id, "irma", "lizaceves-landing");

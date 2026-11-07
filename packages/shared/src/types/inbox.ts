@@ -16,6 +16,8 @@ export interface InboxThread {
   id: string;
   scope: InboxScope;
   scopeId: string | null;
+  /** In a colab: the member project it is for; null for the whole colab */
+  toProject: string | null;
   kind: InboxKind;
   title: string;
   url: string | null;
@@ -72,6 +74,10 @@ export const INBOX_PENDING_LABEL: Record<InboxPendingState, string> = {
   needs_you: "Needs you",
   to_review: "To review",
 };
+
+/** The project a thread counts on: its own, or the colab member it is for */
+export const inboxProjectOf = (t: Pick<InboxThread, "scope" | "scopeId" | "toProject">) =>
+  t.scope === "project" ? t.scopeId : t.scope === "colab" ? t.toProject : null;
 
 /** Who an active thread waits on. Derived, never stored: it waits on whoever did not write last */
 export function inboxPendingState(t: InboxThread): InboxPendingState {

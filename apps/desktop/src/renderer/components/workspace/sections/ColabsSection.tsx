@@ -1,4 +1,4 @@
-import type { Colab } from "@exegol/shared";
+import { type Colab, inboxProjectOf } from "@exegol/shared";
 import { cn, ScrollArea } from "@exegol/ui";
 import { Plus, Users } from "lucide-react";
 import { useState } from "react";
@@ -73,7 +73,11 @@ export function ColabsSection({ projectMeta }: { projectMeta: ReadonlyMap<string
   const closed = useInboxThreads("closed", showClosed);
   const project = useAppStore((s) => s.inboxProject);
   const openInbox = useAppStore((s) => s.openInbox);
-  const threads = (showClosed ? closed : active).filter((t) => !project || t.scopeId === project);
+  const colabNames = new Map(colabs.map((c) => [c.id, c.name]));
+  // A colab open in the editor narrows the list to its threads
+  const threads = (showClosed ? closed : active)
+    .filter((t) => !project || inboxProjectOf(t) === project)
+    .filter((t) => !editing || (t.scope === "colab" && t.scopeId === editing));
 
   return (
     <div className="flex min-h-0 flex-1 gap-3 p-4 pt-0">
@@ -102,7 +106,7 @@ export function ColabsSection({ projectMeta }: { projectMeta: ReadonlyMap<string
               <InboxThreadRow
                 key={thread.id}
                 thread={thread}
-                place={inboxPlace(thread, projectMeta)}
+                place={inboxPlace(thread, projectMeta, colabNames)}
                 selected={thread.id === selectedId}
                 onSelect={() => setSelectedId(thread.id)}
               />
