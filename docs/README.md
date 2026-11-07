@@ -22,7 +22,7 @@
 |----------|------------|
 | [TASK_TODO.md](./TASK_TODO.md) | The single source of truth for pending work |
 | [../CONTRIBUTING.md](../CONTRIBUTING.md) / [../AGENTS.md](../AGENTS.md) | How to contribute, for people and for AI agents |
-| [RESEARCH/INBOX_KNOWLEDGE_DESIGN_2026_11.md](./RESEARCH/INBOX_KNOWLEDGE_DESIGN_2026_11.md) | Design for T217: project links and inbox, with docs instead of a knowledge store; usage numbers and outside evidence |
+| [RESEARCH/COLABS_INBOX_NOTES_DESIGN_2026_11.md](./RESEARCH/COLABS_INBOX_NOTES_DESIGN_2026_11.md) | Design for T217: colabs, inbox and notes, with usage numbers and outside evidence |
 | [RESEARCH/HIDE_COMPARISON_2026_11.md](./RESEARCH/HIDE_COMPARISON_2026_11.md) | Hide compared with Exegol and what came of it |
 | [RESEARCH/WEBGPU_RENDERER_2026_10.md](./RESEARCH/WEBGPU_RENDERER_2026_10.md) | WebGPU vs WebGL terminal rendering (wraithterm), benchmark and the atlas churn guard |
 | [RESEARCH/PERF_AUDIT_2026_10.md](./RESEARCH/PERF_AUDIT_2026_10.md) | Performance audit: renders, bundle, requests, DB, assets and packaging, with ids to pick from |
