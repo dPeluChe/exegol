@@ -1,4 +1,4 @@
-// A version bump ends every live session: the inventory says which ones (ids and DB metadata,
+// Replacing a sidecar ends every live session: the inventory says which ones (ids and DB metadata,
 // never output or env), and crashReason says why each agent came back crashed.
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";

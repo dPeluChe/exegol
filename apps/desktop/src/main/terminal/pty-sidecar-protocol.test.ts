@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { holdsLease, sidecarCompatible } from "./pty-sidecar-protocol";
+import { keepsSidecar, sidecarCompatible } from "./pty-sidecar-discovery";
+import { holdsLease } from "./pty-sidecar-protocol";
 
 describe("holdsLease", () => {
   const file = (token: string) => JSON.stringify({ pid: 1, token, version: "x", sock: "s" });
@@ -31,5 +32,20 @@ describe("sidecarCompatible", () => {
   it("refuses one below the floor, and a newer one left by a downgrade", () => {
     expect(usable("1.7.0")).toBe(false);
     expect(usable("1.10.1")).toBe(false);
+  });
+});
+
+describe("keepsSidecar", () => {
+  const keeps = (version: string, live: number | null) =>
+    keepsSidecar(version, live, "1.7.1", "1.10.0");
+
+  it("stays for live sessions, even when it could not count them", () => {
+    expect(keeps("1.9.0", 2)).toBe(true);
+    expect(keeps("1.9.0", null)).toBe(true);
+  });
+
+  it("is replaced with nothing live, or when below the floor", () => {
+    expect(keeps("1.9.0", 0)).toBe(false);
+    expect(keeps("1.7.0", 2)).toBe(false);
   });
 });

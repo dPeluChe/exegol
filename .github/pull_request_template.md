@@ -11,6 +11,6 @@
 - [ ] `bun run lint`, `bun run typecheck`, `bun run test && bun run test:shared` pass
 - [ ] Docs in this PR: task removed from `docs/TASK_TODO.md`, dated entry in
       `docs/TASK_COMPLETED/YYMM.md`, user-facing line in `docs/CHANGELOG.md` `[Unreleased]`
-- [ ] Touched the PTY sidecar? `SIDECAR_VERSION` bumped
+- [ ] Touched the PTY sidecar? `SIDECAR_VERSION` bumped, and `SIDECAR_COMPATIBLE_SINCE` raised if main needs the new code
 - [ ] New IPC/tRPC procedure? Added to `preload/capabilities.json`
 - [ ] No secrets, prompts or home paths in code, logs or tests

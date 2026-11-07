@@ -19,7 +19,7 @@ export const SIDECAR_LOG_PATH = join(EXEGOL_DIR, "logs", "sidecar.log");
  * lib/ipc-endpoint). The
  * sidecar is detached so it outlives both an app restart AND an app update —
  * on a version mismatch, discovery shuts the old one down and spawns a fresh
- * one. Forget the bump and the fix silently never loads: that is a released
+ * one, unless SIDECAR_COMPATIBLE_SINCE keeps it. Forget the bump and the fix silently never loads: that is a released
  * user still running the old sidecar, not just a stale dev process.
  *
  * 1.3.0 — snapshots carry the alternate-screen mode (2026-08-13)
@@ -38,29 +38,10 @@ export const SIDECAR_LOG_PATH = join(EXEGOL_DIR, "logs", "sidecar.log");
  *  Linux, and Windows had no earlier sidecar to replace)
  */
 export const SIDECAR_VERSION = "1.7.1";
-/** RAISE THIS with a bump main cannot talk to, or a fix that must reach running sessions. Any
- *  older sidecar is replaced at once, ending its PTYs. From here up one with live sessions stays
- *  until a launch finds none: a bump alone reaches released users only then */
+/** RAISE THIS with a bump main cannot talk to (a new RPC or param, a smaller frame or ring) or a
+ *  fix that must reach running sessions: any older sidecar is replaced at once, ending its PTYs.
+ *  From here up one with live sessions stays until a launch finds none */
 export const SIDECAR_COMPATIBLE_SINCE = "1.7.1";
-
-const versionParts = (version: string) => version.split(".").map(Number);
-
-/** Pure: main can drive a sidecar of this version (never newer than the app's) */
-export function sidecarCompatible(
-  version: string,
-  since = SIDECAR_COMPATIBLE_SINCE,
-  current = SIDECAR_VERSION,
-): boolean {
-  const compare = (a: string, b: string) => {
-    const [x, y] = [versionParts(a), versionParts(b)];
-    for (let i = 0; i < Math.max(x.length, y.length); i++) {
-      const diff = (x[i] ?? 0) - (y[i] ?? 0);
-      if (diff !== 0) return diff;
-    }
-    return 0;
-  };
-  return compare(version, since) >= 0 && compare(version, current) <= 0;
-}
 
 // ─── Timeouts ───────────────────────────────────────────────────────────
 
