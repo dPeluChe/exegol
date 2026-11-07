@@ -230,6 +230,7 @@ function callSocket(
   method: string,
   params: Record<string, unknown>,
   label = method,
+  timeoutMs = CALL_TIMEOUT_MS,
 ): Promise<unknown> {
   const id = nextSocketId++;
   // Whether it reached the wire decides what a timeout means: in the outbox it never ran; written,
@@ -256,7 +257,7 @@ function callSocket(
           ),
         );
       }
-    }, CALL_TIMEOUT_MS);
+    }, timeoutMs);
     timer.unref?.();
     const payload = encodeRequest(id, method, params);
     if (socketWritable()) {
@@ -274,13 +275,12 @@ function callSocket(
 
 const SESSION_WAIT_MS = 500;
 
-/** Bounded: the first call beats the socket's connect, and a slow init times the client out */
-async function sessionInstructions(): Promise<string> {
-  const late = new Promise<string>((resolve) => setTimeout(() => resolve(""), SESSION_WAIT_MS));
-  const asked = callSocket("session_context", { token, ppid: process.ppid })
+/** Bounded: a slow init times the client out. Queued, as the first call beats the socket's connect */
+function sessionInstructions(): Promise<string> {
+  const identity = { token, ppid: process.ppid };
+  return callSocket("session_context", identity, "session_context", SESSION_WAIT_MS)
     .then((result) => (result as { text?: string } | null)?.text ?? "")
     .catch(() => "");
-  return Promise.race([asked, late]);
 }
 
 async function callTool(tool: string, args: Record<string, unknown>): Promise<unknown> {

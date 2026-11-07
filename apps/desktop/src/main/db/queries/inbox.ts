@@ -199,6 +199,17 @@ export function listThreads(db: Database.Database, filter: ThreadFilter): InboxT
   return rows.map(toThread);
 }
 
+export function countActiveThreads(db: Database.Database, projectId: string): number {
+  const { n } = db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM inbox_threads t
+       LEFT JOIN inbox_reads r ON r.thread_id = t.id AND r.project_id = @projectId
+       WHERE ${REACH_SQL} ${STATE_SQL.active}`,
+    )
+    .get({ projectId }) as { n: number };
+  return n;
+}
+
 export function markRead(db: Database.Database, key: string, projectId: string, seq: number): void {
   db.prepare(
     `INSERT INTO inbox_reads (thread_id, project_id, last_read_seq) VALUES (?, ?, ?)
