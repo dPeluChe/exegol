@@ -62,6 +62,10 @@ interface AppStore {
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
 
+  /** Add Project dialog, opened from the Projects view or Cmd+Shift+A there */
+  addProjectOpen: boolean;
+  setAddProjectOpen: (open: boolean) => void;
+
   /** Command palette open state */
   commandPaletteOpen: boolean;
   setCommandPaletteOpen: (open: boolean) => void;
@@ -187,6 +191,9 @@ export const useAppStore = create<AppStore>()(
 
       sidebarCollapsed: false,
       toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+
+      addProjectOpen: false,
+      setAddProjectOpen: (open) => set({ addProjectOpen: open }),
 
       commandPaletteOpen: false,
       setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),

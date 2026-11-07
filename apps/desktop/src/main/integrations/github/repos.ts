@@ -85,12 +85,19 @@ export async function findRepoFolders(root: string): Promise<string[]> {
   return found;
 }
 
+const foldersCache = new AsyncLruCache<string, string[]>(256, SCAN_TTL_MS);
+
+/** `findRepoFolders`, cached: the GitHub menu and the Projects view walk the same folders */
+export function repoFoldersOf(path: string): Promise<string[]> {
+  return foldersCache.getOrCompute(path, () => findRepoFolders(path));
+}
+
 async function discover(path: string): Promise<ProjectRepo[]> {
   const rootConfig = await gitConfig(path);
   const rootRepo = rootConfig ? githubRepoInConfig(rootConfig) : null;
   if (rootRepo) return [{ name: rootRepo, folder: "", path }];
 
-  const folders = await findRepoFolders(path);
+  const folders = await repoFoldersOf(path);
   const named = await mapWithConcurrency(folders, FS_CONCURRENCY, async (folder) => {
     const config = await gitConfig(join(path, folder));
     return { folder, name: config ? githubRepoInConfig(config) : null };
@@ -114,6 +121,7 @@ export function projectRepos(projectPath: string): Promise<ProjectRepo[]> {
 /** The menu opened: the next read walks the disk again, background polls need not */
 export function forgetProjectRepos(projectPath: string): void {
   reposCache.invalidateWhere((key) => key === projectPath);
+  foldersCache.invalidateWhere((key) => key === projectPath);
 }
 
 export interface SessionFolder {

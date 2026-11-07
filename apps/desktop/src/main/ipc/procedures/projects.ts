@@ -107,7 +107,7 @@ export const projectRouter = router({
     return listProjects(ctx.db);
   }),
 
-  /** Repo, workspace or folder per project, read from disk and cached 10 min */
+  /** Repo, workspace or folder per project, from the folder walk the GitHub menu shares (30 min) */
   shapes: publicProcedure.query(({ ctx }) => projectShapes(listProjects(ctx.db))),
 
   // Returns null (not throws) when project not found: stale persisted

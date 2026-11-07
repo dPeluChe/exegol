@@ -173,7 +173,8 @@ const matches = (p: Project, q: string) =>
 export function ProjectList() {
   const { data: projects, isLoading, isError } = useProjects();
   const { data: groups } = useProjectGroups();
-  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const addDialogOpen = useAppStore((s) => s.addProjectOpen);
+  const setAddDialogOpen = useAppStore((s) => s.setAddProjectOpen);
   const activeProjectId = useAppStore((s) => s.activeProjectId);
   const canGoBack = useAppStore((s) => s.projectsFrom !== null || s.activeProjectId !== null);
   const closeProjects = useAppStore((s) => s.closeProjects);
@@ -181,19 +182,13 @@ export function ProjectList() {
   const shortcuts = useProjectShortcuts();
   const groupById = useMemo(() => new Map(groups?.map((g) => [g.id, g])), [groups]);
   const { data: shapes } = useQuery({
-    queryKey: ["projects", "shapes"],
+    queryKey: ["projectShapes"],
     queryFn: () => trpcInvoke<Record<string, ProjectShape>>("projects.shapes"),
     staleTime: 5 * 60_000,
   });
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
   const shown = q ? (projects ?? []).filter((p) => matches(p, q)) : (projects ?? []);
-
-  useEffect(() => {
-    const open = () => setAddDialogOpen(true);
-    window.addEventListener("exegol:add-project", open);
-    return () => window.removeEventListener("exegol:add-project", open);
-  }, []);
 
   // Radix dialogs preventDefault the Esc that closes them, so that one never also leaves the view
   useEffect(() => {

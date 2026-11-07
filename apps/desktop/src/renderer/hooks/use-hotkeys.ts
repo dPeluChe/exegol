@@ -107,7 +107,7 @@ export function useHotkeys() {
       if (chord.shift && key === "a") {
         e.preventDefault();
         const app = useAppStore.getState();
-        if (app.activeView === "projects") window.dispatchEvent(new Event("exegol:add-project"));
+        if (app.activeView === "projects") app.setAddProjectOpen(true);
         else app.openProjects();
         return;
       }
