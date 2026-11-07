@@ -1410,7 +1410,7 @@ Core shipped in v0.4.3 (types, spawn injection, modal selector, badge, pipeline 
 
 ### T217: Colabs, inbox and notes (design first) `added: 2026-11-06`
 
-Design and what is left to decide: `docs/RESEARCH/COLABS_INBOX_NOTES_DESIGN_2026_11.md`. Inbox and notes exist per project, per colab (a space between related projects) and personal. An agent tells a related project what it found without being asked. An inbox item is a thread with a status, and a top bar menu hands it to a session by id. A Colabs tab in the Dashboard, next to Company, is where colabs are created and shows Pending: threads waiting on a project, so you see which agent to reactivate. Company shows a badge per room. Notes keep decisions and reminders across CLIs; what describes the project stays in code and docs.
+Design, decisions and plan: `docs/RESEARCH/COLABS_INBOX_NOTES_DESIGN_2026_11.md`. Inbox and notes exist per project, per colab (a space between related projects) and personal. An agent tells a related project what it found without being asked. An inbox item is a thread with a status, and a top bar menu hands it to a session by id. A Colabs tab in the Dashboard, next to Company, is where colabs are created and shows Pending: threads waiting on a project, so you see which agent to reactivate. Company shows a badge per room. Closing takes a required line, and a problem that returns is a new thread referencing the old one. Articles and links reach an inbox from outside Exegol with a right click. Notes keep decisions and reminders across CLIs; what describes the project stays in code and docs.
 
 ### T218: Recover sessions after an API or network error `added: 2026-11-06`
 
@@ -1431,7 +1431,7 @@ From the Hide comparison. Done: a compatible sidecar with live sessions stays th
 Agent replies read aloud on the machine, as an option beside dictation. No text leaves it and none reaches a log. After T217 unless Antonio moves it up.
 
 - Engines, chosen in Settings > Models: Phonon 31m (Gradium, English only, Apache-2.0, 64 MB) and Kokoro-82M for Spanish (Apache-2.0, sherpa-onnx has it, already in the app)
-- Phonon 40m Spanish (74.6 MB) is CC BY-NC 4.0 and gated on Hugging Face, so a token and accepted terms: only as the person's own download, marked `commercialUse: false`, never bundled. Commercial use needs Gradium's per-user licence
+- Phonon 40m Spanish (74.6 MB) is CC BY-NC 4.0 and gated on Hugging Face, so a token and accepted terms. Antonio wants to evaluate it first: `uvx ptts --model hf://gradium/phonon-40m-es --lang es --quant q8`. If it stays, it is the person's own download, marked `commercialUse: false`, never bundled: the licence follows what the voice is used for, even in a free app. Its benchmark voices are Spanish from Spain
 - Runtime: no sherpa-onnx support found for Phonon. `ptts` is MIT or Apache-2.0: Rust crate, C library, a prebuilt command per OS, and `phonon-tts` (Wasm, browsers only). `onnx-community/phonon-31m-en-ONNX` exists, not tried. Prototype which one fits on the three systems
 - Decide what is read (a reply's text, not code or tool output) and when: per session or on demand. Speech stops when dictation starts, or the mic hears it
 - Listen in English and Spanish before choosing: Gradium's comparison with Kokoro is its own
