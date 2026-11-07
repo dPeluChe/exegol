@@ -170,6 +170,11 @@ const SENSITIVE_DIR_SEGMENTS: string[] = [
   ".config/git", // git-credential store
   "library/keychains", // macOS Keychain
   "library/cookies", // macOS / Safari cookies
+  ".local/share/keyrings", // GNOME keyring
+  "appdata/roaming/github cli", // gh's hosts.yml
+  "appdata/roaming/microsoft/credentials",
+  "appdata/local/microsoft/credentials",
+  "appdata/roaming/microsoft/protect", // DPAPI keys
 ];
 
 // Absolute-path-prefix sensitive dirs (root profile, system var dirs).
@@ -180,6 +185,8 @@ const SENSITIVE_PATH_PREFIXES: string[] = [
   "/private/var/root/",
   "/var/db/",
   "/var/root/",
+  "/etc/shadow",
+  "/etc/gshadow",
 ];
 
 function normalizeForCompare(p: string): string {

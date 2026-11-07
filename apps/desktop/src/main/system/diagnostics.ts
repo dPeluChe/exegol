@@ -66,6 +66,10 @@ const REDACTIONS: Array<[RegExp, string]> = [
   [/~\/(?!\.)[^\s"',)\]]+/g, "~/<path>"],
   [/\/(?:Users|home)\/[^/\s"']+(?:\/[^\s"',)\]]*)?/g, "/<user-path>"],
   [/\/Volumes\/[^\s"',)\]]+/g, "/Volumes/<path>"],
+  [/(?<![\w.:/-])\/(?:mnt|media|run\/media)\/[^\s"',)\]]+/g, "/<mount-path>"],
+  [/~\\(?!\.)[^\s"',)\]]+/g, "~\\<path>"],
+  [/\b[A-Za-z]:[\\/][^\s"',)\]]*/g, "<win-path>"],
+  [/\\\\[\w.-]+\\[^\s"',)\]]+/g, "<share-path>"],
 ];
 
 export function redact(text: string, home = homedir()): string {

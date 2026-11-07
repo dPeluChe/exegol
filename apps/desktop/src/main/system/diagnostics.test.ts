@@ -167,3 +167,16 @@ describe("compactLog", () => {
     );
   });
 });
+
+describe("redact on Windows and Linux", () => {
+  it("makes Windows and Linux mount paths generic", () => {
+    expect(redact("at D:\\clients\\acme\\a.ts", "")).toBe("at <win-path>");
+    expect(redact("in ~\\clients\\acme", "")).toBe("in ~\\<path>");
+    expect(redact("\\\\server\\share\\acme", "")).toBe("<share-path>");
+    expect(redact("/mnt/data/acme and /run/media/me/usb", "")).toBe(
+      "/<mount-path> and /<mount-path>",
+    );
+    expect(redact("see https://github.com/a/b", "")).toContain("github.com/a/b");
+    expect(redact("src/media/x.ts and a\\\\nb", "")).toBe("src/media/x.ts and a\\\\nb");
+  });
+});

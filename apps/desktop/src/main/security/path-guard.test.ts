@@ -345,3 +345,16 @@ describe("assertSafePath", () => {
     });
   });
 });
+
+describe("isSensitivePath on Windows and Linux", () => {
+  it("refuses credential stores on Windows and Linux", () => {
+    for (const p of [
+      "C:\\Users\\me\\AppData\\Roaming\\GitHub CLI\\hosts.yml",
+      "C:\\Users\\me\\AppData\\Roaming\\Microsoft\\Protect\\key",
+      "/home/me/.local/share/keyrings/login.keyring",
+      "/etc/shadow",
+    ]) {
+      expect(isSensitivePath(p), p).toBe(true);
+    }
+  });
+});
