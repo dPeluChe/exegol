@@ -103,7 +103,7 @@ export async function handleRequest(
   }
   if (req.method === "session_context") {
     const resolved = resolveContext(db, caller?.token, caller?.ppid, conn);
-    const text = resolved.ok ? sessionLine(db, resolved.context.projectId) : "";
+    const text = resolved.ok ? await sessionLine(db, resolved.context.projectId) : "";
     socket.write(encodeResponse(req.id, { text }));
     return;
   }

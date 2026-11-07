@@ -88,14 +88,14 @@ describe("inboxPendingState", () => {
 });
 
 describe("sessionLine", () => {
-  it("counts the project's open threads, and says nothing with none", () => {
-    expect(sessionLine(db, "p1")).toBe("");
+  it("counts the project's open threads, and says nothing with none", async () => {
+    expect(await sessionLine(db, "p1")).toBe("");
     const id = post();
     post();
     post(agent("b1", "p2"), { scope: "project", projectId: "p2" });
-    expect(sessionLine(db, "p1")).toContain("2 threads waiting");
+    expect(await sessionLine(db, "p1")).toContain("2 threads waiting");
     close(db, PERSON, id, "resolved", "Done");
-    expect(sessionLine(db, "p1")).toContain("1 thread waiting");
+    expect(await sessionLine(db, "p1")).toContain("1 thread waiting");
   });
 });
 

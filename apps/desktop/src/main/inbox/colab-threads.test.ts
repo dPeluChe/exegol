@@ -98,10 +98,10 @@ describe("colab threads", () => {
     ).rejects.toThrow("Members: Blueprints, Irma Projects");
   });
 
-  it("tell a starting session its colab, purpose and the other members", () => {
-    const line = sessionLine(db, "irma");
+  it("tell a starting session its colab, purpose and the other members", async () => {
+    const line = await sessionLine(db, "irma");
     expect(line).toContain('colab "Landings" with Blueprints (labs-landings-base), blueprint.');
     expect(line).toContain("Purpose: Blueprint fixes from its clones");
-    expect(sessionLine(db, "out")).toBe("");
+    expect(await sessionLine(db, "out")).toBe("");
   });
 });

@@ -17,6 +17,7 @@ export * from "./inbox";
 export * from "./mcp";
 export * from "./memory";
 export * from "./models";
+export * from "./notes";
 export * from "./pipeline";
 export * from "./project";
 export * from "./project-group";
