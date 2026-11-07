@@ -62,6 +62,10 @@ interface AppStore {
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
 
+  /** The top bar's inbox menu, also Cmd+Shift+I */
+  inboxMenuOpen: boolean;
+  setInboxMenuOpen: (open: boolean) => void;
+
   /** Add Project dialog, opened from the Projects view or Cmd+Shift+A there */
   addProjectOpen: boolean;
   setAddProjectOpen: (open: boolean) => void;
@@ -191,6 +195,9 @@ export const useAppStore = create<AppStore>()(
 
       sidebarCollapsed: false,
       toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+
+      inboxMenuOpen: false,
+      setInboxMenuOpen: (open) => set({ inboxMenuOpen: open }),
 
       addProjectOpen: false,
       setAddProjectOpen: (open) => set({ addProjectOpen: open }),

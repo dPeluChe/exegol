@@ -5,11 +5,13 @@ export function FilterChip({
   active,
   onClick,
   disabled,
+  className,
   children,
 }: {
   active: boolean;
   onClick: () => void;
   disabled?: boolean;
+  className?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -22,6 +24,7 @@ export function FilterChip({
         active
           ? "bg-white/10 text-text-primary"
           : "text-text-muted hover:bg-white/5 hover:text-text-secondary",
+        className,
       )}
     >
       {children}

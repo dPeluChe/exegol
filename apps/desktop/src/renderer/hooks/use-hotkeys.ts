@@ -103,6 +103,14 @@ export function useHotkeys() {
         return;
       }
 
+      // Cmd+Shift+I: the active project's inbox
+      if (chord.shift && key === "i") {
+        e.preventDefault();
+        const app = useAppStore.getState();
+        app.setInboxMenuOpen(!app.inboxMenuOpen);
+        return;
+      }
+
       // Cmd+Shift+A: the Projects view, and from there Add Project
       if (chord.shift && key === "a") {
         e.preventDefault();

@@ -47,6 +47,13 @@ const MAC_SHORTCUTS: Shortcut[] = [
     category: "navigation",
   },
   {
+    id: "inbox",
+    label: "Inbox",
+    description: "The active project's inbox threads, and Personal",
+    keys: "Cmd+Shift+I",
+    category: "navigation",
+  },
+  {
     id: "projects",
     label: "Projects",
     description: "Open the Projects view; pressed there, Add Project",

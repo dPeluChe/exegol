@@ -1409,10 +1409,6 @@ Core shipped in v0.4.3 (types, spawn injection, modal selector, badge, pipeline 
 
 ### T217: Colabs, inbox and notes (design first) `added: 2026-11-06`
 
-Live test feedback (2026-11-07), before notes: the GitHub and Inbox buttons move to the tab row beside
-the launcher, the Inbox gets a shortcut; the thread view is shorter (actions collapsed, session list
-compact); Active and Archived filters; the Personal inbox is always there to write to.
-
 Design, decisions and plan: `docs/RESEARCH/COLABS_INBOX_NOTES_DESIGN_2026_11.md`. Inbox and notes exist per project, per colab (a space between related projects) and personal. An agent tells a related project what it found without being asked. An inbox item is a thread with a status, and a top bar menu hands it to a session by id. A Colabs tab in the Dashboard, next to Company, is where colabs are created and shows Pending: threads waiting on a project, so you see which agent to reactivate. Company shows a badge per room. Closing takes a required line, and a problem that returns is a new thread referencing the old one. Articles and links reach an inbox from outside Exegol with a right click. Notes keep decisions and reminders across CLIs; what describes the project stays in code and docs.
 
 ### T218: Recover sessions after an API or network error `added: 2026-11-06`

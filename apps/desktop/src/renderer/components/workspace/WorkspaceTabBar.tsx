@@ -21,6 +21,8 @@ import {
   useWorkspaceStore,
 } from "../../stores/workspace";
 import { tabCloseTarget } from "../../stores/workspace/helpers";
+import { GitHubMenu } from "./GitHubMenu";
+import { InboxMenu } from "./InboxMenu";
 import { LayoutPresets } from "./LayoutPresets";
 import { PANE_ALONE_DRAG_TYPE, PANE_DRAG_TYPE, readPaneDrag } from "./PaneDragHandle";
 import { QuickLaunchBar } from "./QuickLaunchBar";
@@ -273,6 +275,8 @@ export function WorkspaceTabBar() {
       {/* Outside the overflow container so its dropdown escapes clipping */}
       <div className="flex h-full shrink-0 items-center border-l border-border/40 px-1">
         <LayoutPresets tabId={activeTabId} />
+        <InboxMenu key={`inbox-${projectId}`} />
+        <GitHubMenu key={projectId} />
       </div>
       <QuickLaunchBar />
     </div>
