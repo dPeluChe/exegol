@@ -101,7 +101,7 @@ export function LayoutPresets({ tabId }: LayoutPresetsProps) {
 
       {open && (
         <div
-          className="absolute right-0 top-8 z-50 min-w-[240px] rounded-lg border py-1 shadow-2xl"
+          className="absolute left-0 top-8 z-50 min-w-[240px] rounded-lg border py-1 shadow-2xl"
           style={{
             background: "var(--bg-secondary)",
             borderColor: "var(--border)",

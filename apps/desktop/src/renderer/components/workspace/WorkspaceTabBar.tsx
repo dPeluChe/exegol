@@ -207,7 +207,7 @@ export function WorkspaceTabBar() {
       {/* biome-ignore lint/a11y/noStaticElementInteractions: drop target for pane extraction */}
       <div
         className={cn(
-          "flex h-full min-w-0 flex-1 items-center gap-0.5 overflow-x-auto px-1 transition-colors",
+          "flex h-full min-w-0 items-center gap-0.5 overflow-x-auto px-1 transition-colors",
           paneDragOverBar && "bg-accent/10 ring-1 ring-inset ring-accent/40",
         )}
         onDragOver={handleBarDragOver}
@@ -278,6 +278,13 @@ export function WorkspaceTabBar() {
         <InboxMenu key={`inbox-${projectId}`} />
         <GitHubMenu key={projectId} />
       </div>
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: the free bar space still takes a pane drop */}
+      <div
+        className={cn("h-full min-w-0 flex-1", paneDragOverBar && "bg-accent/10")}
+        onDragOver={handleBarDragOver}
+        onDragLeave={handleBarDragLeave}
+        onDrop={handleBarDrop}
+      />
       <QuickLaunchBar />
     </div>
   );
