@@ -15,6 +15,7 @@ import {
 import { IDE_IDS } from "../types/ide";
 import {
   DEFAULT_SETTINGS,
+  DEFAULT_TERMINAL_FONT,
   IDLE_SUSPEND_DAYS,
   type IdleSuspendDays,
   STUCK_TURN_MAX,
@@ -86,7 +87,7 @@ export const settingsSchema = z.object({
   agentClis: z.array(agentCliConfigSchema).default([]),
   globalHotkey: z.string().default("CommandOrControl+Shift+E"),
   terminalFontSize: z.number().int().min(8).max(32).default(14),
-  terminalFontFamily: z.string().default("Menlo, Monaco, monospace"),
+  terminalFontFamily: z.string().default(DEFAULT_TERMINAL_FONT),
   sendToRunTerminal: z.boolean().default(false),
   sendToSubmitAgent: z.boolean().default(false),
   notificationsEnabled: z.boolean().default(true),

@@ -1,4 +1,4 @@
-import type { Settings } from "@exegol/shared";
+import { DEFAULT_TERMINAL_FONT, type Settings } from "@exegol/shared";
 import { Input } from "@exegol/ui";
 import { RefreshCw, Send, TerminalSquare } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
@@ -71,7 +71,7 @@ export function TerminalSettings({ settings, onChange }: TerminalSettingsProps) 
       .map((s) => s.trim())
       .filter(Boolean);
     const filtered = parts.filter((p) => normalizeFamily(p) !== target);
-    const next = filtered.length > 0 ? filtered.join(", ") : "Menlo, Monaco, monospace";
+    const next = filtered.length > 0 ? filtered.join(", ") : DEFAULT_TERMINAL_FONT;
     onChange({ terminalFontFamily: next });
   };
 

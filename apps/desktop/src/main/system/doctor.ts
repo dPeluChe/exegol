@@ -16,6 +16,7 @@ import type Database from "libsql";
 import { cliSetupFor } from "../agents/cli-catalog";
 import { getProviderRegistry } from "../agents/registry";
 import { _getFullPath, coreRust } from "../agents/spawn-env";
+import { isWaylandSession } from "../bootstrap/global-hotkey";
 import { getAppSettings } from "../db/queries/settings";
 import { checkOllamaStatus } from "../indexer/ollama-client";
 import { isNamedPipe } from "../lib/ipc-endpoint";
@@ -291,6 +292,27 @@ export async function runDoctorChecks(db: Database.Database): Promise<DoctorRepo
         : "OS keychain encryption UNAVAILABLE — API keys are stored in plaintext in the local database",
     category: "config",
   });
+
+  if (process.platform === "win32") {
+    checks.push({
+      id: "windows-limits",
+      label: "Windows limits",
+      status: "warn",
+      detail:
+        "Not available yet: the browser port chips and dev server list, a terminal's child programs in idle auto-suspend, and per-session CPU",
+      category: "system",
+    });
+  }
+  if (process.platform === "linux" && isWaylandSession(process.env)) {
+    checks.push({
+      id: "wayland-limits",
+      label: "Wayland session",
+      status: "warn",
+      detail:
+        "Floating panes may not stay on top, and the global hotkey depends on your desktop's GlobalShortcuts portal, which can refuse it",
+      category: "system",
+    });
+  }
 
   // Minimal Linux installs lack these: lsof reads ports and dev servers, playerctl pauses media
   if (process.platform === "linux") {

@@ -8,6 +8,7 @@ import {
   useCheckForUpdates,
   useUpdateStatus,
 } from "../../hooks/use-update-status";
+import { PLATFORM } from "../../lib/keymap";
 import { ReleaseNotesDialog, useUpdateNotes } from "./ReleaseNotesDialog";
 
 interface View {
@@ -46,7 +47,7 @@ function viewFor(
     case "ready":
       return {
         Icon: ArrowDownCircle,
-        title: `Exegol ${info.version ?? ""} is ready: see what's new and restart to install`,
+        title: `Exegol ${info.version ?? ""} is ready: see what's new and restart to install${PLATFORM === "win32" ? ". Open terminals close and come back for resume" : ""}`,
         tone: "text-green-400",
         badge: <span>Restart to update</span>,
         onClick: showNotes,

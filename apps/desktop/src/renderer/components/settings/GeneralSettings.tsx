@@ -16,7 +16,7 @@ import {
   Sun,
 } from "lucide-react";
 import { useState } from "react";
-import { appKeys, IS_MAC } from "../../lib/keymap";
+import { appKeys, IS_MAC, PLATFORM } from "../../lib/keymap";
 import { openInBrowser } from "../../lib/open-in-browser";
 import { displayAccelerator } from "../../lib/shortcuts";
 import { trpcInvoke } from "../../lib/trpc-client";
@@ -183,7 +183,9 @@ export function GeneralSettings({ settings, onChange }: GeneralSettingsProps) {
             <Input
               value={settings.customIdePath ?? ""}
               onChange={(e) => onChange({ customIdePath: e.target.value || null })}
-              placeholder="/usr/local/bin/my-editor"
+              placeholder={
+                PLATFORM === "win32" ? "C:\\Tools\\my-editor.exe" : "/usr/local/bin/my-editor"
+              }
               className="border-[var(--border)] bg-[var(--bg-tertiary)] text-[var(--text-primary)]"
             />
           </div>
@@ -372,8 +374,12 @@ function OllamaStatusSection({
           <div className="rounded-md border border-border/50 bg-bg-tertiary p-2.5 text-[10px] text-text-muted">
             <p className="font-medium text-text-secondary">Install Ollama:</p>
             <p className="mt-1">
-              <code className="rounded bg-white/5 px-1 py-0.5">brew install ollama</code> or
-              download from{" "}
+              {IS_MAC && (
+                <>
+                  <code className="rounded bg-white/5 px-1 py-0.5">brew install ollama</code> or{" "}
+                </>
+              )}
+              {IS_MAC ? "download" : "Download"} from{" "}
               <button
                 type="button"
                 onClick={() => openInBrowser("https://ollama.ai")}

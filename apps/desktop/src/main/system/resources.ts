@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs";
-import { readFile } from "node:fs/promises";
+import { readFile, statfs } from "node:fs/promises";
 import * as os from "node:os";
 import type { MetricsSnapshot } from "@exegol/shared";
 import { app, BrowserWindow } from "electron";
@@ -65,6 +65,8 @@ interface ProjectMetrics {
 const COLLECT_INTERVAL = 10_000; // 10 seconds
 /** The promotion poll reads the full table every 3 s: one this recent is reused, else a light ps */
 const SHARED_PS_AGE_MS = 4_000;
+/** A read there starts PowerShell, a second or two of CPU */
+const WIN_TABLE_AGE_MS = 120_000;
 
 let cachedMetrics: SystemMetrics | null = null;
 let collectorTimer: ReturnType<typeof setInterval> | null = null;
@@ -339,10 +341,9 @@ async function getProcessUsage(cores: number): Promise<ProcessUsage> {
     exegolMemory += m.memory.workingSetSize * 1024;
   }
   const sidecarPid = readPidFile()?.pid ?? 0;
-  // No ps on Windows: Exegol's own Electron processes only
   const rows =
     process.platform === "win32"
-      ? []
+      ? await readProcessTable({ maxAgeMs: WIN_TABLE_AGE_MS }).catch(() => [])
       : (readProcessTable.recent(SHARED_PS_AGE_MS) ?? (await readProcessUsage()));
   const children = new Map<number, ProcRow[]>();
   for (const r of rows) children.set(r.ppid, [...(children.get(r.ppid) ?? []), r]);
@@ -384,6 +385,18 @@ const DATA_VOLUME = existsSync("/System/Volumes/Data")
 
 async function getDiskMetrics() {
   try {
+    if (process.platform === "win32") {
+      const fsInfo = await statfs(DATA_VOLUME);
+      const total = fsInfo.blocks * fsInfo.bsize;
+      const free = fsInfo.bavail * fsInfo.bsize;
+      const used = total - free;
+      return {
+        total,
+        used,
+        free,
+        usagePercent: total > 0 ? Math.round((used / total) * 1000) / 10 : 0,
+      };
+    }
     const { stdout } = await execFileAsync("df", ["-k", DATA_VOLUME], { timeout: 5_000 });
     const line = stdout.trim().split("\n")[1];
     if (!line) return { total: 0, used: 0, free: 0, usagePercent: 0 };

@@ -1,4 +1,4 @@
-import { gridLabel } from "@exegol/shared";
+import { DEFAULT_TERMINAL_FONT, gridLabel } from "@exegol/shared";
 import type { FitAddon } from "@xterm/addon-fit";
 import type { SerializeAddon } from "@xterm/addon-serialize";
 import type { Terminal } from "@xterm/xterm";
@@ -95,7 +95,7 @@ export function useXterm({
 
   const { data: settings } = useSettings();
   const fontSize = settings?.terminalFontSize ?? 14;
-  const fontFamily = settings?.terminalFontFamily ?? "Menlo, Monaco, monospace";
+  const fontFamily = settings?.terminalFontFamily ?? DEFAULT_TERMINAL_FONT;
   const terminalTheme = resolveTerminalTheme(settings?.theme ?? "dark");
 
   // A card that sizes its session behaves like an owner pane for sizing only

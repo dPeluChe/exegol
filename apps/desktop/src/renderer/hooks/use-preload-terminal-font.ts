@@ -1,3 +1,4 @@
+import { DEFAULT_TERMINAL_FONT } from "@exegol/shared";
 import { useEffect } from "react";
 import { useSettings } from "./use-trpc";
 
@@ -6,7 +7,7 @@ import { useSettings } from "./use-trpc";
 export function usePreloadTerminalFont(): void {
   const { data: settings } = useSettings();
   const font = settings
-    ? `${settings.terminalFontSize ?? 14}px ${settings.terminalFontFamily ?? "Menlo, Monaco, monospace"}`
+    ? `${settings.terminalFontSize ?? 14}px ${settings.terminalFontFamily ?? DEFAULT_TERMINAL_FONT}`
     : null;
   useEffect(() => {
     if (!font || typeof document === "undefined" || !document.fonts) return;

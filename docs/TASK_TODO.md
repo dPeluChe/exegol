@@ -182,6 +182,10 @@ Checked by the user on the 0.5.15 build: status bar widgets, Ctrl+Tab switcher, 
   T185.16
 
 ### Platform and health tracks
+- **Live checks on Windows and Linux** (2026-11-06): Rigo and Neptali run
+  `docs/GUIDES/CROSS_PLATFORM_CHECKS.md` on the next full build
+- **Windows CLI command**: `exegol` has no Windows form yet (POSIX script, no `.cmd` in the
+  package), so the menu items are hidden there; ship a `.cmd` shim through `lib/win-launch.ts`
 - **Windows runtime, unverified** (2026-10-20, `feat/windows-runtime`): written and unit-tested on
   macOS only. On Windows 11 check: pwsh and powershell.exe 5.1 plain terminals (profile.ps1
   marker, OSC 7 folder, no console window flash); a prompt with quotes, `$` and newlines reaching
@@ -191,8 +195,8 @@ Checked by the user on the 0.5.15 build: status bar widgets, Ctrl+Tab switcher, 
   surviving an app restart, replacement on a version bump (pipe released before the successor
   listens); MCP pipe for shim and claim guard; Claude hooks under Git Bash (`C:/` paths, `-x` on
   notify.sh, `$HOME/.exegol/events` = Exegol's folder); `code.cmd` via cmd.exe; Restart terminals
-  and pane close through `Get-CimInstance`. Still off there: ports and dev servers, process
-  metrics, shell promotion; renderer writes ending in `\n` (`spawn-shell`, CLI updates, launcher
+  and pane close through `Get-CimInstance`. Still off there: ports and dev servers, per-session CPU,
+  shell promotion; renderer writes ending in `\n` (`spawn-shell`, CLI updates, launcher
   folder commands) may not submit in PowerShell
 - **Windows install commands, unverified**: `CLI_SETUP` has a `win` command per CLI taken from
   each vendor's docs (2026-10-01), but Exegol ships no Windows build, so none has been run.

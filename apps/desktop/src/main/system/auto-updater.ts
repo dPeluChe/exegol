@@ -8,6 +8,8 @@ import { autoUpdater } from "electron-updater";
 import { prerelease } from "semver";
 import { logger } from "../lib/logger";
 import { EXEGOL_REPO_URL } from "../lib/repo";
+import { getPtyHost } from "../terminal/pty-host";
+import { stopSidecarProcess } from "../terminal/pty-sidecar-discovery";
 import { setUpdateStatus, type UpdateStatus } from "./update-status";
 import { allowQuit } from "./work-guard";
 
@@ -183,7 +185,15 @@ export function checkForUpdatesManual(): void {
 }
 
 /** Install a downloaded update now (restarts the app). */
-export function installUpdate(): void {
+export async function installUpdate(): Promise<void> {
+  // The sidecar runs from the install folder and the installer cannot replace it while it lives.
+  // The relaunch's recovery offers the sessions for resume, as Restart terminals does
+  if (process.platform === "win32") {
+    getPtyHost().expectRelaunch();
+    await stopSidecarProcess(getPtyHost().getSidecarClient()).catch((err) =>
+      logger.warn("[Updater] Sidecar stop failed before install:", err),
+    );
+  }
   allowQuit();
   autoUpdater.quitAndInstall(false, true);
 }
