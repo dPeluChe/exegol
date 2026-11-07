@@ -14,6 +14,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - `Cmd+.` no longer stops the focused session: one stray key ended it with no warning. Stop Agent stays in the Command Palette
 
 ### Added
+- Tab row: LayoutPresets, Inbox and GitHub follow the terminal button instead of the far right.
 - Inbox: the Inbox and GitHub buttons sit in the tab row beside layouts, Cmd+Shift+I opens the inbox, Active and Archived filters, Personal always there to write to, and a shorter thread view (session chips, New tab and Close folded).
 - Projects view: narrower cards in an auto-fill grid, a search box (Enter opens the first match), a repo count with the folder names on a workspace, and Cmd+Shift+A to open it (pressed there, Add Project).
 - Inbox: a thread sent to a session always carries its messages and names the Exegol inbox, `inbox_reply` says to close the thread, and agent messages show the session name.
