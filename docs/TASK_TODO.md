@@ -1440,6 +1440,15 @@ colab: the full loop. To weigh: it reads Exegol's signals (attention items, turn
 inbox Pending) rather than every terminal, so it costs few tokens; T215 (voice orchestrator) and
 the `watch` role of T221 likely fold into it.
 
+### T225: Company chat shows what each tool did `added: 2026-11-07`
+**Priority**: P2 | **Effort**: S | **Source**: Antonio, 2026-11-07 (screenshot: "Bash x5" says
+little). The chat keeps only tool names on purpose (`parseClaudeLine`, `parseCodexLine`). The
+transcripts hold more: Claude's Bash `description` (written for people, e.g. "Run all gates"), Read,
+Edit and Write `file_path`, Edit's old/new text (lines added and removed), Agent `description`,
+and each tool_result's error flag; Codex keeps function call arguments. Show per group the
+descriptions, files touched with +/- lines and a failed mark. Never commands' output, file
+contents or env values; paths relative to the project.
+
 ### T222: Exegol speaks `added: 2026-11-06`
 
 Agent replies read aloud on the machine, as an option beside dictation. No text leaves it and none reaches a log. After T217 unless Antonio moves it up.

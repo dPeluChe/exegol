@@ -7,6 +7,7 @@ import {
   type InboxCloseStatus,
   type InboxMessage,
   type InboxThread,
+  inboxProjectOf,
   isInboxClosed,
 } from "@exegol/shared";
 import { Button, cn } from "@exegol/ui";
@@ -15,6 +16,7 @@ import { Plus } from "lucide-react";
 import { useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useAct } from "../../../hooks/use-act";
+import { useColabs } from "../../../hooks/use-inbox";
 import { useLaunchableProviders } from "../../../hooks/use-providers";
 import { useGitHubOverview } from "../../../hooks/use-trpc-github";
 import { sessionName } from "../../../lib/agent-label";
@@ -75,11 +77,19 @@ function SendToSession({
   repo: string | null;
   homeProject: string | null;
 }) {
-  const projectId = thread.scope === "personal" ? null : thread.scopeId;
+  const colabs = useColabs();
+  // A colab thread goes to a session in any member project, its own project first
+  const projectId = inboxProjectOf(thread);
+  const members =
+    thread.scope === "colab"
+      ? new Set(colabs.find((c) => c.id === thread.scopeId)?.members.map((m) => m.projectId))
+      : null;
   const sessions = useAgentStore(
     useShallow((s) =>
       Object.values(s.agents).filter(
-        (a) => isOpenSession(a) && (!projectId || a.projectId === projectId),
+        (a) =>
+          isOpenSession(a) &&
+          (members ? members.has(a.projectId) : !projectId || a.projectId === projectId),
       ),
     ),
   );

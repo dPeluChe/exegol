@@ -9,6 +9,7 @@ import {
   close,
   giveLastTurn,
   InboxError,
+  type InboxTarget,
   openThread,
   PERSON,
   readThread,
@@ -48,13 +49,24 @@ export const inboxRouter = router({
     .query(({ ctx, input }) => inboxCall(() => readThread(ctx.db, PERSON, input.id, 0))),
 
   open: publicProcedure
-    .input(z.object({ title: z.string(), body: z.string(), projectId: z.string().nullable() }))
+    .input(
+      z.object({
+        title: z.string(),
+        body: z.string(),
+        projectId: z.string().nullable(),
+        /** A colab thread, for one member (toProject) or all of them */
+        colabId: z.string().optional(),
+        toProject: z.string().nullable().optional(),
+      }),
+    )
     .mutation(({ ctx, input }) =>
       inboxCall(() => {
-        const { title, body, projectId } = input;
-        const target = projectId
-          ? ({ scope: "project", projectId } as const)
-          : ({ scope: "personal" } as const);
+        const { title, body, projectId, colabId } = input;
+        const target: InboxTarget = colabId
+          ? { scope: "colab", colabId, toProject: input.toProject ?? null }
+          : projectId
+            ? { scope: "project", projectId }
+            : { scope: "personal" };
         const fields = { title, body, url: null, refs: [] };
         return { id: openThread(ctx.db, PERSON, target, fields).thread.id };
       }),

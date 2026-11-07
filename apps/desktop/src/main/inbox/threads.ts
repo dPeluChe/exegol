@@ -11,6 +11,7 @@ import {
   isInboxClosed,
 } from "@exegol/shared";
 import type Database from "libsql";
+import { isColabMember } from "../db/queries/colabs";
 import {
   closeThread,
   getThread,
@@ -80,7 +81,26 @@ function similarClosed(db: Database.Database, actor: InboxActor, thread: InboxTh
     .slice(0, 3);
 }
 
-export type InboxTarget = { scope: "project"; projectId: string } | { scope: "personal" };
+export type InboxTarget =
+  | { scope: "project"; projectId: string }
+  | { scope: "personal" }
+  | { scope: "colab"; colabId: string; toProject: string | null };
+
+/** Where a thread goes and which project owns it. A colab takes members only, both ways */
+function placed(db: Database.Database, author: InboxAuthor, target: InboxTarget) {
+  if (target.scope === "personal") return { scopeId: null, toProject: null, owner: null };
+  if (target.scope === "project") {
+    return { scopeId: target.projectId, toProject: null, owner: target.projectId };
+  }
+  const { colabId, toProject } = target;
+  if (author.projectId && !isColabMember(db, colabId, author.projectId)) {
+    throw new InboxError("This project is not in that colab");
+  }
+  if (toProject && !isColabMember(db, colabId, toProject)) {
+    throw new InboxError("That project is not in the colab");
+  }
+  return { scopeId: colabId, toProject, owner: toProject };
+}
 
 export interface ThreadFields {
   title: string;
@@ -102,13 +122,14 @@ export function openThread(
     }
   }
   checkRefs(db, author, fields.refs);
-  const projectId = target.scope === "project" ? target.projectId : null;
+  const { scopeId, toProject, owner } = placed(db, author, target);
   const key = insertThread(
     db,
     {
       scope: target.scope,
-      scopeId: projectId,
-      ownerProject: projectId,
+      scopeId,
+      toProject,
+      ownerProject: owner,
       title: bounded(fields.title, INBOX_TITLE_MAX, "title"),
       url: fields.url,
       refs: fields.refs,

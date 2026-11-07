@@ -1,8 +1,18 @@
 import { type InboxAuthor, type InboxThread, pathBase, pathParent } from "@exegol/shared";
 import type Database from "libsql";
 import { getAgent, getAgentCwd } from "../db/queries/agents";
+import { colabsOfProject } from "../db/queries/colabs";
 import { listThreads } from "../db/queries/inbox";
-import { close, InboxError, openThread, readThread, replyTo, take } from "../inbox/threads";
+import { getProject } from "../db/queries/projects";
+import {
+  close,
+  InboxError,
+  type InboxTarget,
+  openThread,
+  readThread,
+  replyTo,
+  take,
+} from "../inbox/threads";
 import { runGit } from "../lib/worktree-safety";
 import { type ExegolToolContext, ExegolToolError } from "./exegol-protocol";
 import type { InboxToolName } from "./inbox-tool-defs";
@@ -46,10 +56,40 @@ const text = (value: unknown): string => (typeof value === "string" ? value : ""
 
 const summary = (t: InboxThread) => ({
   thread: t.id,
+  scope: t.scope,
   title: t.title,
   status: t.status,
   resolution: t.resolution,
 });
+
+const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+/** Names, as an agent knows them from its instructions; only colabs this project is in */
+function targetOf(
+  db: Database.Database,
+  args: Record<string, unknown>,
+  projectId: string,
+): InboxTarget {
+  if (args.target === "personal") return { scope: "personal" };
+  if (args.target !== "colab") return { scope: "project", projectId };
+  const colabs = colabsOfProject(db, projectId);
+  const colab = colabs.find((c) => same(c.name, text(args.colab)));
+  if (!colab) {
+    const names = colabs.map((c) => c.name).join(", ") || "none";
+    throw new InboxError(
+      `No colab named ${JSON.stringify(text(args.colab))} here. Yours: ${names}`,
+    );
+  }
+  const wanted = text(args.to_project);
+  if (!wanted) return { scope: "colab", colabId: colab.id, toProject: null };
+  const members = colab.members.map((m) => getProject(db, m.projectId)).filter((p) => !!p);
+  const to = members.find((p) => same(p.name, wanted));
+  if (!to) {
+    const names = [...new Set(members.map((p) => p.name))].join(", ");
+    throw new InboxError(`${JSON.stringify(wanted)} is not in ${colab.name}. Members: ${names}`);
+  }
+  return { scope: "colab", colabId: colab.id, toProject: to.id };
+}
 
 type Handler = (
   db: Database.Database,
@@ -62,9 +102,7 @@ const HANDLERS: Record<InboxToolName, Handler> = {
     const opened = openThread(
       db,
       await authorOf(db, context),
-      args.target === "personal"
-        ? { scope: "personal" }
-        : { scope: "project", projectId: context.projectId },
+      targetOf(db, args, context.projectId),
       {
         title: text(args.title),
         body: text(args.body),

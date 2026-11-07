@@ -36,16 +36,19 @@ const THREAD_SELECT = `SELECT t.*, r.last_read_seq,
   LEFT JOIN inbox_reads r ON r.thread_id = t.id AND r.project_id = @projectId`;
 
 // The one reach rule. A null project is a person. A personal thread reaches a project through
-// the read row a hand-over leaves
+// the read row a hand-over leaves; a colab thread reaches its members, for as long as they are
 const REACH_SQL = `(@projectId IS NULL
   OR (t.scope = 'project' AND t.scope_id = @projectId)
-  OR (t.scope = 'personal' AND r.thread_id IS NOT NULL))`;
+  OR (t.scope = 'personal' AND r.thread_id IS NOT NULL)
+  OR (t.scope = 'colab' AND EXISTS (SELECT 1 FROM colab_members cm
+        WHERE cm.colab_id = t.scope_id AND cm.project_id = @projectId)))`;
 
 function toThread(row: Record<string, unknown>): InboxThread {
   return {
     id: threadKey(row.id as number),
     scope: row.scope as InboxScope,
     scopeId: (row.scope_id as string) ?? null,
+    toProject: (row.to_project as string) ?? null,
     kind: row.kind as InboxKind,
     title: row.title as string,
     url: (row.url as string) ?? null,
@@ -133,6 +136,7 @@ export function insertMessage(
 export interface NewThread {
   scope: InboxScope;
   scopeId: string | null;
+  toProject: string | null;
   title: string;
   url: string | null;
   ownerProject: string | null;
@@ -151,8 +155,9 @@ export function insertThread(
     const { id } = db
       .prepare(
         `INSERT INTO inbox_threads
-           (scope, scope_id, title, url, owner_project, opened_at, last_activity_at, refs)
-         VALUES (@scope, @scopeId, @title, @url, @ownerProject, @at, @at, @refs) RETURNING id`,
+           (scope, scope_id, to_project, title, url, owner_project, opened_at, last_activity_at, refs)
+         VALUES (@scope, @scopeId, @toProject, @title, @url, @ownerProject, @at, @at, @refs)
+         RETURNING id`,
       )
       .get({ ...thread, at, refs: JSON.stringify(thread.refs) }) as { id: number };
     appendMessage(db, id, body, author);
@@ -252,5 +257,16 @@ export function threadsOpenedBySince(
       "SELECT COUNT(*) AS n FROM inbox_messages WHERE agent_id = ? AND seq = 1 AND created_at >= ?",
     )
     .get(agentId, since) as { n: number };
+  return n;
+}
+
+/** Active threads of a colab: one with any refuses to be deleted */
+export function countColabActiveThreads(db: Database.Database, colabId: string): number {
+  const { n } = db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM inbox_threads t
+       WHERE t.scope = 'colab' AND t.scope_id = ? ${STATE_SQL.active}`,
+    )
+    .get(colabId) as { n: number };
   return n;
 }

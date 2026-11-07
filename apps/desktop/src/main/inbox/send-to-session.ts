@@ -7,6 +7,7 @@ import {
 import type Database from "libsql";
 import { FOLLOW_UP_MAX_CHARS, queueFollowUp } from "../agents/follow-up-queue";
 import { getAgent } from "../db/queries/agents";
+import { isColabMember } from "../db/queries/colabs";
 import { getThread, listMessages } from "../db/queries/inbox";
 import { handOver, InboxError, PERSON, take } from "./threads";
 
@@ -57,6 +58,9 @@ function handable(db: Database.Database, key: string, projectId: string): InboxT
   if (atInboxTurnLimit(thread)) throw new InboxError(`${key} waits at the turn limit`);
   if (thread.scope === "project" && thread.scopeId !== projectId) {
     throw new InboxError("That session is in another project");
+  }
+  if (thread.scope === "colab" && !isColabMember(db, thread.scopeId ?? "", projectId)) {
+    throw new InboxError("That session's project is not in the colab");
   }
   return thread;
 }

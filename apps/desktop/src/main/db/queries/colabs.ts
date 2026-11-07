@@ -85,3 +85,21 @@ export function removeColabMember(
     repo,
   );
 }
+
+export function isColabMember(db: Database.Database, colabId: string, projectId: string): boolean {
+  return !!db
+    .prepare("SELECT 1 FROM colab_members WHERE colab_id = ? AND project_id = ? LIMIT 1")
+    .get(colabId, projectId);
+}
+
+/** The colabs a project is in, with all their members */
+export function colabsOfProject(db: Database.Database, projectId: string): Colab[] {
+  const ids = new Set(
+    (
+      db
+        .prepare("SELECT DISTINCT colab_id FROM colab_members WHERE project_id = ?")
+        .all(projectId) as { colab_id: string }[]
+    ).map((r) => r.colab_id),
+  );
+  return ids.size === 0 ? [] : listColabs(db).filter((c) => ids.has(c.id));
+}
