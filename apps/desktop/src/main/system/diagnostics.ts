@@ -185,7 +185,7 @@ export async function collectDiagnostics(
     `- App: ${version} (${app.isPackaged ? "packaged" : "dev"})`,
     `- Electron ${process.versions.electron}, Chrome ${process.versions.chrome}, Node ${process.versions.node}`,
     `- ${osType()} ${release()} (${process.platform}-${process.arch})`,
-    `- Sidecar protocol ${SIDECAR_VERSION}`,
+    `- Sidecar this app expects: ${SIDECAR_VERSION} (the running one is under Doctor)`,
     ...(gpuLine ? [`- ${gpuLine}`] : []),
     "",
     "### Doctor",

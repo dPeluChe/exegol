@@ -1423,7 +1423,7 @@ A session stopped by an API error, or by moving to another network, retries by i
 
 ### T219: Sessions survive an app update `added: 2026-11-06`
 
-From the Hide comparison. Run the sidecar from a versioned copy outside the bundle; an old sidecar drains while new sessions go to the new one, so a `SIDECAR_VERSION` bump stops killing PTYs. Also removes the Windows stop before install in `installUpdate`. Design, not code, from Hide: its licence is FSL-1.1.
+From the Hide comparison. Done: a compatible sidecar with live sessions stays through an update (`SIDECAR_COMPATIBLE_SINCE`). Left, to decide before any code: Windows still stops the sidecar on every update because the installer cannot replace files in use, and a forced replacement still ends PTYs. Running it from a versioned copy outside the bundle means copying Electron per version or a small native holder, plus several sidecars at once in `PtyHost`. Design, not code, from Hide: its licence is FSL-1.1.
 
 ### T221: Agents watch and message each other without getting in the way `added: 2026-11-06`
 

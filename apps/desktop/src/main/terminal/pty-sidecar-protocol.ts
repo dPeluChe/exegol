@@ -19,7 +19,7 @@ export const SIDECAR_LOG_PATH = join(EXEGOL_DIR, "logs", "sidecar.log");
  * lib/ipc-endpoint). The
  * sidecar is detached so it outlives both an app restart AND an app update —
  * on a version mismatch, discovery shuts the old one down and spawns a fresh
- * one. Forget the bump and the fix silently never loads: that is a released
+ * one, unless SIDECAR_COMPATIBLE_SINCE keeps it. Forget the bump and the fix silently never loads: that is a released
  * user still running the old sidecar, not just a stale dev process.
  *
  * 1.3.0 — snapshots carry the alternate-screen mode (2026-08-13)
@@ -33,10 +33,15 @@ export const SIDECAR_LOG_PATH = join(EXEGOL_DIR, "logs", "sidecar.log");
  *        `sidecar.shuttingDown` notice before it kills its sessions, the pid file released first
  *        and session.create refused while it shuts down (2026-10-12)
  * 1.7.1: no protocol change; test builds of 1.7.0 shipped without the shutdown notice (2026-10-13)
+ * (2026-11-06, no bump: SIDECAR_COMPATIBLE_SINCE is read only by main)
  * (2026-10-20, no bump: the Windows named pipe from lib/ipc-endpoint changes nothing on macOS or
  *  Linux, and Windows had no earlier sidecar to replace)
  */
 export const SIDECAR_VERSION = "1.7.1";
+/** RAISE THIS with a bump main cannot talk to (a new RPC or param, a smaller frame or ring) or a
+ *  fix that must reach running sessions: any older sidecar is replaced at once, ending its PTYs.
+ *  From here up one with live sessions stays until a launch finds none */
+export const SIDECAR_COMPATIBLE_SINCE = "1.7.1";
 
 // ─── Timeouts ───────────────────────────────────────────────────────────
 

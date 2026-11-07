@@ -32,7 +32,7 @@ React health: CI runs react-doctor@0.9.14 on the PR's changes; errors fail; fix 
 ## Hard rules
 
 - Changing a file the PTY sidecar bundles (`terminal/pty-sidecar-*.ts`, `ring-buffer.ts`,
-  `lib/frame-reader.ts`; the list is in the `SIDECAR_VERSION` comment) → bump `SIDECAR_VERSION`.
+  `lib/frame-reader.ts`; the list is in the `SIDECAR_VERSION` comment) → bump `SIDECAR_VERSION`, and `SIDECAR_COMPATIBLE_SINCE` when main cannot talk to the old one or the fix must reach running sessions.
 - New tRPC procedure or IPC channel → add it to `apps/desktop/src/preload/capabilities.json`.
 - Migrations only in your own `db/migration-sets/<group>.ts`; never edit shipped ones.
 - Paths, ids and commands from the renderer are untrusted: validate them in main

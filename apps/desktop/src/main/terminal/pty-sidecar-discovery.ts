@@ -5,6 +5,7 @@ import { randomBytes } from "node:crypto";
 import { closeSync, existsSync, openSync, readFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { satisfies } from "semver";
 import { logger } from "../lib/logger";
 import { withTimeout } from "../lib/timeout";
 import { nodeLaunch } from "../system/node-launch";
@@ -13,6 +14,7 @@ import { SidecarClient } from "./pty-sidecar-client";
 import {
   type PidFile,
   parsePidFile,
+  SIDECAR_COMPATIBLE_SINCE,
   SIDECAR_CONNECT_TIMEOUT_MS,
   SIDECAR_LOG_PATH,
   SIDECAR_PID_PATH,
@@ -56,6 +58,25 @@ export interface SidecarReplacement {
   liveSessionIds: string[];
 }
 
+/** Pure: main can drive a sidecar of this version (never newer than the app's) */
+export function sidecarCompatible(
+  version: string,
+  since = SIDECAR_COMPATIBLE_SINCE,
+  current = SIDECAR_VERSION,
+): boolean {
+  return satisfies(version, `>=${since} <=${current}`);
+}
+
+/** Pure: stay for live sessions. `null`: the list failed, and replacing would end what it missed */
+export function keepsSidecar(
+  version: string,
+  liveSessions: number | null,
+  since = SIDECAR_COMPATIBLE_SINCE,
+  current = SIDECAR_VERSION,
+): boolean {
+  return liveSessions !== 0 && sidecarCompatible(version, since, current);
+}
+
 /** "ready": reuse it; "retiring": another version, asked to shut down; "unreachable": no answer */
 async function tryConnect(
   client: SidecarClient,
@@ -66,8 +87,15 @@ async function tryConnect(
     await client.connect(pidFile.sock);
     const ping = await client.ping();
     if (ping.version === SIDECAR_VERSION) return "ready";
-    const info = await client.listSessionsInfo().catch(() => []);
-    const liveSessionIds = info.filter((s) => s.alive).map((s) => s.id);
+    const info = await client.listSessionsInfo().catch(() => null);
+    const liveSessionIds = (info ?? []).filter((s) => s.alive).map((s) => s.id);
+    if (keepsSidecar(ping.version, info ? liveSessionIds.length : null)) {
+      discoveryLog(
+        `keeping ${ping.version} for its ${info ? liveSessionIds.length : "unknown"} live session(s), app ${SIDECAR_VERSION}`,
+        true,
+      );
+      return "ready";
+    }
     discoveryLog(
       `replacing ${ping.version} -> ${SIDECAR_VERSION} (${liveSessionIds.length} live session(s)), pid ${pidFile.pid}`,
       true,
@@ -161,7 +189,7 @@ export async function waitForExit(pid: number, waitMs = EXIT_WAIT_MS): Promise<v
 
 /**
  * Ensure a sidecar is running and return a connected client.
- * Reuses existing sidecar if version matches, otherwise spawns a new one.
+ * Reuses a sidecar of this version or one kept by `keepsSidecar`, else spawns a new one.
  */
 export async function ensureSidecar(
   onReplace?: (r: SidecarReplacement) => void,
@@ -216,7 +244,7 @@ export async function reconnectSidecar(): Promise<SidecarClient> {
   try {
     await client.connect(pidFile.sock);
     const ping = await withTimeout(client.ping(), 5_000, "Sidecar ping");
-    if (ping.version !== SIDECAR_VERSION) throw new Error("Sidecar version changed");
+    if (!sidecarCompatible(ping.version)) throw new Error("Sidecar version changed");
     client.pid = pidFile.pid;
     return client;
   } catch (err) {

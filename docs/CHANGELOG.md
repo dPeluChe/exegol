@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Updates keep live terminals when the new version can still talk to the running sidecar; it is replaced once a launch finds no live session
 - Unread sessions: a turn that ended while you were elsewhere gets its own group in Company, the sidebar and the status bar, apart from what needs an answer
 - Company chat: a working row with animated orbs says what the session is doing during a turn
 - Agents no longer act on a browser pane another agent is driving, `browser_open` no longer loads over a pane you are reading, and agents can close the panes they opened

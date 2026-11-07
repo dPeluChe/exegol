@@ -91,7 +91,7 @@ points:
 - **PTY sidecar**: it outlives the app on purpose. If you change anything it bundles
   (`pty-sidecar-*.ts`, `ring-buffer.ts`, `lib/frame-reader.ts`; the list is in the `SIDECAR_VERSION`
   comment), bump `SIDECAR_VERSION` in `pty-sidecar-protocol.ts`, or the running sidecar keeps
-  the old code, for released users too. A bump restarts every live terminal on update.
+  the old code, for released users too. A bump alone reaches a user once a launch finds no live session; raising `SIDECAR_COMPATIBLE_SINCE` too restarts every live terminal on update.
 - **Database**: add migrations only to your group's file in `apps/desktop/src/main/db/migration-sets/`
   (new work goes in `wave3.ts`, ids `w3_NNN_…`); never edit another group's set or a shipped
   migration.
@@ -133,7 +133,7 @@ español y lo resolvemos en la revisión. Lo esencial:
   entrada con fecha en `docs/TASK_COMPLETED/YYMM.md` y una línea en `docs/CHANGELOG.md`
   `[Unreleased]` si el cambio se nota para quien usa la app.
 - **Sidecar del PTY**: si cambias un archivo que empaqueta (la lista está en el comentario de
-  `SIDECAR_VERSION`, en `pty-sidecar-protocol.ts`), sube `SIDECAR_VERSION`.
+  `SIDECAR_VERSION`, en `pty-sidecar-protocol.ts`), sube `SIDECAR_VERSION`, y también `SIDECAR_COMPATIBLE_SINCE` si main ya no puede hablar con el anterior.
 - **Migraciones**: solo en el archivo de tu grupo dentro de `db/migration-sets/`; nunca edites
   una migración ya publicada.
 - **Commits**: conventional commits (`fix(terminal): …`); el PR se fusiona con squash.
