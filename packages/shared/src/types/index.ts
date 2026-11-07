@@ -12,6 +12,7 @@ export * from "./dictation-repeats";
 export * from "./diff-comment";
 export * from "./github";
 export * from "./ide";
+export * from "./inbox";
 export * from "./mcp";
 export * from "./memory";
 export * from "./models";

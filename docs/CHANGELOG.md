@@ -14,6 +14,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - `Cmd+.` no longer stops the focused session: one stray key ended it with no warning. Stop Agent stays in the Command Palette
 
 ### Added
+- Agents can leave threads in a project's or your personal inbox through Exegol's tools; the screens to read them come next
 - Updates keep live terminals when the new version can still talk to the running sidecar; it is replaced once a launch finds no live session
 - Unread sessions: a turn that ended while you were elsewhere gets its own group in Company, the sidebar and the status bar, apart from what needs an answer
 - Company chat: a working row with animated orbs says what the session is doing during a turn

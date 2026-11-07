@@ -89,11 +89,11 @@ An inbox item is a **thread**, not a message: an opening message ("improvement s
 
 | Table | Columns |
 |---|---|
-| `inbox_threads` | `id`, `scope` (`project`, `colab`, `personal`) and `scope_id`, `to_project`, `to_repo`, `kind`, `title`, `url`, `status`, `resolution`, `owner_project`, `forwarded_from`, `opened_at`, `last_activity_at`, `agent_turns`, `last_turn`, `refs` |
-| `inbox_messages` | `id`, `thread_id`, `seq`, `body`, `author_kind` (`user`, `agent`, `external`), `project_id`, `repo`, `agent_id`, `cli`, `model`, `branch`, `commit`, `created_at` |
+| `inbox_threads` | `id`, `scope` (`project`, `colab`, `personal`) and `scope_id`, `to_project`, `to_repo`, `kind`, `title`, `url`, `status`, `resolution`, `owner_project`, `forwarded_from`, `opened_at`, `last_activity_at`, `last_turn`, `refs` |
+| `inbox_messages` | `thread_id`, `seq`, `body`, `author_kind` (`user`, `agent`, `external`), `project_id`, `repo`, `agent_id`, `cli`, `model`, `branch`, `commit`, `created_at` |
 | `inbox_reads` | `thread_id`, `project_id`, `last_read_seq` |
 
-Each message says where it came from: which project and repo, which session, which CLI, on which commit. These are copied, not joined, so they survive the session. Closed threads are kept: they are what a later thread points at. No existing table fits: `messages` needs a live agent, attention items live in the renderer, and `handoffs` and `task_queue` are unused.
+Agent turns are counted from the messages. Each message says where it came from: which project and repo, which session, which CLI, on which commit. These are copied, not joined, so they survive the session. Closed threads are kept: they are what a later thread points at. No existing table fits: `messages` needs a live agent, attention items live in the renderer, and `handoffs` and `task_queue` are unused.
 
 ### Status
 

@@ -36,8 +36,10 @@ import {
   searchMemories,
 } from "../memory/store";
 import { isPathInside, realpathSafeSync } from "../security/path-guard";
+import { callInboxTool } from "./exegol-inbox-tools";
 import { type ExegolToolContext, ExegolToolError, type ExegolToolName } from "./exegol-protocol";
 import { EXEGOL_TOOL_NAMES, SEARCH_ONLY_TOOLS } from "./exegol-tool-defs";
+import { isInboxTool } from "./inbox-tool-defs";
 
 export { ExegolToolError };
 
@@ -407,6 +409,7 @@ export async function callExegolTool(
   const toolName = tool as ExegolToolName;
   requireWriteAccess(toolName, context);
   if (isBrowserTool(toolName)) return callBrowserTool(db, toolName, args, context);
+  if (isInboxTool(toolName)) return callInboxTool(db, toolName, args, context);
 
   // Single translation point: messaging throws AgentMessagingError (its own
   // JSON-RPC codes), which the socket layer surfaces to the agent verbatim.
