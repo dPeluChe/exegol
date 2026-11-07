@@ -479,6 +479,9 @@ on the machine (no audio leaves it), typed into the focused pane.
    - Numbers-as-words post-processing for Parakeet ("twenty five" to "25")
    - "Agents that talk": text to speech for agent replies, Kokoro-82M (Apache-2.0, sherpa-onnx
      has it) as the candidate
+     or Phonon (`huggingface.co/blog/phonon-tts`, 2026-11, 65-75 MB). Only its English model is
+     Apache-2.0; the five-language one, Spanish included, is CC BY-NC. Runs on its own `ptts` or
+     Transformers, no sherpa-onnx support found. Listen and compare before choosing
 
 ### T153 — Project Awareness Engine `added: 2026-07-04`
 > Merged from T132 (automations catalog, `added: 2026-07-04`), T186 (Owl Phase 1), T187 (Owl
@@ -1408,7 +1411,7 @@ Core shipped in v0.4.3 (types, spawn injection, modal selector, badge, pipeline 
 
 ### T217: Colabs, inbox and notes (design first) `added: 2026-11-06`
 
-Design and what is left to decide: `docs/RESEARCH/COLABS_INBOX_NOTES_DESIGN_2026_11.md`. Inbox and notes exist per project, per colab (a space between related projects) and personal. An agent tells a related project what it found without being asked, and a top bar menu hands an item to a session by id. Notes keep decisions and reminders across CLIs; what describes the project stays in code and docs.
+Design and what is left to decide: `docs/RESEARCH/COLABS_INBOX_NOTES_DESIGN_2026_11.md`. Inbox and notes exist per project, per colab (a space between related projects) and personal. An agent tells a related project what it found without being asked. An inbox item is a thread with a status, and a top bar menu hands it to a session by id. Notes keep decisions and reminders across CLIs; what describes the project stays in code and docs.
 
 ### T218: Recover sessions after an API or network error `added: 2026-11-06`
 
