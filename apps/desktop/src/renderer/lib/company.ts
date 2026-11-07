@@ -5,12 +5,17 @@ import type { ProjectWorkspace } from "../stores/workspace/types";
 import { agentGroup, needsYou } from "./agent-groups";
 import { isBusy } from "./sidebar-views";
 
-export type DeskState = "needs" | "stuck" | "working" | "idle" | "suspended";
+export type DeskState = "needs" | "stuck" | "unread" | "working" | "idle" | "suspended";
 
-export function deskState(a: AgentState, item: AttentionItem | undefined): DeskState {
+export function deskState(
+  a: AgentState,
+  item: AttentionItem | undefined,
+  unseen: boolean,
+): DeskState {
   if (a.suspended) return "suspended";
-  const group = agentGroup(a, item);
+  const group = agentGroup(a, item, unseen);
   if (group === "needYou") return "needs";
+  if (group === "unread") return "unread";
   if (group === "waiting") return "idle";
   // Raised in an earlier turn: it says nothing about this one
   const stuck = item?.stuck && item.timestamp >= (a.activitySince ?? 0);
@@ -36,15 +41,17 @@ export interface Room {
 const DESK_RANK: Record<DeskState, number> = {
   needs: 0,
   stuck: 1,
-  working: 2,
-  idle: 3,
-  suspended: 4,
+  unread: 2,
+  working: 3,
+  idle: 4,
+  suspended: 5,
 };
 
 /** What asks for you first, then the latest state change: a desk only moves when its state does */
 export function buildRooms(
   agents: Iterable<AgentState>,
   attention: Record<string, AttentionItem>,
+  unseen: Record<string, string>,
 ): Room[] {
   const ranks = new Map<string, number>();
   const byUrgency = (x: AgentState, y: AgentState) =>
@@ -53,7 +60,7 @@ export function buildRooms(
   const rooms = new Map<string, AgentState[]>();
   for (const a of agents) {
     if (a.archived || !LIVE_STATUSES.has(a.status)) continue;
-    ranks.set(a.id, DESK_RANK[deskState(a, attention[a.id])]);
+    ranks.set(a.id, DESK_RANK[deskState(a, attention[a.id], a.id in unseen)]);
     rooms.set(a.projectId, [...(rooms.get(a.projectId) ?? []), a]);
   }
   const sorted = [...rooms].map(([projectId, desks]) => ({
@@ -80,6 +87,7 @@ export function todayStrip(
     levelOf: (projectId: string) => InterruptionLevel;
     /** CLIs with a newer release */
     outdated: ReadonlySet<string>;
+    unseen: Record<string, string>;
   },
 ): TodayStrip {
   const strip: TodayStrip = { needs: [], stuck: [], canWait: [] };
@@ -87,13 +95,15 @@ export function todayStrip(
     if (a.archived || !LIVE_STATUSES.has(a.status)) continue;
     const item = attention[a.id];
     const level = ctx.levelOf(a.projectId);
-    const state = deskState(a, item);
+    const state = deskState(a, item, a.id in ctx.unseen);
     if (state === "needs") {
       if (level !== "none") strip.needs.push(a);
     } else if (state === "stuck") {
       strip.stuck.push(a);
     } else if (level === "all" && a.cliType !== "shell") {
-      if (ctx.outdated.has(a.cliType) || (item && !item.read)) strip.canWait.push(a);
+      if (ctx.outdated.has(a.cliType) || (item && !item.read) || state === "unread") {
+        strip.canWait.push(a);
+      }
     }
   }
   return strip;

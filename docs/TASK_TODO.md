@@ -1412,6 +1412,7 @@ Antonio's idea, to plan and analyze before any code. Related projects (blueprint
 
 - One inbox per project, fed by agents of any project: the feedback found while applying a base reaches the base's session as pending, not as an injected prompt. Entering that session shows there is something to read, to work on or to leave for later
 - A personal knowledge inbox: "save this library or skill" from any agent
+- A way in from outside: an API (or native share) so other apps with access can send a resource, a post or a web page, straight to the inbox
 - Decide against PRs in the repos: they carry the change but no conversation between agents
 - Tie it to the knowledge base (T140, `.exegol/knowledge`, trs digests, memories), which was started but never given a shape: agents cannot yet consult and update it, and it stays local to Exegol. Plan both together: what lives per project, what is global, what an agent reads and writes through MCP
 - Open: lifecycle of an item (open, accepted, done, answered), who validates it, how it differs from `agent_send`, whether Orbital holds any of it
@@ -1423,10 +1424,6 @@ A session stopped by an API error, or by moving to another network, retries by i
 ### T219: Sessions survive an app update `added: 2026-11-06`
 
 From the Hide comparison. Run the sidecar from a versioned copy outside the bundle; an old sidecar drains while new sessions go to the new one, so a `SIDECAR_VERSION` bump stops killing PTYs. Also removes the Windows stop before install in `installUpdate`. Design, not code, from Hide: its licence is FSL-1.1.
-
-### T220: Unread group in Company and the sidebar `added: 2026-11-06`
-
-Separate "look when free" from "act now": a finished session nobody has seen should not read as waiting. Read state per session.
 
 ### T221: Agents watch and message each other without getting in the way `added: 2026-11-06`
 

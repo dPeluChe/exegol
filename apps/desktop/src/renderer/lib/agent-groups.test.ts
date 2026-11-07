@@ -33,8 +33,12 @@ const item = (agentId: string, level: AttentionItem["level"], read: boolean): At
 type Agent = ReturnType<typeof agent>;
 
 /** The group one live agent lands in */
-const agentGroup = (a: Agent, attention: AttentionItem | undefined) => {
-  const groups = groupAgents([a], attention ? { [a.id]: attention } : {});
+const agentGroup = (a: Agent, attention: AttentionItem | undefined, unseen = false) => {
+  const groups = groupAgents(
+    [a],
+    attention ? { [a.id]: attention } : {},
+    unseen ? { [a.id]: "p" } : {},
+  );
   return (Object.keys(groups) as (keyof typeof groups)[]).find((g) => groups[g].length > 0);
 };
 
@@ -64,6 +68,15 @@ describe("agent groups", () => {
   });
 });
 
+describe("unread", () => {
+  it("is a finished turn: a question or a running turn says more", () => {
+    expect(agentGroup(agent("a", "waiting_input", "idle"), undefined, true)).toBe("unread");
+    expect(agentGroup(agent("a", "running", "busy"), undefined, true)).toBe("working");
+    const question = item("a", "action_needed", false);
+    expect(agentGroup(agent("a", "waiting_input", "idle"), question, true)).toBe("needYou");
+  });
+});
+
 describe("groupAgents", () => {
   it("counts live agents only, longest in state first", () => {
     const groups = groupAgents(
@@ -77,6 +90,7 @@ describe("groupAgents", () => {
         agent("arch", "running", "busy", 1, { archived: true }),
       ],
       { q: item("q", "action_needed", false) },
+      {},
     );
     expect(groups.needYou.map((a) => a.id)).toEqual(["q"]);
     expect(groups.working.map((a) => a.id)).toEqual(["w2", "w1"]);

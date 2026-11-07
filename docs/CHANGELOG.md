@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Added
+- Unread sessions: a turn that ended while you were elsewhere gets its own group in Company, the sidebar and the status bar, apart from what needs an answer
 - Company chat: a working row with animated orbs says what the session is doing during a turn
 - Agents no longer act on a browser pane another agent is driving, `browser_open` no longer loads over a pane you are reading, and agents can close the panes they opened
 - Agents get usage instructions from Exegol's MCP server and three new browser tools: wait for text or a url, hover, and scroll; they can also go back, forward or reload and take a full-page screenshot

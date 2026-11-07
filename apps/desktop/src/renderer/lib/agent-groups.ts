@@ -1,9 +1,9 @@
 import { LIVE_STATUSES } from "@exegol/shared";
 import type { AgentState, AttentionItem } from "../stores/agents";
 
-export type AgentGroup = "needYou" | "working" | "waiting";
+export type AgentGroup = "needYou" | "working" | "unread" | "waiting";
 
-export const AGENT_GROUP_ORDER: AgentGroup[] = ["needYou", "working", "waiting"];
+export const AGENT_GROUP_ORDER: AgentGroup[] = ["needYou", "working", "unread", "waiting"];
 
 type Grouped = Pick<
   AgentState,
@@ -18,21 +18,27 @@ export function needsYou(
   return item?.level === "action_needed" && (!item.read || a.status === "waiting_input");
 }
 
-/** Working: busy. Everything else live that does not need you is waiting */
-export function agentGroup(a: Grouped, item: AttentionItem | undefined): AgentGroup {
+/** Working: busy. Unread: a finished turn nobody has seen yet, to look at when free. The rest waits */
+export function agentGroup(
+  a: Grouped,
+  item: AttentionItem | undefined,
+  unseen: boolean,
+): AgentGroup {
   if (needsYou(a, item)) return "needYou";
-  return a.activityLevel === "busy" ? "working" : "waiting";
+  if (a.activityLevel === "busy") return "working";
+  return unseen ? "unread" : "waiting";
 }
 
 /** Live, non-shell, non-archived sessions by group, the longest in their state first */
 export function groupAgents<T extends Grouped>(
   agents: Iterable<T>,
   attention: Record<string, AttentionItem>,
+  unseen: Record<string, string>,
 ): Record<AgentGroup, T[]> {
-  const groups: Record<AgentGroup, T[]> = { needYou: [], working: [], waiting: [] };
+  const groups: Record<AgentGroup, T[]> = { needYou: [], working: [], unread: [], waiting: [] };
   for (const a of agents) {
     if (a.cliType === "shell" || a.archived || !LIVE_STATUSES.has(a.status)) continue;
-    groups[agentGroup(a, attention[a.id])].push(a);
+    groups[agentGroup(a, attention[a.id], a.id in unseen)].push(a);
   }
   const since = (a: T) => a.activitySince ?? Number.POSITIVE_INFINITY;
   for (const list of Object.values(groups)) list.sort((x, y) => since(x) - since(y));
