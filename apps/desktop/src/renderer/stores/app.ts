@@ -62,6 +62,10 @@ interface AppStore {
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
 
+  /** The top bar's inbox menu, also Cmd+Shift+I */
+  inboxMenuOpen: boolean;
+  setInboxMenuOpen: (open: boolean) => void;
+
   /** Command palette open state */
   commandPaletteOpen: boolean;
   setCommandPaletteOpen: (open: boolean) => void;
@@ -187,6 +191,9 @@ export const useAppStore = create<AppStore>()(
 
       sidebarCollapsed: false,
       toggleSidebar: () => set((state) => ({ sidebarCollapsed: !state.sidebarCollapsed })),
+
+      inboxMenuOpen: false,
+      setInboxMenuOpen: (open) => set({ inboxMenuOpen: open }),
 
       commandPaletteOpen: false,
       setCommandPaletteOpen: (open) => set({ commandPaletteOpen: open }),

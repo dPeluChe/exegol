@@ -26,7 +26,7 @@ export function ColabsSection({ projectMeta }: { projectMeta: ReadonlyMap<string
             Pending
           </FilterChip>
           <FilterChip active={showClosed} onClick={() => setShowClosed(true)}>
-            Closed
+            Archived
           </FilterChip>
           {project && (
             <FilterChip active onClick={() => openInbox(null)}>
@@ -47,13 +47,13 @@ export function ColabsSection({ projectMeta }: { projectMeta: ReadonlyMap<string
             ))}
             {threads.length === 0 && (
               <p className="py-8 text-center text-xs text-text-muted">
-                {showClosed ? "No closed threads." : "Nothing pending."}
+                {showClosed ? "No archived threads." : "Nothing pending."}
               </p>
             )}
           </div>
         </ScrollArea>
       </div>
-      <div className="min-w-0 flex-1 rounded-lg border border-border bg-bg-secondary">
+      <div className="flex max-h-full min-w-0 flex-1 flex-col self-start rounded-lg border border-border bg-bg-secondary">
         {selectedId ? (
           <InboxThreadView
             key={selectedId}

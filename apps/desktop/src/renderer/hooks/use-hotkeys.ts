@@ -103,6 +103,14 @@ export function useHotkeys() {
         return;
       }
 
+      // Cmd+Shift+I: the active project's inbox
+      if (chord.shift && key === "i") {
+        e.preventDefault();
+        const app = useAppStore.getState();
+        app.setInboxMenuOpen(!app.inboxMenuOpen);
+        return;
+      }
+
       // Cmd+Shift+D: Split vertical
       if (chord.shift && key === "d") {
         e.preventDefault();
