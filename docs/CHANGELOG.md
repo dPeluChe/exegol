@@ -47,6 +47,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Browser panes search from the address bar: `?telnyx`, or words that are not an address, open a Google search; `localhost:3000`, `example.com` and full URLs still go straight there
 
 ### Fixed
+- A message or follow-up no longer lands on text you are typing in a session: it waits until you send it
 - Linux gets its own CI job, and Windows and Linux run real system calls in CI, so a macOS-only assumption fails a PR
 - Windows: installing an update stops the terminals first and offers them for resume, agent memory, disk and worktree sizes read real numbers, the POSIX-only CLI install is hidden, JetBrains Toolbox and Goose sessions are found. Linux: Goose honors `XDG_DATA_HOME`. Doctor lists what is still off on Windows and Wayland, macOS-only text is gone elsewhere, and the default terminal font falls back to the bundled Meslo
 - Safety guards know PowerShell and cmd commands and Windows and Linux credential stores, bug reports redact Windows and Linux mount paths, and a lost Linux keyring no longer sends ciphertext as an API key

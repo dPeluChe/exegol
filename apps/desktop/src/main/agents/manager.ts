@@ -18,6 +18,7 @@ import { logger } from "../lib/logger";
 import { runSetupIfNeeded } from "../lifecycle/loader";
 import { installedCliVersion } from "../system/cli-versions";
 import { getPtyHost } from "../terminal/pty-host";
+import { noteDraftInput } from "./agent-message-queue";
 import type { OutputProcessor } from "./agent-output-processor";
 import {
   createSpawnCallbacks,
@@ -339,6 +340,8 @@ export class AgentManager {
 
   write(agentId: string, data: string): void {
     noteAgentInput(agentId, data);
+    // Shells take no messages, so their keys never hold anything
+    if (this.contexts.get(agentId)?.cliType !== "shell") noteDraftInput(agentId, data);
     getPtyHost().write(agentId, data);
   }
 

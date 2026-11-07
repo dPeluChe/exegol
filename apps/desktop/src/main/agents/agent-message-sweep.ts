@@ -4,7 +4,12 @@ import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { getNotificationBus } from "../notifications/bus";
 import { isEchoingInjection } from "./agent-message-injection";
-import { isAgentAwaitingApproval, needsUser, queuedAgentIds } from "./agent-message-queue";
+import {
+  holdsDelivery,
+  isAgentAwaitingApproval,
+  needsUser,
+  queuedAgentIds,
+} from "./agent-message-queue";
 
 // Delivery waits for a turn boundary, but only providers with hooks (claude,
 // codex) reliably emit one — opencode's TUI produces nothing the scraper
@@ -88,8 +93,12 @@ function sweepQuietAgents(deliver: (agentId: string) => void): void {
     const announces = boundarySignalling.has(agentId);
     if (quietFor < (announces ? BOUNDARY_STALL_MS : QUIET_MS)) continue;
     if (isEchoingInjection(agentId)) continue;
-    if (needsUser(agentId)) {
-      if (!isAgentAwaitingApproval(agentId) && quietFor >= BOUNDARY_STALL_MS) {
+    if (holdsDelivery(agentId)) {
+      if (
+        needsUser(agentId) &&
+        !isAgentAwaitingApproval(agentId) &&
+        quietFor >= BOUNDARY_STALL_MS
+      ) {
         noticeHeldBehindDialog(agentId);
       }
       continue;

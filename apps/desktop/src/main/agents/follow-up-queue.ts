@@ -5,8 +5,8 @@ import { logger } from "../lib/logger";
 import { getPtyHost } from "../terminal/pty-host";
 import { injectNow, isEchoingInjection, sanitizeAgentMessage } from "./agent-message-injection";
 import {
+  holdsDelivery,
   listFollowUps,
-  needsUser,
   notifyFollowUps,
   queuedFor,
   takeQueued,
@@ -107,7 +107,7 @@ export function removeFollowUp(agentId: string, id: string): boolean {
 /** At its input prompt; a terminal whose CLI exited back to the shell is idle too, but not there */
 function atPrompt(db: Database.Database, agentId: string): boolean {
   const agent = getAgent(db, agentId);
-  if (!agent || needsUser(agentId)) return false;
+  if (!agent || holdsDelivery(agentId)) return false;
   return agent.status === "waiting_input" || (agent.status === "idle" && !agent.launchedInShell);
 }
 
@@ -180,7 +180,7 @@ async function typeAtPrompt(
     Date.now() - interruptAt >= STEER_QUIET_MS &&
     msSinceAgentOutput(agentId) >= STEER_QUIET_MS &&
     !isEchoingInjection(agentId) &&
-    !needsUser(agentId);
+    !holdsDelivery(agentId);
   const ready = await waitUntil(
     () => !queued() || atPrompt(db, agentId) || quiet(),
     STEER_TIMEOUT_MS,

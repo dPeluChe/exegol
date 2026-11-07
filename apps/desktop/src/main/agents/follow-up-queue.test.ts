@@ -22,7 +22,7 @@ vi.mock("../terminal/pty-host", () => ({
   }),
 }));
 
-import { setAgentAwaitingApproval } from "./agent-message-queue";
+import { noteDraftInput, setAgentAwaitingApproval } from "./agent-message-queue";
 import { noteAgentOutput, stopSweep } from "./agent-message-sweep";
 import {
   clearAgentMessageQueue,
@@ -115,6 +115,33 @@ describe("follow-up queue", () => {
     setAgentAwaitingApproval("a1", true);
     expect(queueFollowUp(db, "a1", "go on").delivered).toBe(false);
     expect(ptyMock.writes).toHaveLength(0);
+  });
+
+  it("waits for a draft to be sent, and goes at the next boundary", () => {
+    insertAgent("a1", "waiting_input");
+    noteDraftInput("a1", "half a thou");
+    expect(queueFollowUp(db, "a1", "go on").delivered).toBe(false);
+    deliverPendingAgentMessages(db, "a1");
+    expect(ptyMock.writes).toHaveLength(0);
+
+    noteDraftInput("a1", "\r");
+    deliverPendingAgentMessages(db, "a1");
+    expect(typed()).toContain("go on");
+  });
+
+  it("stops waiting on a draft nobody touched for 10 minutes", () => {
+    insertAgent("a1", "waiting_input");
+    noteDraftInput("a1", "gone for lunch");
+    vi.advanceTimersByTime(10 * 60_000);
+    expect(queueFollowUp(db, "a1", "go on").delivered).toBe(true);
+  });
+
+  it("takes a key that answers a dialog as no draft", () => {
+    insertAgent("a1", "waiting_input");
+    setAgentAwaitingApproval("a1", true);
+    noteDraftInput("a1", "1");
+    setAgentAwaitingApproval("a1", false);
+    expect(queueFollowUp(db, "a1", "go on").delivered).toBe(true);
   });
 
   it("refuses shells, ended sessions and a CLI back at its shell prompt", () => {
