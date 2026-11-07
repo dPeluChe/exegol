@@ -1422,7 +1422,6 @@ From the Hide comparison. Done: a compatible sidecar with live sessions stays th
 
 ### T221: Agents watch and message each other without getting in the way `added: 2026-11-06`
 
-- Draft guard: nothing checks whether a person is typing before a message is pasted (`agent-message-injection.ts`). Hold it, or prepend it with a separator
 - Delivery proof through the prompt hook, and a deadline
 - A `watch` role on `agent_link`: the parent hears when a child stops on a question or stalls. To weigh: here or in Orbital
 
