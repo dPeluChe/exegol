@@ -1,28 +1,40 @@
 import { resolve } from "node:path";
+import type { CaptureLink } from "@exegol/shared";
 import { app, type BrowserWindow } from "electron";
-import { findDeepLinkArg, parseDeepLink } from "../lib/deeplink";
+import { findDeepLinkArg, parseCaptureLink, parseDeepLink } from "../lib/deeplink";
 import { logger } from "../lib/logger";
 import { createWindow, getMainWindow, showMainWindow } from "./window";
 
 // ─── T155.6: exegol:// deep link (CLI opener) ─────────────────────────────
 
 let pendingDeepLinkPath: string | null = null;
+let pendingCapture: CaptureLink | null = null;
 
 export function deliverPendingDeepLink(win: BrowserWindow): void {
-  if (!pendingDeepLinkPath) return;
-  const path = pendingDeepLinkPath;
-  pendingDeepLinkPath = null;
-  win.webContents.send("deeplink:open-path", { path });
+  if (pendingDeepLinkPath) {
+    win.webContents.send("deeplink:open-path", { path: pendingDeepLinkPath });
+    pendingDeepLinkPath = null;
+  }
+  if (pendingCapture) {
+    win.webContents.send("deeplink:capture", pendingCapture);
+    pendingCapture = null;
+  }
 }
 
 function handleDeepLinkUrl(url: string): void {
-  const parsed = parseDeepLink(url);
-  if (!parsed) {
-    logger.warn(`[DeepLink] Ignored malformed url: ${url}`);
+  const capture = parseCaptureLink(url);
+  const parsed = capture ? null : parseDeepLink(url);
+  if (capture) {
+    // A capture carries what the person sent: only its shape is logged
+    logger.info(`[DeepLink] capture${capture.url ? " url" : ""}${capture.text ? " text" : ""}`);
+    pendingCapture = capture;
+  } else if (parsed) {
+    logger.info("[DeepLink] open path");
+    pendingDeepLinkPath = parsed.path;
+  } else {
+    logger.warn("[DeepLink] Ignored a malformed link");
     return;
   }
-  logger.info(`[DeepLink] open path: ${parsed.path}`);
-  pendingDeepLinkPath = parsed.path;
 
   const win = getMainWindow();
   if (!win || win.isDestroyed()) {

@@ -180,6 +180,9 @@ interface Window {
     toggleDevTools?: () => void;
     reportError?: (source: string, message: string, stack: string) => void;
     onDeepLinkOpenPath?: (callback: (data: { path: string }) => void) => () => void;
+    onDeepLinkCapture?: (
+      callback: (data: import("@exegol/shared").CaptureLink) => void,
+    ) => () => void;
     updater: {
       check: () => Promise<void>;
       install: () => Promise<void>;

@@ -29,13 +29,14 @@ type Panel = "forward" | "note" | "issue" | null;
 const CHIP = "border border-border text-[11px] text-text-primary";
 
 /** One select over every place a thread can go, encoded as its value */
-function targets(
-  thread: InboxThread,
+export function inboxTargets(
+  thread: InboxThread | null,
   projectMeta: ReadonlyMap<string, ProjectMeta>,
   colabs: Colab[],
 ) {
-  const here =
-    thread.scope === "project"
+  const here = !thread
+    ? null
+    : thread.scope === "project"
       ? `p:${thread.scopeId}`
       : thread.scope === "colab"
         ? `c:${thread.scopeId}:${thread.toProject ?? ""}`
@@ -54,7 +55,7 @@ function targets(
   return all.filter((t) => t.value !== here);
 }
 
-function targetOf(value: string) {
+export function inboxTargetOf(value: string) {
   if (value === "personal") return { scope: "personal" };
   const [kind, id, to] = value.split(":");
   return kind === "p"
@@ -75,14 +76,14 @@ function Forward({
   const { busy, act } = useThreadAct(thread.id);
   const [to, setTo] = useState("");
   const send = async () => {
-    const done = await act<{ id: string }>("inbox.forward", { target: targetOf(to) });
+    const done = await act<{ id: string }>("inbox.forward", { target: inboxTargetOf(to) });
     if (done) onOpen(done.value.id);
   };
   return (
     <div className="flex items-center gap-1.5">
       <select value={to} onChange={(e) => setTo(e.target.value)} className={INPUT_CLASS}>
         <option value="">Forward to</option>
-        {targets(thread, projectMeta, colabs).map((t) => (
+        {inboxTargets(thread, projectMeta, colabs).map((t) => (
           <option key={t.value} value={t.value}>
             {t.label}
           </option>

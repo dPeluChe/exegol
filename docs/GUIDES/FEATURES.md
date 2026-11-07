@@ -121,6 +121,10 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
 
 - **Fleet** (`Cmd+1`): every live agent across projects with status, uptime, tokens and cost,
   and its message thread with other agents.
+- **Colabs and inbox**: threads between projects, colabs and you. Send one to a session, close
+  it with a line, forward it, save it as a note or send it as a GitHub issue. Capture from
+  outside: `exegol inbox add <text or url>` or an `exegol://capture` link opens a dialog in
+  Exegol to pick the place, Personal by default; nothing is saved until you confirm.
 - **Watching**: pin sessions to see them as live terminals side by side (one to three columns,
   collapsible, reorderable); type into a card after clicking it.
 - **Right-click menus**: a Watching card offers Go to session, Copy (with text selected),

@@ -1,9 +1,11 @@
+import { INBOX_BODY_MAX, INBOX_TITLE_MAX } from "@exegol/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { FollowUpError } from "../../agents/follow-up-queue";
 import { checkGitRepo } from "../../agents/preflight";
 import { listThreads } from "../../db/queries/inbox";
 import { getProject } from "../../db/queries/projects";
+import { capture } from "../../inbox/capture";
 import { forward } from "../../inbox/forward";
 import { ISSUE_BODY_MAX, issueDraft, sendAsIssue } from "../../inbox/issue";
 import { sendToSession, startSession } from "../../inbox/send-to-session";
@@ -96,6 +98,20 @@ export const inboxRouter = router({
   lastTurn: publicProcedure
     .input(threadId)
     .mutation(({ ctx, input }) => inboxCall(() => giveLastTurn(ctx.db, input.id))),
+
+  capture: publicProcedure
+    .input(
+      z.object({
+        target,
+        title: z.string().max(INBOX_TITLE_MAX).nullable(),
+        url: z.string().max(2_000).nullable(),
+        text: z.string().max(INBOX_BODY_MAX).nullable(),
+        note: z.string().max(500).nullable(),
+      }),
+    )
+    .mutation(({ ctx, input: { target, ...fields } }) =>
+      inboxCall(() => ({ id: capture(ctx.db, target, fields).id })),
+    ),
 
   forward: publicProcedure
     .input(threadId.extend({ target }))

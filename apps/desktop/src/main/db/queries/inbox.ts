@@ -143,6 +143,7 @@ export interface NewThread {
   ownerProject: string | null;
   refs: string[];
   forwardedFrom?: string;
+  kind?: InboxKind;
 }
 
 /** The new thread's id */
@@ -152,15 +153,16 @@ export function insertThread(
   body: string,
   author: InboxAuthor,
 ): string {
-  const { forwardedFrom, ...fields } = thread;
+  const { forwardedFrom, kind, ...fields } = thread;
   const create = db.transaction(() => {
     const at = now();
     const { id } = db
       .prepare(
         `INSERT INTO inbox_threads
            (scope, scope_id, to_project, title, url, owner_project, forwarded_from, opened_at,
-            last_activity_at, refs)
-         VALUES (@scope, @scopeId, @toProject, @title, @url, @ownerProject, @from, @at, @at, @refs)
+            last_activity_at, refs, kind)
+         VALUES (@scope, @scopeId, @toProject, @title, @url, @ownerProject, @from, @at, @at, @refs,
+            @kind)
          RETURNING id`,
       )
       .get({
@@ -168,6 +170,7 @@ export function insertThread(
         at,
         refs: JSON.stringify(fields.refs),
         from: forwardedFrom ? threadRowId(forwardedFrom) : null,
+        kind: kind ?? "message",
       }) as { id: number };
     appendMessage(db, id, body, author);
     return threadKey(id);
