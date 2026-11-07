@@ -1,9 +1,7 @@
 /** T145: the Exegol MCP tool handlers. Identity and access rules: exegol-identity.ts */
 
-import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { MemoryCategory } from "@exegol/shared";
-import { acceptsFollowUps, MEMORY_CATEGORIES } from "@exegol/shared";
+import { acceptsFollowUps } from "@exegol/shared";
 import type Database from "libsql";
 import {
   AgentMessagingError,
@@ -26,132 +24,24 @@ import {
 import { listActiveAgents } from "../db/queries/agents";
 import { claimPaths, listProjectClaims, releasePaths } from "../db/queries/path-claims";
 import { getWorktreeByAgentId } from "../db/queries/worktrees";
-import { readProjectBrief } from "../knowledge/brief";
-import { getDigestPath } from "../knowledge/paths";
-import {
-  listMemories,
-  MAX_FACT_CHARS,
-  MAX_QUERY_CHARS,
-  observeMemory,
-  searchMemories,
-} from "../memory/store";
 import { isPathInside, realpathSafeSync } from "../security/path-guard";
 import { callInboxTool } from "./exegol-inbox-tools";
 import { callNotesTool } from "./exegol-notes-tools";
 import { type ExegolToolContext, ExegolToolError, type ExegolToolName } from "./exegol-protocol";
-import { EXEGOL_TOOL_NAMES, SEARCH_ONLY_TOOLS } from "./exegol-tool-defs";
+import { EXEGOL_TOOL_NAMES, NON_WRITE_TOOLS } from "./exegol-tool-defs";
 import { isInboxTool } from "./inbox-tool-defs";
 import { isNotesTool } from "./notes-tool-defs";
 
 export { ExegolToolError };
 
 function requireWriteAccess(tool: ExegolToolName, context: ExegolToolContext): void {
-  if (SEARCH_ONLY_TOOLS.has(tool)) return;
+  if (NON_WRITE_TOOLS.has(tool)) return;
   if (context.accessMode !== "write") {
     throw new ExegolToolError(
       `Tool "${tool}" requires write access (agent is in "${context.accessMode}" mode)`,
       -32001,
     );
   }
-}
-
-async function handleMemorySearch(
-  db: Database.Database,
-  args: Record<string, unknown>,
-  context: ExegolToolContext,
-) {
-  const query = String(args.query ?? "");
-  if (!query) throw new ExegolToolError("memory_search requires a non-empty query", -32602);
-  if (query.length > MAX_QUERY_CHARS) {
-    // The store enforces it too; translating here keeps the agent's error a
-    // "your input was invalid" instead of an opaque internal failure.
-    throw new ExegolToolError(`memory_search query too long (max ${MAX_QUERY_CHARS})`, -32602);
-  }
-
-  const category = typeof args.category === "string" ? (args.category as MemoryCategory) : null;
-  const results = await searchMemories(db, context.projectId, query);
-  const filtered = category ? results.filter((m) => m.category === category) : results;
-
-  return {
-    facts: filtered.map((m) => ({
-      id: m.id,
-      category: m.category,
-      content: m.content,
-      relevanceScore: m.relevanceScore,
-    })),
-  };
-}
-
-function handleMemoryList(
-  db: Database.Database,
-  args: Record<string, unknown>,
-  context: ExegolToolContext,
-) {
-  const limit = Math.min(Math.max(Number(args.limit) || 10, 1), 30);
-  const category = typeof args.category === "string" ? (args.category as MemoryCategory) : null;
-  const all = listMemories(db, context.projectId);
-  const filtered = category ? all.filter((m) => m.category === category) : all;
-  return {
-    total: filtered.length,
-    facts: filtered.slice(0, limit).map((m) => ({
-      id: m.id,
-      category: m.category,
-      content: m.content,
-      relevanceScore: m.relevanceScore,
-    })),
-  };
-}
-
-function handleMemorySave(
-  db: Database.Database,
-  args: Record<string, unknown>,
-  context: ExegolToolContext,
-) {
-  const fact = String(args.fact ?? "");
-  const category = args.category as MemoryCategory;
-  if (!fact) throw new ExegolToolError("memory_save requires a non-empty fact", -32602);
-  if (fact.length > MAX_FACT_CHARS) {
-    throw new ExegolToolError(`memory_save fact too long (max ${MAX_FACT_CHARS})`, -32602);
-  }
-  if (!MEMORY_CATEGORIES.includes(category)) {
-    throw new ExegolToolError(
-      `memory_save requires a valid category (one of ${MEMORY_CATEGORIES.join(", ")})`,
-      -32602,
-    );
-  }
-
-  const id = observeMemory(db, {
-    projectId: context.projectId,
-    category,
-    content: fact,
-    sourceAgentId: context.agentId,
-    relevanceScore: 0.6,
-  });
-  return { id };
-}
-
-function handleKnowledgeGet(
-  db: Database.Database,
-  args: Record<string, unknown>,
-  context: ExegolToolContext,
-) {
-  const project = getProject(db, context.projectId);
-  if (!project) throw new ExegolToolError(`Project ${context.projectId} not found`, -32603);
-
-  // STRICTLY read-only: this runs for read/plan agents too — creating
-  // PROJECT.md or regenerating DIGEST.md here would dirty the user's repo
-  // from a read call (and violate the read-mode contract).
-  const section = typeof args.section === "string" ? args.section : null;
-  const result: { brief?: string | null; digest?: string | null } = {};
-
-  if (section === "brief" || !section) {
-    result.brief = readProjectBrief(project.path);
-  }
-  if (section === "digest" || !section) {
-    const digestPath = getDigestPath(project.path);
-    result.digest = existsSync(digestPath) ? readFileSync(digestPath, "utf-8") : null;
-  }
-  return result;
 }
 
 /** T157: other live agents the caller can message, plus the caller's OWN
@@ -418,14 +308,6 @@ export async function callExegolTool(
   // JSON-RPC codes), which the socket layer surfaces to the agent verbatim.
   try {
     switch (toolName) {
-      case "memory_search":
-        return await handleMemorySearch(db, args, context);
-      case "memory_list":
-        return handleMemoryList(db, args, context);
-      case "memory_save":
-        return handleMemorySave(db, args, context);
-      case "knowledge_get":
-        return handleKnowledgeGet(db, args, context);
       case "agents_list":
         return handleAgentsList(db, args, context);
       case "agent_send":

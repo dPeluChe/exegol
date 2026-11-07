@@ -34,8 +34,8 @@ const EXEGOL_INSTRUCTIONS = [
     "reminders, what you tried. Read the ones that matter before you start, and save one with " +
     "note_write when something is clearly worth keeping.",
   "In read and plan mode you can open a new pane and read it, not act on it. Use " +
-    "memory_search for what earlier sessions learned, agents_list and agent_send to reach another " +
-    "agent, and claim_paths before editing files others may touch.",
+    "agents_list and agent_send to reach another agent, and claim_paths before editing files " +
+    "others may touch.",
 ].join("\n\n");
 
 const serverInfo = (version: string) => ({ name: "exegol", title: "Exegol", version });

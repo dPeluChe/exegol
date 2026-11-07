@@ -4,11 +4,7 @@ const SECTIONS = {
     { label: "History", sections: [{ id: "history", label: "History" }] },
     {
       label: "Context",
-      sections: [
-        { id: "notes", label: "Notes" },
-        { id: "memory", label: "Memory" },
-        { id: "knowledge", label: "Knowledge" },
-      ],
+      sections: [{ id: "notes", label: "Notes" }],
     },
     { label: "Prompts & Skills", sections: [{ id: "prompts-skills", label: "Prompts & Skills" }] },
     {

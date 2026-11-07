@@ -1,9 +1,8 @@
 /**
  * T145 — Writes the "exegol" entry into a spawned agent's `.mcp.json`
  * (the widely-adopted MCP client config convention — Claude Code, Cursor,
- * Windsurf all discover it in the CWD). Upserts only the "exegol" key,
- * exactly like T140's managed-block pattern: never touches other servers
- * the user has configured.
+ * Windsurf all discover it in the CWD). Upserts only the "exegol" key:
+ * never touches other servers the user has configured.
  */
 
 import {

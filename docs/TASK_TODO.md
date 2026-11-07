@@ -162,9 +162,8 @@ Checked by the user on the 0.5.15 build: status bar widgets, Ctrl+Tab switcher, 
 
 ### Manual verification pending — Wave 2 `added: 2026-07-05`
 - Attention Inbox: TitleBar queue, Cmd+J jump, unread badges
-- Knowledge tab: opt-in setup (no files written on tab open), digest refresh, MEMORY.md sync/import
-- Exegol MCP read-mode denial: spawn a read-mode agent, memory_save must be refused (the rest of
-  the MCP loop was verified 2026-08-11)
+- Exegol MCP read-mode denial: spawn a read-mode agent, a browser write tool (browser_click) must
+  be refused (the rest of the MCP loop was verified 2026-08-11)
 - Evaluator gate: template with gate step persists (zod fix), ship/retry routing works
 - Oplog v2: Turn Snapshots tab lists per-step snapshots; restore refuses cross-worktree
 - Race promote & clean: dirty loser prompts; live-agent loser refuses cleanup
@@ -176,7 +175,7 @@ Checked by the user on the 0.5.15 build: status bar widgets, Ctrl+Tab switcher, 
 - Watching: a card waiting for input cannot be collapsed. QA: saving a test does not refresh
   the list. Tasks: auto-detect never retries once the project loads; `.gitkeep` overwrite;
   GitHub issue cards drag to nothing
-- Nits: Memory search ignores the category; prompts empty-state wording; tray "Show/Hide" label
+- Nits: prompts empty-state wording; tray "Show/Hide" label
   stale; Parallel Runs promote has no error
 - Moved: hardcoded token price table to T183.1, `budgets.delete` to T144, unused `agentClis` to
   T185.16
@@ -619,7 +618,16 @@ exchange-bus MVP only, no headless council executions. Absorbs:
 
 ---
 
+### T226 — Ollama and project search have no caller left `added: 2026-11-07`
+**Priority**: P3 | **Effort**: S | **Source**: simplify pass on the Memory retirement (T217 step 4, part 3)
+
+With memory gone, nothing a person can reach uses Ollama: the `search` router (`hybridSearch`, already noted unused) and the `indexer` router (only `ollamaStatus` is called, from Settings) have no UI. Doctor still checks Ollama and Settings still offers its URL and model.
+- Decide: wire project search somewhere (notes search, command palette) or remove `search`, `indexer` (except what Settings needs), `indexer/`, the Ollama settings block and the Doctor check
+- If removed: the `search_index`, `file_index` and `file_chunks` tables stay, unused, like `memories`
+
 ### T164 — Memory Anchors: memories addressed by the code index `added: 2026-08-12`
+> 2026-11-07: Memory retired with T217 (notes replace it). The anchor idea could apply to notes once they are measured (T217 step 5); the memory_save scope below no longer exists.
+
 **Priority**: P1-P2 (Wave 3 — pairs with T153 Phase 2; anchor table can land before the full engine) | **Effort**: M | **Source**: idea (Antonio: "las memorias serían alrededor del index") + **`RESEARCH/COCOINDEX_2026_08.md`** (full design in § "Hipótesis")
 
 **Why**

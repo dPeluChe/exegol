@@ -149,16 +149,6 @@ export const activityRowSchema = z.object({
   created_at: z.number(),
 });
 
-export const memoryRowSchema = z.object({
-  id: z.string(),
-  project_id: z.string(),
-  agent_id: optStr,
-  content: z.string(),
-  source: z.string(),
-  relevance_score: z.number().catch(0),
-  created_at: z.number(),
-});
-
 export const scoreRowSchema = z.object({
   agent_id: z.string(),
   exit_code: optNum,

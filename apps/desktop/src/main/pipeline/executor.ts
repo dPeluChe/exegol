@@ -19,7 +19,6 @@ import {
   recoverStalePipelineRuns,
   updatePipelineRun,
 } from "../db/queries";
-import { buildKnowledgeContext } from "../knowledge/context";
 import { logger } from "../lib/logger";
 import { getPtyHost } from "../terminal/pty-host";
 import { buildStepPrompt, getPreviousOutput, getRetryFeedback } from "./context";
@@ -184,18 +183,12 @@ export class PipelineExecutor {
     const previousOutput = getPreviousOutput(run.stepResults);
     const retryFeedback = getRetryFeedback(run.stepResults);
     const isLastStep = stepIndex === template.steps.length - 1;
-    const project = getProject(db, run.projectId);
-    // Knowledge files are git-tracked: point at the run's worktree copy so the
-    // agent reads the branch's own PROJECT/MEMORY.md, not the main checkout's.
-    const knowledgeRoot = run.worktreePath ?? project?.path;
-    const knowledge = knowledgeRoot ? buildKnowledgeContext(knowledgeRoot) : "";
     const prompt = buildStepPrompt(stepDef, {
       task: run.originalTask,
       diff,
       previousOutput,
       iteration: run.iterationCount,
       isLastStep,
-      knowledge,
       retryFeedback,
     });
 

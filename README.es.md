@@ -54,7 +54,7 @@ paralelo, en distintos proyectos, sin perderles la pista.
 - Watching: fija sesiones y síguelas como terminales en vivo lado a lado.
 
 **Coordinación**
-- Un servidor MCP de Exegol para cada agente: memoria compartida, mensajes entre agentes y
+- Un servidor MCP de Exegol para cada agente: inbox, notas, mensajes entre agentes y
   reserva de archivos para que dos agentes no editen las mismas rutas.
 - Pipelines: agentes en secuencia sobre un worktree compartido, con ciclos de revisión y
   corrección y compuertas con evaluador.
@@ -126,7 +126,7 @@ Releases, descarga las actualizaciones y te ofrece reiniciar desde la barra de t
 notas de la versión.
 
 **Requisitos**: al menos un CLI de código instalado y con sesión iniciada. Opcional: `gh` (pull
-requests, Watch PR), [Ollama](https://ollama.com/) (búsqueda semántica en la memoria) y una API
+requests, Watch PR) y una API
 key de Anthropic (mensajes de commit con IA, calificación de corridas, evaluadores de pipelines).
 
 ## Primeros pasos
@@ -170,8 +170,8 @@ versión: [docs/GUIDES/RELEASE.md](docs/GUIDES/RELEASE.md).
 
 Exegol funciona primero en local. No hay cuenta ni telemetría.
 
-- Tus datos (proyectos, sesiones, memoria, configuración) viven en una base SQLite local y en
-  `~/.exegol`.
+- Tus datos (proyectos, sesiones, configuración) viven en una base SQLite local y en
+  `~/.exegol`, las notas como archivos Markdown en `~/.exegol/notes`.
 - El dictado corre en tu máquina: el audio nunca sale de ella ni se guarda. Los modelos se
   descargan solo cuando lo pides, de los releases de sherpa-onnx en GitHub, y se verifican contra
   un SHA-256 fijo.

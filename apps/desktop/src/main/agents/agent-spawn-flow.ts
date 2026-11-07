@@ -327,7 +327,7 @@ export function buildPtyInvocation(
       EXEGOL_AGENT_ID: agent.id,
     } as Record<string, string>;
   } else {
-    const { contextPrefix } = buildSpawnContext(db, agent.projectId, config, projectPath);
+    const contextPrefix = buildSpawnContext(config, projectPath);
     let fullCommand = buildShellCommand(
       registry,
       agent,

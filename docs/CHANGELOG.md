@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Removed
+- Memory and Knowledge: notes replace them. The `memory_search`, `memory_list`, `memory_save` and `knowledge_get` tools, both Context sections and the memory and knowledge blocks added to a new session's prompt are gone; the `memories` table stays with its rows
 - Memory's empty state no longer says memories are extracted automatically: they are not
 - `Cmd+.` no longer stops the focused session: one stray key ended it with no warning. Stop Agent stays in the Command Palette
 

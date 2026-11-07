@@ -107,7 +107,9 @@ function checkMcpSocket(): Promise<DoctorCheck> {
       resolve({ id: "exegol-mcp", label: "Exegol MCP server", status, detail, category: "system" });
     };
     sock.setTimeout(500);
-    sock.on("connect", () => done("ok", "Listening — agents can reach memory/knowledge tools"));
+    sock.on("connect", () =>
+      done("ok", "Listening — agents can reach the inbox, notes and browser tools"),
+    );
     sock.on("timeout", () => done("warn", "Socket file present but not answering"));
     sock.on("error", () =>
       pipe
@@ -268,9 +270,9 @@ export async function runDoctorChecks(db: Database.Database): Promise<DoctorRepo
     status: ollama.available ? (ollama.modelInstalled ? "ok" : "warn") : "warn",
     detail: ollama.available
       ? ollama.modelInstalled
-        ? `Reachable at ${ollamaConfig.url} — model '${ollamaConfig.model}' ready, hybrid memory search enabled`
+        ? `Reachable at ${ollamaConfig.url} — model '${ollamaConfig.model}' ready`
         : `Reachable, but model '${ollamaConfig.model}' is missing — run: ollama pull ${ollamaConfig.model}`
-      : "Not running — memory search falls back to keyword-only",
+      : "Not running (optional: nothing in Exegol needs it today, see T226)",
     actionUrl: ollama.available ? undefined : "https://ollama.com",
     category: "system",
   });

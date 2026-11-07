@@ -246,15 +246,6 @@
       "listTools",
       "saveConfigs"
     ],
-    "memory": [
-      "create",
-      "delete",
-      "extract",
-      "getContext",
-      "list",
-      "search",
-      "updateRelevance"
-    ],
     "inbox": [
       "close",
       "get",
@@ -310,14 +301,6 @@
       "fuzzyFind",
       "grep",
       "projectSearch"
-    ],
-    "knowledge": [
-      "get",
-      "importMemoryBridgeAsSeed",
-      "initialize",
-      "refreshDigest",
-      "saveBrief",
-      "syncMemoryBridge"
     ],
     "doctor": [
       "run",

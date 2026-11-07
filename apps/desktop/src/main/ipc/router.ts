@@ -15,9 +15,7 @@ import { historyRouter } from "./procedures/history";
 import { ideRouter } from "./procedures/ide";
 import { inboxRouter } from "./procedures/inbox";
 import { indexerRouter } from "./procedures/indexer";
-import { knowledgeRouter } from "./procedures/knowledge";
 import { mcpRouter } from "./procedures/mcp";
-import { memoryRouter } from "./procedures/memory";
 import { messagesRouter } from "./procedures/messages";
 import { modelsRouter } from "./procedures/models";
 import { notesRouter } from "./procedures/notes";
@@ -62,7 +60,6 @@ export const appRouter = router({
   skills: skillsRouter,
   skillInstaller: skillInstallerRouter,
   mcp: mcpRouter,
-  memory: memoryRouter,
   messages: messagesRouter,
   colabs: colabsRouter,
   notes: notesRouter,
@@ -74,7 +71,6 @@ export const appRouter = router({
   fsSearch: fsSearchRouter,
   github: githubRouter,
   indexer: indexerRouter,
-  knowledge: knowledgeRouter,
   doctor: doctorRouter,
   diagnostics: diagnosticsRouter,
   budgets: budgetsRouter,

@@ -32,12 +32,6 @@ const PromptsSkillsSection = lazy(() =>
 const NotesSection = lazy(() =>
   import("./sections/NotesSection").then((m) => ({ default: m.NotesSection })),
 );
-const MemorySection = lazy(() =>
-  import("./sections/MemorySection").then((m) => ({ default: m.MemorySection })),
-);
-const KnowledgeSection = lazy(() =>
-  import("./sections/KnowledgeSection").then((m) => ({ default: m.KnowledgeSection })),
-);
 const PipelineSection = lazy(() =>
   import("./sections/PipelineSection").then((m) => ({ default: m.PipelineSection })),
 );
@@ -66,8 +60,6 @@ const LAZY_SECTIONS: Record<Exclude<WorkspaceSection, "agents">, React.Component
   history: HistorySection,
   "prompts-skills": PromptsSkillsSection,
   notes: NotesSection,
-  memory: MemorySection,
-  knowledge: KnowledgeSection,
   pipelines: PipelineSection,
   "parallel-runs": ParallelRunsSection,
   "qa-tests": QaTestsSection,

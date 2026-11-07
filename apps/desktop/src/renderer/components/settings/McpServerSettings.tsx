@@ -131,7 +131,7 @@ function ServerTab({
     <div className="space-y-4">
       <div className="rounded-lg border border-border bg-bg-secondary p-4">
         <p className="text-xs leading-relaxed text-text-muted">
-          The bridge every agent uses for shared memory, knowledge and inter-agent messaging.
+          The bridge every agent uses for the inbox, notes, the browser and inter-agent messaging.
           Identity comes from a per-agent token minted at spawn — never from what the agent claims,
           so a message's sender can always be trusted.
         </p>
@@ -183,7 +183,7 @@ function ActivityTab({ activity }: { activity: McpActivityEntry[] }) {
       </p>
       {activity.length === 0 && (
         <p className="rounded-md border border-border bg-bg-tertiary px-3 py-3 text-[11px] text-text-muted">
-          No activity yet. Agents talk to the server when they call a tool (memory, knowledge,
+          No activity yet. Agents talk to the server when they call a tool (inbox_post, note_write,
           agents_list, agent_send…).
         </p>
       )}
@@ -220,8 +220,8 @@ function ToolsTab({ tools }: { tools: ExegolMcpStatus["tools"] }) {
   return (
     <div className="space-y-1.5">
       <p className="text-xs text-text-muted">
-        Served to every agent Exegol spawns. Read/plan-mode agents see all of these except
-        memory_save.
+        Served to every agent Exegol spawns. Read/plan-mode agents see all of these except the
+        browser tools that act on a page.
       </p>
       {tools.map((tool) => (
         <div key={tool.name} className="rounded-md border border-border bg-bg-tertiary px-3 py-2">

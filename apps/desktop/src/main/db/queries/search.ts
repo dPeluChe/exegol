@@ -51,21 +51,6 @@ function buildFts5Query(raw: string, operator: "AND" | "OR" = "AND"): string | n
 
 // ─── CRUD ───────────────────────────────────────────────────────────────────
 
-/** Index a single entry into the FTS5 table. */
-export function indexEntry(db: Database.Database, entry: IndexEntry): void {
-  db.prepare(
-    `INSERT INTO search_index (title, body, entity_type, entity_id, project_id, agent_id, indexed_at)
-     VALUES (?, ?, ?, ?, ?, ?, unixepoch())`,
-  ).run(
-    entry.title,
-    entry.body,
-    entry.entityType,
-    entry.entityId,
-    entry.projectId,
-    entry.agentId ?? "",
-  );
-}
-
 /** Index multiple entries in a transaction. */
 export function indexEntries(db: Database.Database, entries: IndexEntry[]): number {
   const stmt = db.prepare(
@@ -89,11 +74,6 @@ export function indexEntries(db: Database.Database, entries: IndexEntry[]): numb
   });
   insertAll();
   return count;
-}
-
-/** Remove all indexed entries for a given entity. */
-export function removeFromIndex(db: Database.Database, entityId: string): void {
-  db.prepare("DELETE FROM search_index WHERE entity_id = ?").run(entityId);
 }
 
 /** Check if an entity is already indexed. */
@@ -390,25 +370,6 @@ export function rebuildIndex(db: Database.Database): { indexed: number } {
         entityId: `result:${r.id}`,
         projectId: r.project_id as string,
         agentId: (r.agent_id as string) || undefined,
-      });
-    }
-  }
-
-  // Collect memories (T125) — memory recall depends on this index; dropping
-  // them here would silently degrade searchMemories to the LIKE fallback.
-  const memories = db
-    .prepare("SELECT id, project_id, content, source_agent_id FROM memories")
-    .all() as Array<Record<string, unknown>>;
-  for (const m of memories) {
-    const content = m.content as string;
-    if (content) {
-      entries.push({
-        title: content.slice(0, 80),
-        body: content,
-        entityType: "memory",
-        entityId: `memory:${m.id}`,
-        projectId: m.project_id as string,
-        agentId: (m.source_agent_id as string) || undefined,
       });
     }
   }

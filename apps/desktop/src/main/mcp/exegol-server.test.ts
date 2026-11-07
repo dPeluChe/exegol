@@ -73,26 +73,26 @@ describe("exegol MCP server token lifecycle", () => {
   });
 
   it("rejects unknown methods with -32601", async () => {
-    const res = await call(db, { tool: "memory_list", args: {} }, "list_tools_nope");
+    const res = await call(db, { tool: "list_claims", args: {} }, "list_tools_nope");
     expect(res.error?.code).toBe(-32601);
   });
 
   it("rejects a call with no token with -32002", async () => {
-    const res = await call(db, { tool: "memory_list", args: {} });
+    const res = await call(db, { tool: "list_claims", args: {} });
     expect(res.error?.code).toBe(-32002);
     expect(res.result).toBeUndefined();
   });
 
   it("rejects an unknown token with -32002", async () => {
-    const res = await call(db, { tool: "memory_list", args: {}, token: "deadbeef" });
+    const res = await call(db, { tool: "list_claims", args: {}, token: "deadbeef" });
     expect(res.error?.code).toBe(-32002);
   });
 
   it("accepts a call carrying a freshly minted token", async () => {
     const token = registerAgentMcpToken("writer", "p1");
-    const res = await call(db, { tool: "memory_list", args: {}, token });
+    const res = await call(db, { tool: "list_claims", args: {}, token });
     expect(res.error).toBeUndefined();
-    expect(res.result).toMatchObject({ total: 0, facts: [] });
+    expect(res.result).toMatchObject({ claims: [] });
   });
 
   it("mints one stable token per agent", () => {
@@ -105,7 +105,7 @@ describe("exegol MCP server token lifecycle", () => {
   it("rejects a revoked token with -32002", async () => {
     const token = registerAgentMcpToken("writer", "p1");
     revokeAgentMcpToken("writer");
-    const res = await call(db, { tool: "memory_list", args: {}, token });
+    const res = await call(db, { tool: "list_claims", args: {}, token });
     expect(res.error?.code).toBe(-32002);
   });
 
@@ -113,48 +113,27 @@ describe("exegol MCP server token lifecycle", () => {
     const token = registerAgentMcpToken("writer", "p1");
     revokeAgentMcpToken("writer");
     restoreAgentMcpToken("writer", "p1", token);
-    const res = await call(db, { tool: "memory_list", args: {}, token });
+    const res = await call(db, { tool: "list_claims", args: {}, token });
     expect(res.error).toBeUndefined();
   });
 
-  it("allows memory_save for an agent the DB marks as write", async () => {
+  it("lets an agent the DB marks as write past the write gate", async () => {
     const token = registerAgentMcpToken("writer", "p1");
-    const res = await call(db, {
-      tool: "memory_save",
-      args: { fact: "uses bun as package manager", category: "convention" },
-      token,
-    });
-    expect(res.error).toBeUndefined();
-    expect(res.result).toHaveProperty("id");
-    const row = db.prepare("SELECT content, source_agent_id FROM memories").get() as {
-      content: string;
-      source_agent_id: string;
-    };
-    expect(row.content).toBe("uses bun as package manager");
-    expect(row.source_agent_id).toBe("writer");
+    const res = await call(db, { tool: "browser_navigate", args: { url: "about:blank" }, token });
+    expect(res.error?.code).not.toBe(-32001);
   });
 
-  it("denies memory_save for an agent the DB marks as read, with -32001", async () => {
+  it("denies a write tool to an agent the DB marks as read, with -32001", async () => {
     const token = registerAgentMcpToken("reader", "p1");
-    const res = await call(db, {
-      tool: "memory_save",
-      args: { fact: "should never land", category: "convention" },
-      token,
-    });
+    const res = await call(db, { tool: "browser_navigate", args: { url: "about:blank" }, token });
     expect(res.error?.code).toBe(-32001);
     expect(res.error?.message).toContain("read");
-    const count = db.prepare("SELECT COUNT(*) AS n FROM memories").get() as { n: number };
-    expect(count.n).toBe(0);
   });
 
   it("derives access mode from the DB, not from the client or mint-time state", async () => {
     const token = registerAgentMcpToken("writer", "p1");
     db.prepare("UPDATE agents SET access_mode = 'read' WHERE id = 'writer'").run();
-    const res = await call(db, {
-      tool: "memory_save",
-      args: { fact: "demoted mid-session", category: "convention" },
-      token,
-    });
+    const res = await call(db, { tool: "browser_navigate", args: { url: "about:blank" }, token });
     expect(res.error?.code).toBe(-32001);
   });
 
@@ -168,34 +147,30 @@ describe("exegol MCP server token lifecycle", () => {
     const tokenOfSibling = registerAgentMcpToken("writer", "p1");
 
     const res = await call(db, {
-      tool: "memory_save",
-      args: { fact: "written by the twin", category: "convention" },
+      tool: "inbox_post",
+      args: { target: "personal", title: "From the twin", body: "written by the twin" },
       token: tokenOfSibling,
       ppid: 4242,
     });
 
     expect(res.error).toBeUndefined();
-    const row = db
-      .prepare("SELECT source_agent_id FROM memories WHERE content = 'written by the twin'")
-      .get() as { source_agent_id?: string } | undefined;
-    expect(row?.source_agent_id).toBe("twin");
+    const row = db.prepare("SELECT agent_id FROM inbox_messages").get() as
+      | { agent_id?: string }
+      | undefined;
+    expect(row?.agent_id).toBe("twin");
     revokeAgentMcpToken("writer");
   });
 
   it("rejects a token whose agent row is gone (leaked/stale secret is inert)", async () => {
     const token = registerAgentMcpToken("ghost", "p1");
-    const res = await call(db, {
-      tool: "memory_save",
-      args: { fact: "no row", category: "convention" },
-      token,
-    });
+    const res = await call(db, { tool: "list_claims", args: {}, token });
     expect(res.error?.code).toBe(-32002);
     revokeAgentMcpToken("ghost");
   });
 
   it("still allows read-only tools for a read-mode agent", async () => {
     const token = registerAgentMcpToken("reader", "p1");
-    const res = await call(db, { tool: "memory_list", args: {}, token });
+    const res = await call(db, { tool: "list_claims", args: {}, token });
     expect(res.error).toBeUndefined();
   });
 
