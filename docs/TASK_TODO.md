@@ -323,9 +323,8 @@ focus inside a read-only editor. Also check the Files pane's find widget behaves
 **Priority**: P2 | **Effort**: S | **Source**: user, 2026-10-27 (screenshot of the projects view
 with 28 projects). `ProjectList.tsx` renders one large card per project in a 1-3 column grid
 (`ProjectList.tsx:222`), so only ~18 fit on screen and finding one means scrolling.
-- [ ] Compact card (one row: icon, name, folder, live/idle counts, last active) as a view toggle
-  beside the current card, choice persisted
-- [ ] Search box (name and folder), focused with Cmd+F on that view
+- [x] Compact card (two rows) in an auto-fill grid, repo count on workspaces, Cmd+Shift+A (2026-11-07)
+- [x] Search box (name and folder), focused when the view opens (2026-11-07)
 - [ ] Filters: with live agents, group, recently active; sort by last active or name
 - [ ] Keep keyboard order and the Cmd+n badges consistent with the sidebar
 
@@ -1424,6 +1423,12 @@ From the Hide comparison. Done: a compatible sidecar with live sessions stays th
 
 - Delivery proof through the prompt hook, and a deadline
 - A `watch` role on `agent_link`: the parent hears when a child stops on a question or stalls. To weigh: here or in Orbital
+
+### T223: A CLI's own session name becomes the Exegol session name `added: 2026-11-07`
+**Priority**: P2 | **Effort**: S | **Source**: Antonio, 2026-11-07 (inbox test: messages showed the
+codename, not the name he gave with /rename). Read the name a CLI stores when the user renames a
+session (Claude Code `/rename` in its transcript, Codex and others where they keep one) and set it as
+the agent's alias, so panes, Company, the inbox and the sidebar use it. Check each CLI that has a rename.
 
 ### T222: Exegol speaks `added: 2026-11-06`
 

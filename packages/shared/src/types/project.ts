@@ -60,3 +60,11 @@ export type FolderInspection =
   | { kind: "noGit" }
   | { kind: "subfolder"; toplevel: string }
   | { kind: "repo" };
+
+/** What a project folder holds: a git repo at its root, repos inside (a workspace) or none */
+export interface ProjectShape {
+  kind: "repo" | "workspace" | "folder";
+  repoCount: number;
+  /** Folders of the inner repos, relative to the project, first 40 */
+  repos: string[];
+}

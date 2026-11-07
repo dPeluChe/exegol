@@ -54,6 +54,13 @@ const MAC_SHORTCUTS: Shortcut[] = [
     category: "navigation",
   },
   {
+    id: "projects",
+    label: "Projects",
+    description: "Open the Projects view; pressed there, Add Project",
+    keys: "Cmd+Shift+A",
+    category: "navigation",
+  },
+  {
     id: "palette",
     label: "Command Palette",
     description: "Search commands, projects and agents",

@@ -1,11 +1,14 @@
-import type { AgentStatus, Project, ProjectGroup } from "@exegol/shared";
-import { Button, cn } from "@exegol/ui";
-import { ArrowLeft, Clock, Cuboid, GitBranch, Pause, Plus } from "lucide-react";
+import type { AgentStatus, Project, ProjectGroup, ProjectShape } from "@exegol/shared";
+import { Button, cn, Tooltip, TooltipContent, TooltipTrigger } from "@exegol/ui";
+import { useQuery } from "@tanstack/react-query";
+import { ArrowLeft, Clock, Cuboid, FolderGit2, GitBranch, Pause, Plus, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { useProjects } from "../../hooks/use-trpc";
 import { useProjectGroups } from "../../hooks/use-trpc-project-groups";
-import { formatTimeAgoLong, tailPath } from "../../lib/format";
+import { formatTimeAgo, tailPath } from "../../lib/format";
+import { appKeys } from "../../lib/keymap";
 import { shortcutLabel, useProjectShortcuts } from "../../lib/live-tabs";
+import { trpcInvoke } from "../../lib/trpc-client";
 import { isLiveAgent, useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import { ProjectAvatar } from "../common/ProjectAvatar";
@@ -44,18 +47,44 @@ function useLiveCounts(): Map<string, LiveCounts> {
 function LiveCount({
   status,
   count,
-  label,
+  title,
 }: {
   status: AgentStatus;
   count: number;
-  label: string;
+  title: string;
 }) {
   if (count === 0) return null;
   return (
-    <span className="flex items-center gap-1.5 text-text-secondary">
+    <span className="flex items-center gap-1 text-text-secondary" title={title}>
       <StatusDot status={status} size="sm" />
-      {count} {label}
+      {count}
     </span>
+  );
+}
+
+function RepoCount({ shape }: { shape: ProjectShape | undefined }) {
+  if (shape?.kind !== "workspace") return null;
+  const more = shape.repoCount - shape.repos.length;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="flex shrink-0 items-center gap-1 rounded border border-border px-1 text-[10px] text-text-secondary">
+          <FolderGit2 className="h-3 w-3" />
+          {shape.repoCount}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent side="bottom" className="max-w-xs">
+        <p className="mb-1 font-medium">
+          Workspace, {shape.repoCount} repo{shape.repoCount === 1 ? "" : "s"} inside
+        </p>
+        {shape.repos.map((folder) => (
+          <p key={folder} className="truncate font-mono text-[10px]">
+            {folder}
+          </p>
+        ))}
+        {more > 0 && <p className="text-[10px]">and {more} more</p>}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -63,44 +92,48 @@ function ProjectCard({
   project,
   group,
   live,
+  shape,
   shortcut,
   current,
 }: {
   project: Project;
   group: ProjectGroup | undefined;
   live: LiveCounts;
+  shape: ProjectShape | undefined;
   shortcut: string | null;
   current: boolean;
 }) {
   const setActiveProject = useAppStore((s) => s.setActiveProject);
   const tint = project.color ?? "var(--accent)";
+  const liveTotal = live.running + live.waiting + live.idle;
 
   return (
     <button
       type="button"
       onClick={() => setActiveProject(project.id)}
       className={cn(
-        "flex flex-col gap-3 rounded-lg border bg-bg-secondary p-4 text-left transition-all",
+        "flex min-w-0 flex-col gap-1.5 rounded-lg border bg-bg-secondary px-3 py-2.5 text-left transition-colors",
         "hover:border-[var(--accent)]/50 hover:bg-white/[0.02]",
         current ? "border-[var(--accent)]/60" : "border-border",
       )}
     >
-      <div className="flex items-start gap-3">
+      <div className="flex min-w-0 items-center gap-2.5">
         <div
-          className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md"
           style={{ backgroundColor: `color-mix(in srgb, ${tint} 15%, transparent)` }}
         >
-          <ProjectAvatar project={project} className="h-5 w-5" />
+          <ProjectAvatar project={project} className="h-4 w-4" />
         </div>
         <div className="min-w-0 flex-1">
-          <h3 className="truncate text-sm font-semibold text-text-primary">{project.name}</h3>
-          <p className="truncate text-xs text-text-muted" title={project.path}>
+          <h3 className="truncate text-[13px] font-semibold text-text-primary">{project.name}</h3>
+          <p className="truncate text-[10px] text-text-muted" title={project.path}>
             {tailPath(project.path, 2)}
           </p>
         </div>
+        <RepoCount shape={shape} />
         {shortcut && (
           <kbd
-            className="shrink-0 rounded border border-border px-1.5 py-0.5 font-mono text-[10px] text-text-muted"
+            className="shrink-0 rounded border border-border px-1 font-mono text-[9px] text-text-muted"
             title="Opens the project as you left it"
           >
             {shortcut}
@@ -108,45 +141,54 @@ function ProjectCard({
         )}
       </div>
 
-      <div className="flex min-h-4 flex-wrap items-center gap-3 text-[11px]">
-        <LiveCount status="running" count={live.running} label="working" />
-        <LiveCount status="waiting_input" count={live.waiting} label="waiting for you" />
+      <div className="flex min-w-0 items-center gap-2.5 text-[10px] text-text-muted">
+        <LiveCount status="running" count={live.running} title="Working" />
+        <LiveCount status="waiting_input" count={live.waiting} title="Waiting for you" />
         {live.idle > 0 && (
-          <span className="flex items-center gap-1 text-text-muted">
-            <Pause className="h-3 w-3" />
-            {live.idle} idle
+          <span className="flex items-center gap-0.5" title="Idle">
+            <Pause className="h-2.5 w-2.5" />
+            {live.idle}
           </span>
         )}
-        {live.running + live.waiting + live.idle === 0 && (
-          <span className="text-text-muted">No live agents</span>
-        )}
-      </div>
-
-      <div className="flex flex-wrap items-center gap-3 text-[11px] text-text-muted">
-        {group && <ProjectChip project={group} className="text-[10px]" />}
-        <span className="flex min-w-0 items-center gap-1">
-          <GitBranch className="h-3 w-3 shrink-0" />
-          <span className="truncate">{project.defaultBranch}</span>
-        </span>
-        <span className="flex items-center gap-1">
-          <Clock className="h-3 w-3" />
-          {formatTimeAgoLong(project.lastOpenedAt)}
+        {liveTotal === 0 && <span>No live agents</span>}
+        {group && <ProjectChip project={group} className="text-[9px]" />}
+        <span className="ml-auto flex shrink-0 items-center gap-1">
+          {shape?.kind === "repo" && (
+            <>
+              <GitBranch className="h-2.5 w-2.5" />
+              <span className="max-w-20 truncate">{project.defaultBranch}</span>
+            </>
+          )}
+          <Clock className="ml-1 h-2.5 w-2.5" />
+          {formatTimeAgo(project.lastOpenedAt)}
         </span>
       </div>
     </button>
   );
 }
 
+const matches = (p: Project, q: string) =>
+  p.name.toLowerCase().includes(q) || p.path.toLowerCase().includes(q);
+
 export function ProjectList() {
   const { data: projects, isLoading, isError } = useProjects();
   const { data: groups } = useProjectGroups();
-  const [addDialogOpen, setAddDialogOpen] = useState(false);
+  const addDialogOpen = useAppStore((s) => s.addProjectOpen);
+  const setAddDialogOpen = useAppStore((s) => s.setAddProjectOpen);
   const activeProjectId = useAppStore((s) => s.activeProjectId);
   const canGoBack = useAppStore((s) => s.projectsFrom !== null || s.activeProjectId !== null);
   const closeProjects = useAppStore((s) => s.closeProjects);
   const liveCounts = useLiveCounts();
   const shortcuts = useProjectShortcuts();
   const groupById = useMemo(() => new Map(groups?.map((g) => [g.id, g])), [groups]);
+  const { data: shapes } = useQuery({
+    queryKey: ["projectShapes"],
+    queryFn: () => trpcInvoke<Record<string, ProjectShape>>("projects.shapes"),
+    staleTime: 5 * 60_000,
+  });
+  const [query, setQuery] = useState("");
+  const q = query.trim().toLowerCase();
+  const shown = q ? (projects ?? []).filter((p) => matches(p, q)) : (projects ?? []);
 
   // Radix dialogs preventDefault the Esc that closes them, so that one never also leaves the view
   useEffect(() => {
@@ -180,14 +222,42 @@ export function ProjectList() {
             <p className="text-xs text-text-muted">Select a project to start working with agents</p>
           </div>
         </div>
-        <Button onClick={() => setAddDialogOpen(true)} className="gap-2 bg-accent text-white">
-          <Plus className="h-4 w-4" />
-          Add Project
-        </Button>
+        <div className="flex items-center gap-2">
+          {projects && projects.length > 0 && (
+            <label className="flex h-8 w-64 items-center gap-2 rounded-md border border-border bg-bg-secondary px-2 text-xs focus-within:border-[var(--accent)]/60">
+              <Search className="h-3.5 w-3.5 shrink-0 text-text-muted" />
+              <input
+                // biome-ignore lint/a11y/noAutofocus: the view opens to find a project
+                autoFocus
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Escape" && query) {
+                    e.preventDefault();
+                    setQuery("");
+                  }
+                  const first = shown[0];
+                  if (e.key === "Enter" && q && first)
+                    useAppStore.getState().setActiveProject(first.id);
+                }}
+                placeholder={`Search ${projects.length} projects`}
+                className="min-w-0 flex-1 bg-transparent text-text-primary outline-none placeholder:text-text-muted"
+              />
+            </label>
+          )}
+          <Button
+            onClick={() => setAddDialogOpen(true)}
+            className="gap-2 bg-accent text-white"
+            title={`Add Project (${appKeys("Cmd+Shift+A")} here)`}
+          >
+            <Plus className="h-4 w-4" />
+            Add Project
+          </Button>
+        </div>
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-auto p-6">
+      <div className="flex-1 overflow-auto p-4">
         {isLoading && (
           <div className="flex h-40 items-center justify-center">
             <p className="text-sm text-text-muted">Loading projects...</p>
@@ -218,14 +288,19 @@ export function ProjectList() {
           </div>
         )}
 
-        {projects && projects.length > 0 && (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {projects.map((project) => (
+        {projects && projects.length > 0 && shown.length === 0 && (
+          <p className="py-10 text-center text-xs text-text-muted">No project matches "{query}"</p>
+        )}
+
+        {shown.length > 0 && (
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(250px,1fr))] gap-2">
+            {shown.map((project) => (
               <ProjectCard
                 key={project.id}
                 project={project}
                 group={project.groupId ? groupById.get(project.groupId) : undefined}
                 live={liveCounts.get(project.id) ?? EMPTY_COUNTS}
+                shape={shapes?.[project.id]}
                 shortcut={shortcutLabel(shortcuts.get(project.id))}
                 current={project.id === activeProjectId}
               />
