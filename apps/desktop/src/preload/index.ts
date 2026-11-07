@@ -231,6 +231,7 @@ contextBridge.exposeInMainWorld("api", {
   onAgentActivity: (callback: (event: unknown) => void) => listen("agent:activity", callback),
   onMessageHeld: (callback: (event: unknown) => void) => listen("agent:message-held", callback),
   onChatUpdated: (callback: (event: unknown) => void) => listen("agent:chat-updated", callback),
+  onInboxChanged: (callback: (event: unknown) => void) => listen("inbox:changed", callback),
   /** A session's CLI updated itself and exited: the pane offers Restart session */
   onCliSelfUpdated: (callback: (event: unknown) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);

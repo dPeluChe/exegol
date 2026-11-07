@@ -27,7 +27,11 @@ const now = () => Math.floor(Date.now() / 1000);
 const THREAD_SELECT = `SELECT t.*, r.last_read_seq,
     (SELECT MAX(seq) FROM inbox_messages m WHERE m.thread_id = t.id) AS last_seq,
     (SELECT COUNT(*) FROM inbox_messages m WHERE m.thread_id = t.id AND m.author_kind = 'agent') AS agent_turns,
-    (SELECT agent_id FROM inbox_messages m WHERE m.thread_id = t.id AND m.seq = 1) AS opener_agent
+    (SELECT agent_id FROM inbox_messages m WHERE m.thread_id = t.id AND m.seq = 1) AS opener_agent,
+    (SELECT last_read_seq FROM inbox_reads o
+      WHERE o.thread_id = t.id AND o.project_id = t.owner_project) AS owner_read_seq,
+    (SELECT author_kind FROM inbox_messages m WHERE m.thread_id = t.id ORDER BY m.seq DESC LIMIT 1) AS last_author_kind,
+    (SELECT agent_id FROM inbox_messages m WHERE m.thread_id = t.id ORDER BY m.seq DESC LIMIT 1) AS last_agent
   FROM inbox_threads t
   LEFT JOIN inbox_reads r ON r.thread_id = t.id AND r.project_id = @projectId`;
 
@@ -56,6 +60,9 @@ function toThread(row: Record<string, unknown>): InboxThread {
     openerAgent: (row.opener_agent as string) ?? null,
     lastTurn: row.last_turn === 1,
     lastReadSeq: (row.last_read_seq as number) ?? null,
+    ownerReadSeq: (row.owner_read_seq as number) ?? null,
+    lastAuthorKind: row.last_author_kind as InboxAuthorKind,
+    lastAgent: (row.last_agent as string) ?? null,
   };
 }
 
@@ -166,6 +173,7 @@ interface ThreadFilter {
   state: "active" | "closed" | "all";
   query?: string;
   limit: number;
+  oldestFirst?: boolean;
 }
 
 const STATE_SQL = {
@@ -180,7 +188,8 @@ export function listThreads(db: Database.Database, filter: ThreadFilter): InboxT
       `${THREAD_SELECT}
        WHERE ${REACH_SQL} ${STATE_SQL[filter.state]}
        AND (@like IS NULL OR t.title LIKE @like OR t.resolution LIKE @like)
-       ORDER BY t.last_activity_at DESC, t.id DESC LIMIT @limit`,
+       ORDER BY ${filter.oldestFirst ? "t.last_activity_at, t.id" : "t.last_activity_at DESC, t.id DESC"}
+       LIMIT @limit`,
     )
     .all({
       projectId: filter.projectId,

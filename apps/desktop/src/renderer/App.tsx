@@ -27,6 +27,7 @@ import { useFleetSync } from "./hooks/use-fleet-sync";
 import { useFloatingPaneSync } from "./hooks/use-floating-pane-sync";
 import { useHotkeys } from "./hooks/use-hotkeys";
 import { useIdleSuspend } from "./hooks/use-idle-suspend";
+import { useInboxSync } from "./hooks/use-inbox";
 import { usePanelessAgentSweep } from "./hooks/use-paneless-agent-sweep";
 import { usePreloadTerminalFont } from "./hooks/use-preload-terminal-font";
 import { useAutoResumeLost, useRelaunchMissedResume } from "./hooks/use-resume-agent";
@@ -75,6 +76,7 @@ function AppEffects() {
   useAutoResumeLost();
   useRelaunchMissedResume();
   useCliRestarts();
+  useInboxSync();
   useCliSelfUpdates();
   useFleetSync();
   useActiveViewSync();

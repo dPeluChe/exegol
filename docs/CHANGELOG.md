@@ -14,6 +14,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - `Cmd+.` no longer stops the focused session: one stray key ended it with no warning. Stop Agent stays in the Command Palette
 
 ### Added
+- Colabs tab in the Dashboard: inbox threads pending across every project (Not read, Read no reply, Needs you, To review), each thread read in full, Send to session, Reply, Close and One last turn; a Company room shows how many threads wait on it
 - Agents can leave threads in a project's or your personal inbox through Exegol's tools; the screens to read them come next
 - Updates keep live terminals when the new version can still talk to the running sidecar; it is replaced once a launch finds no live session
 - Unread sessions: a turn that ended while you were elsewhere gets its own group in Company, the sidebar and the status bar, apart from what needs an answer

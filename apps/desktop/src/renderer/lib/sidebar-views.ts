@@ -1,3 +1,4 @@
+import { acceptsFollowUps } from "@exegol/shared";
 import { Activity, Bell, Cuboid, type LucideIcon } from "lucide-react";
 import { type AgentState, type AttentionItem, isLiveAgent, useAgentStore } from "../stores/agents";
 import type { SidebarView } from "../stores/app";
@@ -13,6 +14,10 @@ export const SIDEBAR_VIEW_META: { id: SidebarView; label: string; icon: LucideIc
 /** A session the sidebar counts as live: no shells, suspended ones apart (the rail's own rule) */
 export const isLiveSession = (a: Pick<AgentState, "cliType" | "status" | "suspended">) =>
   isLiveAgent(a) && !a.suspended;
+
+/** Takes follow-ups, so an inbox thread or a GitHub task can be handed to it */
+export const isOpenSession = (a: AgentState) =>
+  acceptsFollowUps(a) && isLiveSession(a) && !a.archived;
 
 export const isBusy = (a: Pick<AgentState, "activityLevel"> | undefined) =>
   a?.activityLevel === "busy";

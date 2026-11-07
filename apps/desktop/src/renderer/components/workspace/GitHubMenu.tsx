@@ -1,12 +1,11 @@
-import {
-  type AgentCliType,
-  type AgentProvider,
-  acceptsFollowUps,
-  type GitHubCi,
-  type GitHubOpenIssue,
-  type GitHubOverview,
-  type GitHubPr,
-  type GitHubTaskRef,
+import type {
+  AgentCliType,
+  AgentProvider,
+  GitHubCi,
+  GitHubOpenIssue,
+  GitHubOverview,
+  GitHubPr,
+  GitHubTaskRef,
 } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { ChevronLeft, ExternalLink, GitPullRequest } from "lucide-react";
@@ -25,11 +24,12 @@ import {
   UNAVAILABLE_TEXT,
 } from "../../lib/github-repos";
 import { openInBrowser } from "../../lib/open-in-browser";
-import { isLiveSession } from "../../lib/sidebar-views";
+import { isOpenSession } from "../../lib/sidebar-views";
 import { trpcMutate } from "../../lib/trpc-client";
 import { type AgentState, useProjectAgents } from "../../stores/agents";
 import { toastError, useToastStore } from "../../stores/toasts";
 import { AgentIcon } from "../common/AgentIcon";
+import { PickButton } from "../common/PickButton";
 
 const CI_DOT: Record<GitHubCi, string> = {
   failing: "bg-error",
@@ -37,8 +37,6 @@ const CI_DOT: Record<GitHubCi, string> = {
   passing: "bg-success",
   none: "bg-text-muted/40",
 };
-
-const isOpenSession = (a: AgentState) => acceptsFollowUps(a) && isLiveSession(a) && !a.archived;
 
 // A provider that cannot take a prompt at launch would start without the task
 const takesTask = (p: AgentProvider) => p.capabilities.supportsPromptArg;
@@ -376,32 +374,5 @@ function TargetPicker({
         </PickButton>
       ))}
     </>
-  );
-}
-
-function PickButton({
-  name,
-  hint,
-  disabled,
-  onClick,
-  children,
-}: {
-  name: string;
-  hint?: string;
-  disabled: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
-      className="flex items-center gap-2 px-3 py-1 text-left text-text-primary hover:bg-white/5 disabled:opacity-50"
-    >
-      {children}
-      <span className="truncate">{name}</span>
-      {hint && <span className="ml-auto shrink-0 text-[10px] text-text-muted">{hint}</span>}
-    </button>
   );
 }

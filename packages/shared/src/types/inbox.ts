@@ -29,6 +29,10 @@ export interface InboxThread {
   lastTurn: boolean;
   /** The asking project's cursor; null for a person, or a project that never read it */
   lastReadSeq: number | null;
+  /** The owner project's cursor, whoever asks: what Pending reads */
+  ownerReadSeq: number | null;
+  lastAuthorKind: InboxAuthorKind;
+  lastAgent: string | null;
 }
 
 export interface InboxMessage {
@@ -56,3 +60,21 @@ export type InboxActor = Pick<InboxAuthor, "authorKind" | "projectId" | "agentId
 
 export const atInboxTurnLimit = (t: Pick<InboxThread, "agentTurns" | "lastTurn">): boolean =>
   t.agentTurns >= INBOX_TURN_LIMIT && !t.lastTurn;
+
+export type InboxPendingState = "not_read" | "read_no_reply" | "needs_you" | "to_review";
+
+export const INBOX_PENDING_LABEL: Record<InboxPendingState, string> = {
+  not_read: "Not read",
+  read_no_reply: "Read, no reply",
+  needs_you: "Needs you",
+  to_review: "To review",
+};
+
+/** Who an active thread waits on. Derived, never stored: it waits on whoever did not write last */
+export function inboxPendingState(t: InboxThread): InboxPendingState {
+  if (t.kind === "capture") return "to_review";
+  if (t.scope === "personal" || atInboxTurnLimit(t)) return "needs_you";
+  const onTheProject = t.lastTurn || t.lastAuthorKind !== "agent" || t.lastAgent === t.openerAgent;
+  if (!onTheProject) return "needs_you";
+  return (t.ownerReadSeq ?? 0) < t.lastSeq ? "not_read" : "read_no_reply";
+}

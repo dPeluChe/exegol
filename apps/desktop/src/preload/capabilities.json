@@ -254,6 +254,14 @@
       "search",
       "updateRelevance"
     ],
+    "inbox": [
+      "close",
+      "get",
+      "lastTurn",
+      "list",
+      "reply",
+      "sendToSession"
+    ],
     "messages": [
       "conversation",
       "list"
@@ -420,6 +428,7 @@
     "agent:stuck-turn",
     "agent:activity",
     "agent:message-held",
+    "inbox:changed",
     "agent:chat-updated",
     "agent:resume-missed",
     "agent:cli-self-updated",
