@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { findDeepLinkArg, parseDeepLink } from "./deeplink";
+import { findDeepLinkArg, parseCaptureLink, parseDeepLink } from "./deeplink";
 
 describe("parseDeepLink", () => {
   it("parses a plain absolute path", () => {
@@ -63,5 +63,23 @@ describe("findDeepLinkArg", () => {
 
   it("returns null when absent", () => {
     expect(findDeepLinkArg(["/usr/bin/app", "--flag"])).toBeNull();
+  });
+});
+
+describe("parseCaptureLink", () => {
+  it("takes an http(s) url, a title and text, fully encoded as the CLI sends them", () => {
+    expect(
+      parseCaptureLink("exegol://capture?url=%68ttps%3A%2F%2Fa.dev%2Fx&title=Hi&text=read%20this"),
+    ).toEqual({ url: "https://a.dev/x", title: "Hi", text: "read this" });
+  });
+
+  it("drops a url that is not http(s), and needs a url or text", () => {
+    expect(parseCaptureLink("exegol://capture?url=file%3A%2F%2F%2Fetc&text=t")).toEqual({
+      url: null,
+      title: null,
+      text: "t",
+    });
+    expect(parseCaptureLink("exegol://capture?url=javascript%3Ax")).toBeNull();
+    expect(parseCaptureLink("exegol://open?path=/tmp")).toBeNull();
   });
 });

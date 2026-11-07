@@ -3,7 +3,7 @@
 #
 # `exegol [path]` resolves the path (default ".") to an absolute one — the
 # .app's CWD at launch is "/", so relative paths must be resolved here — and
-# invokes the app via an exegol:// URL. LaunchServices / xdg-open deliver the
+# invokes the app via an exegol:// URL. `exegol inbox add` sends a capture. LaunchServices / xdg-open deliver the
 # URL to the running instance if one exists, or cold-start the app otherwise.
 set -e
 
@@ -30,8 +30,26 @@ resolve_abs() {
     fi
 }
 
-abs="$(resolve_abs "${1:-.}")"
-url="$SCHEME://open?path=$(urlenc "$abs")"
+if [ "$1" = "inbox" ] && [ "$2" = "add" ]; then
+    # `exegol inbox add [--title T] <text or url>`: Exegol shows it in a dialog to confirm
+    shift 2
+    title=""
+    if [ "$1" = "--title" ]; then title="$2"; shift 2; fi
+    what="$*"
+    if [ -z "$what" ]; then
+        echo "usage: exegol inbox add [--title T] <text or url>" >&2
+        exit 2
+    fi
+    case "$what" in
+        http://*|https://*) field="url" ;;
+        *) field="text" ;;
+    esac
+    url="$SCHEME://capture?$field=$(urlenc "$what")"
+    [ -n "$title" ] && url="$url&title=$(urlenc "$title")"
+else
+    abs="$(resolve_abs "${1:-.}")"
+    url="$SCHEME://open?path=$(urlenc "$abs")"
+fi
 
 case "$(uname -s)" in
     Darwin) exec open "$url" ;;

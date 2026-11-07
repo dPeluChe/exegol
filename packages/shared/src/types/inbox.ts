@@ -89,3 +89,10 @@ export function inboxPendingState(t: InboxThread): InboxPendingState {
   if (!onTheProject) return "needs_you";
   return (t.ownerReadSeq ?? 0) < t.lastSeq ? "not_read" : "read_no_reply";
 }
+
+/** What `exegol://capture` carried, before the person confirms it */
+export interface CaptureLink {
+  title: string | null;
+  url: string | null;
+  text: string | null;
+}

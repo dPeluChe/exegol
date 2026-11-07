@@ -351,6 +351,14 @@ contextBridge.exposeInMainWorld("api", {
       safe.off("deeplink:open-path", handler as never);
     };
   },
+  onDeepLinkCapture: (callback: (data: import("@exegol/shared").CaptureLink) => void) => {
+    const handler = (_e: Electron.IpcRendererEvent, data: Parameters<typeof callback>[0]) =>
+      callback(data);
+    safe.on("deeplink:capture", handler as never);
+    return () => {
+      safe.off("deeplink:capture", handler as never);
+    };
+  },
   // T44: Auto-updater
   updater: {
     check: () => safe.invoke("updater:check"),

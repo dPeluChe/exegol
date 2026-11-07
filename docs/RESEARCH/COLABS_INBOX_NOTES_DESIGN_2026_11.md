@@ -180,8 +180,8 @@ With Exegol installed, you send it something from anywhere: right click on an ar
 
 | Entry | Reach | State |
 |---|---|---|
-| `exegol inbox add <text or url>` | The base for the rest, three systems | To build |
-| `exegol://capture` | Any app that opens a link | Scheme exists, handler to build |
+| `exegol inbox add <text or url>` | The base for the rest, macOS and Linux (the shell opener) | Done |
+| `exegol://capture` | Any app that opens a link | Done |
 | Browser extension: right click on a page, link or selection | Chromium browsers on three systems | To build |
 | System right click: macOS Quick Action, Windows, Linux | Any app | Not researched |
 

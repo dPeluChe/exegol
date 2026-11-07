@@ -8,6 +8,7 @@ import { SidecarHealthBanner } from "./components/common/SidecarHealthBanner";
 import { ToastStack } from "./components/common/ToastStack";
 import { UpdateBanner } from "./components/common/UpdateBanner";
 import { DictationOverlay } from "./components/dictation/DictationOverlay";
+import { CaptureDialog } from "./components/layout/CaptureDialog";
 import { CliUpdatesNotice } from "./components/layout/CliUpdatesNotice";
 import { WhatsNewAfterUpdate } from "./components/layout/ReleaseNotesDialog";
 import { Sidebar } from "./components/layout/Sidebar";
@@ -144,6 +145,7 @@ export default function App() {
         <ToastStack />
         <PaneSwitcher />
         <TerminalFileWindow />
+        <CaptureDialog />
         <DictationOverlay />
         <Suspense fallback={null}>
           <CommandPalette />

@@ -247,6 +247,7 @@
       "saveConfigs"
     ],
     "inbox": [
+      "capture",
       "close",
       "forward",
       "get",
@@ -451,6 +452,7 @@
     "window:close",
     "notification:navigate",
     "deeplink:open-path",
+    "deeplink:capture",
     "updater:check",
     "updater:install",
     "updater:status",

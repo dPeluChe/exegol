@@ -1,4 +1,5 @@
 import { isAbsolute } from "node:path";
+import type { CaptureLink } from "@exegol/shared";
 
 /**
  * T155.6 — `exegol://` deep link parsing.
@@ -23,6 +24,26 @@ export function parseDeepLink(url: string): { path: string } | null {
   const path = parsed.searchParams.get("path");
   if (!path || !isAbsolute(path)) return null;
   return { path };
+}
+
+const CAPTURE_TEXT_MAX = 8_000;
+
+/** `exegol://capture?url=&title=&text=`: any page can fire it, so it only fills a dialog the person confirms */
+export function parseCaptureLink(link: string): CaptureLink | null {
+  let parsed: URL;
+  try {
+    parsed = new URL(link);
+  } catch {
+    return null;
+  }
+  if (parsed.protocol !== "exegol:") return null;
+  if ((parsed.host || parsed.pathname.replace(/^\/+/, "")) !== "capture") return null;
+  const field = (name: string, max: number) =>
+    parsed.searchParams.get(name)?.trim().slice(0, max) || null;
+  const raw = field("url", 2_000);
+  const url = raw && /^https?:\/\//i.test(raw) ? raw : null;
+  const capture = { title: field("title", 120), url, text: field("text", CAPTURE_TEXT_MAX) };
+  return capture.url || capture.text ? capture : null;
 }
 
 /** Find the deep-link URL in a second-instance argv, if any. */
