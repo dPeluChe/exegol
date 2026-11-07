@@ -241,7 +241,7 @@ function Panel({
     (projects ?? []).map((p) => [p.id, { name: p.name, color: p.color ?? null }]),
   );
   return (
-    <div className="absolute top-full right-0 z-50 mt-1 flex max-h-[70vh] w-[28rem] flex-col overflow-hidden rounded-lg border border-border bg-bg-secondary text-xs shadow-lg">
+    <div className="absolute top-full left-0 z-50 mt-1 flex max-h-[70vh] w-[28rem] flex-col overflow-hidden rounded-lg border border-border bg-bg-secondary text-xs shadow-lg">
       {view !== "list" && (
         <button
           type="button"
