@@ -24,16 +24,20 @@ function byline(note: Note, name: string | null): string {
 export function NoteEditor({
   place,
   note,
+  draft,
   onDone,
 }: {
   place: NotesPlace;
   note: Note | null;
+  /** A new note started from something else, like an inbox thread */
+  draft?: Pick<Note, "title" | "body">;
   onDone: (id: string | null) => void;
 }) {
   const { busy, act } = useAct("Note not saved");
-  const [title, setTitle] = useState(note?.title ?? "");
+  const start = note ?? draft;
+  const [title, setTitle] = useState(start?.title ?? "");
   const [group, setGroup] = useState(note?.group ?? "");
-  const [body, setBody] = useState(note?.body ?? "");
+  const [body, setBody] = useState(start?.body ?? "");
 
   const save = async () => {
     const saved = await act<Note>("notes.save", { place, id: note?.id, title, body, group });

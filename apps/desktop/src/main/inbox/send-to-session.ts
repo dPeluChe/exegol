@@ -1,15 +1,10 @@
-import {
-  atInboxTurnLimit,
-  type InboxMessage,
-  type InboxThread,
-  isInboxClosed,
-} from "@exegol/shared";
+import { atInboxTurnLimit, type InboxMessage, type InboxThread } from "@exegol/shared";
 import type Database from "libsql";
 import { FOLLOW_UP_MAX_CHARS, queueFollowUp } from "../agents/follow-up-queue";
 import { getAgent } from "../db/queries/agents";
 import { isColabMember } from "../db/queries/colabs";
 import { getThread, listMessages } from "../db/queries/inbox";
-import { handOver, InboxError, PERSON, take } from "./threads";
+import { handOver, InboxError, openThreadOrThrow, PERSON, take } from "./threads";
 
 // Room for the lines around the bodies
 const MAX_PASTED_CHARS = FOLLOW_UP_MAX_CHARS - 2_000;
@@ -52,9 +47,7 @@ function instruction(db: Database.Database, thread: InboxThread): string {
 }
 
 function handable(db: Database.Database, key: string, projectId: string): InboxThread {
-  const thread = getThread(db, key, null);
-  if (!thread) throw new InboxError(`No inbox thread ${key} here`);
-  if (isInboxClosed(thread.status)) throw new InboxError(`${key} is closed`);
+  const thread = openThreadOrThrow(db, key);
   if (atInboxTurnLimit(thread)) throw new InboxError(`${key} waits at the turn limit`);
   if (thread.scope === "project" && thread.scopeId !== projectId) {
     throw new InboxError("That session is in another project");

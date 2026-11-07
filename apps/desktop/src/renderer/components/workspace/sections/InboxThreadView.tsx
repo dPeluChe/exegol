@@ -15,7 +15,6 @@ import { useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { useState } from "react";
 import { useShallow } from "zustand/react/shallow";
-import { useAct } from "../../../hooks/use-act";
 import { useColabs } from "../../../hooks/use-inbox";
 import { useLaunchableProviders } from "../../../hooks/use-providers";
 import { useGitHubOverview } from "../../../hooks/use-trpc-github";
@@ -32,6 +31,7 @@ import { AgentIcon } from "../../common/AgentIcon";
 import { FilterChip } from "../../common/FilterChip";
 import type { ProjectMeta } from "../../common/ProjectChip";
 import { inboxPlace } from "../inbox-place";
+import { InboxMoreActions, useThreadAct } from "./InboxMoreActions";
 
 interface ThreadData {
   thread: InboxThread;
@@ -63,11 +63,6 @@ function Message({ message }: { message: InboxMessage }) {
 }
 
 /** Every action here names the thread */
-function useThreadAct(id: string) {
-  const { busy, act } = useAct(`${id}: not done`);
-  return { busy, act: <T,>(path: string, input: object) => act<T>(path, { id, ...input }) };
-}
-
 function SendToSession({
   thread,
   repo,
@@ -310,6 +305,15 @@ export function InboxThreadView({
             {url}
           </button>
         )}
+        {thread.forwardedFrom && (
+          <button
+            type="button"
+            onClick={() => thread.forwardedFrom && onOpen(thread.forwardedFrom)}
+            className="block max-w-full truncate text-[10px] text-text-secondary hover:underline"
+          >
+            Forwarded from {thread.forwardedFrom}
+          </button>
+        )}
         {refs.map((ref) => (
           <button
             key={ref.id}
@@ -333,6 +337,12 @@ export function InboxThreadView({
           )}
         </div>
       </div>
+      <InboxMoreActions
+        thread={thread}
+        lastBody={messages.at(-1)?.body ?? ""}
+        projectMeta={projectMeta}
+        onOpen={onOpen}
+      />
       {!closed && (
         <Actions thread={thread} repo={messages[0]?.repo ?? null} homeProject={homeProject} />
       )}

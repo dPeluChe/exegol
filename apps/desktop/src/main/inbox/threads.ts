@@ -87,7 +87,7 @@ export type InboxTarget =
   | { scope: "colab"; colabId: string; toProject: string | null };
 
 /** Where a thread goes and which project owns it. A colab takes members only, both ways */
-function placed(db: Database.Database, author: InboxAuthor, target: InboxTarget) {
+export function placed(db: Database.Database, author: InboxAuthor, target: InboxTarget) {
   if (target.scope === "personal") return { scopeId: null, toProject: null, owner: null };
   if (target.scope === "project") {
     return { scopeId: target.projectId, toProject: null, owner: target.projectId };
@@ -140,6 +140,13 @@ export function openThread(
   const thread = getThread(db, key, null) as InboxThread;
   notifyInboxChanged();
   return { thread, similarClosed: similarClosed(db, author, thread) };
+}
+
+export function openThreadOrThrow(db: Database.Database, key: string): InboxThread {
+  const thread = getThread(db, key, null);
+  if (!thread) throw new InboxError(`No inbox thread ${key}`);
+  if (isInboxClosed(thread.status)) throw new InboxError(`${key} is closed`);
+  return thread;
 }
 
 export function replyTo(

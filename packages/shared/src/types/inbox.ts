@@ -24,6 +24,8 @@ export interface InboxThread {
   status: InboxStatus;
   resolution: string | null;
   ownerProject: string | null;
+  /** The thread this one was forwarded from, closed when it was */
+  forwardedFrom: string | null;
   openedAt: number;
   lastActivityAt: number;
   refs: string[];
