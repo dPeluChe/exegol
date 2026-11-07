@@ -1,14 +1,13 @@
 import type { AgentStatus, Project, ProjectGroup, ProjectShape } from "@exegol/shared";
 import { Button, cn, Tooltip, TooltipContent, TooltipTrigger } from "@exegol/ui";
-import { useQuery } from "@tanstack/react-query";
 import { ArrowLeft, Clock, Cuboid, FolderGit2, GitBranch, Pause, Plus, Search } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useProjectShapes } from "../../hooks/use-project-shapes";
 import { useProjects } from "../../hooks/use-trpc";
 import { useProjectGroups } from "../../hooks/use-trpc-project-groups";
 import { formatTimeAgo, tailPath } from "../../lib/format";
 import { appKeys } from "../../lib/keymap";
 import { shortcutLabel, useProjectShortcuts } from "../../lib/live-tabs";
-import { trpcInvoke } from "../../lib/trpc-client";
 import { isLiveAgent, useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import { ProjectAvatar } from "../common/ProjectAvatar";
@@ -181,11 +180,7 @@ export function ProjectList() {
   const liveCounts = useLiveCounts();
   const shortcuts = useProjectShortcuts();
   const groupById = useMemo(() => new Map(groups?.map((g) => [g.id, g])), [groups]);
-  const { data: shapes } = useQuery({
-    queryKey: ["projectShapes"],
-    queryFn: () => trpcInvoke<Record<string, ProjectShape>>("projects.shapes"),
-    staleTime: 5 * 60_000,
-  });
+  const shapes = useProjectShapes();
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
   const shown = q ? (projects ?? []).filter((p) => matches(p, q)) : (projects ?? []);

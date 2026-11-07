@@ -2,6 +2,7 @@ import { activitiesRouter } from "./procedures/activities";
 import { agentRouter } from "./procedures/agents";
 import { apiKeysRouter } from "./procedures/apikeys";
 import { budgetsRouter } from "./procedures/budgets";
+import { colabsRouter } from "./procedures/colabs";
 import { diagnosticsRouter } from "./procedures/diagnostics";
 import { dictationRouter } from "./procedures/dictation";
 import { diffRouter } from "./procedures/diff";
@@ -62,6 +63,7 @@ export const appRouter = router({
   mcp: mcpRouter,
   memory: memoryRouter,
   messages: messagesRouter,
+  colabs: colabsRouter,
   inbox: inboxRouter,
   queue: queueRouter,
   qaTests: qaTestRouter,

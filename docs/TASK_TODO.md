@@ -1430,6 +1430,16 @@ codename, not the name he gave with /rename). Read the name a CLI stores when th
 session (Claude Code `/rename` in its transcript, Codex and others where they keep one) and set it as
 the agent's alias, so panes, Company, the inbox and the sidebar use it. Check each CLI that has a rename.
 
+### T224: Commander, one session that watches the rest `added: 2026-11-07`
+**Priority**: P2 | **Effort**: L | **Source**: Antonio, 2026-11-07. A session inside Exegol that
+watches every project's sessions and tells Antonio what he missed: a question nobody answered, a
+session stuck, a turn that ended with something important. It may answer only what is safe by rule
+(a retry after an API or network error, T218), never a tool permission. It is who speaks (T222),
+and Antonio hands it points to review, which it turns into inbox threads in the right project or
+colab: the full loop. To weigh: it reads Exegol's signals (attention items, turn ends, stuck turns,
+inbox Pending) rather than every terminal, so it costs few tokens; T215 (voice orchestrator) and
+the `watch` role of T221 likely fold into it.
+
 ### T222: Exegol speaks `added: 2026-11-06`
 
 Agent replies read aloud on the machine, as an option beside dictation. No text leaves it and none reaches a log. After T217 unless Antonio moves it up.

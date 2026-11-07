@@ -396,4 +396,24 @@ export const wave3Migrations: Migration[] = [
       );
     `,
   },
+  {
+    // T217. Only a person creates a colab or changes its members. repo '' = the whole project
+    id: "w3_037_colabs",
+    sql: `
+      CREATE TABLE colabs (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE COLLATE NOCASE,
+        purpose TEXT NOT NULL DEFAULT '',
+        created_at INTEGER NOT NULL
+      );
+      CREATE TABLE colab_members (
+        colab_id TEXT NOT NULL REFERENCES colabs (id) ON DELETE CASCADE,
+        project_id TEXT NOT NULL REFERENCES projects (id) ON DELETE CASCADE,
+        repo TEXT NOT NULL DEFAULT '',
+        role TEXT NOT NULL DEFAULT '',
+        PRIMARY KEY (colab_id, project_id, repo)
+      );
+      CREATE INDEX idx_colab_members_project ON colab_members (project_id);
+    `,
+  },
 ];

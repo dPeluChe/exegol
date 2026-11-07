@@ -41,7 +41,9 @@ export const PERSON: InboxAuthor = {
   commit: null,
 };
 
-const notifyChanged = () => broadcast("inbox:changed");
+/** Colabs ride the same push: their query sits under the "inbox" key */
+export const notifyInboxChanged = () => broadcast("inbox:changed");
+const notifyChanged = notifyInboxChanged;
 
 function bounded(value: string, max: number, name: string): string {
   const text = value.trim();
