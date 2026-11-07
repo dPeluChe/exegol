@@ -17,6 +17,7 @@ import {
   SIDECAR_LOG_PATH,
   SIDECAR_PID_PATH,
   SIDECAR_VERSION,
+  sidecarCompatible,
 } from "./pty-sidecar-protocol";
 import { createSidecarLog, rotateSidecarLog } from "./sidecar-log";
 
@@ -68,6 +69,13 @@ async function tryConnect(
     if (ping.version === SIDECAR_VERSION) return "ready";
     const info = await client.listSessionsInfo().catch(() => []);
     const liveSessionIds = info.filter((s) => s.alive).map((s) => s.id);
+    if (liveSessionIds.length > 0 && sidecarCompatible(ping.version)) {
+      discoveryLog(
+        `keeping ${ping.version} for its ${liveSessionIds.length} live session(s), app ${SIDECAR_VERSION}`,
+        true,
+      );
+      return "ready";
+    }
     discoveryLog(
       `replacing ${ping.version} -> ${SIDECAR_VERSION} (${liveSessionIds.length} live session(s)), pid ${pidFile.pid}`,
       true,
@@ -216,7 +224,7 @@ export async function reconnectSidecar(): Promise<SidecarClient> {
   try {
     await client.connect(pidFile.sock);
     const ping = await withTimeout(client.ping(), 5_000, "Sidecar ping");
-    if (ping.version !== SIDECAR_VERSION) throw new Error("Sidecar version changed");
+    if (!sidecarCompatible(ping.version)) throw new Error("Sidecar version changed");
     client.pid = pidFile.pid;
     return client;
   } catch (err) {

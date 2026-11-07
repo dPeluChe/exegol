@@ -33,10 +33,12 @@ bun run rebuild:native   # Rust + rebuild node-pty for Electron
 # and an app UPDATE too — the running process keeps the old code.
 #
 # The mechanism that handles this is SIDECAR_VERSION in pty-sidecar-protocol.ts:
-# on a mismatch, discovery shuts the old sidecar down and spawns a fresh one.
+# on a mismatch, discovery shuts the old sidecar down and spawns a fresh one, unless it is compatible and has live sessions.
 # So after changing anything the sidecar bundles (the file list is in the
 # SIDECAR_VERSION comment) BUMP SIDECAR_VERSION. Skip it and the fix never loads,
-# for released users as well as in dev.
+# for released users as well as in dev. A bump alone waits: a sidecar from
+# SIDECAR_COMPATIBLE_SINCE up with live sessions stays until a launch finds none. Raise
+# that too when main cannot talk to the old one or the fix must reach running sessions.
 #
 # `dev:fresh` is only the manual escape hatch for when you don't want to bump
 # (mid-debugging). Either way every live PTY dies and agents return as crashed.

@@ -33,10 +33,34 @@ export const SIDECAR_LOG_PATH = join(EXEGOL_DIR, "logs", "sidecar.log");
  *        `sidecar.shuttingDown` notice before it kills its sessions, the pid file released first
  *        and session.create refused while it shuts down (2026-10-12)
  * 1.7.1: no protocol change; test builds of 1.7.0 shipped without the shutdown notice (2026-10-13)
+ * (2026-11-06, no bump: SIDECAR_COMPATIBLE_SINCE is read only by main)
  * (2026-10-20, no bump: the Windows named pipe from lib/ipc-endpoint changes nothing on macOS or
  *  Linux, and Windows had no earlier sidecar to replace)
  */
 export const SIDECAR_VERSION = "1.7.1";
+/** RAISE THIS with a bump main cannot talk to, or a fix that must reach running sessions. Any
+ *  older sidecar is replaced at once, ending its PTYs. From here up one with live sessions stays
+ *  until a launch finds none: a bump alone reaches released users only then */
+export const SIDECAR_COMPATIBLE_SINCE = "1.7.1";
+
+const versionParts = (version: string) => version.split(".").map(Number);
+
+/** Pure: main can drive a sidecar of this version (never newer than the app's) */
+export function sidecarCompatible(
+  version: string,
+  since = SIDECAR_COMPATIBLE_SINCE,
+  current = SIDECAR_VERSION,
+): boolean {
+  const compare = (a: string, b: string) => {
+    const [x, y] = [versionParts(a), versionParts(b)];
+    for (let i = 0; i < Math.max(x.length, y.length); i++) {
+      const diff = (x[i] ?? 0) - (y[i] ?? 0);
+      if (diff !== 0) return diff;
+    }
+    return 0;
+  };
+  return compare(version, since) >= 0 && compare(version, current) <= 0;
+}
 
 // ─── Timeouts ───────────────────────────────────────────────────────────
 
