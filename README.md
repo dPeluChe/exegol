@@ -51,7 +51,7 @@ several in parallel, across projects, without losing track.
 - Watching: pin sessions and follow them as live terminals side by side.
 
 **Coordination**
-- An Exegol MCP server for every agent: shared memory, messages between agents and file claims
+- An Exegol MCP server for every agent: inbox, notes, messages between agents and file claims
   so two agents do not edit the same paths.
 - Pipelines: agents in sequence on a shared worktree, with review and fix loops and evaluator
   gates.
@@ -120,7 +120,7 @@ Intel Macs and Windows have no release yet. Once installed, the app checks GitHu
 downloads updates and offers to restart from the title bar, with the release notes.
 
 **Requirements**: at least one coding CLI installed and signed in. Optional: `gh` (pull requests,
-Watch PR), [Ollama](https://ollama.com/) (semantic memory recall), an Anthropic API key (AI commit
+Watch PR), an Anthropic API key (AI commit
 messages, run scoring, pipeline evaluators).
 
 ## Quick start
@@ -161,8 +161,8 @@ Release steps: [docs/GUIDES/RELEASE.md](docs/GUIDES/RELEASE.md).
 
 Exegol is local first. There is no account and no telemetry.
 
-- Your data (projects, sessions, memory, settings) lives in a local SQLite database and in
-  `~/.exegol`.
+- Your data (projects, sessions, settings) lives in a local SQLite database and in
+  `~/.exegol`, notes as Markdown files in `~/.exegol/notes`.
 - Dictation runs on your machine: audio never leaves it and is never saved. Models are
   downloaded only when you ask, from the sherpa-onnx releases on GitHub, and checked against a
   pinned SHA-256.

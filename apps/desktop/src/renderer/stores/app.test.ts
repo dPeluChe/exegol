@@ -124,7 +124,7 @@ describe("workspace section", () => {
     app.openDashboard();
     app.setActiveProject("q");
     expect(useAppStore.getState().workspaceSection).toBe("agents");
-    app.setWorkspaceSection("memory");
+    app.setWorkspaceSection("notes");
     app.openDashboard();
     app.setActiveView("workspace");
     expect(useAppStore.getState().workspaceSection).toBe("agents");

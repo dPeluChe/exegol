@@ -27,7 +27,7 @@ vi.mock("./spawn-env", () => ({
   loginShell: () => process.env.SHELL || "/bin/zsh",
 }));
 vi.mock("./spawn-context", () => ({
-  buildSpawnContext: () => ({ contextPrefix: "" }),
+  buildSpawnContext: () => "",
   buildShellCommand: (
     _registry: unknown,
     _agent: unknown,

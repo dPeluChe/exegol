@@ -1,10 +1,7 @@
 import { randomBytes } from "node:crypto";
 import type { Agent, AgentAccessMode, AgentCreate } from "@exegol/shared";
-import type Database from "libsql";
-import { buildKnowledgeContext } from "../knowledge/context";
 import { logger } from "../lib/logger";
 import { getMcpHost } from "../mcp/host";
-import { buildMemoryContext, getMemoriesForInjection } from "../memory/store";
 import { discoverSkills } from "../skills/discovery";
 import type { AgentProviderRegistry } from "./registry";
 import { quoteArg, type ShellKind } from "./shell-dialect";
@@ -15,14 +12,6 @@ const ACCESS_MODE_PREFIXES: Record<string, string> = {
   read: "[IMPORTANT: READ-ONLY MODE] You are running in explore-only mode. Do NOT write, edit, or create any files. Only read, search, and analyze the codebase. Report your findings but make no changes.\n\n",
   plan: "[IMPORTANT: PLAN-ONLY MODE] You are running in plan mode. Analyze the codebase and produce a detailed implementation plan, but do NOT write, edit, or create any files. Output your plan as structured text.\n\n",
 };
-
-interface SpawnContextResult {
-  memoryContext: string;
-  mcpContext: string;
-  skillContext: string;
-  knowledgeContext: string;
-  contextPrefix: string;
-}
 
 // ─── T127: Progressive disclosure skills ──────────────────────────────────
 //
@@ -62,7 +51,7 @@ export function buildSkillContext(projectPath: string, requestedNames?: string[]
 }
 
 /**
- * Build the full context payload (memory, MCP tools, skills) to inject
+ * Build the context payload (MCP tools, skills) to inject
  * into an agent's task prompt. Each source is non-fatal: a failure logs
  * and yields an empty section, never blocks the spawn.
  *
@@ -70,29 +59,9 @@ export function buildSkillContext(projectPath: string, requestedNames?: string[]
  * picker in SpawnAgentModal and the injected content always agree, regardless
  * of the worktree the agent runs in.
  */
-export function buildSpawnContext(
-  db: Database.Database,
-  projectId: string,
-  config: AgentCreate,
-  projectPath: string,
-): SpawnContextResult {
-  let memoryContext = "";
+export function buildSpawnContext(config: AgentCreate, projectPath: string): string {
   let mcpContext = "";
   let skillContext = "";
-  let knowledgeContext = "";
-
-  try {
-    knowledgeContext = buildKnowledgeContext(projectPath);
-  } catch (err) {
-    logger.warn("[SpawnContext] Failed to build knowledge context:", err);
-  }
-
-  try {
-    // Bounded by getMemoriesForInjection's token budget (~2000 tokens).
-    memoryContext = buildMemoryContext(getMemoriesForInjection(db, projectId));
-  } catch (err) {
-    logger.warn("[SpawnContext] Failed to build memory context:", err);
-  }
 
   try {
     mcpContext = getMcpHost().buildToolContext();
@@ -106,10 +75,7 @@ export function buildSpawnContext(
     logger.warn("[SpawnContext] Failed to build skill context:", err);
   }
 
-  const contextPrefix = [memoryContext, mcpContext, skillContext, knowledgeContext]
-    .filter(Boolean)
-    .join("\n");
-  return { memoryContext, mcpContext, skillContext, knowledgeContext, contextPrefix };
+  return [mcpContext, skillContext].filter(Boolean).join("\n");
 }
 
 /**

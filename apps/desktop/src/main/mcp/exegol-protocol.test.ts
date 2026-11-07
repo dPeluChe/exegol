@@ -3,13 +3,13 @@ import { encodeRequest, encodeResponse } from "./exegol-protocol";
 
 describe("encodeRequest / encodeResponse", () => {
   it("round-trips a newline-terminated request through JSON.parse", () => {
-    const line = encodeRequest(1, "call_tool", { tool: "memory_search" });
+    const line = encodeRequest(1, "call_tool", { tool: "inbox_list" });
     expect(line.endsWith("\n")).toBe(true);
     expect(JSON.parse(line.trim())).toEqual({
       jsonrpc: "2.0",
       id: 1,
       method: "call_tool",
-      params: { tool: "memory_search" },
+      params: { tool: "inbox_list" },
     });
   });
 

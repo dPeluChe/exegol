@@ -114,8 +114,8 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
   command matches how the running copy was installed; Settings > CLIs lists duplicate installs
   and how to remove the extras; a CLI that updated itself offers Restart session.
 - **Terminal or chat view**: switch any agent between the raw terminal and a readable chat.
-- **Agent tools (MCP)**: every agent gets an Exegol MCP server: shared memory, project knowledge,
-  messages between agents, and file claims so two agents do not edit the same paths.
+- **Agent tools (MCP)**: every agent gets an Exegol MCP server: inbox, notes, messages between
+  agents, and file claims so two agents do not edit the same paths.
 
 ## Dashboard
 
@@ -175,8 +175,8 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
   gates (ship, hold or retry) and an exported evidence report.
 - **Parallel runs**: several agents on the same task, compared side by side.
 - **Prompts and skills**: reusable prompts and personas injected when an agent starts.
-- **Memory and Knowledge**: facts agents save (recalled by relevance), and an opt-in project
-  brief kept in `.exegol/knowledge/`.
+- **Notes**: what agents and you keep for later sessions (decisions, reminders, what was tried),
+  as Markdown files per project, colab and personal under `~/.exegol/notes`, in Project > Context.
 - **Lifecycle scripts**: `.exegol/lifecycle.yaml` runs setup, before-agent, after-commit and
   teardown hooks.
 - Built but not in the UI yet: the scheduler (cron tasks) and semantic search over the code.

@@ -18,8 +18,6 @@ export default defineConfig({
         "src/main/agents/spawn-env.ts",
         "src/main/agents/status-parser.ts",
         "src/main/terminal/ring-buffer.ts",
-        "src/main/memory/extractor.ts",
-        "src/main/memory/store.ts",
         "src/main/pipeline/context.ts",
       ],
       reportsDirectory: "../../coverage",

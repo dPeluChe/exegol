@@ -21,7 +21,6 @@ import { useWorkspaceStore } from "../stores/workspace";
 export * from "./use-trpc-budgets";
 export * from "./use-trpc-diff-comments";
 export * from "./use-trpc-github";
-export * from "./use-trpc-memory";
 export * from "./use-trpc-pipeline";
 export * from "./use-trpc-project-groups";
 export * from "./use-trpc-resources";

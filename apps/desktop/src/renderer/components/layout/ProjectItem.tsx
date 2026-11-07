@@ -404,7 +404,7 @@ export function ProjectItem({
         open={confirmRemove}
         onOpenChange={setConfirmRemove}
         title="Remove project"
-        description={`Remove "${project.name}" from Exegol? Its session history, scores and memories are deleted. Files on disk are not touched.`}
+        description={`Remove "${project.name}" from Exegol? Its session history and scores are deleted. Files on disk are not touched.`}
         confirmLabel="Remove"
         variant="destructive"
         onConfirm={() =>

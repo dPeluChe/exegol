@@ -36,7 +36,6 @@ vi.mock("../agents/worktrees", () => ({
   prepareNewWorktree: vi.fn(() => ({ copied: Promise.resolve(), done: Promise.resolve() })),
 }));
 vi.mock("../hooks/project-hooks", () => ({ runSetupHook: vi.fn(async () => {}) }));
-vi.mock("../knowledge/context", () => ({ buildKnowledgeContext: () => "" }));
 vi.mock("./oplog-snapshots", () => ({
   prepareStepSnapshot: () => null,
   commitStepSnapshot: vi.fn(),

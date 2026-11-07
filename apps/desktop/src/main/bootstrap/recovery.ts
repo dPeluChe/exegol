@@ -44,27 +44,6 @@ export function cleanupStaleData(): void {
   } catch (err) {
     logger.warn("[Startup] Could not clean shell terminals:", err);
   }
-  try {
-    const cleaned = getDb()
-      .prepare(
-        `DELETE FROM memories WHERE
-          content LIKE '%' || X'1B' || '%'
-          OR content LIKE '%' || X'0D' || '%'
-          OR content LIKE '%bun install%'
-          OR content LIKE '%npm install%'
-          OR content LIKE '%yarn add%'
-          OR content LIKE '%pip install%'
-          OR content LIKE '%packages installed%'
-          OR content LIKE '%Update now%'
-          OR content LIKE '%Skip until next%'`,
-      )
-      .run();
-    if (cleaned.changes > 0) {
-      logger.info(`[Startup] Cleaned ${cleaned.changes} ANSI-contaminated memories`);
-    }
-  } catch {
-    /* table may not exist yet */
-  }
 }
 
 /** The sidecar stopped under the running app: a fresh one for the resumes, then the renderer

@@ -158,21 +158,7 @@ describe("buildStepPrompt", () => {
     expect(prompt).toContain("Reminder: Refactor");
   });
 
-  it("should interpolate {{knowledge}} variable (T140)", () => {
-    const step = makeStep({
-      promptTemplate: "Context:\n{{knowledge}}\n\nTask: {{task}}",
-    });
-    const prompt = buildStepPrompt(step, {
-      task: "Add feature",
-      diff: "",
-      previousOutput: "",
-      iteration: 0,
-      knowledge: "# Project Knowledge\n\n- read PROJECT.md",
-    });
-    expect(prompt).toContain("read PROJECT.md");
-  });
-
-  it("should replace {{knowledge}} with empty string when omitted", () => {
+  it("drops {{knowledge}} from a template saved before it retired", () => {
     const step = makeStep({
       promptTemplate: "Context:[{{knowledge}}]",
     });

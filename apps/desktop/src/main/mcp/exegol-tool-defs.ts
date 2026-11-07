@@ -1,4 +1,3 @@
-import { MEMORY_CATEGORIES } from "@exegol/shared";
 import {
   BROWSER_READ_TOOLS,
   BROWSER_TOOL_DEFS,
@@ -12,10 +11,6 @@ import { NOTES_TOOL_DEFS, NOTES_TOOLS } from "./notes-tool-defs";
 export type ExegolAccessMode = "read" | "plan" | "write";
 
 export const EXEGOL_TOOL_NAMES = [
-  "memory_search",
-  "memory_list",
-  "memory_save",
-  "knowledge_get",
   "agents_list",
   "agent_send",
   "message_status",
@@ -34,10 +29,7 @@ export type ExegolToolName = (typeof EXEGOL_TOOL_NAMES)[number];
 
 /** Tools a read/plan agent may still call — everything else needs write access.
  *  Messaging (T157) is not a repo write: read/plan agents may coordinate too. */
-export const SEARCH_ONLY_TOOLS = new Set<ExegolToolName>([
-  "memory_search",
-  "memory_list",
-  "knowledge_get",
+export const NON_WRITE_TOOLS = new Set<ExegolToolName>([
   "agents_list",
   "agent_send",
   "message_status",
@@ -55,66 +47,9 @@ export const SEARCH_ONLY_TOOLS = new Set<ExegolToolName>([
   ...BROWSER_READ_TOOLS,
 ]);
 
-const MEMORY_CATEGORY_VALUES = [...MEMORY_CATEGORIES];
-
 const OWN_TOOLS: ToolBody<ExegolToolName>[] = [
   ...INBOX_TOOL_DEFS,
   ...NOTES_TOOL_DEFS,
-  {
-    name: "memory_search",
-    title: "Search project memory",
-    description: "Hybrid RRF search over this project's memory store. Returns top facts.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        query: { type: "string" },
-        category: { type: "string", enum: MEMORY_CATEGORY_VALUES },
-      },
-      required: ["query"],
-    },
-  },
-  {
-    name: "memory_list",
-    title: "List project memory",
-    description:
-      "List this project's most relevant memories (no query needed — use this to see " +
-      "what the store knows). Optional category filter and limit (default 10, max 30).",
-    inputSchema: {
-      type: "object",
-      properties: {
-        limit: { type: "number" },
-        category: { type: "string", enum: MEMORY_CATEGORY_VALUES },
-      },
-    },
-  },
-  {
-    name: "memory_save",
-    title: "Save to project memory",
-    description:
-      "Record a fact into this project's memory store. The store decides whether to " +
-      "reinforce an existing fact, supersede a contradicting one, or create a new entry.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        fact: { type: "string", maxLength: 4_000 },
-        category: { type: "string", enum: MEMORY_CATEGORY_VALUES },
-      },
-      required: ["fact", "category"],
-    },
-  },
-  {
-    name: "knowledge_get",
-    title: "Read project knowledge",
-    description:
-      "Read this project's knowledge base. `section` is 'brief' (PROJECT.md) or " +
-      "'digest' (auto-generated structure summary); omit for both.",
-    inputSchema: {
-      type: "object",
-      properties: {
-        section: { type: "string", enum: ["brief", "digest"] },
-      },
-    },
-  },
   {
     name: "agents_list",
     title: "List agents",
@@ -283,11 +218,8 @@ const OWN_TOOLS: ToolBody<ExegolToolName>[] = [
   },
 ];
 
-// Narrower than SEARCH_ONLY_TOOLS: those change no repo files, these change nothing at all
+// Narrower than NON_WRITE_TOOLS: those change no repo files, these change nothing at all
 const READ_ONLY = new Set<ExegolToolName>([
-  "memory_search",
-  "memory_list",
-  "knowledge_get",
   "agents_list",
   "message_status",
   "list_claims",
@@ -319,5 +251,5 @@ export function getToolDefsForAccessMode(
     ? EXEGOL_TOOL_DEFS
     : EXEGOL_TOOL_DEFS.filter((t) => t.name !== "browser_eval");
   if (accessMode === "write") return tools;
-  return tools.filter((t) => SEARCH_ONLY_TOOLS.has(t.name));
+  return tools.filter((t) => NON_WRITE_TOOLS.has(t.name));
 }

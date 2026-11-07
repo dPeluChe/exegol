@@ -15,7 +15,6 @@ export * from "./github";
 export * from "./ide";
 export * from "./inbox";
 export * from "./mcp";
-export * from "./memory";
 export * from "./models";
 export * from "./notes";
 export * from "./pipeline";

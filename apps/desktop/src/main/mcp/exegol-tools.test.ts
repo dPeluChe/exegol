@@ -1,20 +1,12 @@
-import { existsSync, mkdtempSync, realpathSync, rmSync } from "node:fs";
+import { mkdtempSync, realpathSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import Database from "libsql";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runMigrations } from "../db/migrations";
-import { ensureProjectBrief } from "../knowledge/brief";
-import { refreshDigest } from "../knowledge/staleness";
 import type { ExegolToolContext } from "./exegol-protocol";
 import { EXEGOL_TOOL_DEFS, getToolDefsForAccessMode } from "./exegol-tool-defs";
 import { callExegolTool, ExegolToolError } from "./exegol-tools";
-
-// The internal digest, never the real trs (it would record each call in ~/.trs history)
-vi.mock("../agents/spawn-env", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../agents/spawn-env")>()),
-  findOnPath: () => null,
-}));
 
 function makeContext(overrides: Partial<ExegolToolContext> = {}): ExegolToolContext {
   return { agentId: "agent-1", accessMode: "write", projectId: "proj-1", ...overrides };
@@ -46,14 +38,14 @@ describe("exegol-tools", () => {
       expect(getToolDefsForAccessMode("write")).toEqual(EXEGOL_TOOL_DEFS);
     });
 
-    it("hides memory_save for read/plan access", () => {
+    it("hides the browser's write tools for read/plan access, keeps notes and inbox", () => {
       const readTools = getToolDefsForAccessMode("read").map((t) => t.name);
-      expect(readTools).toContain("memory_search");
-      expect(readTools).toContain("knowledge_get");
-      expect(readTools).not.toContain("memory_save");
+      expect(readTools).toContain("note_write");
+      expect(readTools).toContain("inbox_post");
+      expect(readTools).not.toContain("browser_click");
 
       const planTools = getToolDefsForAccessMode("plan").map((t) => t.name);
-      expect(planTools).not.toContain("memory_save");
+      expect(planTools).not.toContain("browser_click");
     });
   });
 
@@ -92,77 +84,6 @@ describe("exegol-tools", () => {
       await expect(
         callExegolTool(db, "agent_link", { target: "term" }, makeContext()),
       ).rejects.toThrow("plain terminal");
-    });
-
-    it("memory_save creates a fact attributed to the calling agent", async () => {
-      const result = (await callExegolTool(
-        db,
-        "memory_save",
-        { fact: "Uses pnpm for package management", category: "convention" },
-        makeContext(),
-      )) as { id: string };
-
-      expect(result.id).toBeTruthy();
-      const row = db
-        .prepare("SELECT source_agent_id FROM memories WHERE id = ?")
-        .get(result.id) as {
-        source_agent_id: string;
-      };
-      expect(row.source_agent_id).toBe("agent-1");
-    });
-
-    it("memory_search finds a previously saved fact", async () => {
-      await callExegolTool(
-        db,
-        "memory_save",
-        { fact: "Prefer bun over npm for this repo", category: "preference" },
-        makeContext(),
-      );
-
-      const result = (await callExegolTool(
-        db,
-        "memory_search",
-        { query: "bun" },
-        makeContext({ accessMode: "read" }),
-      )) as { facts: Array<{ content: string }> };
-
-      expect(result.facts.some((f) => f.content.includes("bun"))).toBe(true);
-    });
-
-    it("knowledge_get is read-only: uninitialized project returns nulls, writes nothing", async () => {
-      const result = (await callExegolTool(
-        db,
-        "knowledge_get",
-        {},
-        makeContext({ accessMode: "read" }),
-      )) as { brief: string | null; digest: string | null };
-      expect(result.brief).toBeNull();
-      expect(result.digest).toBeNull();
-      // The read must not have created the knowledge dir in the repo.
-      expect(existsSync(join(projectPath, ".exegol", "knowledge"))).toBe(false);
-    });
-
-    it("knowledge_get returns the brief and digest once initialized", async () => {
-      ensureProjectBrief(projectPath);
-      await refreshDigest(projectPath);
-      const result = (await callExegolTool(db, "knowledge_get", {}, makeContext())) as {
-        brief: string;
-        digest: string;
-      };
-      expect(result.brief).toContain("What it does");
-      expect(result.digest).toContain("Codebase Digest");
-    });
-
-    it("knowledge_get respects the section filter", async () => {
-      ensureProjectBrief(projectPath);
-      const result = (await callExegolTool(
-        db,
-        "knowledge_get",
-        { section: "brief" },
-        makeContext({ accessMode: "read" }),
-      )) as { brief?: string; digest?: string };
-      expect(result.brief).toBeTruthy();
-      expect(result.digest).toBeUndefined();
     });
   });
 
