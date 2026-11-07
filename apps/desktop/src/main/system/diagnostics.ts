@@ -1,17 +1,9 @@
-import {
-  closeSync,
-  existsSync,
-  openSync,
-  readSync,
-  rmSync,
-  statSync,
-  writeFileSync,
-} from "node:fs";
-import { homedir, type as osType, release, tmpdir } from "node:os";
+import { closeSync, existsSync, openSync, readSync, statSync } from "node:fs";
+import { homedir, type as osType, release } from "node:os";
 import { join } from "node:path";
 import type { BugDiagnostics } from "@exegol/shared";
 import type Database from "libsql";
-import { execFileAsync } from "../lib/exec-file";
+import { ghCreateIssue, ghSignedIn } from "../integrations/github/gh";
 import { flushLogSync, LOG_DIR } from "../lib/logger";
 import { EXEGOL_REPO_SLUG, EXEGOL_REPO_URL } from "../lib/repo";
 import { SIDECAR_LOG_PATH, SIDECAR_VERSION } from "../terminal/pty-sidecar-protocol";
@@ -211,15 +203,6 @@ export async function collectDiagnostics(
 }
 
 /** `gh` present AND signed in: only then can it file the issue itself. */
-async function ghCanFile(): Promise<boolean> {
-  try {
-    await execFileAsync("gh", ["auth", "status"], { timeout: 5_000 });
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 /**
  * File the report: through `gh` when it is signed in (the full diagnostics fit
  * in the issue), otherwise a prefilled new-issue URL, since a URL can only carry
@@ -235,19 +218,10 @@ export async function fileBugReport(
   const text = redact(diag.text);
   const title = `[bug] ${(said.split("\n")[0] || diag.lastError || "Report from Exegol").slice(0, 100)}`;
 
-  if (await ghCanFile()) {
-    const file = join(tmpdir(), `exegol-bug-${Date.now()}.md`);
-    writeFileSync(file, [said, text].filter(Boolean).join("\n\n").slice(0, MAX_BODY));
-    try {
-      const { stdout } = await execFileAsync(
-        "gh",
-        ["issue", "create", "--repo", EXEGOL_REPO_SLUG, "--title", title, "--body-file", file],
-        { timeout: 30_000 },
-      );
-      return { url: stdout.trim().split("\n").pop() ?? EXEGOL_REPO_URL, via: "gh" };
-    } finally {
-      rmSync(file, { force: true });
-    }
+  if (await ghSignedIn()) {
+    const body = [said, text].filter(Boolean).join("\n\n").slice(0, MAX_BODY);
+    const url = await ghCreateIssue(EXEGOL_REPO_SLUG, title, body);
+    return { url: url || EXEGOL_REPO_URL, via: "gh" };
   }
 
   const body = [

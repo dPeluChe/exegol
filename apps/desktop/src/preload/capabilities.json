@@ -248,11 +248,14 @@
     ],
     "inbox": [
       "close",
+      "forward",
       "get",
+      "issueDraft",
       "lastTurn",
       "list",
       "open",
       "reply",
+      "sendAsIssue",
       "sendToSession",
       "startSession"
     ],

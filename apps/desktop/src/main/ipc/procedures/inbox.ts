@@ -4,6 +4,8 @@ import { FollowUpError } from "../../agents/follow-up-queue";
 import { checkGitRepo } from "../../agents/preflight";
 import { listThreads } from "../../db/queries/inbox";
 import { getProject } from "../../db/queries/projects";
+import { forward } from "../../inbox/forward";
+import { ISSUE_BODY_MAX, issueDraft, sendAsIssue } from "../../inbox/issue";
 import { sendToSession, startSession } from "../../inbox/send-to-session";
 import {
   close,
@@ -19,15 +21,24 @@ import { publicProcedure, router } from "../trpc";
 
 const LIST_LIMIT = 200;
 const threadId = z.object({ id: z.string() });
+const target: z.ZodType<InboxTarget> = z.discriminatedUnion("scope", [
+  z.object({ scope: z.literal("project"), projectId: z.string() }),
+  z.object({ scope: z.literal("personal") }),
+  z.object({ scope: z.literal("colab"), colabId: z.string(), toProject: z.string().nullable() }),
+]);
+
+function rethrow(err: unknown): never {
+  if (err instanceof InboxError || err instanceof FollowUpError) {
+    throw new TRPCError({ code: "BAD_REQUEST", message: err.message });
+  }
+  throw err;
+}
 
 function inboxCall<T>(run: () => T): T {
   try {
     return run();
   } catch (err) {
-    if (err instanceof InboxError || err instanceof FollowUpError) {
-      throw new TRPCError({ code: "BAD_REQUEST", message: err.message });
-    }
-    throw err;
+    rethrow(err);
   }
 }
 
@@ -85,6 +96,28 @@ export const inboxRouter = router({
   lastTurn: publicProcedure
     .input(threadId)
     .mutation(({ ctx, input }) => inboxCall(() => giveLastTurn(ctx.db, input.id))),
+
+  forward: publicProcedure
+    .input(threadId.extend({ target }))
+    .mutation(({ ctx, input }) =>
+      inboxCall(() => ({ id: forward(ctx.db, input.id, input.target).id })),
+    ),
+
+  issueDraft: publicProcedure
+    .input(threadId)
+    .query(({ ctx, input }) => issueDraft(ctx.db, input.id).catch(rethrow)),
+
+  sendAsIssue: publicProcedure
+    .input(
+      threadId.extend({
+        repo: z.string(),
+        title: z.string().max(256),
+        body: z.string().max(ISSUE_BODY_MAX),
+      }),
+    )
+    .mutation(async ({ ctx, input: { id, ...fields } }) => ({
+      url: await sendAsIssue(ctx.db, id, fields).catch(rethrow),
+    })),
 
   sendToSession: publicProcedure
     .input(threadId.extend({ agentId: z.string() }))

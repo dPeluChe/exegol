@@ -15,6 +15,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - `Cmd+.` no longer stops the focused session: one stray key ended it with no warning. Stop Agent stays in the Command Palette
 
 ### Added
+- Inbox: Forward a thread to another project, colab or Personal (the origin is kept), Save as note from any thread, and Send as issue to a GitHub repo of the project after reviewing the text.
 - Notes view in Project > Context: read, write, edit, retire, restore and delete the notes of the project, its colabs and your own, with search and the folder one click away.
 - Notes: agents keep decisions, reminders and what they tried as files under `~/.exegol/notes` (per project, colab and personal) with the `note_` tools, an index Exegol writes, and limits; a starting session is told the project's note titles.
 - Colab inbox: threads to a colab or to one member project, from the inbox menu or `inbox_post`; only members reach them, Send to session offers sessions in member projects, and a starting session is told its colabs.

@@ -252,11 +252,11 @@ Inbox first, for what it does. Notes come right after, and both are built before
 |---|---|---|
 | 0 | False "automatically extracted" text | Done |
 | 1 | T221 draft guard, so Send to session cannot land on what you are typing | Done |
-| 2 | Per-session instructions in the MCP handshake (a prompt would start a turn, so resume and quick launch get them there). Inbox in project and personal scope: threads, closing, refs, Colabs tab with Pending, Company badge, top bar menu, Send to session | 1-2 weeks |
-| 3 | Colabs: created in the tab, members, gate, their inbox (moved ahead of notes on 2026-11-07: the inbox between projects needs them to be tested) | 3-5 days |
-| 4 | Notes in project, colab and personal scope: tools, index, limits, view, the told block; Memory and Knowledge retire | 1 week |
+| 2 | Per-session instructions in the MCP handshake (a prompt would start a turn, so resume and quick launch get them there). Inbox in project and personal scope: threads, closing, refs, Colabs tab with Pending, Company badge, top bar menu, Send to session | Done |
+| 3 | Colabs: created in the tab, members, gate, their inbox (moved ahead of notes on 2026-11-07: the inbox between projects needs them to be tested) | Done |
+| 4 | Notes in project, colab and personal scope: tools, index, limits, view, the told block; Memory and Knowledge retire | Done |
 | 5 | **Measure on Irma and the blueprint, across Claude Code, Codex and Devin**: do they write, do they close, is it worth keeping | A week of use |
-| 6 | Forward, Send as issue | 2-3 days |
+| 6 | Forward, Save as note, Send as issue | Done |
 | 7 | Capture: `exegol inbox add`, `exegol://capture`, browser extension; research the system right click | 1 week |
 | 8 | Phone, review pass: only if asked for | Unknown |
 

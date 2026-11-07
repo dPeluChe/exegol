@@ -55,6 +55,7 @@ function toThread(row: Record<string, unknown>): InboxThread {
     status: row.status as InboxStatus,
     resolution: (row.resolution as string) ?? null,
     ownerProject: (row.owner_project as string) ?? null,
+    forwardedFrom: row.forwarded_from ? threadKey(row.forwarded_from as number) : null,
     openedAt: row.opened_at as number,
     lastActivityAt: row.last_activity_at as number,
     refs: parseJson(row.refs as string, REFS) ?? [],
@@ -141,6 +142,7 @@ export interface NewThread {
   url: string | null;
   ownerProject: string | null;
   refs: string[];
+  forwardedFrom?: string;
 }
 
 /** The new thread's id */
@@ -150,16 +152,23 @@ export function insertThread(
   body: string,
   author: InboxAuthor,
 ): string {
+  const { forwardedFrom, ...fields } = thread;
   const create = db.transaction(() => {
     const at = now();
     const { id } = db
       .prepare(
         `INSERT INTO inbox_threads
-           (scope, scope_id, to_project, title, url, owner_project, opened_at, last_activity_at, refs)
-         VALUES (@scope, @scopeId, @toProject, @title, @url, @ownerProject, @at, @at, @refs)
+           (scope, scope_id, to_project, title, url, owner_project, forwarded_from, opened_at,
+            last_activity_at, refs)
+         VALUES (@scope, @scopeId, @toProject, @title, @url, @ownerProject, @from, @at, @at, @refs)
          RETURNING id`,
       )
-      .get({ ...thread, at, refs: JSON.stringify(thread.refs) }) as { id: number };
+      .get({
+        ...fields,
+        at,
+        refs: JSON.stringify(fields.refs),
+        from: forwardedFrom ? threadRowId(forwardedFrom) : null,
+      }) as { id: number };
     appendMessage(db, id, body, author);
     return threadKey(id);
   });
@@ -241,6 +250,14 @@ export function closeThread(
   db.prepare(
     "UPDATE inbox_threads SET status = ?, resolution = ?, last_activity_at = ? WHERE id = ?",
   ).run(status, resolution, now(), threadRowId(key));
+}
+
+/** Only where none was given: an issue link must not hide the thread's own */
+export function setThreadUrl(db: Database.Database, key: string, url: string): void {
+  db.prepare("UPDATE inbox_threads SET url = COALESCE(url, ?) WHERE id = ?").run(
+    url,
+    threadRowId(key),
+  );
 }
 
 export function grantLastTurn(db: Database.Database, key: string): void {
