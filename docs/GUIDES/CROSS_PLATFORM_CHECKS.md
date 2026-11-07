@@ -1,6 +1,6 @@
 # Cross-platform checks
 
-What only a real Windows or Linux desktop can confirm. Run it on each full build. A test build needs
+What only a real Windows or Linux desktop can confirm; what a runner can check lives in `apps/desktop/src/main/system/os-contract.test.ts`. Run it on each full build. A test build needs
 no release: run `windows.yml` or `linux.yml` by hand with `test` on, and the package is kept as a run
 artifact.
 

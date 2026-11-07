@@ -35,6 +35,7 @@ import {
   quotePath,
   runAndExit,
   type ShellKind,
+  shellBaseName,
   shellKind,
   submitKey,
 } from "./shell-dialect";
@@ -519,7 +520,7 @@ export function buildPtyInvocation(
     if (mcpToken) env.EXEGOL_MCP_TOKEN = mcpToken;
   }
 
-  const shellName = userShell.split("/").pop() ?? "";
+  const shellName = shellBaseName(userShell, process.platform);
   // Marker gating also covers interactive-CLI spawns: PtyHost queues the
   // stdinCommand until the shell-ready marker (or its timeout) fires, so we
   // don't race a blind delay against shell startup.
