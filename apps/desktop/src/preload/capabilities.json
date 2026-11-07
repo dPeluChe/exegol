@@ -22,7 +22,8 @@
       "setAppearance",
       "setBrowserHosts",
       "setGroup",
-      "setWorktreeCopy"
+      "setWorktreeCopy",
+      "shapes"
     ],
     "agents": [
       "answerDialog",
