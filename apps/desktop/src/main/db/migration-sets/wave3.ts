@@ -348,4 +348,52 @@ export const wave3Migrations: Migration[] = [
     id: "w3_035_worktree_repo_path",
     sql: "ALTER TABLE worktrees ADD COLUMN repo_path TEXT;",
   },
+  {
+    // T217. agent_id and the rest are copied, no foreign keys: a message outlives its session
+    id: "w3_036_inbox",
+    sql: `
+      CREATE TABLE inbox_threads (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        scope TEXT NOT NULL CHECK (scope IN ('project', 'colab', 'personal')),
+        scope_id TEXT,
+        to_project TEXT,
+        to_repo TEXT,
+        kind TEXT NOT NULL DEFAULT 'message' CHECK (kind IN ('message', 'capture')),
+        title TEXT NOT NULL,
+        url TEXT,
+        status TEXT NOT NULL DEFAULT 'open'
+          CHECK (status IN ('open', 'in_progress', 'resolved', 'dismissed')),
+        resolution TEXT,
+        owner_project TEXT,
+        forwarded_from INTEGER,
+        opened_at INTEGER NOT NULL,
+        last_activity_at INTEGER NOT NULL,
+        last_turn INTEGER NOT NULL DEFAULT 0,
+        refs TEXT NOT NULL DEFAULT '[]'
+      );
+      CREATE INDEX idx_inbox_threads_scope ON inbox_threads (scope, scope_id, status);
+      CREATE TABLE inbox_messages (
+        thread_id INTEGER NOT NULL REFERENCES inbox_threads (id) ON DELETE CASCADE,
+        seq INTEGER NOT NULL,
+        body TEXT NOT NULL,
+        author_kind TEXT NOT NULL CHECK (author_kind IN ('user', 'agent', 'external')),
+        project_id TEXT,
+        repo TEXT,
+        agent_id TEXT,
+        cli TEXT,
+        model TEXT,
+        branch TEXT,
+        commit_sha TEXT,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (thread_id, seq)
+      );
+      CREATE INDEX idx_inbox_messages_agent ON inbox_messages (agent_id, seq);
+      CREATE TABLE inbox_reads (
+        thread_id INTEGER NOT NULL REFERENCES inbox_threads (id) ON DELETE CASCADE,
+        project_id TEXT NOT NULL,
+        last_read_seq INTEGER NOT NULL DEFAULT 0,
+        PRIMARY KEY (thread_id, project_id)
+      );
+    `,
+  },
 ];

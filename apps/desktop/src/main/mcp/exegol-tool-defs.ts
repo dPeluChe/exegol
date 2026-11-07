@@ -6,6 +6,7 @@ import {
   type ExegolToolDef,
   type ToolBody,
 } from "./browser-tool-defs";
+import { INBOX_TOOL_DEFS, INBOX_TOOLS } from "./inbox-tool-defs";
 
 export type ExegolAccessMode = "read" | "plan" | "write";
 
@@ -23,6 +24,7 @@ export const EXEGOL_TOOL_NAMES = [
   "claim_paths",
   "release_paths",
   "list_claims",
+  ...INBOX_TOOLS,
   ...BROWSER_READ_TOOLS,
   ...BROWSER_WRITE_TOOLS,
 ] as const;
@@ -45,12 +47,15 @@ export const SEARCH_ONLY_TOOLS = new Set<ExegolToolName>([
   "claim_paths",
   "release_paths",
   "list_claims",
+  // Coordination too: a thread changes nothing in the repo
+  ...INBOX_TOOLS,
   ...BROWSER_READ_TOOLS,
 ]);
 
 const MEMORY_CATEGORY_VALUES = [...MEMORY_CATEGORIES];
 
 const OWN_TOOLS: ToolBody<ExegolToolName>[] = [
+  ...INBOX_TOOL_DEFS,
   {
     name: "memory_search",
     title: "Search project memory",
@@ -282,6 +287,7 @@ const READ_ONLY = new Set<ExegolToolName>([
   "agents_list",
   "message_status",
   "list_claims",
+  "inbox_list",
 ]);
 
 export const EXEGOL_TOOL_DEFS: ExegolToolDef<ExegolToolName>[] = [
