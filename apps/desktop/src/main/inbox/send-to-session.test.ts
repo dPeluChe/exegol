@@ -3,7 +3,7 @@ import Database from "libsql";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { runMigrations } from "../db/migrations";
 import { getThread, listThreads } from "../db/queries/inbox";
-import { sendToSession } from "./send-to-session";
+import { sendToSession, startSession } from "./send-to-session";
 import {
   close,
   giveLastTurn,
@@ -150,6 +150,16 @@ describe("sendToSession", () => {
     queued.refuse = false;
     sendToSession(db, id, "b1", true);
     expect(listThreads(db, { projectId: "p2", state: "active", limit: 5 })).toHaveLength(1);
+  });
+
+  it("starts a new session on its own branch and claims the thread for that project", () => {
+    const id = post(a1, { scope: "personal" });
+
+    const { prompt, branch } = startSession(db, id, "p2", true);
+
+    expect(prompt).toContain(`inbox_get ${id}`);
+    expect(branch).toBe(`inbox/${id}`);
+    expect(getThread(db, id, "p2")?.status).toBe("in_progress");
   });
 
   it("refuses a closed thread, a thread at the limit and another project's session", () => {

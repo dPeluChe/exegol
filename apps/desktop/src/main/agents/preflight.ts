@@ -36,7 +36,7 @@ async function checkProjectPath(projectPath: string): Promise<"ok" | "missing" |
   }
 }
 
-async function checkGitRepo(projectPath: string): Promise<boolean> {
+export async function checkGitRepo(projectPath: string): Promise<boolean> {
   try {
     await access(join(projectPath, ".git"));
     return true;

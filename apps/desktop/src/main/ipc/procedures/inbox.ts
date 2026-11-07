@@ -1,9 +1,20 @@
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { FollowUpError } from "../../agents/follow-up-queue";
+import { checkGitRepo } from "../../agents/preflight";
 import { listThreads } from "../../db/queries/inbox";
-import { sendToSession } from "../../inbox/send-to-session";
-import { close, giveLastTurn, InboxError, PERSON, readThread, replyTo } from "../../inbox/threads";
+import { getProject } from "../../db/queries/projects";
+import { sendToSession, startSession } from "../../inbox/send-to-session";
+import {
+  close,
+  giveLastTurn,
+  InboxError,
+  openThread,
+  PERSON,
+  readThread,
+  replyTo,
+} from "../../inbox/threads";
+import { readsExegolMcpConfig } from "../../mcp/exegol-mcp-config";
 import { connectedAgentIds } from "../../mcp/exegol-tokens";
 import { publicProcedure, router } from "../trpc";
 
@@ -38,6 +49,19 @@ export const inboxRouter = router({
     .input(threadId)
     .query(({ ctx, input }) => inboxCall(() => readThread(ctx.db, PERSON, input.id, 0))),
 
+  open: publicProcedure
+    .input(z.object({ title: z.string(), body: z.string(), projectId: z.string().nullable() }))
+    .mutation(({ ctx, input }) =>
+      inboxCall(() => {
+        const { title, body, projectId } = input;
+        const target = projectId
+          ? ({ scope: "project", projectId } as const)
+          : ({ scope: "personal" } as const);
+        const fields = { title, body, url: null, refs: [] };
+        return { id: openThread(ctx.db, PERSON, target, fields).thread.id };
+      }),
+    ),
+
   reply: publicProcedure
     .input(threadId.extend({ body: z.string() }))
     .mutation(({ ctx, input }) => inboxCall(() => replyTo(ctx.db, PERSON, input.id, input.body))),
@@ -59,4 +83,16 @@ export const inboxRouter = router({
         sendToSession(ctx.db, input.id, input.agentId, connectedAgentIds().has(input.agentId)),
       ),
     ),
+
+  startSession: publicProcedure
+    .input(threadId.extend({ projectId: z.string(), cliType: z.string() }))
+    .mutation(async ({ ctx, input }) => {
+      const { id, projectId, cliType } = input;
+      const path = getProject(ctx.db, projectId)?.path;
+      const useWorktree = !!path && (await checkGitRepo(path));
+      return {
+        ...inboxCall(() => startSession(ctx.db, id, projectId, readsExegolMcpConfig(cliType))),
+        useWorktree,
+      };
+    }),
 });

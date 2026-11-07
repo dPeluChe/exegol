@@ -1,4 +1,7 @@
 export const INBOX_TURN_LIMIT = 6;
+export const INBOX_TITLE_MAX = 120;
+export const INBOX_BODY_MAX = 8_000;
+export const INBOX_RESOLUTION_MAX = 200;
 
 export type InboxScope = "project" | "colab" | "personal";
 export type InboxStatus = "open" | "in_progress" | "resolved" | "dismissed";

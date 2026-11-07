@@ -1,6 +1,5 @@
 import type {
   AgentCliType,
-  AgentProvider,
   GitHubCi,
   GitHubOpenIssue,
   GitHubOverview,
@@ -15,7 +14,7 @@ import { useDismiss } from "../../hooks/use-dismiss";
 import { useLaunchableProviders } from "../../hooks/use-providers";
 import { useFullGitHubOverview, useGitHubOverview } from "../../hooks/use-trpc-github";
 import { sessionName } from "../../lib/agent-label";
-import { startTaskInNewTab, taskLabel } from "../../lib/github-handoff";
+import { startTaskInNewTab, takesPrompt, taskLabel } from "../../lib/github-handoff";
 import {
   groupByRepo,
   reposNotShown,
@@ -37,9 +36,6 @@ const CI_DOT: Record<GitHubCi, string> = {
   passing: "bg-success",
   none: "bg-text-muted/40",
 };
-
-// A provider that cannot take a prompt at launch would start without the task
-const takesTask = (p: AgentProvider) => p.capabilities.supportsPromptArg;
 
 type Menu = "closed" | "list" | GitHubTaskRef;
 
@@ -308,7 +304,7 @@ function TargetPicker({
   onDone: () => void;
 }) {
   const sessions = sessionsInRepoFirst(useProjectAgents(projectId, isOpenSession), repoSessions);
-  const clis = useLaunchableProviders().filter(takesTask);
+  const clis = useLaunchableProviders().filter(takesPrompt);
   const [busy, setBusy] = useState(false);
   const label = taskLabel(task);
   const repoName = task.repo.folder || task.repo.name;
