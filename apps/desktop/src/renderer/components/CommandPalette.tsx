@@ -211,7 +211,6 @@ function useCommands(close: () => void, open: boolean): Command[] {
         label: "Stop Focused Agent",
         category: "agent",
         icon: Square,
-        shortcut: "⌘.",
         action: run(() => useAgentStore.getState().stopFocusedAgent()),
       },
 
