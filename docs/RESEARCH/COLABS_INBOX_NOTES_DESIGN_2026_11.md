@@ -250,9 +250,9 @@ Inbox first, for what it does. Notes come right after, and both are built before
 
 | Step | Content | Estimate |
 |---|---|---|
-| 0 | Spawn context on resume and quick launch; false "automatically extracted" text | 1 day |
+| 0 | False "automatically extracted" text | Done |
 | 1 | T221 draft guard, so Send to session cannot land on what you are typing | 2-3 days |
-| 2 | Inbox in project and personal scope: threads, closing, refs, Colabs tab with Pending, Company badge, top bar menu, Send to session | 1-2 weeks |
+| 2 | Per-session instructions in the MCP handshake (a prompt would start a turn, so resume and quick launch get them there). Inbox in project and personal scope: threads, closing, refs, Colabs tab with Pending, Company badge, top bar menu, Send to session | 1-2 weeks |
 | 3 | Notes in project and personal scope: tools, index, limits, view, the told block; Memory and Knowledge retire | 1 week |
 | 4 | Colabs: created in the tab, members, gate, their inbox and notes | 3-5 days |
 | 5 | **Measure on Irma and the blueprint, across Claude Code, Codex and Devin**: do they write, do they close, is it worth keeping | A week of use |
