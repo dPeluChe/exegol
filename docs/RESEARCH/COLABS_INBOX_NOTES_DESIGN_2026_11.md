@@ -22,7 +22,7 @@ Irma's landing agent finds a bug in the blueprint
         │ it knows the colab exists
         ▼
 "Landings" inbox, addressed to the blueprint
-        │ count on the top bar
+        │ count in the top bar, Pending and Company
         ▼
 You press Send to session, or the blueprint's agent asks for it
         │ the session gets: "read inbox item inb_12"
@@ -71,7 +71,7 @@ It agrees with the earlier research: ETH's `AGENTS.md` study found instructions 
 | `colab_members` | `colab_id`, `project_id`, `repo` (optional), `role` (free text: "blueprint", "clone of it") |
 
 - **Repo matters**: "Irma Projects" and "Blueprints" are workspaces. The real members are `lizaceves-landing` and `labs-landings-base`.
-- **Only a person creates one or changes members.** An agent can never add itself.
+- **Only a person creates one or changes members**, in the Colabs tab of the Dashboard. An agent can never add itself.
 - A project may be in several.
 - `purpose` says what belongs there, and agents read it.
 
@@ -89,7 +89,7 @@ An inbox item is a **thread**, not a message: an opening message ("improvement s
 
 | Table | Columns |
 |---|---|
-| `inbox_threads` | `id`, `scope` (`project`, `colab`, `personal`) and `scope_id`, `to_project`, `to_repo`, `kind`, `title`, `url`, `status`, `resolution`, `owner_project`, `forwarded_from`, `opened_at`, `last_activity_at`, `agent_turns` |
+| `inbox_threads` | `id`, `scope` (`project`, `colab`, `personal`) and `scope_id`, `to_project`, `to_repo`, `kind`, `title`, `url`, `status`, `resolution`, `owner_project`, `forwarded_from`, `opened_at`, `last_activity_at`, `agent_turns`, `last_turn` |
 | `inbox_messages` | `id`, `thread_id`, `seq`, `body`, `author_kind` (`user`, `agent`, `external`), `project_id`, `repo`, `agent_id`, `cli`, `model`, `branch`, `commit`, `created_at` |
 | `inbox_reads` | `thread_id`, `project_id`, `last_read_seq` |
 
@@ -104,17 +104,40 @@ Each message says where it came from: which project and repo, which session, whi
 Threads between agents are where this can run away: two agents can keep answering each other at your expense. Four rules:
 
 1. **A message never wakes a session.** A reply waits like everything else. An agent reads it when a person hands it over, or when it starts and asks. Two idle sessions cannot talk on their own. This is the main brake.
-2. **Turn limit.** After 6 agent messages in a row with no person, the thread shows "needs you" and `inbox_reply` refuses until a person replies or closes it. The number is a first guess.
-3. **Only people in the scope reply**: members of the colab, or the project itself.
-4. **Idle threads are flagged, not closed.** After 14 days without activity the menu offers Close. Nothing closes alone.
+2. **Turn limit.** At 6 agent messages the thread shows "needs you" and `inbox_reply` refuses. You choose: **Close**, or **One last turn**, which lets one more agent message through so it can wrap up, and then the thread waits for you to close it. Your own messages do not count and do not reset the limit.
+3. **Only members reply**: the projects of the colab, or the project itself on a project thread. You can add a message to any thread.
+4. **Nothing closes alone.** A thread with no activity stays in Pending until you act on it.
+
+### Pending
+
+Since a message wakes nobody, a thread can sit there because you never handed it to a session. Pending is the list that catches that: which agent you still have to reactivate.
+
+A thread is pending while it is open or in progress and someone has not answered. It is derived, not stored: it waits on whoever did not write last, the owner or the opener. A thread that waits on a person, or a personal one, waits on you.
+
+| State | Meaning | Actions |
+|---|---|---|
+| **Not read** | The project it waits on never read the last message | Send to session, New tab |
+| **Read, no reply** | A session read it and wrote nothing back | Send to session, Reply |
+| **Needs you** | At the turn limit, or waiting on your answer | Close, One last turn, Reply |
+
+Oldest first, each with the project it waits on and its age. There is no day threshold: a thread is pending from the moment it waits.
 
 ### Tools
 
 `inbox_post` (opens a thread), `inbox_reply`, `inbox_list`, `inbox_get`, `inbox_take` (`in_progress`, compare-and-swap), `inbox_close`. `inbox_get` takes `since_seq`, so a session reads only what is new, and a long thread costs little.
 
-### The button
+### Where you see it
 
-A top bar menu next to GitHub, built on the same pattern: count of open threads with something new, by scope, filter by status. A thread at its turn limit is the one thing marked as needing you.
+**Colabs tab.** The Dashboard gets a tab next to Company. It is where the relation between colabs, threads and notes is seen:
+
+- **Pending** first, across every project, colab and personal scope.
+- **Colabs**: create one, set its purpose and members. Each shows its threads, its notes and how many are pending.
+- A selected thread reads in full, with who wrote each message, and has the actions below.
+- Project and personal threads appear here too, so nothing needs a colab to be found.
+
+**Company badge.** A room shows how many threads wait on that project. A click opens the Colabs tab filtered to it. It informs and stops there: no desktop notification, no attention item, no effect on idle suspend.
+
+**Top bar menu.** Next to GitHub, built on the same pattern: threads of the active project, filter by status, Needs you marked. The tab is the overview; the menu is for acting from where you are working. Both use the same list and the same actions.
 
 | Action | What happens |
 |---|---|
@@ -198,21 +221,30 @@ Notes first: smallest, and the test of whether telling agents is enough.
 | 0 | Spawn context on resume and quick launch; false "automatically extracted" text | 1 day |
 | 1 | Notes in project and personal scope, tools, view, the told block | 3-5 days |
 | 2 | **Measure a week across Claude Code, Codex and Devin**: do they write, is it worth keeping | A week of use |
-| 3 | Inbox in project and personal scope, top bar menu, Send to session | 1 week |
+| 3 | Inbox in project and personal scope, Colabs tab with Pending, Company badge, top bar menu, Send to session | 1-2 weeks |
 | 4 | T221 draft guard | 2-3 days |
-| 5 | Colabs: members, gate, their inbox and notes | 3-5 days |
+| 5 | Colabs: created in the tab, members, gate, their inbox and notes | 3-5 days |
 | 6 | Measure on Irma and the blueprint | A week of use |
 | 7 | Forward, Send as issue, `exegol inbox add`, Copy link | 3-5 days |
 | 8 | Capture from other apps, phone, review pass: only if asked for | Unknown |
 
 Outside this repo: `doctos` and `standup` keep the rule that a finding the code cannot show goes into docs in the same PR. A note is not a substitute: what the next developer needs goes in docs.
 
-## 10. Left to decide
+## 10. Decided and left to decide
+
+Decided by Antonio on 2026-11-06:
+
+- 6 agent turns, then close or one last turn.
+- Members reply, and Antonio can write on any thread.
+- Messages never wake a session; idle threads stay in Pending.
+- A person creates colabs, in a Dashboard tab next to Company, with a badge in Company.
+
+Left to decide:
 
 1. **Notes in `~/.exegol/notes`, outside the repo?** Recommended. They stay local: another machine or developer does not get them.
 2. **One colab per relation, or a colab with many projects?** Many, as designed.
 3. **Replace Memory and retire the knowledge node?** Recommended.
-4. **Threads as designed: 6 agent turns, a required closing line, messages that never wake a session?** Recommended.
+4. **Required closing line on a closed thread?** Recommended, so Pending and history say how each one ended.
 5. **Order: notes before inbox?** Recommended, though inbox has the proven demand; flip it if you want inbox sooner.
 6. **What is the "link" you meant?** We read it as a copyable link to an item, sent to a colab. The Claude memory link it was compared to was not found.
 
