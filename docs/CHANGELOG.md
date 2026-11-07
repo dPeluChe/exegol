@@ -14,6 +14,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - `Cmd+.` no longer stops the focused session: one stray key ended it with no warning. Stop Agent stays in the Command Palette
 
 ### Added
+- Projects view: narrower cards in an auto-fill grid, a search box (Enter opens the first match), a repo count with the folder names on a workspace, and Cmd+Shift+A to open it (pressed there, Add Project).
 - Inbox: a thread sent to a session always carries its messages and names the Exegol inbox, `inbox_reply` says to close the thread, and agent messages show the session name.
 - A session is told how many inbox threads wait for its project when it starts, resume and quick launch included, with no prompt and no turn
 - Inbox button in the top bar next to GitHub: the active project's threads with a status filter, the same thread actions as the Colabs tab, New thread and New tab; Send to session lists the sessions in the thread's repo first

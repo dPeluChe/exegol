@@ -323,9 +323,8 @@ focus inside a read-only editor. Also check the Files pane's find widget behaves
 **Priority**: P2 | **Effort**: S | **Source**: user, 2026-10-27 (screenshot of the projects view
 with 28 projects). `ProjectList.tsx` renders one large card per project in a 1-3 column grid
 (`ProjectList.tsx:222`), so only ~18 fit on screen and finding one means scrolling.
-- [ ] Compact card (one row: icon, name, folder, live/idle counts, last active) as a view toggle
-  beside the current card, choice persisted
-- [ ] Search box (name and folder), focused with Cmd+F on that view
+- [x] Compact card (two rows) in an auto-fill grid, repo count on workspaces, Cmd+Shift+A (2026-11-07)
+- [x] Search box (name and folder), focused when the view opens (2026-11-07)
 - [ ] Filters: with live agents, group, recently active; sort by last active or name
 - [ ] Keep keyboard order and the Cmd+n badges consistent with the sidebar
 
@@ -1410,6 +1409,10 @@ Core shipped in v0.4.3 (types, spawn injection, modal selector, badge, pipeline 
 
 ### T217: Colabs, inbox and notes (design first) `added: 2026-11-06`
 
+Live test feedback (2026-11-07), before notes: the GitHub and Inbox buttons move to the tab row beside
+the launcher, the Inbox gets a shortcut; the thread view is shorter (actions collapsed, session list
+compact); Active and Archived filters; the Personal inbox is always there to write to.
+
 Design, decisions and plan: `docs/RESEARCH/COLABS_INBOX_NOTES_DESIGN_2026_11.md`. Inbox and notes exist per project, per colab (a space between related projects) and personal. An agent tells a related project what it found without being asked. An inbox item is a thread with a status, and a top bar menu hands it to a session by id. A Colabs tab in the Dashboard, next to Company, is where colabs are created and shows Pending: threads waiting on a project, so you see which agent to reactivate. Company shows a badge per room. Closing takes a required line, and a problem that returns is a new thread referencing the old one. Articles and links reach an inbox from outside Exegol with a right click. Notes keep decisions and reminders across CLIs; what describes the project stays in code and docs.
 
 ### T218: Recover sessions after an API or network error `added: 2026-11-06`
@@ -1424,6 +1427,12 @@ From the Hide comparison. Done: a compatible sidecar with live sessions stays th
 
 - Delivery proof through the prompt hook, and a deadline
 - A `watch` role on `agent_link`: the parent hears when a child stops on a question or stalls. To weigh: here or in Orbital
+
+### T223: A CLI's own session name becomes the Exegol session name `added: 2026-11-07`
+**Priority**: P2 | **Effort**: S | **Source**: Antonio, 2026-11-07 (inbox test: messages showed the
+codename, not the name he gave with /rename). Read the name a CLI stores when the user renames a
+session (Claude Code `/rename` in its transcript, Codex and others where they keep one) and set it as
+the agent's alias, so panes, Company, the inbox and the sidebar use it. Check each CLI that has a rename.
 
 ### T222: Exegol speaks `added: 2026-11-06`
 

@@ -51,6 +51,7 @@ import {
   iconDataUrl,
   isIconFile,
 } from "../../system/project-icons";
+import { projectShapes } from "../../system/project-shape";
 import { publicProcedure, router } from "../trpc";
 import { initGitRepo, inspectFolder } from "./project-folder";
 import { resolveProjectFolder } from "./project-paths";
@@ -105,6 +106,9 @@ export const projectRouter = router({
   list: publicProcedure.query(({ ctx }) => {
     return listProjects(ctx.db);
   }),
+
+  /** Repo, workspace or folder per project, from the folder walk the GitHub menu shares (30 min) */
+  shapes: publicProcedure.query(({ ctx }) => projectShapes(listProjects(ctx.db))),
 
   // Returns null (not throws) when project not found: stale persisted
   // activeProjectId is a normal state to recover from, not an error.

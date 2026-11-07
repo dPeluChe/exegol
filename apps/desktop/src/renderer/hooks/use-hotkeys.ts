@@ -103,6 +103,15 @@ export function useHotkeys() {
         return;
       }
 
+      // Cmd+Shift+A: the Projects view, and from there Add Project
+      if (chord.shift && key === "a") {
+        e.preventDefault();
+        const app = useAppStore.getState();
+        if (app.activeView === "projects") app.setAddProjectOpen(true);
+        else app.openProjects();
+        return;
+      }
+
       // Cmd+Shift+D: Split vertical
       if (chord.shift && key === "d") {
         e.preventDefault();
