@@ -23,18 +23,21 @@ const member = z.object({
   repo: z.string().max(500),
 });
 
-/** A unique name is the one constraint a person can hit */
-function named<T>(run: () => T): T {
+/** The one constraint a person can hit */
+function uniqueName<T>(run: () => T): T {
   try {
-    const out = run();
-    notifyInboxChanged();
-    return out;
+    return run();
   } catch (err) {
     if (String(err).includes("UNIQUE")) {
       throw new TRPCError({ code: "BAD_REQUEST", message: "A colab with that name exists" });
     }
     throw err;
   }
+}
+
+function changed<T>(out: T): T {
+  notifyInboxChanged();
+  return out;
 }
 
 /** Only the person changes colabs: these procedures, never an MCP tool */
@@ -44,18 +47,18 @@ export const colabsRouter = router({
   create: publicProcedure
     .input(fields)
     .mutation(({ ctx, input }) =>
-      named(() => ({ id: createColab(ctx.db, input.name, input.purpose) })),
+      changed(uniqueName(() => ({ id: createColab(ctx.db, input.name, input.purpose) }))),
     ),
 
   update: publicProcedure
     .input(fields.extend({ id: z.string() }))
     .mutation(({ ctx, input }) =>
-      named(() => updateColab(ctx.db, input.id, input.name, input.purpose)),
+      changed(uniqueName(() => updateColab(ctx.db, input.id, input.name, input.purpose))),
     ),
 
   delete: publicProcedure
     .input(z.object({ id: z.string() }))
-    .mutation(({ ctx, input }) => named(() => deleteColab(ctx.db, input.id))),
+    .mutation(({ ctx, input }) => changed(deleteColab(ctx.db, input.id))),
 
   addMember: publicProcedure
     .input(member.extend({ role: z.string().trim().max(COLAB_ROLE_MAX) }))
@@ -63,18 +66,13 @@ export const colabsRouter = router({
       if (!getProject(ctx.db, input.projectId)) {
         throw new TRPCError({ code: "BAD_REQUEST", message: "No such project" });
       }
-      return named(() =>
-        addColabMember(ctx.db, input.colabId, {
-          projectId: input.projectId,
-          repo: input.repo,
-          role: input.role,
-        }),
-      );
+      const { colabId, projectId, repo, role } = input;
+      return changed(addColabMember(ctx.db, colabId, { projectId, repo, role }));
     }),
 
   removeMember: publicProcedure
     .input(member)
     .mutation(({ ctx, input }) =>
-      named(() => removeColabMember(ctx.db, input.colabId, input.projectId, input.repo)),
+      changed(removeColabMember(ctx.db, input.colabId, input.projectId, input.repo)),
     ),
 });

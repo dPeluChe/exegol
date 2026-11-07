@@ -14,6 +14,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { useState } from "react";
 import { useShallow } from "zustand/react/shallow";
+import { useAct } from "../../../hooks/use-act";
 import { useLaunchableProviders } from "../../../hooks/use-providers";
 import { useGitHubOverview } from "../../../hooks/use-trpc-github";
 import { sessionName } from "../../../lib/agent-label";
@@ -21,7 +22,7 @@ import { startInNewTab, takesPrompt } from "../../../lib/github-handoff";
 import { sessionsInRepoFirst, sessionsOfNamedRepo } from "../../../lib/github-repos";
 import { openInBrowser } from "../../../lib/open-in-browser";
 import { isOpenSession } from "../../../lib/sidebar-views";
-import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
+import { trpcInvoke } from "../../../lib/trpc-client";
 import { type AgentState, useAgentStore } from "../../../stores/agents";
 import { toastError, useToastStore } from "../../../stores/toasts";
 import { INPUT_CLASS } from "../../agents/SpawnOptions";
@@ -59,20 +60,10 @@ function Message({ message }: { message: InboxMessage }) {
   );
 }
 
-function useAct(id: string) {
-  const [busy, setBusy] = useState(false);
-  const act = async <T,>(path: string, input: object): Promise<T | undefined> => {
-    setBusy(true);
-    try {
-      return await trpcMutate<T>(path, { id, ...input });
-    } catch (err) {
-      toastError(`${id}: not done`)(err);
-      return undefined;
-    } finally {
-      setBusy(false);
-    }
-  };
-  return { busy, act };
+/** Every action here names the thread */
+function useThreadAct(id: string) {
+  const { busy, act } = useAct(`${id}: not done`);
+  return { busy, act: <T,>(path: string, input: object) => act<T>(path, { id, ...input }) };
 }
 
 function SendToSession({
@@ -92,7 +83,7 @@ function SendToSession({
       ),
     ),
   );
-  const { busy, act } = useAct(thread.id);
+  const { busy, act } = useThreadAct(thread.id);
   const [picking, setPicking] = useState(false);
   const tabProject = projectId ?? homeProject;
   const clis = useLaunchableProviders().filter(takesPrompt);
@@ -106,7 +97,7 @@ function SendToSession({
       { projectId: tabProject },
     );
     if (!started) return;
-    const { prompt, branch, useWorktree } = started;
+    const { prompt, branch, useWorktree } = started.value;
     await startInNewTab(tabProject, cliType, {
       taskDescription: prompt,
       useWorktree,
@@ -119,9 +110,10 @@ function SendToSession({
       agentId: session.id,
     });
     if (!sent) return;
+    const { delivered } = sent.value;
     useToastStore.getState().addToast({
       type: "info",
-      title: `${thread.id} ${sent.delivered ? "sent to" : "queued for"} ${sessionName(session)}`,
+      title: `${thread.id} ${delivered ? "sent to" : "queued for"} ${sessionName(session)}`,
     });
   };
 
@@ -193,13 +185,13 @@ function Actions({
   repo: string | null;
   homeProject: string | null;
 }) {
-  const { busy, act } = useAct(thread.id);
+  const { busy, act } = useThreadAct(thread.id);
   const [reply, setReply] = useState("");
   const [line, setLine] = useState("");
   const [closing, setClosing] = useState(false);
   const atLimit = atInboxTurnLimit(thread);
   const sendReply = async () => {
-    if ((await act("inbox.reply", { body: reply })) !== undefined) setReply("");
+    if (await act("inbox.reply", { body: reply })) setReply("");
   };
   const closeAs = (status: InboxCloseStatus) => act("inbox.close", { status, resolution: line });
 

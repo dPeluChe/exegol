@@ -1,14 +1,7 @@
 import Database from "libsql";
 import { beforeEach, describe, expect, it } from "vitest";
 import { runMigrations } from "../migrations";
-import {
-  addColabMember,
-  colabsOfProject,
-  createColab,
-  deleteColab,
-  listColabs,
-  removeColabMember,
-} from "./colabs";
+import { addColabMember, createColab, deleteColab, listColabs, removeColabMember } from "./colabs";
 
 describe("colabs", () => {
   let db: Database.Database;
@@ -31,7 +24,6 @@ describe("colabs", () => {
       { projectId: "blue", repo: "labs-landings-base", role: "blueprint" },
       { projectId: "irma", repo: "lizaceves-landing", role: "clone of it" },
     ]);
-    expect(colabsOfProject(db, "irma").map((c) => c.name)).toEqual(["Landings"]);
 
     removeColabMember(db, id, "irma", "lizaceves-landing");
     db.prepare("DELETE FROM projects WHERE id = 'blue'").run();

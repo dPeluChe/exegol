@@ -11,7 +11,7 @@ import { inboxPlace } from "../inbox-place";
 import { ColabEditor } from "./ColabEditor";
 import { InboxThreadView } from "./InboxThreadView";
 
-type Panel = { thread: string } | { colab: string | null } | null;
+type Panel = { kind: "thread"; id: string } | { kind: "colab"; id: string | null } | null;
 
 function ColabList({
   colabs,
@@ -19,7 +19,7 @@ function ColabList({
   onPick,
 }: {
   colabs: Colab[];
-  selected: string | null | undefined;
+  selected: string | null;
   onPick: (id: string | null) => void;
 }) {
   return (
@@ -66,10 +66,9 @@ export function ColabsSection({ projectMeta }: { projectMeta: ReadonlyMap<string
   const [showClosed, setShowClosed] = useState(false);
   const [panel, setPanel] = useState<Panel>(null);
   const colabs = useColabs();
-  const selectedId = panel && "thread" in panel ? panel.thread : null;
-  const setSelectedId = (id: string) => setPanel({ thread: id });
-  const editing = panel && "colab" in panel ? panel.colab : undefined;
-  const editedColab = editing ? (colabs.find((c) => c.id === editing) ?? null) : null;
+  const selectedId = panel?.kind === "thread" ? panel.id : null;
+  const setSelectedId = (id: string) => setPanel({ kind: "thread", id });
+  const editing = panel?.kind === "colab" ? panel.id : null;
   const active = useInboxThreads("active");
   const closed = useInboxThreads("closed", showClosed);
   const project = useAppStore((s) => s.inboxProject);
@@ -79,7 +78,11 @@ export function ColabsSection({ projectMeta }: { projectMeta: ReadonlyMap<string
   return (
     <div className="flex min-h-0 flex-1 gap-3 p-4 pt-0">
       <div className="flex w-80 shrink-0 flex-col gap-3">
-        <ColabList colabs={colabs} selected={editing} onPick={(id) => setPanel({ colab: id })} />
+        <ColabList
+          colabs={colabs}
+          selected={editing}
+          onPick={(id) => setPanel({ kind: "colab", id })}
+        />
         <div className="flex items-center gap-1">
           <FilterChip active={!showClosed} onClick={() => setShowClosed(false)}>
             Pending
@@ -113,12 +116,12 @@ export function ColabsSection({ projectMeta }: { projectMeta: ReadonlyMap<string
         </ScrollArea>
       </div>
       <div className="flex max-h-full min-w-0 flex-1 flex-col self-start rounded-lg border border-border bg-bg-secondary">
-        {editing !== undefined ? (
+        {panel?.kind === "colab" ? (
           <ColabEditor
             key={editing ?? "new"}
-            colab={editedColab}
+            colab={colabs.find((c) => c.id === editing) ?? null}
             projectMeta={projectMeta}
-            onSaved={(id) => setPanel({ colab: id })}
+            onSaved={(id) => setPanel({ kind: "colab", id })}
             onDeleted={() => setPanel(null)}
           />
         ) : selectedId ? (

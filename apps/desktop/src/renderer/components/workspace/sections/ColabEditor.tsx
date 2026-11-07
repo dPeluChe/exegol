@@ -8,24 +8,13 @@ import {
 import { Button, cn } from "@exegol/ui";
 import { X } from "lucide-react";
 import { useState } from "react";
+import { useAct } from "../../../hooks/use-act";
 import { useProjectShapes } from "../../../hooks/use-project-shapes";
-import { trpcMutate } from "../../../lib/trpc-client";
-import { toastError } from "../../../stores/toasts";
 import { INPUT_CLASS } from "../../agents/SpawnOptions";
 import { ConfirmDialog } from "../../common/ConfirmDialog";
 import type { ProjectMeta } from "../../common/ProjectChip";
 
 const LABEL = "text-[10px] uppercase tracking-wide text-text-muted";
-
-/** Null when it failed (and toasted): most of these mutations return nothing */
-async function call<T>(path: string, input: object, failed: string): Promise<{ value: T } | null> {
-  try {
-    return { value: await trpcMutate<T>(path, input) };
-  } catch (err) {
-    toastError(failed)(err);
-    return null;
-  }
-}
 
 function memberLabel(m: ColabMember, projectMeta: ReadonlyMap<string, ProjectMeta>): string {
   const project = projectMeta.get(m.projectId)?.name ?? m.projectId;
@@ -40,13 +29,14 @@ function AddMember({
   projectMeta: ReadonlyMap<string, ProjectMeta>;
 }) {
   const shapes = useProjectShapes();
+  const { busy, act } = useAct("Not added");
   const [projectId, setProjectId] = useState("");
   const [repo, setRepo] = useState("");
   const [role, setRole] = useState("");
   const repos = projectId ? (shapes?.[projectId]?.repos ?? []) : [];
 
   const add = async () => {
-    if (!(await call("colabs.addMember", { colabId, projectId, repo, role }, "Not added"))) return;
+    if (!(await act("colabs.addMember", { colabId, projectId, repo, role }))) return;
     setProjectId("");
     setRepo("");
     setRole("");
@@ -91,7 +81,7 @@ function AddMember({
         placeholder="Role: blueprint, clone of it"
         className={cn(INPUT_CLASS, "w-48")}
       />
-      <Button size="sm" disabled={!projectId} onClick={() => void add()}>
+      <Button size="sm" disabled={busy || !projectId} onClick={() => void add()}>
         Add member
       </Button>
     </div>
@@ -113,22 +103,23 @@ export function ColabEditor({
   const [name, setName] = useState(colab?.name ?? "");
   const [purpose, setPurpose] = useState(colab?.purpose ?? "");
   const [confirming, setConfirming] = useState(false);
+  const { busy, act } = useAct(colab ? `${colab.name}: not done` : "Colab not created");
   const changed = name !== (colab?.name ?? "") || purpose !== (colab?.purpose ?? "");
 
   const save = async () => {
     if (colab) {
-      if (await call("colabs.update", { id: colab.id, name, purpose }, "Not saved")) {
+      if (await act("colabs.update", { id: colab.id, name, purpose })) {
         onSaved(colab.id);
       }
       return;
     }
-    const created = await call<{ id: string }>("colabs.create", { name, purpose }, "Not created");
+    const created = await act<{ id: string }>("colabs.create", { name, purpose });
     if (created) onSaved(created.value.id);
   };
 
   const remove = async (m: ColabMember) => {
     if (!colab) return;
-    await call("colabs.removeMember", { colabId: colab.id, ...m }, "Not removed");
+    await act("colabs.removeMember", { colabId: colab.id, ...m });
   };
 
   return (
@@ -158,7 +149,7 @@ export function ColabEditor({
         />
       </label>
       <div className="flex items-center gap-2">
-        <Button size="sm" disabled={!name.trim() || !changed} onClick={() => void save()}>
+        <Button size="sm" disabled={busy || !name.trim() || !changed} onClick={() => void save()}>
           {colab ? "Save" : "Create colab"}
         </Button>
         {colab && (
@@ -181,6 +172,7 @@ export function ColabEditor({
               <button
                 type="button"
                 aria-label="Remove member"
+                disabled={busy}
                 onClick={() => void remove(m)}
                 className="ml-auto rounded p-0.5 text-text-muted hover:bg-white/5 hover:text-text-primary"
               >
@@ -202,7 +194,7 @@ export function ColabEditor({
           variant="destructive"
           autoFocusCancel
           onConfirm={() => {
-            void call("colabs.delete", { id: colab.id }, "Not deleted").then((done) => {
+            void act("colabs.delete", { id: colab.id }).then((done) => {
               if (done) onDeleted();
             });
           }}

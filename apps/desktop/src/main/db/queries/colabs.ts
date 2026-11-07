@@ -27,22 +27,19 @@ export function listColabs(db: Database.Database): Colab[] {
   const members = db
     .prepare("SELECT * FROM colab_members ORDER BY project_id, repo")
     .all() as MemberRow[];
+  const byColab = new Map<string, ColabMember[]>();
+  for (const m of members) {
+    const list = byColab.get(m.colab_id) ?? [];
+    list.push(toMember(m));
+    byColab.set(m.colab_id, list);
+  }
   return colabs.map((c) => ({
     id: c.id,
     name: c.name,
     purpose: c.purpose,
     createdAt: c.created_at,
-    members: members.filter((m) => m.colab_id === c.id).map(toMember),
+    members: byColab.get(c.id) ?? [],
   }));
-}
-
-export function getColab(db: Database.Database, id: string): Colab | null {
-  return listColabs(db).find((c) => c.id === id) ?? null;
-}
-
-/** The colabs a project is in */
-export function colabsOfProject(db: Database.Database, projectId: string): Colab[] {
-  return listColabs(db).filter((c) => c.members.some((m) => m.projectId === projectId));
 }
 
 export function createColab(db: Database.Database, name: string, purpose: string): string {
