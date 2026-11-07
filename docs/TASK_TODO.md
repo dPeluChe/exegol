@@ -1406,9 +1406,9 @@ Core shipped in v0.4.3 (types, spawn injection, modal selector, badge, pipeline 
 
 ---
 
-### T217: Project links and Exegol Inbox (design first) `added: 2026-11-06`
+### T217: Colabs, inbox and notes (design first) `added: 2026-11-06`
 
-Design and pending decisions: `docs/RESEARCH/INBOX_KNOWLEDGE_DESIGN_2026_11.md`. Linked projects let an agent write to a related project without being told: a landing's agent tells its blueprint what it found, and the message waits in that project's inbox instead of going through a person or a live console. What is true about a project stays in its docs; the design recommends no separate knowledge store.
+Design and what is left to decide: `docs/RESEARCH/COLABS_INBOX_NOTES_DESIGN_2026_11.md`. Inbox and notes exist per project, per colab (a space between related projects) and personal. An agent tells a related project what it found without being asked, and a top bar menu hands an item to a session by id. Notes keep decisions and reminders across CLIs; what describes the project stays in code and docs.
 
 ### T218: Recover sessions after an API or network error `added: 2026-11-06`
 
