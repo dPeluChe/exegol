@@ -1,6 +1,8 @@
 import { mkdir, readdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
+  freeName,
+  groupNotes,
   NOTE_BODY_MAX,
   NOTE_DEFAULT_GROUP,
   NOTE_GROUP_MAX,
@@ -8,6 +10,7 @@ import {
   NOTES_PER_FOLDER,
   type Note,
   type NoteMeta,
+  noteMatches,
 } from "@exegol/shared";
 import { parseFrontmatter } from "../lib/frontmatter";
 import { folderSlug, type NotesFolder } from "./folders";
@@ -25,6 +28,9 @@ export interface NoteAuthor {
   branch: string | null;
   commit: string | null;
 }
+
+/** The person, from the Notes view: may edit any note, and an edit keeps who wrote it */
+export const PERSON_AUTHOR: NoteAuthor = { session: null, cli: null, branch: null, commit: null };
 
 const oneLine = (v: string) => v.replace(/[\r\n]+/g, " ").trim();
 
@@ -124,17 +130,13 @@ function withLock<T>(dir: string, fn: () => Promise<T>): Promise<T> {
 }
 
 export function renderIndex(folder: NotesFolder, notes: NoteMeta[]): string {
-  const groups = new Map<string, NoteMeta[]>();
-  for (const n of notes) groups.set(n.group, [...(groups.get(n.group) ?? []), n]);
-  const sections = [...groups.entries()]
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([group, list]) => {
-      const lines = list.map((n) => {
-        const by = [n.date.slice(0, 10), n.cli ?? (n.session ? null : "person")].filter(Boolean);
-        return `- [${n.title}](${encodeURI(n.id)}.md) ${by.join(", ")}`;
-      });
-      return `## ${group}\n\n${lines.join("\n")}`;
+  const sections = groupNotes(notes).map(([group, list]) => {
+    const lines = list.map((n) => {
+      const by = [n.date.slice(0, 10), n.cli ?? (n.session ? null : "person")].filter(Boolean);
+      return `- [${n.title}](${encodeURI(n.id)}.md) ${by.join(", ")}`;
     });
+    return `## ${group}\n\n${lines.join("\n")}`;
+  });
   return [
     `# Notes: ${folder.name}`,
     `Written by Exegol on every change: edit the notes, not this file. ${notes.length} of ${NOTES_PER_FOLDER}.`,
@@ -147,11 +149,8 @@ const writeIndex = (folder: NotesFolder, notes: NoteMeta[]) =>
   writeFile(join(folder.dir, INDEX_FILE), `${renderIndex(folder, notes)}\n`);
 
 async function freeId(dir: string, title: string, live: Note[]): Promise<string> {
-  const base = folderSlug(title, "note");
   const taken = new Set([...live.map((n) => n.id), ...(await noteIds(join(dir, ARCHIVE_DIR)))]);
-  let id = base;
-  for (let n = 2; taken.has(id); n++) id = `${base}-${n}`;
-  return id;
+  return freeName(folderSlug(title, "note"), (id) => taken.has(id));
 }
 
 export interface NoteInput {
@@ -189,11 +188,13 @@ export async function writeNote(
     await mkdir(folder.dir, { recursive: true });
     const notes = await loadNotes(folder.dir);
     let id: string;
+    let wrote = author;
     if (input.id) {
       id = checkId(input.id);
       const own = notes.find((n) => n.id === id);
       if (!own) throw new NotesError(`No note ${id} here. note_list shows them`);
-      if (!own.session || own.session !== author.session) {
+      if (!author.session) wrote = own;
+      else if (own.session !== author.session) {
         throw new NotesError(
           `${id} was written by another session: add a new note, or retire it with note_retire and a reason`,
         );
@@ -210,7 +211,16 @@ export async function writeNote(
       }
       id = await freeId(folder.dir, fields.title, notes);
     }
-    const note: Note = { id, ...fields, ...author, date: new Date().toISOString() };
+    const { session, cli, branch, commit } = wrote;
+    const note: Note = {
+      id,
+      ...fields,
+      session,
+      cli,
+      branch,
+      commit,
+      date: new Date().toISOString(),
+    };
     await writeFile(join(folder.dir, `${id}.md`), serializeNote(note));
     const meta = metaOf(note);
     await writeIndex(folder, [meta, ...notes.filter((n) => n.id !== id).map(metaOf)]);
@@ -236,13 +246,49 @@ export async function retireNote(folder: NotesFolder, id: string, reason: string
   });
 }
 
+/** The person's: back into the index, within the limit */
+export async function restoreNote(folder: NotesFolder, id: string): Promise<void> {
+  checkId(id);
+  await withLock(folder.dir, async () => {
+    const archive = join(folder.dir, ARCHIVE_DIR);
+    const note = await readOne(archive, id);
+    if (!note) throw new NotesError(`No retired note ${id} here`);
+    const notes = await loadNotes(folder.dir);
+    if (notes.length >= NOTES_PER_FOLDER) {
+      throw new NotesError(`This folder holds ${NOTES_PER_FOLDER} notes: retire one first`);
+    }
+    const { retiredAt: _, retiredReason: __, ...back } = note;
+    const free = freeName(id, (name) => notes.some((n) => n.id === name));
+    await writeFile(join(folder.dir, `${free}.md`), serializeNote({ ...back, id: free }));
+    await unlink(join(archive, `${id}.md`));
+    await writeIndex(
+      folder,
+      [...notes.map(metaOf), metaOf({ ...back, id: free })].sort(newestFirst),
+    );
+  });
+}
+
+/** The person's only: an agent retires, so its mistakes stay recoverable */
+export async function deleteNote(folder: NotesFolder, id: string): Promise<void> {
+  checkId(id);
+  await withLock(folder.dir, async () => {
+    const notes = await loadNotes(folder.dir);
+    const live = notes.some((n) => n.id === id);
+    const dir = live ? folder.dir : join(folder.dir, ARCHIVE_DIR);
+    await unlink(join(dir, `${id}.md`)).catch((err: NodeJS.ErrnoException) => {
+      throw err.code === "ENOENT" ? new NotesError(`No note ${id} here`) : err;
+    });
+    if (live) await writeIndex(folder, notes.filter((n) => n.id !== id).map(metaOf));
+  });
+}
+
 const SNIPPET = 160;
 
 export async function searchNotes(dir: string, query: string, limit = 20) {
   const q = query.trim().toLowerCase();
   if (!q) throw new NotesError("Search needs a query");
   return (await loadNotes(dir))
-    .filter((n) => `${n.title}\n${n.body}`.toLowerCase().includes(q))
+    .filter((n) => noteMatches(n, q))
     .slice(0, limit)
     .map((n) => {
       const at = Math.max(n.body.toLowerCase().indexOf(q) - SNIPPET / 4, 0);

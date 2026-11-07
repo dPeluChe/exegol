@@ -1,5 +1,5 @@
 import { join } from "node:path";
-import type { Note, NoteMeta } from "@exegol/shared";
+import type { Note, NoteMeta, NotesPlace } from "@exegol/shared";
 import { NOTES_PER_FOLDER } from "@exegol/shared";
 import type Database from "libsql";
 import { InboxError } from "../inbox/threads";
@@ -14,7 +14,7 @@ import {
   searchNotes,
   writeNote,
 } from "../notes/files";
-import { type NotesFolder, type NotesPlace, notesFolder } from "../notes/folders";
+import { type NotesFolder, notesFolder, notifyNotesChanged } from "../notes/folders";
 import { authorOf, colabNamed, text } from "./exegol-inbox-tools";
 import { type ExegolToolContext, ExegolToolError } from "./exegol-protocol";
 import type { NotesToolName } from "./notes-tool-defs";
@@ -91,6 +91,7 @@ const HANDLERS: Record<NotesToolName, Handler> = {
       },
       { session: context.agentId, cli: author.cli, branch: author.branch, commit: author.commit },
     );
+    notifyNotesChanged();
     return { id: note.id, created, folder: folder.shown };
   },
 
@@ -107,6 +108,7 @@ const HANDLERS: Record<NotesToolName, Handler> = {
     const folder = folderOf(db, args, context);
     if (!folder) throw missing(id);
     await retireNote(folder, id, text(args.reason));
+    notifyNotesChanged();
     return { id, retired: true };
   },
 };

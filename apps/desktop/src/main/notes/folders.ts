@@ -1,14 +1,13 @@
 import { join } from "node:path";
-import type { NoteScope } from "@exegol/shared";
+import { freeName, type NoteScope, type NotesPlace } from "@exegol/shared";
 import type Database from "libsql";
+import { broadcast } from "../lib/event-bus";
 import { EXEGOL_DIR } from "../mcp/exegol-protocol";
 
 export const notesRoot = () => join(EXEGOL_DIR, "notes");
 
-export type NotesPlace =
-  | { scope: "project"; projectId: string }
-  | { scope: "colab"; colabId: string }
-  | { scope: "personal" };
+/** The Notes view follows agent writes through this, apart from the inbox's push */
+export const notifyNotesChanged = () => broadcast("notes:changed");
 
 export interface NotesFolder {
   scope: NoteScope;
@@ -52,8 +51,7 @@ function folderOf(
   if (!dir) {
     const base = folderSlug(row.name, kind);
     const taken = db.prepare(`SELECT 1 FROM ${table} WHERE notes_dir = ? AND id <> ?`);
-    dir = base;
-    for (let n = 2; taken.get(dir, id); n++) dir = `${base}-${n}`;
+    dir = freeName(base, (name) => taken.get(name, id));
     db.prepare(`UPDATE ${table} SET notes_dir = ? WHERE id = ?`).run(dir, id);
   }
   return {
