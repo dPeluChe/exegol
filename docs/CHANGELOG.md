@@ -10,6 +10,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 ### Removed
+- Memory's empty state no longer says memories are extracted automatically: they are not
 - `Cmd+.` no longer stops the focused session: one stray key ended it with no warning. Stop Agent stays in the Command Palette
 
 ### Added

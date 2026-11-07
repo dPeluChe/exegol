@@ -122,7 +122,7 @@ export function MemorySection() {
             description={
               searchQuery
                 ? "Try a different search term."
-                : "Memories are automatically extracted from agent sessions. You can also add them manually."
+                : "Memories are saved by agents through Exegol's tools, or added here by hand."
             }
             action={
               searchQuery ? undefined : { label: "Add Memory", onClick: () => setDialogOpen(true) }
