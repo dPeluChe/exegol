@@ -42,6 +42,14 @@ const withoutTurn = (turns: Record<string, string>, id: string) => {
   return rest;
 };
 
+const pruneTurns = (turns: Record<string, string>, projectId: string, ids: Set<string>) => {
+  const gone = Object.keys(turns).filter((id) => turns[id] === projectId && !ids.has(id));
+  if (gone.length === 0) return turns;
+  const kept = { ...turns };
+  for (const id of gone) delete kept[id];
+  return kept;
+};
+
 // ─── Attention model (T57) ────────────────────────────────────────────────
 
 export type AttentionLevel = "critical" | "action_needed" | "info";
@@ -330,7 +338,7 @@ interface AgentStore {
   /** Attention inbox — agents needing user attention, persisted across restarts */
   attentionItems: Record<string, AttentionItem>;
   /** Sessions whose last turn ended unseen (agent id to project id): look when free, not a
-   *  question, so no attention item, dot or badge */
+   *  question, so no attention item, amber dot or badge */
   unseenTurns: Record<string, string>;
   noteTurnUnseen: (agentId: string) => void;
   markTurnSeen: (agentId: string) => void;
@@ -664,20 +672,10 @@ export const useAgentStore = create<AgentStore>()(
               !isClaudeQuestion(item, agent)
             );
           });
-          const unseenTurns = Object.fromEntries(
-            Object.entries(state.unseenTurns).filter(
-              ([id, projectId]) => projectId !== _projectId || dbIds.has(id),
-            ),
-          );
-          const pruned =
-            Object.keys(unseenTurns).length === Object.keys(state.unseenTurns).length
-              ? state.unseenTurns
-              : unseenTurns;
+          const unseenTurns = pruneTurns(state.unseenTurns, _projectId, dbIds);
           if (stale.length === 0) {
-            if (pruned !== state.unseenTurns) {
-              return { agents: changed ? updated : state.agents, syncedProjects, unseenTurns };
-            }
-            return changed ? { agents: updated, syncedProjects } : state;
+            if (!changed && unseenTurns === state.unseenTurns) return state;
+            return { agents: changed ? updated : state.agents, syncedProjects, unseenTurns };
           }
 
           let unreadAttentionCount = state.unreadAttentionCount;
@@ -692,7 +690,7 @@ export const useAgentStore = create<AgentStore>()(
           return {
             agents: changed ? updated : state.agents,
             attentionItems,
-            unseenTurns: pruned,
+            unseenTurns,
             unreadAttentionCount,
             syncedProjects,
           };
@@ -760,7 +758,11 @@ export const useAgentStore = create<AgentStore>()(
           return { unseenTurns: { ...s.unseenTurns, [agentId]: agent.projectId } };
         }),
 
-      markTurnSeen: (agentId) => set((s) => ({ unseenTurns: withoutTurn(s.unseenTurns, agentId) })),
+      markTurnSeen: (agentId) => {
+        if (agentId in get().unseenTurns) {
+          set((s) => ({ unseenTurns: withoutTurn(s.unseenTurns, agentId) }));
+        }
+      },
 
       dismissAttention: (agentId) =>
         set((s) => {

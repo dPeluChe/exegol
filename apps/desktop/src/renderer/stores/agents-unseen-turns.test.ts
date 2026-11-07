@@ -3,8 +3,14 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { toAgentState, useAgentStore } from "./agents";
 import { useAppStore } from "./app";
 
-const row = (id: string, cliType = "claude-code") =>
-  ({ id, projectId: "p", cliType, status: "waiting_input", taskDescription: "t" }) as Agent;
+const row = (id: string) =>
+  ({
+    id,
+    projectId: "p",
+    cliType: "claude-code",
+    status: "waiting_input",
+    taskDescription: "t",
+  }) as Agent;
 const unseen = () => useAgentStore.getState().unseenTurns;
 
 describe("unseen turns", () => {

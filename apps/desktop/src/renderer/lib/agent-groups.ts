@@ -22,7 +22,7 @@ export function needsYou(
 export function agentGroup(
   a: Grouped,
   item: AttentionItem | undefined,
-  unseen = false,
+  unseen: boolean,
 ): AgentGroup {
   if (needsYou(a, item)) return "needYou";
   if (a.activityLevel === "busy") return "working";
@@ -33,7 +33,7 @@ export function agentGroup(
 export function groupAgents<T extends Grouped>(
   agents: Iterable<T>,
   attention: Record<string, AttentionItem>,
-  unseen: Record<string, string> = {},
+  unseen: Record<string, string>,
 ): Record<AgentGroup, T[]> {
   const groups: Record<AgentGroup, T[]> = { needYou: [], working: [], unread: [], waiting: [] };
   for (const a of agents) {

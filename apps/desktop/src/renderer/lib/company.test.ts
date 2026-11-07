@@ -18,17 +18,17 @@ const stuck = { level: "info", read: false, stuck: true, timestamp: 100 } as Att
 
 describe("deskState", () => {
   it("drops a stuck mark once the turn is over", () => {
-    expect(deskState(agent({ id: "a", activityLevel: "busy" }), stuck)).toBe("stuck");
-    expect(deskState(agent({ id: "a", activityLevel: "idle" }), stuck)).toBe("idle");
+    expect(deskState(agent({ id: "a", activityLevel: "busy" }), stuck, false)).toBe("stuck");
+    expect(deskState(agent({ id: "a", activityLevel: "idle" }), stuck, false)).toBe("idle");
   });
 
   it("ignores a stuck mark from an earlier turn", () => {
     const later = agent({ id: "a", activityLevel: "busy", activitySince: 200 });
-    expect(deskState(later, stuck)).toBe("working");
+    expect(deskState(later, stuck, false)).toBe("working");
   });
 
   it("puts a suspended session before anything it left pending", () => {
-    expect(deskState(agent({ id: "a", suspended: true }), question)).toBe("suspended");
+    expect(deskState(agent({ id: "a", suspended: true }), question, false)).toBe("suspended");
   });
 });
 
@@ -60,6 +60,7 @@ describe("buildRooms", () => {
         agent({ id: "d", archived: true }),
       ],
       {},
+      {},
     );
     expect(rooms).toHaveLength(1);
     expect(rooms[0]?.desks.map((d) => d.id)).toEqual(["a", "b"]);
@@ -75,6 +76,7 @@ describe("buildRooms", () => {
         agent({ id: "asks", projectId: "p3", ...idle, activitySince: 2 }),
       ],
       { asks: question },
+      {},
     );
     expect(rooms.map((r) => r.projectId)).toEqual(["p3", "p2", "p1"]);
     expect(rooms[2]?.desks.map((d) => d.id)).toEqual(["recent", "old"]);
@@ -90,22 +92,15 @@ describe("unread desks", () => {
       "new",
       "seen",
     ]);
-    const strip = todayStrip(
-      [seenOne, unread],
-      {},
-      {
-        levelOf: () => "all",
-        outdated: new Set(),
-        unseen,
-      },
-    );
+    const ctx = { levelOf: () => "all" as const, outdated: new Set<string>(), unseen };
+    const strip = todayStrip([seenOne, unread], {}, ctx);
     expect(strip.needs).toEqual([]);
     expect(strip.canWait.map((a) => a.id)).toEqual(["new"]);
   });
 });
 
 describe("todayStrip", () => {
-  const ctx = { levelOf: () => "all" as const, outdated: new Set<string>() };
+  const ctx = { levelOf: () => "all" as const, outdated: new Set<string>(), unseen: {} };
   const ids = (list: AgentState[]) => list.map((a) => a.id);
 
   it("sorts each session into one bucket", () => {

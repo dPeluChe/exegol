@@ -22,7 +22,7 @@ export const isBusy = (a: Pick<AgentState, "activityLevel"> | undefined) =>
 export const isActiveOrWaiting = (
   a: AgentState | undefined,
   attention: Record<string, AttentionItem>,
-  unseen: Record<string, string> = {},
+  unseen: Record<string, string>,
 ) => !!a && (isBusy(a) || attention[a.id]?.read === false || a.id in unseen);
 
 /** "Active only": the cards keep their active sessions; a tab or card left empty is dropped */
@@ -30,7 +30,7 @@ export function activeCards(
   cards: LiveProjectGroup[],
   agents: Record<string, AgentState>,
   attention: Record<string, AttentionItem>,
-  unseen: Record<string, string> = {},
+  unseen: Record<string, string>,
 ): LiveProjectGroup[] {
   return cards.flatMap((card) => {
     const tabs = card.tabs.flatMap((tab) => {

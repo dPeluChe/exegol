@@ -10,7 +10,7 @@ export type DeskState = "needs" | "stuck" | "unread" | "working" | "idle" | "sus
 export function deskState(
   a: AgentState,
   item: AttentionItem | undefined,
-  unseen = false,
+  unseen: boolean,
 ): DeskState {
   if (a.suspended) return "suspended";
   const group = agentGroup(a, item, unseen);
@@ -51,7 +51,7 @@ const DESK_RANK: Record<DeskState, number> = {
 export function buildRooms(
   agents: Iterable<AgentState>,
   attention: Record<string, AttentionItem>,
-  unseen: Record<string, string> = {},
+  unseen: Record<string, string>,
 ): Room[] {
   const ranks = new Map<string, number>();
   const byUrgency = (x: AgentState, y: AgentState) =>
@@ -87,7 +87,7 @@ export function todayStrip(
     levelOf: (projectId: string) => InterruptionLevel;
     /** CLIs with a newer release */
     outdated: ReadonlySet<string>;
-    unseen?: Record<string, string>;
+    unseen: Record<string, string>;
   },
 ): TodayStrip {
   const strip: TodayStrip = { needs: [], stuck: [], canWait: [] };
@@ -95,7 +95,7 @@ export function todayStrip(
     if (a.archived || !LIVE_STATUSES.has(a.status)) continue;
     const item = attention[a.id];
     const level = ctx.levelOf(a.projectId);
-    const state = deskState(a, item, !!ctx.unseen && a.id in ctx.unseen);
+    const state = deskState(a, item, a.id in ctx.unseen);
     if (state === "needs") {
       if (level !== "none") strip.needs.push(a);
     } else if (state === "stuck") {

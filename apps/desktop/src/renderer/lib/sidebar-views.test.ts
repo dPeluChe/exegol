@@ -31,9 +31,10 @@ describe("isBusy / isActiveOrWaiting", () => {
     expect(isBusy(agents.a)).toBe(true);
     expect(isBusy(agents.b)).toBe(false);
     expect(isBusy(undefined)).toBe(false);
-    expect(isActiveOrWaiting(agents.b, { b: attention("b", false) })).toBe(true);
-    expect(isActiveOrWaiting(agents.b, { b: attention("b", true) })).toBe(false);
-    expect(isActiveOrWaiting(undefined, {})).toBe(false);
+    expect(isActiveOrWaiting(agents.b, { b: attention("b", false) }, {})).toBe(true);
+    expect(isActiveOrWaiting(agents.b, { b: attention("b", true) }, {})).toBe(false);
+    expect(isActiveOrWaiting(undefined, {}, {})).toBe(false);
+    expect(isActiveOrWaiting(agents.b, {}, { b: "p1" })).toBe(true);
   });
 });
 
@@ -45,7 +46,7 @@ describe("activeCards", () => {
       { projectId: "p3", tabs: [tab("p3", "t4", ["c"])] },
       { projectId: "p4", tabs: [tab("p4", "t5", ["e"])] },
     ];
-    expect(activeCards(cards, agents, { e: attention("e", false) })).toEqual([
+    expect(activeCards(cards, agents, { e: attention("e", false) }, {})).toEqual([
       { projectId: "p1", tabs: [tab("p1", "t1", ["a"])] },
       { projectId: "p3", tabs: [tab("p3", "t4", ["c"])] },
       { projectId: "p4", tabs: [tab("p4", "t5", ["e"])] },
@@ -53,9 +54,9 @@ describe("activeCards", () => {
   });
 
   it("an unknown agent id is not active", () => {
-    expect(activeCards([{ projectId: "p", tabs: [tab("p", "t", ["zz"])] }], agents, {})).toEqual(
-      [],
-    );
+    expect(
+      activeCards([{ projectId: "p", tabs: [tab("p", "t", ["zz"])] }], agents, {}, {}),
+    ).toEqual([]);
   });
 });
 
