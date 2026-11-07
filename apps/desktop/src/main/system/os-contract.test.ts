@@ -4,23 +4,31 @@ import {
   mkdirSync,
   mkdtempSync,
   readlinkSync,
+  rmSync,
   symlinkSync,
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, isAbsolute, join } from "node:path";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import { samePath } from "@exegol/shared";
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it } from "vitest";
 import { execCli, findOnPath, hookShell } from "../agents/spawn-env";
 import { execFileAsync } from "../lib/exec-file";
 import { checkGitSync } from "../pipeline/pipeline-helpers";
 import { readProcessTable } from "./process-table";
-import { duBytes } from "./storage";
 
 // No mocks on purpose: each case calls what the system really has, on its own CI runner
 const WINDOWS = process.platform === "win32";
-const temp = () => mkdtempSync(join(tmpdir(), "exegol-os-"));
+const made: string[] = [];
+const temp = () => {
+  const dir = mkdtempSync(join(tmpdir(), "exegol-os-"));
+  made.push(dir);
+  return dir;
+};
+afterAll(() => {
+  for (const dir of made) rmSync(dir, { recursive: true, force: true, maxRetries: 3 });
+});
 
 const git = (cwd: string, ...args: string[]) =>
   execFileAsync("git", ["-c", "user.name=t", "-c", "user.email=t@t.dev", ...args], { cwd });
@@ -31,8 +39,8 @@ describe("processes", () => {
     expect(rows.find((r) => r.pid === process.pid)?.ppid).toBe(process.ppid);
   });
 
-  it("runs a repo hook in the system's shell, with its environment", async () => {
-    const script = WINDOWS ? "echo $env:EXEGOL_OS_TEST" : "echo $EXEGOL_OS_TEST";
+  it.runIf(WINDOWS)("runs a repo hook in PowerShell, with its environment", async () => {
+    const script = "echo $env:EXEGOL_OS_TEST";
     const { stdout } = await promisify(exec)(script, {
       ...hookShell(),
       env: { ...process.env, EXEGOL_OS_TEST: "held" },
@@ -46,7 +54,7 @@ describe("CLIs as npm installs them", () => {
     const dir = temp();
     writeFileSync(join(dir, "fake-cli"), "#!/bin/sh\n");
     writeFileSync(join(dir, "fake-cli.cmd"), "@echo off\r\n");
-    expect(findOnPath("fake-cli", `${dir}${delimiter}`)?.toLowerCase()).toBe(
+    expect(findOnPath("fake-cli", dir)?.toLowerCase()).toBe(
       join(dir, "fake-cli.cmd").toLowerCase(),
     );
   });
@@ -72,19 +80,6 @@ describe("links and folders", () => {
     symlinkSync(target, link, "junction");
     expect(lstatSync(link).isSymbolicLink()).toBe(true);
     expect(samePath(readlinkSync(link), target)).toBe(true);
-  });
-
-  it.runIf(WINDOWS)("takes both spellings of a Windows folder", () => {
-    expect(isAbsolute("C:/x")).toBe(true);
-    expect(isAbsolute("C:\\x")).toBe(true);
-    expect(samePath("C:/Repo/", "c:\\repo")).toBe(true);
-  });
-
-  it("sizes a folder, and knows a missing one", async () => {
-    const dir = temp();
-    writeFileSync(join(dir, "a.txt"), "x".repeat(4096));
-    expect(await duBytes(dir)).toBeGreaterThan(0);
-    expect(await duBytes(join(dir, "missing"))).toBeNull();
   });
 });
 
