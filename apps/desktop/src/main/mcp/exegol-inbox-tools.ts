@@ -77,7 +77,8 @@ const HANDLERS: Record<InboxToolName, Handler> = {
 
   inbox_reply: async (db, args, context) => {
     const thread = text(args.thread);
-    return { thread, seq: replyTo(db, await authorOf(db, context), thread, text(args.body)) };
+    const seq = replyTo(db, await authorOf(db, context), thread, text(args.body));
+    return { thread, seq, next: "Once the work is done, close it with inbox_close and one line." };
   },
 
   inbox_list: (db, args, context) => {

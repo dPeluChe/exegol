@@ -14,8 +14,6 @@ import {
   readThread,
   replyTo,
 } from "../../inbox/threads";
-import { readsExegolMcpConfig } from "../../mcp/exegol-mcp-config";
-import { connectedAgentIds } from "../../mcp/exegol-tokens";
 import { publicProcedure, router } from "../trpc";
 
 const LIST_LIMIT = 200;
@@ -78,20 +76,16 @@ export const inboxRouter = router({
 
   sendToSession: publicProcedure
     .input(threadId.extend({ agentId: z.string() }))
-    .mutation(({ ctx, input }) =>
-      inboxCall(() =>
-        sendToSession(ctx.db, input.id, input.agentId, connectedAgentIds().has(input.agentId)),
-      ),
-    ),
+    .mutation(({ ctx, input }) => inboxCall(() => sendToSession(ctx.db, input.id, input.agentId))),
 
   startSession: publicProcedure
-    .input(threadId.extend({ projectId: z.string(), cliType: z.string() }))
+    .input(threadId.extend({ projectId: z.string() }))
     .mutation(async ({ ctx, input }) => {
-      const { id, projectId, cliType } = input;
+      const { id, projectId } = input;
       const path = getProject(ctx.db, projectId)?.path;
       const useWorktree = !!path && (await checkGitRepo(path));
       return {
-        ...inboxCall(() => startSession(ctx.db, id, projectId, readsExegolMcpConfig(cliType))),
+        ...inboxCall(() => startSession(ctx.db, id, projectId)),
         useWorktree,
       };
     }),
