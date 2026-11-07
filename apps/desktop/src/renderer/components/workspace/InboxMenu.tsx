@@ -10,7 +10,7 @@ import {
 } from "@exegol/shared";
 import { Button, cn } from "@exegol/ui";
 import { ChevronLeft, Inbox, Plus } from "lucide-react";
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { useAct } from "../../hooks/use-act";
 import { useDismiss } from "../../hooks/use-dismiss";
@@ -25,8 +25,12 @@ import { InboxThreadRow } from "./InboxThreadRow";
 import { inboxPlace } from "./inbox-place";
 import { InboxThreadView } from "./sections/InboxThreadView";
 
-type Target = "project" | "personal" | { colab: string };
-type View = "list" | { new: Target } | { id: string };
+/** `to`: the member project a colab thread is for, null for the whole colab */
+type Target =
+  | { kind: "project" }
+  | { kind: "personal" }
+  | { kind: "colab"; id: string; to: string | null };
+type View = { kind: "list" } | { kind: "new"; target: Target } | { kind: "thread"; id: string };
 
 function ThreadList({
   active,
@@ -53,9 +57,8 @@ function ThreadList({
   const here = all.filter((t) => inboxProjectOf(t) === projectId);
   const personal = all.filter((t) => t.scope === "personal");
   const colabNames = new Map(colabs.map((c) => [c.id, c.name]));
-  const inColabs = all.filter(
-    (t) => t.scope === "colab" && colabNames.has(t.scopeId ?? "") && !here.includes(t),
-  );
+  const inColab = (id: string) =>
+    all.filter((t) => t.scope === "colab" && t.scopeId === id && inboxProjectOf(t) !== projectId);
   const states = archived ? [] : [...new Set(here.map(inboxPendingState))];
   const shown = here.filter((t) => !filter || inboxPendingState(t) === filter);
   const rows = (list: InboxThread[]) =>
@@ -105,7 +108,7 @@ function ThreadList({
             </FilterChip>
           ))}
       </div>
-      {heading(projectName, "project")}
+      {heading(projectName, { kind: "project" })}
       {rows(shown)}
       {here.length === 0 && (
         <p className="py-1 text-center text-text-muted">
@@ -114,11 +117,11 @@ function ThreadList({
       )}
       {colabs.map((c) => (
         <div key={c.id} className="flex flex-col gap-1.5">
-          {heading(c.name, { colab: c.id })}
-          {rows(inColabs.filter((t) => t.scopeId === c.id))}
+          {heading(c.name, { kind: "colab", id: c.id, to: null })}
+          {rows(inColab(c.id))}
         </div>
       ))}
-      {heading("Personal", "personal")}
+      {heading("Personal", { kind: "personal" })}
       {rows(personal)}
       {personal.length === 0 && (
         <p className="py-1 text-center text-text-muted">
@@ -147,17 +150,16 @@ function NewThread({
   const [title, setTitle] = useState("");
   const [body, setBody] = useState("");
   const [target, setTarget] = useState<Target>(start);
-  const [toProject, setToProject] = useState("");
   const { busy, act } = useAct("Thread not opened");
-  const colab = typeof target === "object" ? colabs.find((c) => c.id === target.colab) : undefined;
+  const colab = target.kind === "colab" ? colabs.find((c) => c.id === target.id) : undefined;
   const memberIds = [...new Set(colab?.members.map((m) => m.projectId))];
 
   const post = async () => {
     const opened = await act<{ id: string }>("inbox.open", {
       title,
       body,
-      projectId: target === "project" ? projectId : null,
-      ...(colab && { colabId: colab.id, toProject: toProject || null }),
+      projectId: target.kind === "project" ? projectId : null,
+      ...(target.kind === "colab" && { colabId: target.id, toProject: target.to }),
     });
     if (opened) onOpened(opened.value.id);
   };
@@ -165,29 +167,32 @@ function NewThread({
   return (
     <div className="flex flex-col gap-2 p-2">
       <div className="flex flex-wrap items-center gap-1">
-        <FilterChip active={target === "project"} onClick={() => setTarget("project")}>
+        <FilterChip
+          active={target.kind === "project"}
+          onClick={() => setTarget({ kind: "project" })}
+        >
           {projectName}
         </FilterChip>
         {colabs.map((c) => (
           <FilterChip
             key={c.id}
             active={colab?.id === c.id}
-            onClick={() => {
-              setTarget({ colab: c.id });
-              setToProject("");
-            }}
+            onClick={() => setTarget({ kind: "colab", id: c.id, to: null })}
           >
             {c.name}
           </FilterChip>
         ))}
-        <FilterChip active={target === "personal"} onClick={() => setTarget("personal")}>
+        <FilterChip
+          active={target.kind === "personal"}
+          onClick={() => setTarget({ kind: "personal" })}
+        >
           Personal
         </FilterChip>
       </div>
       {colab && (
         <select
-          value={toProject}
-          onChange={(e) => setToProject(e.target.value)}
+          value={target.kind === "colab" ? (target.to ?? "") : ""}
+          onChange={(e) => setTarget({ kind: "colab", id: colab.id, to: e.target.value || null })}
           className={INPUT_CLASS}
         >
           <option value="">For the whole colab</option>
@@ -234,52 +239,58 @@ function Panel({
   projectId: string;
   projectName: string;
 }) {
-  const [view, setView] = useState<View>("list");
+  const [view, setView] = useState<View>({ kind: "list" });
   const { data: projects } = useProjects();
-  const colabs = useColabs().filter((c) => c.members.some((m) => m.projectId === projectId));
-  const meta = new Map(
-    (projects ?? []).map((p) => [p.id, { name: p.name, color: p.color ?? null }]),
+  const allColabs = useColabs();
+  const colabs = useMemo(
+    () => allColabs.filter((c) => c.members.some((m) => m.projectId === projectId)),
+    [allColabs, projectId],
   );
+  const meta = useMemo(
+    () => new Map((projects ?? []).map((p) => [p.id, { name: p.name, color: p.color ?? null }])),
+    [projects],
+  );
+  const thread = (id: string) => setView({ kind: "thread", id });
   return (
     <div className="absolute top-full left-0 z-50 mt-1 flex max-h-[70vh] w-[28rem] flex-col overflow-hidden rounded-lg border border-border bg-bg-secondary text-xs shadow-lg">
-      {view !== "list" && (
+      {view.kind !== "list" && (
         <button
           type="button"
-          onClick={() => setView("list")}
+          onClick={() => setView({ kind: "list" })}
           className="flex items-center gap-1 px-2 py-1 text-text-secondary hover:text-text-primary"
         >
           <ChevronLeft className="h-3.5 w-3.5" />
           Inbox
         </button>
       )}
-      {view === "list" && (
+      {view.kind === "list" && (
         <ThreadList
           active={active}
           projectId={projectId}
           projectName={projectName}
           meta={meta}
           colabs={colabs}
-          onPick={(id) => setView({ id })}
-          onNew={(target) => setView({ new: target })}
+          onPick={thread}
+          onNew={(target) => setView({ kind: "new", target })}
         />
       )}
-      {typeof view === "object" && "new" in view && (
+      {view.kind === "new" && (
         <NewThread
           projectId={projectId}
           projectName={projectName}
           colabs={colabs}
           meta={meta}
-          start={view.new}
-          onOpened={(id) => setView({ id })}
+          start={view.target}
+          onOpened={thread}
         />
       )}
-      {typeof view === "object" && "id" in view && (
+      {view.kind === "thread" && (
         <InboxThreadView
           key={view.id}
           id={view.id}
           projectMeta={meta}
           homeProject={projectId}
-          onOpen={(id) => setView({ id })}
+          onOpen={thread}
         />
       )}
     </div>

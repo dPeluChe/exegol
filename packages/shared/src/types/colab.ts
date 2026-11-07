@@ -14,6 +14,7 @@ export interface Colab {
 
 export interface ColabMember {
   projectId: string;
+  projectName: string;
   /** Folder of an inner repo, relative to the project; "" for the whole project */
   repo: string;
   /** Free text: "blueprint", "clone of it" */

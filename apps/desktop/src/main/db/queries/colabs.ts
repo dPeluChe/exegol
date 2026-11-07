@@ -12,21 +12,32 @@ interface ColabRow {
 interface MemberRow {
   colab_id: string;
   project_id: string;
+  project_name: string;
   repo: string;
   role: string;
 }
 
 const toMember = (r: MemberRow): ColabMember => ({
   projectId: r.project_id,
+  projectName: r.project_name,
   repo: r.repo,
   role: r.role,
 });
 
-export function listColabs(db: Database.Database): Colab[] {
-  const colabs = db.prepare("SELECT * FROM colabs ORDER BY name").all() as ColabRow[];
+const OF_PROJECT = "id IN (SELECT colab_id FROM colab_members WHERE project_id = @projectId)";
+
+/** Every colab, or with a project only the ones it is in */
+export function listColabs(db: Database.Database, projectId: string | null = null): Colab[] {
+  const only = projectId ? `WHERE ${OF_PROJECT}` : "";
+  const colabs = db
+    .prepare(`SELECT * FROM colabs ${only} ORDER BY name`)
+    .all({ projectId }) as ColabRow[];
   const members = db
-    .prepare("SELECT * FROM colab_members ORDER BY project_id, repo")
-    .all() as MemberRow[];
+    .prepare(
+      `SELECT m.*, p.name AS project_name FROM colab_members m JOIN projects p ON p.id = m.project_id
+       ${projectId ? `WHERE m.colab_${OF_PROJECT}` : ""} ORDER BY p.name, m.repo`,
+    )
+    .all({ projectId }) as MemberRow[];
   const byColab = new Map<string, ColabMember[]>();
   for (const m of members) {
     const list = byColab.get(m.colab_id) ?? [];
@@ -66,7 +77,11 @@ export function deleteColab(db: Database.Database, id: string): void {
   db.prepare("DELETE FROM colabs WHERE id = ?").run(id);
 }
 
-export function addColabMember(db: Database.Database, colabId: string, m: ColabMember): void {
+export function addColabMember(
+  db: Database.Database,
+  colabId: string,
+  m: Omit<ColabMember, "projectName">,
+): void {
   db.prepare(
     `INSERT INTO colab_members (colab_id, project_id, repo, role) VALUES (?, ?, ?, ?)
      ON CONFLICT (colab_id, project_id, repo) DO UPDATE SET role = excluded.role`,
@@ -90,16 +105,4 @@ export function isColabMember(db: Database.Database, colabId: string, projectId:
   return !!db
     .prepare("SELECT 1 FROM colab_members WHERE colab_id = ? AND project_id = ? LIMIT 1")
     .get(colabId, projectId);
-}
-
-/** The colabs a project is in, with all their members */
-export function colabsOfProject(db: Database.Database, projectId: string): Colab[] {
-  const ids = new Set(
-    (
-      db
-        .prepare("SELECT DISTINCT colab_id FROM colab_members WHERE project_id = ?")
-        .all(projectId) as { colab_id: string }[]
-    ).map((r) => r.colab_id),
-  );
-  return ids.size === 0 ? [] : listColabs(db).filter((c) => ids.has(c.id));
 }

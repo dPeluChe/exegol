@@ -16,10 +16,7 @@ import type { ProjectMeta } from "../../common/ProjectChip";
 
 const LABEL = "text-[10px] uppercase tracking-wide text-text-muted";
 
-function memberLabel(m: ColabMember, projectMeta: ReadonlyMap<string, ProjectMeta>): string {
-  const project = projectMeta.get(m.projectId)?.name ?? m.projectId;
-  return m.repo ? `${project} / ${m.repo}` : project;
-}
+const memberLabel = (m: ColabMember) => (m.repo ? `${m.projectName} / ${m.repo}` : m.projectName);
 
 function AddMember({
   colabId,
@@ -167,7 +164,7 @@ export function ColabEditor({
           )}
           {colab.members.map((m) => (
             <div key={`${m.projectId}/${m.repo}`} className="flex items-center gap-2">
-              <span className="truncate text-text-primary">{memberLabel(m, projectMeta)}</span>
+              <span className="truncate text-text-primary">{memberLabel(m)}</span>
               {m.role && <span className="truncate text-text-muted">{m.role}</span>}
               <button
                 type="button"

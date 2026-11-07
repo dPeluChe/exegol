@@ -1,9 +1,8 @@
 import { type InboxAuthor, type InboxThread, pathBase, pathParent } from "@exegol/shared";
 import type Database from "libsql";
 import { getAgent, getAgentCwd } from "../db/queries/agents";
-import { colabsOfProject } from "../db/queries/colabs";
+import { listColabs } from "../db/queries/colabs";
 import { listThreads } from "../db/queries/inbox";
-import { getProject } from "../db/queries/projects";
 import {
   close,
   InboxError,
@@ -72,7 +71,7 @@ function targetOf(
 ): InboxTarget {
   if (args.target === "personal") return { scope: "personal" };
   if (args.target !== "colab") return { scope: "project", projectId };
-  const colabs = colabsOfProject(db, projectId);
+  const colabs = listColabs(db, projectId);
   const colab = colabs.find((c) => same(c.name, text(args.colab)));
   if (!colab) {
     const names = colabs.map((c) => c.name).join(", ") || "none";
@@ -82,13 +81,12 @@ function targetOf(
   }
   const wanted = text(args.to_project);
   if (!wanted) return { scope: "colab", colabId: colab.id, toProject: null };
-  const members = colab.members.map((m) => getProject(db, m.projectId)).filter((p) => !!p);
-  const to = members.find((p) => same(p.name, wanted));
+  const to = colab.members.find((m) => same(m.projectName, wanted));
   if (!to) {
-    const names = [...new Set(members.map((p) => p.name))].join(", ");
+    const names = [...new Set(colab.members.map((m) => m.projectName))].join(", ");
     throw new InboxError(`${JSON.stringify(wanted)} is not in ${colab.name}. Members: ${names}`);
   }
-  return { scope: "colab", colabId: colab.id, toProject: to.id };
+  return { scope: "colab", colabId: colab.id, toProject: to.projectId };
 }
 
 type Handler = (
