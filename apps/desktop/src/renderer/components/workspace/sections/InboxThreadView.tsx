@@ -26,6 +26,7 @@ import { type AgentState, useAgentStore } from "../../../stores/agents";
 import { toastError, useToastStore } from "../../../stores/toasts";
 import { INPUT_CLASS } from "../../agents/SpawnOptions";
 import { AgentIcon } from "../../common/AgentIcon";
+import { FilterChip } from "../../common/FilterChip";
 import type { ProjectMeta } from "../../common/ProjectChip";
 import { inboxPlace } from "../inbox-place";
 
@@ -132,23 +133,36 @@ function SendToSession({
           <span className="text-[10px] text-text-muted">no open session here,</span>
         )}
         {ordered.map((session) => (
-          <Chip key={session.id} disabled={busy} onClick={() => void send(session)}>
+          <FilterChip
+            key={session.id}
+            active={false}
+            className={CHIP}
+            disabled={busy}
+            onClick={() => void send(session)}
+          >
             <AgentIcon provider={session.cliType} size={12} />
             {sessionName(session)}
-          </Chip>
+          </FilterChip>
         ))}
         {tabProject && (
-          <Chip disabled={busy} onClick={() => setPicking(!picking)} active={picking}>
+          <FilterChip
+            active={picking}
+            className={CHIP}
+            disabled={busy}
+            onClick={() => setPicking(!picking)}
+          >
             <Plus className="h-3 w-3" />
             New tab
-          </Chip>
+          </FilterChip>
         )}
       </div>
       {picking && (
         <div className="flex flex-wrap gap-1">
           {clis.map((cli) => (
-            <Chip
+            <FilterChip
               key={cli.id}
+              active={false}
+              className={CHIP}
               disabled={busy}
               onClick={() => void startInTab(cli.id as AgentCliType)}
             >
@@ -159,7 +173,7 @@ function SendToSession({
                 fallbackColor={cli.color}
               />
               {cli.name}
-            </Chip>
+            </FilterChip>
           ))}
         </div>
       )}
@@ -167,31 +181,8 @@ function SendToSession({
   );
 }
 
-function Chip({
-  active = false,
-  disabled,
-  onClick,
-  children,
-}: {
-  active?: boolean;
-  disabled: boolean;
-  onClick: () => void;
-  children: React.ReactNode;
-}) {
-  return (
-    <button
-      type="button"
-      disabled={disabled}
-      onClick={onClick}
-      className={cn(
-        "flex max-w-40 items-center gap-1 truncate rounded-md border border-border px-1.5 py-0.5 text-[11px] text-text-primary hover:bg-white/5 disabled:opacity-50",
-        active && "bg-white/10",
-      )}
-    >
-      {children}
-    </button>
-  );
-}
+const CHIP =
+  "flex max-w-40 items-center gap-1 truncate border border-border text-[11px] text-text-primary";
 
 function Actions({
   thread,

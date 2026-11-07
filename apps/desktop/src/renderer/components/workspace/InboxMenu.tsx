@@ -23,22 +23,27 @@ import { InboxThreadRow } from "./InboxThreadRow";
 import { inboxPlace } from "./inbox-place";
 import { InboxThreadView } from "./sections/InboxThreadView";
 
-type View = "list" | { new: boolean } | { id: string };
+type View = "list" | "new-project" | "new-personal" | { id: string };
 
 function ThreadList({
+  active,
   projectId,
+  projectName,
   meta,
   onPick,
   onNew,
 }: {
+  active: InboxThread[];
   projectId: string;
+  projectName: string;
   meta: ReadonlyMap<string, ProjectMeta>;
   onPick: (id: string) => void;
   onNew: (personal: boolean) => void;
 }) {
   const [archived, setArchived] = useState(false);
   const [filter, setFilter] = useState<InboxPendingState | null>(null);
-  const all = useInboxThreads(archived ? "closed" : "active");
+  const closed = useInboxThreads("closed", archived);
+  const all = archived ? closed : active;
   const here = all.filter((t) => t.scopeId === projectId);
   const personal = all.filter((t) => t.scope === "personal");
   const states = archived ? [] : [...new Set(here.map(inboxPendingState))];
@@ -90,7 +95,7 @@ function ThreadList({
             </FilterChip>
           ))}
       </div>
-      {heading(meta.get(projectId)?.name ?? "This project", false)}
+      {heading(projectName, false)}
       {rows(shown)}
       {here.length === 0 && (
         <p className="py-1 text-center text-text-muted">
@@ -176,25 +181,73 @@ function NewThread({
   );
 }
 
-/** The active project's threads, to act from where you work. The Colabs tab is the overview */
+function Panel({
+  active,
+  projectId,
+  projectName,
+}: {
+  active: InboxThread[];
+  projectId: string;
+  projectName: string;
+}) {
+  const [view, setView] = useState<View>("list");
+  const meta = new Map([[projectId, { name: projectName, color: null }]]);
+  return (
+    <div className="absolute top-full right-0 z-50 mt-1 flex max-h-[70vh] w-[28rem] flex-col overflow-hidden rounded-lg border border-border bg-bg-secondary text-xs shadow-lg">
+      {view !== "list" && (
+        <button
+          type="button"
+          onClick={() => setView("list")}
+          className="flex items-center gap-1 px-2 py-1 text-text-secondary hover:text-text-primary"
+        >
+          <ChevronLeft className="h-3.5 w-3.5" />
+          Inbox
+        </button>
+      )}
+      {view === "list" && (
+        <ThreadList
+          active={active}
+          projectId={projectId}
+          projectName={projectName}
+          meta={meta}
+          onPick={(id) => setView({ id })}
+          onNew={(personal) => setView(personal ? "new-personal" : "new-project")}
+        />
+      )}
+      {(view === "new-project" || view === "new-personal") && (
+        <NewThread
+          projectId={projectId}
+          projectName={projectName}
+          startPersonal={view === "new-personal"}
+          onOpened={(id) => setView({ id })}
+        />
+      )}
+      {typeof view === "object" && (
+        <InboxThreadView
+          key={view.id}
+          id={view.id}
+          projectMeta={meta}
+          homeProject={projectId}
+          onOpen={(id) => setView({ id })}
+        />
+      )}
+    </div>
+  );
+}
+
+/** The active project's threads and Personal, to act from where you work. Colabs is the overview */
 export function InboxMenu() {
   const { projectId, project } = useProjectContext();
   const active = useInboxThreads("active");
   const open = useAppStore((s) => s.inboxMenuOpen);
   const setOpen = useAppStore((s) => s.setInboxMenuOpen);
-  const [view, setView] = useState<View>("list");
   const rootRef = useRef<HTMLDivElement>(null);
-  const close = useCallback(() => {
-    setOpen(false);
-    setView("list");
-  }, [setOpen]);
+  const close = useCallback(() => setOpen(false), [setOpen]);
   useDismiss(rootRef, open, close);
   if (!projectId) return null;
 
   const threads = active.filter((t) => t.scopeId === projectId);
   const needsYou = threads.some((t) => inboxPendingState(t) === "needs_you");
-  const projectName = project?.name ?? projectId;
-  const meta = new Map([[projectId, { name: projectName, color: null }]]);
 
   return (
     <div ref={rootRef} className="relative">
@@ -202,7 +255,7 @@ export function InboxMenu() {
         type="button"
         aria-pressed={open}
         aria-label="Inbox"
-        onClick={() => (open ? close() : setOpen(true))}
+        onClick={() => setOpen(!open)}
         title={`Inbox (${appKeys("Cmd+Shift+I")}): ${threads.length} pending${needsYou ? ", some need you" : ""}`}
         className={cn(
           "relative flex h-7 items-center gap-1 rounded px-2 text-[11px] font-medium tabular-nums transition-colors hover:bg-white/5",
@@ -218,45 +271,8 @@ export function InboxMenu() {
           />
         )}
       </button>
-
       {open && (
-        <div className="absolute top-full right-0 z-50 mt-1 flex max-h-[70vh] w-[28rem] flex-col overflow-hidden rounded-lg border border-border bg-bg-secondary text-xs shadow-lg">
-          {view !== "list" && (
-            <button
-              type="button"
-              onClick={() => setView("list")}
-              className="flex items-center gap-1 px-2 py-1 text-text-secondary hover:text-text-primary"
-            >
-              <ChevronLeft className="h-3.5 w-3.5" />
-              Inbox
-            </button>
-          )}
-          {view === "list" && (
-            <ThreadList
-              projectId={projectId}
-              meta={meta}
-              onPick={(id) => setView({ id })}
-              onNew={(personal) => setView({ new: personal })}
-            />
-          )}
-          {typeof view === "object" && "new" in view && (
-            <NewThread
-              projectId={projectId}
-              projectName={projectName}
-              startPersonal={view.new}
-              onOpened={(id) => setView({ id })}
-            />
-          )}
-          {typeof view === "object" && "id" in view && (
-            <InboxThreadView
-              key={view.id}
-              id={view.id}
-              projectMeta={meta}
-              homeProject={projectId}
-              onOpen={(id) => setView({ id })}
-            />
-          )}
-        </div>
+        <Panel active={active} projectId={projectId} projectName={project?.name ?? projectId} />
       )}
     </div>
   );
