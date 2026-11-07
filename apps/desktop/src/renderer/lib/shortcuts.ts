@@ -163,13 +163,6 @@ const MAC_SHORTCUTS: Shortcut[] = [
     category: "agents",
   },
   {
-    id: "stop-agent",
-    label: "Stop Agent",
-    description: "Stop the focused agent",
-    keys: "Cmd+.",
-    category: "agents",
-  },
-  {
     id: "new-tab",
     label: "New Tab",
     description: "New workspace tab",

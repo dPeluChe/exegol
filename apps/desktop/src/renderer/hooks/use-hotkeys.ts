@@ -6,7 +6,6 @@ import { appChord, chordKey, IS_MAC, windowKey } from "../lib/keymap";
 import { goToShortcut } from "../lib/live-tabs";
 import { cyclePane, focusActivePane, focusDashboard, paneRoot } from "../lib/pane-focus";
 import { addTabAndFocus, splitActivePane, terminalForActivePane } from "../lib/split-terminal";
-import { trpcMutate } from "../lib/trpc-client";
 import { jumpToAgent, sortAttentionItems, useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
 import { getActivePaneId, getProjectState, useWorkspaceStore } from "../stores/workspace";
@@ -139,13 +138,6 @@ export function useHotkeys() {
         return;
       }
 
-      // Cmd+.: Stop focused agent
-      if (key === ".") {
-        e.preventDefault();
-        stopActiveAgent();
-        return;
-      }
-
       // ── Workspace tab navigation (T42) ────────────────────────────────
 
       // Cmd+Shift+]: Next workspace tab
@@ -249,17 +241,6 @@ export function useHotkeys() {
       unsubZoom();
     };
   }, [toggleSidebar, setActiveView]);
-}
-
-/** Cmd+.: the session in the active tab's focused pane, never one in a tab not on screen */
-function stopActiveAgent(): void {
-  if (useAppStore.getState().activeView !== "workspace") {
-    useAgentStore.getState().stopFocusedAgent();
-    return;
-  }
-  const paneId = getActivePaneId();
-  const agentId = paneId ? getProjectState().panes[paneId]?.agentId : undefined;
-  if (agentId) trpcMutate("agents.stop", { id: agentId }).catch(() => {});
 }
 
 /** The browser pane on screen with focus, if that is what has it */

@@ -9,6 +9,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Removed
+- `Cmd+.` no longer stops the focused session: one stray key ended it with no warning. Stop Agent stays in the Command Palette
+
 ### Added
 - Updates keep live terminals when the new version can still talk to the running sidecar; it is replaced once a launch finds no live session
 - Unread sessions: a turn that ended while you were elsewhere gets its own group in Company, the sidebar and the status bar, apart from what needs an answer
