@@ -92,7 +92,7 @@ export function GitHubMenu() {
       </button>
 
       {menu !== "closed" && (
-        <div className="absolute top-full right-0 z-50 mt-1 flex max-h-[70vh] w-[26rem] flex-col overflow-y-auto rounded-md border border-border bg-bg-secondary py-1 text-xs shadow-lg">
+        <div className="absolute top-full left-0 z-50 mt-1 flex max-h-[70vh] w-[26rem] flex-col overflow-y-auto rounded-md border border-border bg-bg-secondary py-1 text-xs shadow-lg">
           {menu !== "list" ? (
             <TargetPicker
               projectId={projectId}
