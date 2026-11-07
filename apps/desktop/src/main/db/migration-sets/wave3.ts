@@ -416,4 +416,12 @@ export const wave3Migrations: Migration[] = [
       CREATE INDEX idx_colab_members_project ON colab_members (project_id);
     `,
   },
+  {
+    // T217 notes: the folder a project or colab got on first use, so a rename keeps it
+    id: "w3_038_notes_dirs",
+    sql: `
+      ALTER TABLE projects ADD COLUMN notes_dir TEXT;
+      ALTER TABLE colabs ADD COLUMN notes_dir TEXT;
+    `,
+  },
 ];

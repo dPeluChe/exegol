@@ -9,30 +9,8 @@ import type {
 } from "@exegol/shared";
 import { SKILL_CATEGORIES } from "@exegol/shared";
 import { commandOnPath } from "../agents/spawn-env";
+import { parseFrontmatter } from "../lib/frontmatter";
 import { logger } from "../lib/logger";
-
-// ─── Frontmatter parser ──────────────────────────────────────────────────────
-
-interface ParsedSkillFile {
-  meta: Record<string, string>;
-  body: string;
-}
-
-function parseFrontmatter(content: string): ParsedSkillFile {
-  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/);
-  if (!match) return { meta: {}, body: content };
-
-  const meta: Record<string, string> = {};
-  const yamlBlock = match[1] ?? "";
-  for (const line of yamlBlock.split(/\r?\n/)) {
-    const idx = line.indexOf(":");
-    if (idx > 0) {
-      meta[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
-    }
-  }
-
-  return { meta, body: match[2] ?? "" };
-}
 
 function parseCommaSeparated(value: string | undefined): string[] {
   if (!value) return [];

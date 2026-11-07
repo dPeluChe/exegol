@@ -1,4 +1,10 @@
-import { type InboxAuthor, type InboxThread, pathBase, pathParent } from "@exegol/shared";
+import {
+  type Colab,
+  type InboxAuthor,
+  type InboxThread,
+  pathBase,
+  pathParent,
+} from "@exegol/shared";
 import type Database from "libsql";
 import { getAgent, getAgentCwd } from "../db/queries/agents";
 import { listColabs } from "../db/queries/colabs";
@@ -33,7 +39,10 @@ async function gitFacts(cwd: string | null) {
 }
 
 /** Copied, not joined: a message outlives the session that wrote it */
-async function authorOf(db: Database.Database, context: ExegolToolContext): Promise<InboxAuthor> {
+export async function authorOf(
+  db: Database.Database,
+  context: ExegolToolContext,
+): Promise<InboxAuthor> {
   const agent = getAgent(db, context.agentId);
   return {
     authorKind: "agent",
@@ -51,7 +60,7 @@ const actorOf = (context: ExegolToolContext) => ({
   agentId: context.agentId,
 });
 
-const text = (value: unknown): string => (typeof value === "string" ? value : "");
+export const text = (value: unknown): string => (typeof value === "string" ? value : "");
 
 const summary = (t: InboxThread) => ({
   thread: t.id,
@@ -63,7 +72,15 @@ const summary = (t: InboxThread) => ({
 
 const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
 
-/** Names, as an agent knows them from its instructions; only colabs this project is in */
+/** By name, as an agent knows it from its instructions; only colabs this project is in */
+export function colabNamed(db: Database.Database, projectId: string, name: unknown): Colab {
+  const colabs = listColabs(db, projectId);
+  const colab = colabs.find((c) => same(c.name, text(name)));
+  if (colab) return colab;
+  const names = colabs.map((c) => c.name).join(", ") || "none";
+  throw new InboxError(`No colab named ${JSON.stringify(text(name))} here. Yours: ${names}`);
+}
+
 function targetOf(
   db: Database.Database,
   args: Record<string, unknown>,
@@ -71,14 +88,7 @@ function targetOf(
 ): InboxTarget {
   if (args.target === "personal") return { scope: "personal" };
   if (args.target !== "colab") return { scope: "project", projectId };
-  const colabs = listColabs(db, projectId);
-  const colab = colabs.find((c) => same(c.name, text(args.colab)));
-  if (!colab) {
-    const names = colabs.map((c) => c.name).join(", ") || "none";
-    throw new InboxError(
-      `No colab named ${JSON.stringify(text(args.colab))} here. Yours: ${names}`,
-    );
-  }
+  const colab = colabNamed(db, projectId, args.colab);
   const wanted = text(args.to_project);
   if (!wanted) return { scope: "colab", colabId: colab.id, toProject: null };
   const to = colab.members.find((m) => same(m.projectName, wanted));
