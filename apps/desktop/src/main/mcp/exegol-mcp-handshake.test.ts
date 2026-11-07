@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { initializeResult, unsupportedVersionError } from "./exegol-mcp-handshake";
+import { discoverResult, initializeResult, unsupportedVersionError } from "./exegol-mcp-handshake";
 
 describe("MCP handshake", () => {
   it("agrees on a legacy version it speaks, and on its newest legacy otherwise", () => {
@@ -17,5 +17,15 @@ describe("MCP handshake", () => {
     const err = unsupportedVersionError(meta("1900-01-01"));
     expect(err?.code).toBe(-32022);
     expect(err?.data.supported).toContain("2026-07-28");
+  });
+});
+
+describe("session instructions", () => {
+  it("come first, in both eras, and leave the rest as it was", () => {
+    const line = "Inbox: 2 threads waiting for this project.";
+    const plain = initializeResult(undefined, "1.2.3").instructions;
+    expect(initializeResult(undefined, "1.2.3", line).instructions).toBe(`${line}\n\n${plain}`);
+    expect(discoverResult("1.2.3", line).instructions).toBe(`${line}\n\n${plain}`);
+    expect(discoverResult("1.2.3").instructions).toBe(plain);
   });
 });

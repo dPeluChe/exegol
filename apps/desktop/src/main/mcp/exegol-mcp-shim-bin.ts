@@ -230,6 +230,7 @@ function callSocket(
   method: string,
   params: Record<string, unknown>,
   label = method,
+  timeoutMs = CALL_TIMEOUT_MS,
 ): Promise<unknown> {
   const id = nextSocketId++;
   // Whether it reached the wire decides what a timeout means: in the outbox it never ran; written,
@@ -256,7 +257,7 @@ function callSocket(
           ),
         );
       }
-    }, CALL_TIMEOUT_MS);
+    }, timeoutMs);
     timer.unref?.();
     const payload = encodeRequest(id, method, params);
     if (socketWritable()) {
@@ -270,6 +271,16 @@ function callSocket(
     }
     outbox.push({ id, payload });
   });
+}
+
+const SESSION_WAIT_MS = 500;
+
+/** Bounded: a slow init times the client out. Queued, as the first call beats the socket's connect */
+function sessionInstructions(): Promise<string> {
+  const identity = { token, ppid: process.ppid };
+  return callSocket("session_context", identity, "session_context", SESSION_WAIT_MS)
+    .then((result) => (result as { text?: string } | null)?.text ?? "")
+    .catch(() => "");
 }
 
 async function callTool(tool: string, args: Record<string, unknown>): Promise<unknown> {
@@ -306,12 +317,20 @@ function handleClientMessage(
   switch (msg.method) {
     case "initialize": {
       const requested = (msg.params as { protocolVersion?: string } | undefined)?.protocolVersion;
-      writeToClient(msg.id, framed, initializeResult(requested, __EXEGOL_VERSION__));
+      void sessionInstructions().then((session) =>
+        writeToClient(
+          msg.id as number,
+          framed,
+          initializeResult(requested, __EXEGOL_VERSION__, session),
+        ),
+      );
       return;
     }
 
     case "server/discover":
-      writeToClient(msg.id, framed, discoverResult(__EXEGOL_VERSION__));
+      void sessionInstructions().then((session) =>
+        writeToClient(msg.id as number, framed, discoverResult(__EXEGOL_VERSION__, session)),
+      );
       return;
 
     case "ping":
