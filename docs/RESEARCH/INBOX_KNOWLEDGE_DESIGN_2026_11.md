@@ -1,222 +1,171 @@
-# Inbox and knowledge: design (2026-11)
+# Inbox, messages and knowledge: design (2026-11)
 
-Design for T217, written before any code. Facts come from reading `main` at 07da04f2; nothing here was run or prototyped. Estimates are guesses. Section 9 lists the decisions that are Antonio's to make.
+Design for T217, second version, after Antonio's review of the first. Nothing here was built or prototyped. Usage numbers are one person's, read from the live DB on 2026-11-06 as counts only. Estimates are guesses. Section 9 lists the decisions pending.
 
-## 1. The idea in one page
+## 1. The short version
 
-Three needs are mixed in T217. They have different lifetimes, so they should stay different things:
+**The project is the address, the link says who may talk, the inbox holds what waits, and the docs keep what stays true.**
 
-| Thing | Question it answers | Lifetime | Today |
-|---|---|---|---|
-| Messages | "Are you there right now?" | Minutes, needs a live session | `agent_send` |
-| Inbox | "What is waiting for someone?" | Until someone closes it | Does not exist |
-| Knowledge | "What is true here?" | Until it stops being true | Half built |
+- A **link** between two projects says they are related and lets their agents write to each other.
+- The **inbox** is the project's message tray: from linked projects, other sessions, or a CLI. Nothing gets pasted into a console.
+- A **live message** (`agent_send`) is the same idea with a session present: a review chat between two sessions.
+- **Knowledge is not a product.** What is true about a project lives in its docs, and what changed lives in git and PRs. An inbox item that teaches something ends as a change to a doc, in a PR.
 
-The inbox is the door and knowledge is the shelf. Anything arriving from an agent, another project or another app lands in an inbox. Triage then turns it into work, a knowledge entry, an answer, or nothing.
+The first version proposed a knowledge store with entries, an index and proposals. This one drops it.
 
 ```
-agent of any project ─┐                       ┌─> a session takes it and works on it
-you, in the app ──────┼─> inbox ─> triage ────┼─> knowledge entry (reviewed)
-other apps, CLI ──────┘   (waits, never       ├─> an answer, back to the sender's inbox
-                           injected)          └─> dismissed
+irma landing's agent finds something the blueprint needs
+        │  it knows the link exists, nobody has to ask it
+        ▼
+  blueprint's inbox  ──waits──>  a session there takes it
+                                        │
+                     PR on the blueprint, doc updated if it teaches something
+                                        │
+                     answer back in the landing's inbox
 ```
 
-This also settles the agent-writes-knowledge problem: an agent proposes an update, and the proposal is an inbox item. Knowledge stays curated without a second review mechanism.
+## 2. What the numbers say
 
-## 2. What exists today
-
-**Reusable**
-- `.exegol/knowledge/`: `PROJECT.md`, `DIGEST.md`, `MEMORY.md`, the managed block, and a pointer list at spawn (`knowledge/context.ts`).
-- `memories` with salience, reinforcement and hybrid recall (`memory/store.ts`).
-- The MCP server's identity model: per-agent token, project and access mode derived on the server.
-- Agent-message framing: no authority, control characters stripped (`agent-message-injection.ts`).
-- `project_groups`: a ready boundary for who may read whom.
-
-**Not reusable**
-- `messages`: tied to agents, no project column, no target when a session is gone. A send to a dead agent is refused.
-- Attention items: renderer localStorage, one per agent, status rather than content.
-- `handoffs`: no SQL touches it. `task_queue`: nothing inserts in practice. `activities`: a log with no read state.
-- `markdown-tasks.ts`: line-based ids, no agent write path. An inbox item can create a task, not be one.
-
-So the inbox needs its own table. T217 said agents cannot consult knowledge; the real gap is narrower: they can read it and save memories, but have no tool to write knowledge, cannot reach another project's, and nothing exists above project level.
-
-## 3. Small fixes worth doing first
-
-Found during this review. All are independent of the design.
-
-| Problem | Where |
+| Thing | Count |
 |---|---|
-| The extractor is not wired, yet the UI says memories are "automatically extracted" | `extractor.ts:167`, `MemorySection.tsx:125` |
-| `memory_search` is keyword-only though described as hybrid: no Ollama config passed | `exegol-tools.ts:68` |
-| `knowledge_get` reads `project.path`, not the agent's worktree | `exegol-tools.ts:134` |
-| Spawn context is skipped with no task and on resume, while `access_count` still rises | `spawn-context.ts:142`, `agent-spawn-flow.ts:366` |
-| The managed block tells a plain CLI about MCP tools it does not have | `managed-block.ts` |
-| `messages_check` returns messages already delivered inline: only it sets `read_at` | `agent-messaging.ts:154` |
-| Re-importing `MEMORY.md` inflates reinforcement | `memory-bridge.ts:112` |
-| A malformed deep link is logged raw; capture links would carry content | `bootstrap/deep-link.ts:21` |
-| The sidecar socket has no `chmod` as the MCP one does. To verify: `~/.exegol` permissions may already cover it | `pty-sidecar-entry.ts` |
+| Projects, sessions | 35, 405 (319 Claude Code, 21 Devin, 13 Antigravity, 12 Codex, 11 OpenCode, 4 Droid, 25 shells) |
+| Exegol memories | **0**, though `memory_save` reaches every MCP session in write mode |
+| Projects with `.exegol/knowledge` | **0** found, this repo included |
+| Project groups, agent links | **0**, **0** |
+| Agent messages | 28, all within 24 h on 2026-08-12, none since |
+| Claude Code's own memory notes | 504 |
+| Hand-written `BLUEPRINT_FEEDBACK.md` | 3 clones, summarized by hand in the base's `docs/GUIDES/LESSONS_FROM_CLONES.md` |
 
-## 4. Inbox
+What this shows:
+- Exegol's memory and knowledge are built and unused. Claude's notes exist because it writes them alone. Nothing here tells whether agents would use a tool they were pushed toward, so low use is not proof of no value, but nothing shows a need.
+- **The inbox already exists, on paper.** `lizaceves-landing/docs/BLUEPRINT_FEEDBACK.md` opens with "each point goes as an issue" to `landings-base`, which has 3 issues. A clone's agent records what it found, and a person carries it across. That is the workflow to automate, and the reason to build this.
 
-### Data
+## 3. What outside evidence says
 
-One table, `inbox_items`. `project_id` null means the personal inbox.
+- **Docs handed to every session do not help by themselves.** ETH Zurich's study of `AGENTS.md` (arXiv 2602.11988, v3, September 2026): context files did not generally raise task success and raised inference cost by over 20%, for generated and hand-written files. Instructions were followed; repository overviews did not help. Redundant content was the problem: with docs removed from the repo, generated files helped (DAIR.AI's reading of it). Limit: these are single-repo issue tasks. It says nothing on cross-project work.
+- **Plain files hold up against memory tools.** Letta scored 74.0% on LoCoMo with file tools, above Mem0's reported 68.5%. Limit: a vendor's result on a conversation benchmark, and Mem0 reports higher numbers of its own.
+- **The cross-agent gap is real, and others are filling it.** `ai-memory` feeds 20+ harnesses one store, because native notes live on one machine and belong to one agent. Its strongest case is handing off a task between CLIs and across machines or a team, which is not Antonio's case today.
+- **Memory goes stale.** Per Mem0's survey, one harness validates citations against the current branch and expires memories after 28 days. A store needs that kind of upkeep; docs reviewed in PRs get it for free.
+- **Links are an established answer.** `mcp_agent_mail` keeps projects separate, suggests related ones, and still requires an explicit contact approval before agents exchange messages.
 
-| Column | Notes |
+## 4. Do we need knowledge? Recommendation: no
+
+Antonio's doubt is right. Four questions, four existing answers:
+
+| Question | Answer lives in |
 |---|---|
-| `id`, `created_at`, `updated_at` | |
-| `project_id` | Null: personal. Set null on project delete rather than cascade |
-| `kind` | `feedback`, `request`, `resource`, `note`, `knowledge_proposal`, `answer` |
-| `title`, `body`, `url` | Capped; `body` like `agent_send`'s 12,000 chars |
-| `source_kind` | `user`, `agent`, `external` |
-| `source_project_id`, `source_agent_id`, `source_app` | No FK cascade: the record outlives the session |
-| `state` | `open`, `taken`, `done`, `dismissed` |
-| `taken_by_agent_id`, `read_at` | |
-| `reply_to` | The item this answers |
-| `payload` | JSON, for a proposal's target and new text |
+| How does this project work? | Docs, read on demand |
+| What changed lately? | `git log`, PRs, `CHANGELOG`: an agent can check them, and they cannot go stale |
+| What rules apply here? | A short `AGENTS.md`: instructions, not overviews |
+| What did an agent discover? | A doc or the code, in the same PR |
 
-Retention: closed items kept 90 days, unlike `messages`, which grows forever.
+Claude cannot see Devin's notes, true. But a discovery only one CLI knows is a discovery not yet written down. Sharing the notes treats that symptom; writing it in the repo cures it, and reaches people too.
 
-### Lifecycle
+So:
+1. **Polish the skills, as Antonio suggested.** One rule: a finding the code cannot show goes into the docs in the same PR. `doctos` and `standup` carry it. This repo already works that way.
+2. **Keep `AGENTS.md` short and made of instructions**, because of the ETH result. Journals and research are read when needed, never loaded at start.
+3. **Freeze Exegol's Memory and Knowledge sections.** No new features. Fix the false "automatically extracted" text. Deciding whether to remove them comes later.
 
-`open` → `taken` → `done`, or `dismissed` from either. `answered` is not a state: an answer is a new item in the sender's inbox with `reply_to`, so a sender whose session is long gone still gets it, and the thread is a chain of items. Read state is apart from `state`, as in T220.
+What would change this: real teamwork where people lose context the docs do not hold, or handing tasks between CLIs often. Handoff between CLIs is its own small feature if it comes up, not a knowledge base.
 
-Who closes: a person, or a write-mode session of the target project. The sender never can. A session that dies while holding an item returns it to `open`.
+## 5. Project links
 
-### MCP tools
+A project can only write to projects it is linked to.
 
-| Tool | Modes | Notes |
+| Field | Notes |
+|---|---|
+| `from_project`, `to_project` | Plus `from_repo`, `to_repo`, optional |
+| `relation` | Free label: "built from", "uses", "documents" |
+| `direction` | One way or both. Default both: answers must get back |
+| `note` | What to send through it: what the agent reads |
+
+Repos matter: an Exegol project is often a workspace. "Irma Projects" holds `lizaceves-landing`, and "Blueprints" holds `labs-landings-base`. Linking those two folders is the real relation, and `repo` already travels with GitHub tasks.
+
+Links are made by hand in Edit project. Exegol can suggest some and a person confirms, as `mcp_agent_mail` does: a repo cloned from a blueprint, a `BLUEPRINT_FEEDBACK.md`, or a sibling repo mentioned in docs. Suggestions come after the manual version.
+
+`project_groups` does not fit: a group is for the sidebar and has no direction or note, and it has no rows.
+
+Links gate `inbox_post`. `agent_send` stays as it is for now, unchecked across projects, and should move under the same rule when T221 is built.
+
+## 6. Inbox
+
+The first version's data model holds, with `repo` and without `knowledge_proposal`: table `inbox_items`; `project_id` null means personal; states `open`, `taken`, `done`, `dismissed`; an answer is a new item in the sender's inbox; closed items kept 90 days. No existing table fits: `messages` needs a live agent, attention items live in the renderer, `handoffs` and `task_queue` are unused.
+
+Tools: `inbox_post`, `inbox_list`, `inbox_get`, `inbox_take`, `inbox_close`.
+
+### An agent must know it can write
+
+This is the core of the feature, and the riskiest part. Antonio wants a landing's agent to write to its blueprint without being told, so it has to know the link exists and when to use it.
+
+Ways to tell it:
+
+| Channel | Reaches | Problem |
 |---|---|---|
-| `inbox_post` | All | Target: `project` by name or id, or `personal`. Rate limited as `agent_send` |
-| `inbox_list` | All | Own project by default; `state`, `kind` filters |
-| `inbox_get` | All | Full item, body marked as data |
-| `inbox_take` | Write | Claims one, compare-and-swap |
-| `inbox_close` | Write | `done` or `dismissed`, optional answer |
+| Spawn context | New sessions with a task | Skipped with no task and on resume |
+| MCP `instructions` | MCP sessions | Static in the shim today, and whether each CLI shows them is unverified |
+| `inbox_post`'s description | MCP sessions | Claude Code can defer tool schemas, so it may go unread |
+| Managed block in `AGENTS.md` | Any CLI | Edits the repo; an Exegol-only fact in a shared file |
+| `exegol inbox add` run by the agent | Any CLI with a shell | It still has to know |
 
-### How it is noticed
+Recommendation: spawn context fixed to reach resume and quick launches, plus MCP instructions, then measure across Claude Code, Codex and Devin before building more. The line names the link and its note: "This repo is built from labs-landings-base. Bugs or missing features in the base go there with inbox_post, without asking." Without a test of whether agents really do it, the rest is worth little.
 
-Nothing is pasted into a session. That is the whole point.
-- A count on the project's sidebar card and a new sidebar view or Project section. No amber dot: this is "look when free", like Unread.
-- One line at spawn and resume: "3 open inbox items, see `inbox_list`". Counts only, never content, so a posted text cannot become a prompt.
-- Company's Can wait card counts them.
+### How it is received
 
-Live delivery stays with `agent_send`. A sender wanting a reply now uses that; a sender that wants it to wait uses the inbox.
+Nothing is pasted. A count on the project's card, and one line with the count when a session opens there. Not a question: no amber dot, like Unread.
 
-### Why not PRs
+### Messages and inbox
 
-A PR carries a change but no conversation between agents, needs a repo with a remote, and cannot hold a resource or a question. An item can point at a PR through `url`.
-
-### Worked example
-
-1. A session on a landing finds a bug in the blueprint it was built from and calls `inbox_post(project: "blueprint", kind: "feedback", ...)`.
-2. Nothing happens in any blueprint terminal. The project's card shows 1.
-3. Antonio opens the blueprint, reads it, and either opens a session on it or sends it to a live one, which calls `inbox_take`.
-4. The session fixes it and calls `inbox_close(done, answer: "fixed in #12")`.
-5. The answer lands in the landing's inbox, even if the first session ended.
-
-## 5. Knowledge
-
-### Two stores, two jobs
-
-The complaint is that knowledge stays local to Exegol. The cause is that one store does two jobs.
-
-| | Memory | Knowledge |
+| | `agent_send` | Inbox |
 |---|---|---|
-| Content | Short facts agents notice | Curated: brief, decisions, how things work, resources |
-| Noise | High, ranked by salience | Low, reviewed |
-| Lives in | DB, local | Files, shared by git |
-| Who writes | Agents, freely | People, and agents through a proposal |
-| Reaches a plain CLI | No | Yes, by reading files |
+| Needs a live session | Yes | No |
+| Survives a restart | Queue does not | Yes |
+| Good for | Review chat between open sessions | Anything that can wait |
 
-Making files hold everything fails: a `memory_save` would dirty the checkout from any session and fill the repo with noise. Making the DB hold everything keeps the complaint. So both stay, and promotion joins them.
+Whether they should share one tool, `send(project, session?)`, can wait: the two have different promises, and `agent_send` has no use today to migrate.
 
-### Shape
+### Other developers
 
-```
-<project>/.exegol/knowledge/
-  PROJECT.md        brief, as today
-  DIGEST.md         trs, gitignored, as today
-  entries/<slug>.md one fact per file, frontmatter, merges cleanly in git
-~/.exegol/knowledge/
-  entries/<slug>.md personal: libraries, skills, references
-```
+A local inbox cannot reach another machine. For a team the transport already exists: GitHub issues, which Exegol's GitHub menu reads. An item gets a "Send as issue" action. Antonio's own feedback file already says each point should become an issue, so this also closes that step. No server needed.
 
-One file per entry because a shared generated `MEMORY.md` conflicts on every merge. The DB holds an FTS index over entries, rebuilt from files, never the source. `MEMORY.md` and its manual bridge retire once promotion exists. The same shape in the personal folder lets it become a git repo later with no change.
+### Ways in
 
-### Tools
+In order: from inside Exegol; `exegol inbox add` for scripts and other CLIs; a deep link that opens a dialog a person confirms, because any web page can fire one; app tokens that can only post. A share from a phone needs something always on, Orbital being the candidate, and comes last. Details as in the first version: no localhost HTTP, and a URL is stored, not fetched.
 
-| Tool | Modes | Notes |
-|---|---|---|
-| `knowledge_get` | All | Add entries, and read from the agent's worktree |
-| `knowledge_search` | All | `scope: project`, `personal`, `group`, or a named project under the read policy below |
-| `knowledge_propose` | All | Creates a `knowledge_proposal` item, even in read mode: it changes nothing until accepted |
+## 7. Security
 
-Accepting a proposal writes the file in the project root. Nothing runs `git add`: it appears as a change for the person to commit. An optional per-project setting lets write-mode agents write entries directly, off by default.
+An item is text from another agent that a privileged agent will read.
+- Links narrow who can write. A page that hijacks one agent reaches only its linked projects.
+- Bodies come back marked as data, with the sender shown. Nothing runs by itself: a person or an explicit `inbox_take` starts work.
+- Rate limits per sender. Content never reaches logs or bug reports.
 
-Reading across projects: same group by default, plus projects named in a project's settings. Otherwise a client's project could be read by an agent in an unrelated one. `DIGEST.md` stays per project, and trs keeps owning digests: Exegol adds no second index of code.
+Since agents will now post unasked, expect noise. Measure it before loosening anything.
 
-## 6. Ways in from outside
-
-Facts: no HTTP server, no share extension, no dock drop. `exegol://open` is the only route and carries no content. Every MCP identity is an agent. The shipped `exegol` is a shell opener; `packages/cli` is private and not packaged.
-
-| Way in | Effort | Reach | Notes |
-|---|---|---|---|
-| In-app capture: hotkey, tray, drop on the window | Small | Local | Takes the clipboard or a dropped link |
-| `exegol://inbox?url=&title=&project=` | Small | Local, any browser, macOS Shortcuts, Linux `.desktop` | **Any web page can open a link, so it only opens a filled dialog that a person confirms. It never writes alone** |
-| `exegol inbox add` | Small | Local scripts | Through the local API below |
-| Local API with app tokens | Medium | Local apps | Same socket, new identity kind `app` |
-| macOS Services menu or Share extension | Unknown | Local | Share needs a signed app extension in an Electron bundle, not verified. Windows Share needs MSIX and we ship NSIS |
-| Remote, from a phone | Large | Anywhere | See below |
-
-### Local API
-
-Extend the MCP socket with a caller kind beyond agents: `app`, with a token created in Settings, named, revocable, shown once, stored hashed, allowed `inbox_post` only. No read: an app that can post learns nothing. Items are marked `source_kind: external` and the app's name shows.
-
-No localhost HTTP in the first version. A browser extension would need it, and it brings DNS rebinding and CSRF to a machine running agents. The deep link covers browsers.
-
-### What a tweet needs
-
-An item stores the URL and title, nothing fetched. Fetching on capture would mean requests with no one watching, and X usually returns a login wall. A session asked to read it does so with its own tools, treating the content as untrusted.
-
-From a phone needs something always on, because Exegol is a desktop app with no public address. Orbital is the natural candidate: its node already keeps notes per project or global and has a human inputs queue, "never in a repo". Exegol could poll a remote queue and turn entries into items. A relay of our own is a service to run, and Twitter's own bookmarks through an API is a dependency. Only decide this after the local version proves useful.
-
-## 7. Orbital
-
-No code links them today. From its tool descriptions: `orbital_memory` holds notes per project or global, `orbital_inputs` holds a manager's asks to people. That overlaps in name, not role: Orbital serves a manager running tasks on a node, Exegol serves a person at a desktop with live sessions. Recommendation: Exegol keeps its local inbox and knowledge and can work offline, and Orbital is a later source for remote items. Its code was not read for this document.
-
-## 8. Security
-
-An item is text from another agent or the internet that a privileged agent will read, so this is the main risk.
-
-- Bodies and URLs are data: `inbox_get` returns them under a marker like `untrusted_page_content`, with the sender shown. `DATA_NOTE`, a single sentence with no delimiter, is too weak here.
-- Nothing is auto-run. A person or a session's explicit `inbox_take` starts work.
-- Accepting a proposal shows the diff, because an accepted entry reaches future agents as trusted context. This is the path a planted instruction would take.
-- External items cannot be proposals, so an outside app cannot write to knowledge by one click.
-- Rate limits per sender, per project and per app token.
-- Content never reaches logs or bug reports. Log ids, kinds and sources.
-- Entry slugs are checked against traversal; file writes stay under the knowledge folder.
-
-## 9. Decisions for Antonio
-
-1. **Files for curated knowledge, DB for memory?** Recommended. The alternative, DB only with auto-export, is smaller but keeps the complaint.
-2. **Agents propose rather than write?** Recommended, with direct writes as an opt-in per project.
-3. **Who reads another project's knowledge?** Recommended: same group, plus named projects. Open to all of a user's projects is simpler but mixes clients.
-4. **Who may post into a project's inbox?** Recommended: any local agent, since items only wait. Stricter: the same rule as 3.
-5. **Personal knowledge in `~/.exegol/knowledge`?** Recommended, or a folder you pick, so it can live in a repo or a synced drive.
-6. **Is capture from the phone needed soon?** It decides whether Orbital enters early.
-
-## 10. Plan
-
-One PR per step. Each is useful alone.
+## 8. Plan
 
 | Step | Content | Estimate |
 |---|---|---|
-| 0 | The fixes in section 3 | 2-3 days |
-| 1 | `inbox_items`, MCP tools, sidebar view, spawn line | 1 week |
-| 2 | Capture in the app and the confirming deep link | 2-3 days |
-| 3 | Entries, index, `knowledge_search`, `knowledge_propose`, accept with a diff | 1-2 weeks |
-| 4 | Personal knowledge and cross-project reads | 3-5 days |
-| 5 | App tokens and `exegol inbox add` | 3-5 days |
-| 6 | Native share and remote, after a decision | Unknown |
+| 0 | False UI text; spawn context on resume and quick launch | 1 day |
+| 1 | Project links, by hand, in Edit project | 2-3 days |
+| 2 | `inbox_items`, tools, sidebar view, count line | 1 week |
+| 3 | Tell the agent; **stop and measure on the real Irma and blueprint case** | 2-3 days |
+| 4 | Send as issue, `exegol inbox add` | 2-3 days |
+| 5 | Deep link, app tokens, suggested links, phone: only if step 3 worked | Unknown |
 
-Step 0 and step 1 can start without any decision above except 4.
+Outside this repo: the documentation rule in the `doctos` and `standup` skills.
+
+## 9. Decisions for Antonio
+
+1. **Drop the knowledge store and go with docs?** Recommended.
+2. **Freeze Memory and Knowledge in the app, or remove them?** Recommended: freeze now, decide later.
+3. **Links by project, with an optional repo?** Recommended.
+4. **Links in both directions by default?** Recommended, so answers get back.
+5. **May an agent post without asking, inside a link?** It is what you described, so recommended, with noise measured at step 3.
+6. **Team reach through GitHub issues?** Recommended, instead of a server.
+
+## Sources
+
+- Gloaguen et al., [Evaluating AGENTS.md](https://arxiv.org/abs/2602.11988); Saravia, [DAIR.AI's reading](https://academy.dair.ai/blog/agents-md-evaluation)
+- Letta, [Benchmarking AI Agent Memory](https://www.letta.com/blog/benchmarking-ai-agent-memory/)
+- [ai-memory](https://github.com/akitaonrails/ai-memory), [mcp_agent_mail](https://github.com/dicklesworthstone/mcp_agent_mail)
+- Claude Code, [memory docs](https://code.claude.com/docs/en/memory)
+- Mem0, [State of Memory in Agent Harness](https://x.com/mem0ai/article/2061822612398014782): search excerpt only, not read in full

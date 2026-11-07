@@ -1406,16 +1406,9 @@ Core shipped in v0.4.3 (types, spawn injection, modal selector, badge, pipeline 
 
 ---
 
-### T217: Exegol Inbox and shared knowledge (design first) `added: 2026-11-06`
+### T217: Project links and Exegol Inbox (design first) `added: 2026-11-06`
 
-Design and pending decisions: `docs/RESEARCH/INBOX_KNOWLEDGE_DESIGN_2026_11.md`. Antonio's idea, to plan and analyze before any code. Related projects (blueprint bases and the landings built on them) share feedback without typing into a live console: a message that waits to be read, worked on and answered.
-
-- One inbox per project, fed by agents of any project: the feedback found while applying a base reaches the base's session as pending, not as an injected prompt. Entering that session shows there is something to read, to work on or to leave for later
-- A personal knowledge inbox: "save this library or skill" from any agent
-- A way in from outside: an API (or native share) so other apps with access can send a resource, a post or a web page, straight to the inbox
-- Decide against PRs in the repos: they carry the change but no conversation between agents
-- Tie it to the knowledge base (T140, `.exegol/knowledge`, trs digests, memories), which was started but never given a shape: agents cannot yet consult and update it, and it stays local to Exegol. Plan both together: what lives per project, what is global, what an agent reads and writes through MCP
-- Open: lifecycle of an item (open, accepted, done, answered), who validates it, how it differs from `agent_send`, whether Orbital holds any of it
+Design and pending decisions: `docs/RESEARCH/INBOX_KNOWLEDGE_DESIGN_2026_11.md`. Linked projects let an agent write to a related project without being told: a landing's agent tells its blueprint what it found, and the message waits in that project's inbox instead of going through a person or a live console. What is true about a project stays in its docs; the design recommends no separate knowledge store.
 
 ### T218: Recover sessions after an API or network error `added: 2026-11-06`
 
