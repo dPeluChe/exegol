@@ -41,7 +41,8 @@ export const PERSON: InboxAuthor = {
   commit: null,
 };
 
-const notifyChanged = () => broadcast("inbox:changed");
+/** Colabs ride the same push: their query sits under the "inbox" key */
+export const notifyInboxChanged = () => broadcast("inbox:changed");
 
 function bounded(value: string, max: number, name: string): string {
   const text = value.trim();
@@ -116,7 +117,7 @@ export function openThread(
     author,
   );
   const thread = getThread(db, key, null) as InboxThread;
-  notifyChanged();
+  notifyInboxChanged();
   return { thread, similarClosed: similarClosed(db, author, thread) };
 }
 
@@ -139,7 +140,7 @@ export function replyTo(
   }
   const seq = insertMessage(db, key, bounded(body, INBOX_BODY_MAX, "body"), author);
   if (author.projectId) markRead(db, key, author.projectId, seq);
-  notifyChanged();
+  notifyInboxChanged();
   return seq;
 }
 
@@ -152,7 +153,7 @@ export function readThread(
   const thread = reachable(db, actor, key);
   if (actor.projectId && thread.lastReadSeq !== thread.lastSeq) {
     markRead(db, key, actor.projectId, thread.lastSeq);
-    notifyChanged();
+    notifyInboxChanged();
   }
   return {
     thread,
@@ -164,7 +165,7 @@ export function readThread(
 export function take(db: Database.Database, actor: InboxActor, key: string): boolean {
   reachable(db, actor, key);
   const taken = takeThread(db, key);
-  if (taken) notifyChanged();
+  if (taken) notifyInboxChanged();
   return taken;
 }
 
@@ -181,7 +182,7 @@ export function close(
     throw new InboxError("The session that opened a thread does not close it");
   }
   closeThread(db, key, status, bounded(resolution, INBOX_RESOLUTION_MAX, "resolution"));
-  notifyChanged();
+  notifyInboxChanged();
 }
 
 /** A person's call, only once the thread stopped at the limit */
@@ -190,7 +191,7 @@ export function giveLastTurn(db: Database.Database, key: string): void {
     throw new InboxError(`${key} is not waiting at the turn limit`);
   }
   grantLastTurn(db, key);
-  notifyChanged();
+  notifyInboxChanged();
 }
 
 /** The only way a personal thread reaches a project: the row is also the grant */
