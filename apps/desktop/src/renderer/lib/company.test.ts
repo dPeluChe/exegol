@@ -81,6 +81,29 @@ describe("buildRooms", () => {
   });
 });
 
+describe("unread desks", () => {
+  it("rank under what asks for you and land in Can wait, not Needs you", () => {
+    const seenOne = agent({ id: "seen", activityLevel: "idle", projectId: "p" });
+    const unread = agent({ id: "new", activityLevel: "idle", projectId: "p" });
+    const unseen = { new: "p" };
+    expect(buildRooms([seenOne, unread], {}, unseen)[0]?.desks.map((d) => d.id)).toEqual([
+      "new",
+      "seen",
+    ]);
+    const strip = todayStrip(
+      [seenOne, unread],
+      {},
+      {
+        levelOf: () => "all",
+        outdated: new Set(),
+        unseen,
+      },
+    );
+    expect(strip.needs).toEqual([]);
+    expect(strip.canWait.map((a) => a.id)).toEqual(["new"]);
+  });
+});
+
 describe("todayStrip", () => {
   const ctx = { levelOf: () => "all" as const, outdated: new Set<string>() };
   const ids = (list: AgentState[]) => list.map((a) => a.id);

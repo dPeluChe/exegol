@@ -29,6 +29,7 @@ import { formatUptime } from "../workspace/sections/resource-format";
 const GROUP_LABEL: Record<AgentGroup, string> = {
   needYou: "Need you",
   working: "Working",
+  unread: "Unread",
   waiting: "Waiting",
 };
 
@@ -40,11 +41,15 @@ const menuY = (rect: DOMRect) =>
 export function AgentsWidget() {
   const agents = useAgentStore((s) => s.agents);
   const attention = useAgentStore((s) => s.attentionItems);
-  const groups = useMemo(() => groupAgents(Object.values(agents), attention), [agents, attention]);
+  const unseen = useAgentStore((s) => s.unseenTurns);
+  const groups = useMemo(
+    () => groupAgents(Object.values(agents), attention, unseen),
+    [agents, attention, unseen],
+  );
   const [anchor, setAnchor] = useState<{ x: number; y: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const menuStyle = useFittedMenu(menuRef, anchor);
-  const total = groups.needYou.length + groups.working.length + groups.waiting.length;
+  const total = Object.values(groups).reduce((n, list) => n + list.length, 0);
   if (total === 0) return null;
 
   return (
@@ -74,6 +79,12 @@ export function AgentsWidget() {
           {groups.working.length} working
         </span>
         <span>·</span>
+        {groups.unread.length > 0 && (
+          <>
+            <span className="text-accent">{groups.unread.length} unread</span>
+            <span>·</span>
+          </>
+        )}
         <span>{groups.waiting.length} waiting</span>
       </button>
       {anchor &&

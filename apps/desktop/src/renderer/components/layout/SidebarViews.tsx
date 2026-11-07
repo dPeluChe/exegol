@@ -112,6 +112,7 @@ export function AgentsView() {
   // attention list is a separate view, so nothing shows twice
   const activeAgents = Object.values(agents).filter((a) => ACTIVE_STATUSES.has(a.status));
   const attentionItems = useAgentStore((s) => s.attentionItems);
+  const unseenTurns = useAgentStore((s) => s.unseenTurns);
   // One card per project in the user's order, its live tabs inside; the card carries its Cmd+n.
   // A live session no pane shows joins its project's card
   const groups = useLiveTabGroups();
@@ -120,8 +121,8 @@ export function AgentsView() {
     [groups, agents],
   );
   const shownCards = useMemo(
-    () => (activeOnly ? activeCards(cards, agents, attentionItems) : cards),
-    [activeOnly, cards, agents, attentionItems],
+    () => (activeOnly ? activeCards(cards, agents, attentionItems, unseenTurns) : cards),
+    [activeOnly, cards, agents, attentionItems, unseenTurns],
   );
   const agentsByProject = useMemo(
     () =>
@@ -433,6 +434,7 @@ function RunningAgentRow({ agent, onClick }: { agent: AgentState; onClick: () =>
   // the row kept its ⚠ after the user answered the prompt).
   const hasUnreadAttention = useAgentStore((s) => s.isUnread(agent.id));
   const isWaiting = agent.status === "waiting_input" && hasUnreadAttention;
+  const unread = useAgentStore((s) => agent.id in s.unseenTurns);
   const recovery = useSessionRecovery();
   const reconnecting = isSessionReconnecting(recovery, agent.id);
   const now = useNow();
@@ -455,9 +457,12 @@ function RunningAgentRow({ agent, onClick }: { agent: AgentState; onClick: () =>
         <AlertTriangle className="h-3 w-3 shrink-0 animate-pulse text-amber-400" />
       ) : agent.status === "waiting_input" ? (
         <span
-          className="mx-0.5 inline-block h-2 w-2 shrink-0 rounded-full bg-zinc-500"
+          className={cn(
+            "mx-0.5 inline-block h-2 w-2 shrink-0 rounded-full",
+            unread ? "bg-accent" : "bg-zinc-500",
+          )}
           aria-hidden="true"
-          title="Idle — waiting for your next prompt"
+          title={unread ? "Finished: not seen yet" : "Idle — waiting for your next prompt"}
         />
       ) : (
         <AgentSpinner agentId={agent.id} />

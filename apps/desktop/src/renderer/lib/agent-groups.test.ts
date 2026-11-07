@@ -1,7 +1,7 @@
 import type { AgentActivityLevel, AgentStatus } from "@exegol/shared";
 import { describe, expect, it } from "vitest";
 import type { AttentionItem } from "../stores/agents";
-import { groupAgents } from "./agent-groups";
+import { groupAgents, agentGroup as groupOf } from "./agent-groups";
 
 const agent = (
   id: string,
@@ -61,6 +61,15 @@ describe("agent groups", () => {
     expect(agentGroup(agent("a", "running", "busy"), undefined)).toBe("working");
     expect(agentGroup(agent("a", "waiting_input", "idle"), undefined)).toBe("waiting");
     expect(agentGroup(agent("a", "spawning", "neutral"), undefined)).toBe("waiting");
+  });
+});
+
+describe("unread", () => {
+  it("is a finished turn: a question or a running turn says more", () => {
+    expect(groupOf(agent("a", "waiting_input", "idle"), undefined, true)).toBe("unread");
+    expect(groupOf(agent("a", "running", "busy"), undefined, true)).toBe("working");
+    const question = item("a", "action_needed", false);
+    expect(groupOf(agent("a", "waiting_input", "idle"), question, true)).toBe("needYou");
   });
 });
 

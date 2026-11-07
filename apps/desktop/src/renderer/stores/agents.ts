@@ -36,6 +36,12 @@ export const shellClosesOn = (status: string) =>
 export const isLiveAgent = (a: Pick<AgentState, "cliType" | "status">) =>
   a.cliType !== "shell" && LIVE_STATUSES.has(a.status);
 
+const withoutTurn = (turns: Record<string, string>, id: string) => {
+  if (!(id in turns)) return turns;
+  const { [id]: _, ...rest } = turns;
+  return rest;
+};
+
 // ─── Attention model (T57) ────────────────────────────────────────────────
 
 export type AttentionLevel = "critical" | "action_needed" | "info";
@@ -173,6 +179,8 @@ export function startAgentStatusPush(queryClient: QueryClient): void {
         if (item && item.level === "action_needed" && !item.paneId) {
           store.dismissAttention(event.agentId);
         }
+      } else if (event.turnEnded) {
+        store.noteTurnUnseen(event.agentId);
       }
     }
   });
@@ -321,6 +329,11 @@ interface AgentStore {
 
   /** Attention inbox — agents needing user attention, persisted across restarts */
   attentionItems: Record<string, AttentionItem>;
+  /** Sessions whose last turn ended unseen (agent id to project id): look when free, not a
+   *  question, so no attention item, dot or badge */
+  unseenTurns: Record<string, string>;
+  noteTurnUnseen: (agentId: string) => void;
+  markTurnSeen: (agentId: string) => void;
   /** `cause` overrides the status-derived reason (PR watch) */
   addAttentionItem: (agentId: string, cause?: AttentionCause) => void;
   markAttentionRead: (agentId: string) => void;
@@ -454,6 +467,7 @@ export const useAgentStore = create<AgentStore>()(
       syncedProjects: {},
       focusedAgentId: null,
       attentionItems: {},
+      unseenTurns: {},
       unreadAttentionCount: 0,
 
       stopFocusedAgent: () => {
@@ -470,10 +484,11 @@ export const useAgentStore = create<AgentStore>()(
             set({
               focusedAgentId: id,
               attentionItems: { ...s.attentionItems, [id]: { ...item, read: true } },
+              unseenTurns: withoutTurn(s.unseenTurns, id),
               unreadAttentionCount: Math.max(0, s.unreadAttentionCount - 1),
             });
           } else {
-            set({ focusedAgentId: id });
+            set({ focusedAgentId: id, unseenTurns: withoutTurn(s.unseenTurns, id) });
           }
         } else {
           set({ focusedAgentId: id });
@@ -537,7 +552,7 @@ export const useAgentStore = create<AgentStore>()(
         set((state) => {
           const { [id]: _, ...rest } = state.agents;
           const focusedAgentId = state.focusedAgentId === id ? null : state.focusedAgentId;
-          return { agents: rest, focusedAgentId };
+          return { agents: rest, focusedAgentId, unseenTurns: withoutTurn(state.unseenTurns, id) };
         });
       },
 
@@ -649,7 +664,21 @@ export const useAgentStore = create<AgentStore>()(
               !isClaudeQuestion(item, agent)
             );
           });
-          if (stale.length === 0) return changed ? { agents: updated, syncedProjects } : state;
+          const unseenTurns = Object.fromEntries(
+            Object.entries(state.unseenTurns).filter(
+              ([id, projectId]) => projectId !== _projectId || dbIds.has(id),
+            ),
+          );
+          const pruned =
+            Object.keys(unseenTurns).length === Object.keys(state.unseenTurns).length
+              ? state.unseenTurns
+              : unseenTurns;
+          if (stale.length === 0) {
+            if (pruned !== state.unseenTurns) {
+              return { agents: changed ? updated : state.agents, syncedProjects, unseenTurns };
+            }
+            return changed ? { agents: updated, syncedProjects } : state;
+          }
 
           let unreadAttentionCount = state.unreadAttentionCount;
           const attentionItems = { ...state.attentionItems };
@@ -663,6 +692,7 @@ export const useAgentStore = create<AgentStore>()(
           return {
             agents: changed ? updated : state.agents,
             attentionItems,
+            unseenTurns: pruned,
             unreadAttentionCount,
             syncedProjects,
           };
@@ -709,13 +739,28 @@ export const useAgentStore = create<AgentStore>()(
 
       markAttentionRead: (agentId) =>
         set((s) => {
+          const unseenTurns = withoutTurn(s.unseenTurns, agentId);
           const item = s.attentionItems[agentId];
-          if (!item || item.read) return s;
+          if (!item || item.read) return unseenTurns === s.unseenTurns ? s : { unseenTurns };
           return {
             attentionItems: { ...s.attentionItems, [agentId]: { ...item, read: true } },
+            unseenTurns,
             unreadAttentionCount: Math.max(0, s.unreadAttentionCount - 1),
           };
         }),
+
+      noteTurnUnseen: (agentId) =>
+        set((s) => {
+          const agent = s.agents[agentId];
+          if (!agent || agent.muted || agent.suspended || agent.cliType === "shell") return s;
+          // The Dashboard covers the panes, so the focused one may be off screen
+          const onScreen =
+            s.focusedAgentId === agentId && useAppStore.getState().activeView !== "dashboard";
+          if (onScreen || s.unseenTurns[agentId]) return s;
+          return { unseenTurns: { ...s.unseenTurns, [agentId]: agent.projectId } };
+        }),
+
+      markTurnSeen: (agentId) => set((s) => ({ unseenTurns: withoutTurn(s.unseenTurns, agentId) })),
 
       dismissAttention: (agentId) =>
         set((s) => {
@@ -751,6 +796,7 @@ export const useAgentStore = create<AgentStore>()(
       name: "exegol-agent-attention",
       partialize: (state) => ({
         attentionItems: state.attentionItems,
+        unseenTurns: state.unseenTurns,
       }),
     },
   ),

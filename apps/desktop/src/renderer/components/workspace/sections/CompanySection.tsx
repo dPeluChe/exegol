@@ -42,6 +42,7 @@ const DESK_STATE: Record<DeskState, { label: string; color: string; ring: string
     ring: "border-amber-400/60 motion-safe:animate-pulse",
   },
   stuck: { label: "stuck", color: "text-error", ring: "border-error/60" },
+  unread: { label: "unread", color: "text-accent", ring: "border-accent/50" },
   working: { label: "working", color: "text-green-400", ring: "border-green-500/40" },
   idle: { label: "waiting", color: "text-text-muted", ring: "border-border" },
   suspended: { label: "suspended", color: "text-text-muted", ring: "border-border opacity-60" },
@@ -51,7 +52,13 @@ const ROOM_SUMMARY: [DeskState, string][] = [
   ["needs", "need you"],
   ["working", "working"],
   ["stuck", "stuck"],
+  ["unread", "unread"],
 ];
+
+const pickDesk = (id: string) => {
+  useAppStore.getState().setCompanyPickedId(id);
+  useAgentStore.getState().markTurnSeen(id);
+};
 
 const whereOf = (a: AgentState) => a.branchName ?? "repo root";
 
@@ -100,7 +107,8 @@ const Desk = memo(function Desk({
 }) {
   const item = useAgentStore((s) => s.attentionItems[agent.id]);
   const lastActivity = useDeskActivityStore((s) => s.activity[agent.id]);
-  const state = deskState(agent, item);
+  const unseen = useAgentStore((s) => agent.id in s.unseenTurns);
+  const state = deskState(agent, item, unseen);
   const activity = deskActivity(agent, item, lastActivity);
   const changed = facts?.changedFiles;
   const shell = agent.cliType === "shell";
@@ -168,9 +176,10 @@ function RoomCard({
 }) {
   const { projectId, desks } = room;
   const attention = useAgentStore((s) => s.attentionItems);
+  const unseen = useAgentStore((s) => s.unseenTurns);
   const { data: overview } = useGitHubOverview(projectId);
   const workspace = useWorkspaceStore((s) => s.projectWorkspaces[projectId]);
-  const states = desks.map((a) => deskState(a, attention[a.id]));
+  const states = desks.map((a) => deskState(a, attention[a.id], a.id in unseen));
   const summary = ROOM_SUMMARY.map(
     ([state, label]) => [states.filter((s) => s === state).length, label] as const,
   )
@@ -285,11 +294,15 @@ export function CompanySection({ projectMeta }: { projectMeta: Map<string, Proje
     refetchInterval: 60_000,
   });
 
-  const rooms = useMemo(() => buildRooms(Object.values(agents), attention), [agents, attention]);
+  const unseen = useAgentStore((s) => s.unseenTurns);
+  const rooms = useMemo(
+    () => buildRooms(Object.values(agents), attention, unseen),
+    [agents, attention, unseen],
+  );
   const today = useMemo(() => {
     const levelOf = (projectId: string) => interruption[projectId] ?? "all";
-    return todayStrip(Object.values(agents), attention, { levelOf, outdated });
-  }, [agents, attention, interruption, outdated]);
+    return todayStrip(Object.values(agents), attention, { levelOf, outdated, unseen });
+  }, [agents, attention, interruption, outdated, unseen]);
   const pickedId = useAppStore((s) => s.companyPickedId);
   const setPickedId = useAppStore((s) => s.setCompanyPickedId);
   const live = rooms.flatMap((r) => r.desks);
@@ -301,10 +314,10 @@ export function CompanySection({ projectMeta }: { projectMeta: Map<string, Proje
       selected?.id ?? null,
       "next",
     );
-    if (next) setPickedId(next);
+    if (next) pickDesk(next);
   };
 
-  useCompanyKeys({ pickNext, pick: setPickedId, selected, live });
+  useCompanyKeys({ pickNext, pick: pickDesk, selected, live });
 
   // A default moves with states: the one on screen stays for the way back, unless one was picked
   const shownId = useLatest(selected?.id);
@@ -342,7 +355,7 @@ export function CompanySection({ projectMeta }: { projectMeta: Map<string, Proje
       minSize={20}
       maxSize={70}
       // Using the panel holds it: a default selection moves as states change
-      onFocusCapture={() => setPickedId(selected.id)}
+      onFocusCapture={() => pickDesk(selected.id)}
     >
       <CompanySession
         key={selected.id}
@@ -392,7 +405,7 @@ export function CompanySection({ projectMeta }: { projectMeta: Map<string, Proje
                       deskFacts={deskFacts}
                       outdated={outdated}
                       selectedId={selected?.id ?? null}
-                      onSelect={setPickedId}
+                      onSelect={pickDesk}
                     />
                   ))}
                 </div>
