@@ -136,9 +136,10 @@ const COMPONENTS: Record<string, ComponentType<ElementProps>> = {
 };
 
 /** Agent text is untrusted: formatted, but its HTML is text and nothing loads or runs by itself */
-export function ChatMarkdown({ text, agentId }: { text: string; agentId: string }) {
+/** No `agentId` (a note): links show as text, since there is no session to open them in */
+export function ChatMarkdown({ text, agentId }: { text: string; agentId?: string }) {
   return (
-    <ChatAgent.Provider value={agentId}>
+    <ChatAgent.Provider value={agentId ?? null}>
       <Streamdown
         mode="static"
         parseIncompleteMarkdown={false}

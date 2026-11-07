@@ -405,6 +405,14 @@
       "list",
       "removeMember",
       "update"
+    ],
+    "notes": [
+      "delete",
+      "list",
+      "openFolder",
+      "restore",
+      "retire",
+      "save"
     ]
   },
   "ipc": [
@@ -440,6 +448,7 @@
     "agent:activity",
     "agent:message-held",
     "inbox:changed",
+    "notes:changed",
     "agent:chat-updated",
     "agent:resume-missed",
     "agent:cli-self-updated",

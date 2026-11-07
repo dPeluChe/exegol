@@ -7,7 +7,16 @@ import { runMigrations } from "../db/migrations";
 import { addColabMember, createColab } from "../db/queries/colabs";
 import { sessionLine } from "../inbox/session-line";
 import { callNotesTool } from "../mcp/exegol-notes-tools";
-import { INDEX_FILE, readNote, writeNote } from "./files";
+import {
+  deleteNote,
+  INDEX_FILE,
+  loadNotes,
+  PERSON_AUTHOR,
+  readNote,
+  restoreNote,
+  retireNote,
+  writeNote,
+} from "./files";
 import { notesFolder, notesRoot } from "./folders";
 
 vi.mock("../mcp/exegol-protocol", async (original) => {
@@ -95,6 +104,30 @@ describe("notes files", () => {
     await expect(writeNote(folder, { title: "one more", body: "b" }, author)).rejects.toThrow(
       /its limit\. .*Oldest: n\d+ \(/,
     );
+  });
+
+  it("let the person edit any note while it keeps its author", async () => {
+    const folder = claimBlue();
+    const { note } = await writeNote(folder, { title: "Agent's", body: "v1" }, author);
+    await writeNote(folder, { id: note.id, title: "Agent's", body: "v2" }, PERSON_AUTHOR);
+    expect(await readNote(folder, note.id)).toMatchObject({ body: "v2", session: "a-blue" });
+  });
+
+  it("restore a retired note under a free id, and delete live or retired ones", async () => {
+    const folder = claimBlue();
+    const { note } = await writeNote(folder, { title: "Agent's", body: "old" }, author);
+    await retireNote(folder, note.id, "Wrong");
+    const { note: again } = await writeNote(folder, { title: "Agent's", body: "new" }, author);
+    expect(again.id).toBe("agent-s-2");
+    await restoreNote(folder, note.id);
+    const back = await loadNotes(folder.dir);
+    expect(back.map((n) => n.id).sort()).toEqual(["agent-s", "agent-s-2"]);
+    expect(back.find((n) => n.id === note.id)?.retiredReason).toBeUndefined();
+    await retireNote(folder, again.id, "Dup");
+    await deleteNote(folder, again.id);
+    await deleteNote(folder, note.id);
+    expect(await loadNotes(folder.dir)).toEqual([]);
+    await expect(deleteNote(folder, note.id)).rejects.toThrow("No note");
   });
 });
 

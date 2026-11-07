@@ -5,6 +5,7 @@ const SECTIONS = {
     {
       label: "Context",
       sections: [
+        { id: "notes", label: "Notes" },
         { id: "memory", label: "Memory" },
         { id: "knowledge", label: "Knowledge" },
       ],

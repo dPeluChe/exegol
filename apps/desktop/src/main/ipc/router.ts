@@ -20,6 +20,7 @@ import { mcpRouter } from "./procedures/mcp";
 import { memoryRouter } from "./procedures/memory";
 import { messagesRouter } from "./procedures/messages";
 import { modelsRouter } from "./procedures/models";
+import { notesRouter } from "./procedures/notes";
 import { oplogRouter } from "./procedures/oplog";
 import { pipelineRouter } from "./procedures/pipeline";
 import { projectGroupsRouter } from "./procedures/project-groups";
@@ -64,6 +65,7 @@ export const appRouter = router({
   memory: memoryRouter,
   messages: messagesRouter,
   colabs: colabsRouter,
+  notes: notesRouter,
   inbox: inboxRouter,
   queue: queueRouter,
   qaTests: qaTestRouter,
