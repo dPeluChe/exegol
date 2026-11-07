@@ -34,11 +34,9 @@ function pastedBodies(messages: InboxMessage[]): string {
 
 /** Bodies always go along: a session whose tool list predates the inbox, or whose shim is
  *  reconnecting, still has the thread, and one with the tools can answer through them */
-function instructionFor(
-  thread: InboxThread,
-  refs: InboxThread[],
-  messages: InboxMessage[],
-): string {
+function instruction(db: Database.Database, thread: InboxThread): string {
+  const refs = thread.refs.flatMap((ref) => getThread(db, ref, null) ?? []);
+  const messages = listMessages(db, thread.id);
   const count = `${messages.length} message${messages.length === 1 ? "" : "s"}`;
   return [
     `Exegol inbox: the person handed you thread ${thread.id}, ${JSON.stringify(thread.title)}, ${count}.`,
@@ -61,11 +59,6 @@ function handable(db: Database.Database, key: string, projectId: string): InboxT
     throw new InboxError("That session is in another project");
   }
   return thread;
-}
-
-function instruction(db: Database.Database, thread: InboxThread): string {
-  const refs = thread.refs.flatMap((ref) => getThread(db, ref, null) ?? []);
-  return instructionFor(thread, refs, listMessages(db, thread.id));
 }
 
 function claim(db: Database.Database, thread: InboxThread, projectId: string): void {

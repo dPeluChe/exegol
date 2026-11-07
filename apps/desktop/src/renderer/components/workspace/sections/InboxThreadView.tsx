@@ -35,19 +35,22 @@ interface ThreadData {
   refs: InboxThread[];
 }
 
-function authorLabel(m: InboxMessage, session: AgentState | undefined): string {
+function authorLabel(m: InboxMessage, name: string | null): string {
   if (m.authorKind === "user") return "You";
   if (m.authorKind === "external") return "Captured";
-  const name = session ? sessionName(session) : null;
-  return [name, m.cli, m.model, m.repo, m.branch, m.commit].filter(Boolean).join(", ") || "Agent";
+  const cli = m.cli === name ? null : m.cli;
+  return [name, cli, m.model, m.repo, m.branch, m.commit].filter(Boolean).join(", ") || "Agent";
 }
 
 function Message({ message }: { message: InboxMessage }) {
-  const session = useAgentStore((s) => (message.agentId ? s.agents[message.agentId] : undefined));
+  const name = useAgentStore((s) => {
+    const session = message.agentId ? s.agents[message.agentId] : undefined;
+    return session ? sessionName(session) : null;
+  });
   return (
     <article className="rounded-lg border border-border bg-bg-primary px-3 py-2">
       <header className="mb-1 flex justify-between gap-3 text-[10px] text-text-muted">
-        <span className="truncate">{authorLabel(message, session)}</span>
+        <span className="truncate">{authorLabel(message, name)}</span>
         <time className="shrink-0">{new Date(message.createdAt * 1000).toLocaleString()}</time>
       </header>
       <p className="whitespace-pre-wrap break-words text-xs text-text-primary">{message.body}</p>

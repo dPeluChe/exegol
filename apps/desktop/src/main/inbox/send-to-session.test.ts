@@ -156,6 +156,7 @@ describe("sendToSession", () => {
     const { prompt, branch } = startSession(db, id, "p2");
 
     expect(prompt).toContain(`inbox_reply on ${id}`);
+    expect(prompt).toContain("<untrusted_inbox_content>");
     expect(branch).toBe(`inbox/${id}`);
     expect(getThread(db, id, "p2")?.status).toBe("in_progress");
   });
