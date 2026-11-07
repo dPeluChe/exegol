@@ -43,20 +43,24 @@ const UNCACHED = { ttlMs: 0, cacheScope: "private" };
 
 export const completeResult = (result: object) => ({ ...result, resultType: "complete" });
 
-export function initializeResult(requested: unknown, version: string) {
+// First: clients may cut long instructions, and this line changes between sessions
+const withSession = (session: string) =>
+  session ? `${session}\n\n${EXEGOL_INSTRUCTIONS}` : EXEGOL_INSTRUCTIONS;
+
+export function initializeResult(requested: unknown, version: string, session = "") {
   return {
     protocolVersion: LEGACY_VERSIONS.find((v) => v === requested) ?? LEGACY_VERSIONS[0],
     capabilities: CAPABILITIES,
     serverInfo: serverInfo(version),
-    instructions: EXEGOL_INSTRUCTIONS,
+    instructions: withSession(session),
   };
 }
 
-export const discoverResult = (version: string) => ({
+export const discoverResult = (version: string, session = "") => ({
   ...UNCACHED,
   supportedVersions: SUPPORTED_VERSIONS,
   capabilities: CAPABILITIES,
-  instructions: EXEGOL_INSTRUCTIONS,
+  instructions: withSession(session),
   _meta: { [SERVER_INFO_META]: serverInfo(version) },
 });
 

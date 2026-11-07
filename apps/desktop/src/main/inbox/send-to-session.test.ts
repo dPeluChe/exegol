@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { runMigrations } from "../db/migrations";
 import { getThread, listThreads } from "../db/queries/inbox";
 import { sendToSession, startSession } from "./send-to-session";
+import { sessionLine } from "./session-line";
 import {
   close,
   giveLastTurn,
@@ -83,6 +84,18 @@ describe("inboxPendingState", () => {
 
   it("keeps a personal thread on you", () => {
     expect(state(post(a1, { scope: "personal" }))).toBe("needs_you");
+  });
+});
+
+describe("sessionLine", () => {
+  it("counts the project's open threads, and says nothing with none", () => {
+    expect(sessionLine(db, "p1")).toBe("");
+    const id = post();
+    post();
+    post(agent("b1", "p2"), { scope: "project", projectId: "p2" });
+    expect(sessionLine(db, "p1")).toContain("2 threads waiting");
+    close(db, PERSON, id, "resolved", "Done");
+    expect(sessionLine(db, "p1")).toContain("1 thread waiting");
   });
 });
 

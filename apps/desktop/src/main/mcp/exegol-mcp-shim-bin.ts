@@ -272,6 +272,17 @@ function callSocket(
   });
 }
 
+const SESSION_WAIT_MS = 500;
+
+/** Bounded: the first call beats the socket's connect, and a slow init times the client out */
+async function sessionInstructions(): Promise<string> {
+  const late = new Promise<string>((resolve) => setTimeout(() => resolve(""), SESSION_WAIT_MS));
+  const asked = callSocket("session_context", { token, ppid: process.ppid })
+    .then((result) => (result as { text?: string } | null)?.text ?? "")
+    .catch(() => "");
+  return Promise.race([asked, late]);
+}
+
 async function callTool(tool: string, args: Record<string, unknown>): Promise<unknown> {
   try {
     return await callSocket("call_tool", { tool, args, token, ppid: process.ppid }, tool);
@@ -306,12 +317,20 @@ function handleClientMessage(
   switch (msg.method) {
     case "initialize": {
       const requested = (msg.params as { protocolVersion?: string } | undefined)?.protocolVersion;
-      writeToClient(msg.id, framed, initializeResult(requested, __EXEGOL_VERSION__));
+      void sessionInstructions().then((session) =>
+        writeToClient(
+          msg.id as number,
+          framed,
+          initializeResult(requested, __EXEGOL_VERSION__, session),
+        ),
+      );
       return;
     }
 
     case "server/discover":
-      writeToClient(msg.id, framed, discoverResult(__EXEGOL_VERSION__));
+      void sessionInstructions().then((session) =>
+        writeToClient(msg.id as number, framed, discoverResult(__EXEGOL_VERSION__, session)),
+      );
       return;
 
     case "ping":

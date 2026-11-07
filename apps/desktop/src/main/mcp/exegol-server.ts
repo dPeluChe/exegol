@@ -12,6 +12,7 @@ import { forgetBrowserAgent } from "../browser/agent-browser-tools";
 import { listLiveAgentClis } from "../db/queries/agents";
 import { findBlockingClaim } from "../db/queries/path-claims";
 import { getProject } from "../db/queries/projects";
+import { sessionLine } from "../inbox/session-line";
 import { isNamedPipe } from "../lib/ipc-endpoint";
 import { logger } from "../lib/logger";
 import { getNotificationBus } from "../notifications/bus";
@@ -98,6 +99,12 @@ export async function handleRequest(
         ),
       }),
     );
+    return;
+  }
+  if (req.method === "session_context") {
+    const resolved = resolveContext(db, caller?.token, caller?.ppid, conn);
+    const text = resolved.ok ? sessionLine(db, resolved.context.projectId) : "";
+    socket.write(encodeResponse(req.id, { text }));
     return;
   }
   // Claim enforcement before the write (git cannot attribute a change in a shared tree). Identity
