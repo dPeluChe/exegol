@@ -48,6 +48,7 @@ returns the last turns of one session (text only, 2,000 characters each, 12 at m
 - `session_suspend` takes only a session at its prompt, never one working or waiting on the person.
 - `project_add` takes an existing git folder; nothing is created or initialised.
 - Session, thread and note text reach it marked as data.
+- Every change it makes, and every refusal, is a row in `commander_log` that is never pruned: the person reads it under History, the Commander with `my_history`.
 
 ## Phases
 

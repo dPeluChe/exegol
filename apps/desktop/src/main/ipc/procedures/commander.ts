@@ -8,6 +8,7 @@ import {
   setCommanderFeed,
 } from "../../commander/home";
 import { listAgents } from "../../db/queries/agents";
+import { listCommanderLog } from "../../db/queries/commander-log";
 import { publicProcedure, router } from "../trpc";
 
 export const commanderRouter = router({
@@ -42,4 +43,7 @@ export const commanderRouter = router({
     setCommanderFeed(ctx.db, input.on);
     return { feed: input.on };
   }),
+
+  /** What the Commander did, newest first */
+  history: publicProcedure.query(({ ctx }) => listCommanderLog(ctx.db, 100)),
 });

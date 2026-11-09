@@ -16,6 +16,7 @@ import { ModelSelect } from "../../agents/ModelSelect";
 import { AgentIcon } from "../../common/AgentIcon";
 import { FilterChip } from "../../common/FilterChip";
 import { SegmentedTabs } from "../../common/SegmentedTabs";
+import { CommanderHistory } from "./CommanderHistory";
 import { CompanySession } from "./CompanySession";
 
 type Autonomy = "answer" | "ask";
@@ -184,16 +185,34 @@ export function CommanderSection() {
   const session = useAgentStore((s) => (sessionId ? s.agents[sessionId] : undefined));
   const { data: state } = useCommander(sessionId);
   const [view, setView] = useState<CompanyView>("chat");
+  const [history, setHistory] = useState(false);
   if (!state) return null;
-  if (!session) return <StartCard state={state} />;
+  const historyChip = (
+    <FilterChip active={history} onClick={() => setHistory(!history)}>
+      History
+    </FilterChip>
+  );
+  if (history || session) {
+    return (
+      <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col gap-2 px-4 pb-4">
+        <div className="flex items-center justify-between gap-2">
+          {historyChip}
+          {session && <Options state={state} />}
+        </div>
+        {history || !session ? (
+          <CommanderHistory />
+        ) : (
+          <div className="min-h-0 flex-1">
+            <CompanySession agent={session} where="Every project" picked={view} onPick={setView} />
+          </div>
+        )}
+      </div>
+    );
+  }
   return (
-    <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col gap-2 px-4 pb-4">
-      <div className="flex items-center justify-end">
-        <Options state={state} />
-      </div>
-      <div className="min-h-0 flex-1">
-        <CompanySession agent={session} where="Every project" picked={view} onPick={setView} />
-      </div>
-    </div>
+    <>
+      <StartCard state={state} />
+      <div className="mt-3 flex justify-center">{historyChip}</div>
+    </>
   );
 }

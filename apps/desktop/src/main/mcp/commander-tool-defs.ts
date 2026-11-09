@@ -7,6 +7,7 @@ export const COMMANDER_TOOLS = [
   "session_suspend",
   "session_restart",
   "project_add",
+  "my_history",
 ] as const;
 
 export type CommanderToolName = (typeof COMMANDER_TOOLS)[number];
@@ -82,6 +83,18 @@ export const COMMANDER_TOOL_DEFS: ToolBody<CommanderToolName>[] = [
         name: { type: "string", description: "Project name. Default: the folder's name" },
       },
       required: ["path"],
+    },
+  },
+  {
+    name: "my_history",
+    title: "What you did before",
+    description:
+      "Your own past actions, newest first, across every conversation you had: messages sent to " +
+      "sessions, threads, notes, suspends, restarts, projects added, and what was refused. Read " +
+      "it when you start, with your notes, to know where things were left.",
+    inputSchema: {
+      type: "object",
+      properties: { limit: { type: "number", description: "How many. Default 20, at most 50" } },
     },
   },
 ];

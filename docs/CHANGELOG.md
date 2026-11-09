@@ -15,6 +15,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - `Cmd+.` no longer stops the focused session: one stray key ended it with no warning. Stop Agent stays in the Command Palette
 
 ### Added
+- Commander history: everything the Commander changes (messages to sessions, threads, notes, suspends, restarts, projects added, and what was refused) is kept for good and shown under History in its tab; it reads the same history when a new conversation starts.
 - Commander feed: Exegol tells the Commander when a session ends its turn, waits on you, closes or gets stuck, and when a thread arrives, so it reports without being asked (at most every 2 minutes and 10 times an hour; Feed on/off beside its chat). It can also restart a session onto a newer installed CLI.
 - Commander (Dashboard > Commander): one conversation about every other session. It reports what needs you, hands your requests to the right session, answers a session only as you allow, and never a tool permission. Start it on the CLI and model you pick.
 - Inbox capture: `exegol inbox add <text or url>` and `exegol://capture` links open a dialog in Exegol to pick the place (Personal by default) and add a line; nothing is saved until you confirm.
