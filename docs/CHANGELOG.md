@@ -15,12 +15,10 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - `Cmd+.` no longer stops the focused session: one stray key ended it with no warning. Stop Agent stays in the Command Palette
 
 ### Added
+- Commander voice: its replies read aloud on your machine (Kokoro, downloaded once in Settings > Models > Voice, about 130 MB; nothing leaves the machine). Voice toggle in its tab for every new reply, a Speak button on each reply, voices in Spanish and English and a speed. Speech stops when you start a dictation.
 - Commander: it continues a session that stopped on an API or network error (up to 3 times an hour per session, never for a login or account problem), it leaves alone the sessions you are writing to yourself and reports on the rest, and it asks you how to go on when a session has waited 15 minutes at its prompt with no reply.
-<<<<<<< HEAD
 - Commander calls you: a chime, a desktop notice and a toast with its line when something cannot wait, at most once a minute; one click opens its chat. With notifications off in Settings only the toast shows.
-=======
 - Commander: Float opens its chat in a small always-on-top window, so you can talk to it while working elsewhere.
->>>>>>> origin/main
 - Commander history: everything the Commander changes (messages to sessions, threads, notes, suspends, restarts, projects added, and what was refused) is kept for good and shown under History in its tab; it reads the same history when a new conversation starts.
 - Commander feed: Exegol tells the Commander when a session ends its turn, waits on you, closes or gets stuck, and when a thread arrives, so it reports without being asked (at most every 3 minutes and 10 times an hour; Feed on/off beside its chat). It can also restart a session onto a newer installed CLI.
 - Commander (Dashboard > Commander): one conversation about every other session. It reports what needs you, hands your requests to the right session, answers a session only as you allow, and never a tool permission. Start it on the CLI and model you pick.
