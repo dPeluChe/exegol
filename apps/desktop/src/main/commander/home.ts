@@ -13,6 +13,7 @@ export const COMMANDER_NAME = "Commander";
 const COMMANDER_DIR = join(homedir(), ".exegol", "commander");
 const PROJECT_KEY = "commander_project_id";
 const AUTONOMY_KEY = "commander_autonomy";
+const FEED_KEY = "commander_feed";
 
 /** answer: it may write into sessions when sure. ask: it only proposes, the person sends */
 export type CommanderAutonomy = "answer" | "ask";
@@ -32,6 +33,14 @@ export const commanderAutonomy = (db: Database.Database): CommanderAutonomy =>
 
 export function setCommanderAutonomy(db: Database.Database, value: CommanderAutonomy): void {
   setJsonSetting(db, AUTONOMY_KEY, value);
+}
+
+/** On: Exegol tells it what changed in the fleet, so it reports without being asked */
+export const commanderFeed = (db: Database.Database): boolean =>
+  getJsonSetting<boolean>(db, FEED_KEY, true) !== false;
+
+export function setCommanderFeed(db: Database.Database, on: boolean): void {
+  setJsonSetting(db, FEED_KEY, on);
 }
 
 /** Its own project in a folder Exegol owns: the brief is rewritten on every start */

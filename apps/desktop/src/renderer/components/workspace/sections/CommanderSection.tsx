@@ -24,6 +24,7 @@ interface CommanderState {
   projectId: string | null;
   last: Agent | null;
   autonomy: Autonomy;
+  feed: boolean;
 }
 
 const KEY = ["commander"];
@@ -45,22 +46,30 @@ function useCommander(sessionId: string | null) {
   });
 }
 
-function AutonomyPicker({ value }: { value: Autonomy }) {
+function Options({ state }: { state: CommanderState }) {
   const queryClient = useQueryClient();
   const { act } = useAct("Not changed");
-  const set = async (autonomy: Autonomy) => {
-    if (await act("commander.setAutonomy", { autonomy })) {
-      void queryClient.invalidateQueries({ queryKey: KEY });
-    }
+  const set = async (procedure: string, input: Record<string, unknown>) => {
+    if (await act(procedure, input)) void queryClient.invalidateQueries({ queryKey: KEY });
   };
   return (
-    <SegmentedTabs
-      tabs={AUTONOMY}
-      active={value}
-      onChange={(next) => void set(next)}
-      compact
-      label="How the Commander answers sessions"
-    />
+    <div className="flex flex-wrap items-center gap-2">
+      <SegmentedTabs
+        tabs={AUTONOMY}
+        active={state.autonomy}
+        onChange={(autonomy) => void set("commander.setAutonomy", { autonomy })}
+        compact
+        label="How the Commander answers sessions"
+      />
+      <FilterChip
+        active={state.feed}
+        onClick={() => void set("commander.setFeed", { on: !state.feed })}
+      >
+        <span title="Exegol tells it when a session ends a turn, waits on you or closes, a few times an hour at most. Each one is a turn of its model.">
+          {state.feed ? "Feed on" : "Feed off"}
+        </span>
+      </FilterChip>
+    </div>
   );
 }
 
@@ -145,7 +154,7 @@ function StartCard({ state }: { state: CommanderState }) {
           onChange={setModel}
         />
       )}
-      <AutonomyPicker value={state.autonomy} />
+      <Options state={state} />
       <Button
         size="sm"
         variant={last ? "outline" : "default"}
@@ -180,7 +189,7 @@ export function CommanderSection() {
   return (
     <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col gap-2 px-4 pb-4">
       <div className="flex items-center justify-end">
-        <AutonomyPicker value={state.autonomy} />
+        <Options state={state} />
       </div>
       <div className="min-h-0 flex-1">
         <CompanySession agent={session} where="Every project" picked={view} onPick={setView} />

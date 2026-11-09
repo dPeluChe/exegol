@@ -1,6 +1,6 @@
 # Commander: one conversation about every session (T224)
 
-**Date**: 2026-11-09 | **Status**: phase 1 built, phases 2-4 planned | **Source**: Antonio
+**Date**: 2026-11-09 | **Status**: phases 1-2 built, phases 3-5 planned | **Source**: Antonio
 
 ## What it is
 
@@ -54,23 +54,33 @@ returns the last turns of one session (text only, 2,000 characters each, 12 at m
 | Phase | Content | State |
 |---|---|---|
 | 1 | Project, brief, role, tools, Dashboard tab, start and resume | Built |
-| 2 | Feed: attention items, stuck turns, turn ends and new inbox threads reach it as one digest per quiet window, so it reports without being asked. Restart a session to update its CLI | Planned |
+| 2 | Feed: turn ends, sessions that wait on the person, closed sessions, stuck turns and new inbox threads reach it as one message while it is at its prompt, at most one per 2 minutes and 10 an hour, so it reports without being asked. `session_restart` moves a session onto a newer installed CLI | Built |
 | 3 | It calls the person: a sound and a desktop notice from `alert_person`; a floating window with its chat | Planned |
-| 4 | Voice (T222): its replies read aloud. Engines to weigh: Kokoro, Phonon, Woof (underdog.ai) | Planned, research first |
+| 4 | Voice (T222): its replies read aloud. Kokoro first, see below | Planned, research first |
 | 5 | Retry after an API or network error (T218), through the Commander's rules | Planned |
 
 ## Voice engines (phase 4, read 2026-11-09)
 
-Woof (underdog.ai/woof, the vendor's own page and numbers): one voice in 31.7 MB or two in
-40.6 MB, 24 kHz, about 18x real time on one CPU thread, its own text normalizer for numbers,
-dates and codes. Against it for Exegol: the licence is CC BY-NC 4.0, so like Phonon 40m it could
-only be the person's own download, marked non-commercial, never bundled; the page shows English
-only, and Antonio works in Spanish; it ships as Python with numpy or PyTorch, and as a browser
-build, with no ONNX or sherpa-onnx file named, so a runtime would have to be found or written.
-Kokoro (Apache-2.0, Spanish, already loadable through sherpa-onnx in the app) stays the first
-engine to try; Woof is worth a listen for English once a runtime exists.
+Everything here is from each vendor's own page; nothing was listened to.
+
+| Engine | Size | Spanish | Licence | Runtime |
+|---|---|---|---|---|
+| Kokoro 82M | 327 MB | Yes | Apache-2.0 | sherpa-onnx, already in the app |
+| Phonon 40m-es (Gradium) | 74.6 MB | Yes (Spain) | CC BY-NC 4.0 | its own (`ptts`: Rust, C, npm), GGUF weights, files behind a Hugging Face login |
+| Supertonic 3 (Supertone) | 398 MB | Yes, 31 languages | OpenRAIL-M | ONNX Runtime; sherpa-onnx support not checked |
+| Phonon 31m-en | 64.5 MB | No | Apache-2.0 | its own |
+| Woof (ConwayResearch/Underdog-Woof) | 31.7 MB one voice, 40.6 MB two | No | Underdog Non-Commercial License 1.0, credit "Voice by Underdog Woof" shown in the app | Python with numpy (`woof_int8.npz`), no ONNX file |
+
+- Woof is the smallest and leads its own table (English, Gradium's hard cases), but it is
+  English only, non-commercial with a mandatory credit, and has no runtime the app can load.
+  Out for a Commander that speaks Spanish.
+- Phonon 40m-es beats Kokoro in Gradium's own blind test in Spanish (Elo 2103 against 1629).
+  Its licence allows only a person's own non-commercial download, never a bundle.
+- Kokoro is the only one with Spanish, a free licence and no new dependency: the first engine,
+  as a model downloaded from Settings > Models. The engine stays swappable.
+- Before building: the same Spanish sentence through Kokoro and Supertonic 3 for Antonio to hear.
 
 ## Open
 
-- The digest's window and what counts as worth a wake, measured on real days before tuning.
+- The feed's window (2 minutes), cap (10 an hour) and what counts as worth a wake, measured on real days.
 - Whether the Commander's project should stay out of Company and the project lists.

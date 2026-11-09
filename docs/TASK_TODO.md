@@ -1442,14 +1442,15 @@ the agent's alias, so panes, Company, the inbox and the sidebar use it. Check ea
 **Priority**: P2 | **Effort**: M | **Source**: Antonio. Phase 1 is in `TASK_COMPLETED/2611.md`;
 design in `RESEARCH/COMMANDER_DESIGN_2026_11.md`.
 
-- Phase 2: the feed. Attention items, stuck turns, turn ends and new inbox threads reach it as one
-  digest per quiet window, so it reports without being asked. Restart a session to update its CLI
+- Phase 2 leftover: installing a newer CLI release for a session (today it only restarts onto an
+  installed one), and the feed's window and cap tuned on real days
 - Phase 3: it calls the person (a sound and a notice), and a floating window with its chat
-- Phase 4: voice (T222). Weigh Kokoro, Phonon and Woof (underdog.ai)
+- Phase 4: voice (T222). Kokoro first; Phonon 40m-es and Supertonic 3 to listen to (design doc)
 - Phase 5: retry after an API or network error (T218)
 - Decide whether its project stays out of Company and the project lists
 - Verify live: start on Claude Code, fleet_status, a message to a session, a thread in a project,
-  a note of its own, suspend, add a project; then on another CLI
+  a note of its own, suspend, add a project, a feed message after a session ends its turn,
+  session_restart; then on another CLI
 
 ### T225: Company chat shows what each tool did `added: 2026-11-07`
 **Priority**: P2 | **Effort**: S | **Source**: Antonio, 2026-11-07 (screenshot: "Bash x5" says

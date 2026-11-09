@@ -1,8 +1,13 @@
-import { type CliUpdateStatus, INSTALL_METHOD_LABEL, LIVE_STATUSES } from "@exegol/shared";
+import {
+  type CliUpdateStatus,
+  cliRestartNeeded,
+  INSTALL_METHOD_LABEL,
+  LIVE_STATUSES,
+} from "@exegol/shared";
 import * as Dialog from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { useState } from "react";
-import { restartNeeded, updateAndRestart, useCliUpdates } from "../../hooks/use-cli-updates";
+import { updateAndRestart, useCliUpdates } from "../../hooks/use-cli-updates";
 import { useEnabledProviders } from "../../hooks/use-providers";
 import { useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
@@ -38,7 +43,7 @@ export function cliUpdateRows(
       return {
         status,
         sessions: live.map((a) => a.id),
-        behind: live.filter((a) => restartNeeded(a, status)).map((a) => a.id),
+        behind: live.filter((a) => cliRestartNeeded(a, status)).map((a) => a.id),
       };
     })
     .filter((r) => (r.status.updateAvailable && r.status.updateCommand) || r.behind.length > 0);

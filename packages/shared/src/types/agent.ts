@@ -522,6 +522,22 @@ export function isNewerVersion(
   return false;
 }
 
+/** A newer CLI than the one this session started with is installed. A session from before the
+ *  version was recorded (0.5.10) has none: it is behind when the binary was written after it
+ *  started (a minute of slack: launching right after an install is not "older") */
+export function cliRestartNeeded(
+  agent: { cliVersion?: string | null; startedAt?: number | null },
+  status?: Pick<CliUpdateStatus, "installed" | "installedAt">,
+): boolean {
+  if (!status) return false;
+  if (agent.cliVersion) return isNewerVersion(status.installed, agent.cliVersion);
+  return (
+    !!status.installedAt &&
+    !!agent.startedAt &&
+    status.installedAt > agent.startedAt * 1000 + 60_000
+  );
+}
+
 export const AGENT_ACCESS_MODES = ["read", "write", "plan"] as const;
 export type AgentAccessMode = (typeof AGENT_ACCESS_MODES)[number];
 

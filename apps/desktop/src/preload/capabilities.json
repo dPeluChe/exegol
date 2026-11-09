@@ -396,6 +396,7 @@
     "commander": [
       "prepare",
       "setAutonomy",
+      "setFeed",
       "state"
     ],
     "notes": [
@@ -442,6 +443,7 @@
     "inbox:changed",
     "notes:changed",
     "projects:changed",
+    "commander:restart-session",
     "agent:chat-updated",
     "agent:resume-missed",
     "agent:cli-self-updated",

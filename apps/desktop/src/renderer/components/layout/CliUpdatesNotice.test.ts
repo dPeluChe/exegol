@@ -1,14 +1,9 @@
 import { describe, expect, it, vi } from "vitest";
 
-vi.mock("../../hooks/use-cli-updates", async () => {
-  const { isNewerVersion } = await import("@exegol/shared");
-  return {
-    restartNeeded: (a: { cliVersion?: string | null }, s?: { installed: string | null }) =>
-      isNewerVersion(s?.installed, a.cliVersion),
-    updateAndRestart: vi.fn(),
-    useCliUpdates: vi.fn(),
-  };
-});
+vi.mock("../../hooks/use-cli-updates", () => ({
+  updateAndRestart: vi.fn(),
+  useCliUpdates: vi.fn(),
+}));
 vi.mock("../common/SessionChips", () => ({ SessionChips: vi.fn() }));
 const { cliUpdateRows, rowsKey } = await import("./CliUpdatesNotice");
 
