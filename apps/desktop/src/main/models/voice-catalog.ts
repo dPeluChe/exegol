@@ -12,17 +12,17 @@ const speaker = (id: string, label: string, lang: string, speakerId: number): Vo
   speakerId,
 });
 
-export const KOKORO_VOICES: readonly VoiceSpeaker[] = [
-  speaker("ef_dora", "Dora (Spanish)", "es", 28),
+const KOKORO_VOICES: readonly VoiceSpeaker[] = [
   speaker("em_alex", "Alex (Spanish)", "es", 29),
   speaker("em_santa", "Santa (Spanish)", "es", 53),
+  speaker("ef_dora", "Dora (Spanish)", "es", 28),
   speaker("af_heart", "Heart (English)", "en-us", 3),
   speaker("af_bella", "Bella (English)", "en-us", 2),
   speaker("am_michael", "Michael (English)", "en-us", 16),
   speaker("am_adam", "Adam (English)", "en-us", 11),
 ];
 
-export const DEFAULT_VOICE_MODEL_ID = "kokoro-multi-lang-v1.0-int8";
+const DEFAULT_VOICE_MODEL_ID = "kokoro-multi-lang-v1.0-int8";
 
 export const VOICE_CATALOG: readonly VoiceModelEntry[] = [
   {
@@ -47,7 +47,7 @@ export const VOICE_CATALOG: readonly VoiceModelEntry[] = [
   },
 ];
 
-export function findVoiceModel(id: string): VoiceModelEntry | undefined {
+function findVoiceModel(id: string): VoiceModelEntry | undefined {
   return VOICE_CATALOG.find((m) => m.id === id);
 }
 

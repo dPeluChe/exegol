@@ -3,13 +3,12 @@ import {
   acceptsFollowUps,
   type ChatPage,
   type OlderChatPage,
-  type SessionTurn,
 } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, SendHorizontal } from "lucide-react";
 import { memo, useMemo, useState } from "react";
-import { useLatest } from "../../../hooks/use-latest";
+import { useCommanderVoice } from "../../../hooks/use-commander-voice";
 import { useMountEffect } from "../../../hooks/use-mount-effect";
 import { isClaudeQuestion } from "../../../lib/claude-question";
 import { hasClipboardImage } from "../../../lib/clipboard-image";
@@ -26,8 +25,8 @@ import {
   sameBubble,
   toolsLine,
 } from "../../../lib/session-chat";
-import { liveReply } from "../../../lib/speech/live-reply";
 import { speakReply } from "../../../lib/speech/player";
+import { useLiveReplies } from "../../../lib/speech/use-live-replies";
 import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
 import { type AgentState, useAgentStore } from "../../../stores/agents";
 import { DEFAULT_CHAT_FONT, useAppStore } from "../../../stores/app";
@@ -40,38 +39,21 @@ import { FollowUpList, useFollowUps } from "../../terminal/FollowUpControl";
 import { DELIVERY, peerName, useAgentMessages } from "./AgentMessages";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ChatWorking } from "./ChatWorking";
-import { SpeakButton, useCommanderVoice } from "./SpeakButton";
+import { SpeakButton } from "./SpeakButton";
 
 const FALLBACK_POLL_MS = 15_000;
 const NO_TURNS: ChatHistory["turns"] = [];
 const NO_MESSAGES: AgentMessage[] = [];
 const SHOWN_STEP = 100;
 
-const turnIds = (history: ChatHistory | undefined) =>
-  history ? new Set(history.turns.map((t) => t.id)) : null;
-
-/** `onLiveReply`: a reply finished while the chat is open (pushed at turn boundaries) */
-function useChat(agentId: string, onLiveReply?: (turn: SessionTurn) => void) {
+function useChat(agentId: string) {
   const queryClient = useQueryClient();
   const queryKey = ["chatTurns", agentId];
-  const latestReply = useLatest(onLiveReply);
-  // What the chat opened with is never read aloud: the cache, else the first page
-  const [live] = useState(() => ({
-    seen: turnIds(queryClient.getQueryData<ChatHistory>(queryKey)),
-    lastRead: null as string | null,
-  }));
   useMountEffect(() =>
     window.api.onChatUpdated((event) => {
       if (event.agentId !== agentId) return;
-      const refreshed = queryClient.invalidateQueries({ queryKey });
+      void queryClient.invalidateQueries({ queryKey });
       void queryClient.invalidateQueries({ queryKey: ["messages", "agent", agentId] });
-      void refreshed.then(() => {
-        const history = queryClient.getQueryData<ChatHistory>(queryKey);
-        const turn = live.seen && history && liveReply(history.turns, live.seen, live.lastRead);
-        if (!turn || !latestReply.current) return;
-        live.lastRead = turn.id;
-        latestReply.current(turn);
-      });
     }),
   );
   const chat = useQuery({
@@ -80,10 +62,7 @@ function useChat(agentId: string, onLiveReply?: (turn: SessionTurn) => void) {
       const cursor = queryClient.getQueryData<ChatHistory>(queryKey)?.cursor ?? undefined;
       const page = await trpcInvoke<ChatPage>("agents.chatTurns", { agentId, cursor });
       // Read after the wait: older turns may have landed meanwhile
-      const next = appendChatPage(queryClient.getQueryData<ChatHistory>(queryKey), page);
-      if (!live.seen) live.seen = turnIds(next);
-      else if (page.reset) for (const t of page.turns) live.seen.add(t.id);
-      return next;
+      return appendChatPage(queryClient.getQueryData<ChatHistory>(queryKey), page);
     },
     refetchInterval: FALLBACK_POLL_MS,
   }).data;
@@ -124,10 +103,11 @@ interface BubbleProps {
   agentId: string;
   cliType: string;
   formatted: boolean;
-  speak: boolean;
+  /** Speaker button and whether a voice is installed; absent, no button */
+  voiceReady?: boolean;
 }
 
-function BubbleBody({ bubble, agentId, cliType, formatted, speak }: BubbleProps) {
+function BubbleBody({ bubble, agentId, cliType, formatted, voiceReady }: BubbleProps) {
   if (bubble.kind === "tools") {
     return <p className="truncate pl-6 text-[10px] text-text-muted">{toolsLine(bubble.names)}</p>;
   }
@@ -156,10 +136,17 @@ function BubbleBody({ bubble, agentId, cliType, formatted, speak }: BubbleProps)
             <p className="whitespace-pre-wrap break-words font-mono text-[11px]">{bubble.text}</p>
           )}
         </div>
-        {(time || speak) && (
+        {(time || voiceReady !== undefined) && (
           <div className="flex items-center gap-1 pl-1">
             {time && <span className="text-[9px] text-text-muted">{time}</span>}
-            {speak && <SpeakButton turnId={bubble.id} text={bubble.text} agentId={agentId} />}
+            {voiceReady !== undefined && (
+              <SpeakButton
+                turnId={bubble.id}
+                text={bubble.text}
+                agentId={agentId}
+                ready={voiceReady}
+              />
+            )}
           </div>
         )}
       </div>
@@ -175,7 +162,7 @@ const Bubble = memo(
     a.agentId === b.agentId &&
     a.cliType === b.cliType &&
     a.formatted === b.formatted &&
-    a.speak === b.speak &&
+    a.voiceReady === b.voiceReady &&
     sameBubble(a.bubble, b.bubble),
 );
 
@@ -339,11 +326,16 @@ export function CompanyChat({
   dictation?: boolean;
   speak?: boolean;
 }) {
-  const auto = useCommanderVoice(speak).data?.settings.auto === true;
-  const { chat, older } = useChat(
+  const voice = useCommanderVoice(speak).data;
+  useLiveReplies(
     agent.id,
-    speak && auto ? (turn) => void speakReply(turn.id, turn.text, agent.id, true) : undefined,
+    speak && voice?.settings.auto
+      ? (turn) => void speakReply(turn.id, turn.text, agent.id, true)
+      : undefined,
   );
+  const { chat, older } = useChat(agent.id);
+  // undefined: no speaker buttons; false: they point to Settings > Models
+  const voiceReady = speak ? voice?.ready === true : undefined;
   const turns = chat?.turns ?? NO_TURNS;
   const [shown, setShown] = useState(SHOWN_STEP);
   const { data: messages = NO_MESSAGES } = useAgentMessages(agent.id);
@@ -393,7 +385,7 @@ export function CompanyChat({
               agentId={agent.id}
               cliType={agent.cliType}
               formatted={!!chat?.markdown}
-              speak={speak}
+              voiceReady={voiceReady}
             />
           ))}
           <ChatWorking agent={agent} />

@@ -1,21 +1,17 @@
 /** What of a Markdown reply is read aloud: its prose, in sentences, capped */
 
-export const SPEECH_MAX_CHARS = 1500;
+import { hostOf } from "../types/agent-browser";
+
+const SPEECH_MAX_CHARS = 1500;
 const SENTENCE_MAX_CHARS = 280;
 
 const FENCE = /^\s*(```|~~~)/;
 const TABLE_SEPARATOR = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)+\|?\s*$/;
 const RULE = /^\s*([-*_])(\s*\1){2,}\s*$/;
-const URL = /\bhttps?:\/\/[^\s)<>\]]+/gi;
+const BARE_URL = /\bhttps?:\/\/[^\s)<>\]]+/gi;
 const ENDS_SENTENCE = /[.!?…:;]$/;
 
-function hostOf(url: string): string {
-  try {
-    return new globalThis.URL(url).hostname.replace(/^www\./, "");
-  } catch {
-    return "";
-  }
-}
+const spokenHost = (url: string) => hostOf(url)?.replace(/^www\./, "") ?? "";
 
 /** Drops fenced code (an unclosed fence runs to the end) and Markdown tables */
 function proseLines(text: string): string[] {
@@ -48,8 +44,8 @@ function inline(text: string): string {
     text
       .replace(/!\[[^\]]*\]\([^)]*\)/g, "")
       .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-      .replace(/<(https?:\/\/[^>\s]+)>/gi, (_m, url: string) => hostOf(url))
-      .replace(URL, (url) => hostOf(url))
+      .replace(/<(https?:\/\/[^>\s]+)>/gi, (_m, url: string) => spokenHost(url))
+      .replace(BARE_URL, spokenHost)
       .replace(/<\/?[a-z][^>]*>/gi, "")
       // Short inline code reads as words; a long one is code
       .replace(/`([^`]*)`/g, (_m, code: string) => (code.length <= 40 ? code : ""))

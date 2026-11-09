@@ -1,39 +1,20 @@
-import type { CommanderVoiceSettings, VoiceSpeaker } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import { useQuery } from "@tanstack/react-query";
 import { Square, Volume2 } from "lucide-react";
 import { speakReply, stopSpeaking, useSpeaking } from "../../../lib/speech/player";
-import { trpcInvoke } from "../../../lib/trpc-client";
 
-export interface CommanderVoice {
-  settings: CommanderVoiceSettings;
-  voices: VoiceSpeaker[];
-  /** A voice model is installed */
-  ready: boolean;
-}
-
-export const VOICE_KEY = ["commander", "voice"];
-
-export function useCommanderVoice(enabled = true) {
-  return useQuery({
-    queryKey: VOICE_KEY,
-    queryFn: () => trpcInvoke<CommanderVoice>("commander.voice"),
-    enabled,
-  });
-}
-
-/** Reads one reply aloud; while it plays, stops it */
+/** Reads one reply aloud; while it plays, stops it. Without a voice installed, opens the Models tab */
 export function SpeakButton({
   turnId,
   text,
   agentId,
+  ready,
 }: {
   turnId: string;
   text: string;
   agentId: string;
+  ready: boolean;
 }) {
-  const ready = useCommanderVoice().data?.ready;
-  const speaking = useSpeaking() === turnId;
+  const speaking = useSpeaking(turnId);
   const title = !ready
     ? "Download a voice in Settings > Models to hear replies"
     : speaking

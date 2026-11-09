@@ -44,32 +44,28 @@ async function ensureLoaded(spec: TtsSpec): Promise<number> {
 }
 
 async function speak(msg: Extract<TtsRequest, { type: "speak" }>): Promise<void> {
-  const job = {
-    id: msg.id,
-    get cancelled() {
-      return latest !== msg.id;
-    },
-  };
-  if (job.cancelled) return;
+  const { id } = msg;
+  const cancelled = () => latest !== id;
+  if (cancelled()) return;
   try {
     const loadMs = await ensureLoaded(msg.spec);
     const started = Date.now();
     let spoken = 0;
     for (const text of msg.sentences) {
-      if (job.cancelled || !tts) break;
+      if (cancelled() || !tts) break;
       const audio = await tts.generateAsync({
         text,
         sid: msg.sid,
         speed: msg.speed,
-        onProgress: () => (job.cancelled ? 0 : 1),
+        onProgress: () => (cancelled() ? 0 : 1),
       });
-      if (job.cancelled) break;
+      if (cancelled()) break;
       spoken++;
-      reply({ type: "audio", id: job.id, samples: audio.samples, sampleRate: audio.sampleRate });
+      reply({ type: "audio", id, samples: audio.samples, sampleRate: audio.sampleRate });
     }
-    reply({ type: "done", id: job.id, sentences: spoken, loadMs, synthMs: Date.now() - started });
+    reply({ type: "done", id, sentences: spoken, loadMs, synthMs: Date.now() - started });
   } catch (err) {
-    reply({ type: "failed", id: job.id, error: job.cancelled ? "cancelled" : errorText(err) });
+    reply({ type: "failed", id, error: cancelled() ? "cancelled" : errorText(err) });
   }
 }
 
@@ -84,4 +80,3 @@ function handle(msg: TtsRequest): void {
 }
 
 port.on("message", (event) => handle(event.data as TtsRequest));
-reply({ type: "ready" });

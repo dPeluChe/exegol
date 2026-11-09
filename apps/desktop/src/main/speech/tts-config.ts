@@ -33,8 +33,7 @@ export function ttsSpec(
   dir: string,
   voice: VoiceSpeaker,
   threads: number,
-): TtsSpec | null {
-  if (entry.engine !== "kokoro") return null;
+): TtsSpec {
   return {
     key: `${entry.id}:${voice.lang}:${threads}`,
     config: {

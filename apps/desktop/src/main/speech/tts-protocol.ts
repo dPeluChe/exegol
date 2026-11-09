@@ -7,7 +7,6 @@ export type TtsRequest =
 
 /** Speech process → main */
 export type TtsReply =
-  | { type: "ready" }
   | { type: "audio"; id: string; samples: Float32Array; sampleRate: number }
   | { type: "done"; id: string; sentences: number; loadMs: number; synthMs: number }
   | { type: "failed"; id: string; error: string };

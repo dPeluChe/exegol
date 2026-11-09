@@ -9,13 +9,12 @@ export interface CommanderVoiceSettings {
 }
 
 export const COMMANDER_VOICE_KEY = "commander_voice";
-export const DEFAULT_VOICE_ID = "ef_dora";
 export const SPEECH_SPEED_MIN = 0.5;
 export const SPEECH_SPEED_MAX = 2;
 
 export const DEFAULT_COMMANDER_VOICE: CommanderVoiceSettings = {
   auto: false,
-  voice: DEFAULT_VOICE_ID,
+  voice: "em_alex",
   speed: 1,
 };
 

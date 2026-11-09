@@ -41,7 +41,6 @@ function end(u: Utterance, outcome: { error?: string; stopped?: boolean } = {}):
 }
 
 function onReply(msg: TtsReply): void {
-  if (msg.type === "ready") return;
   const u = current;
   if (!u || u.id !== msg.id) return;
   switch (msg.type) {
@@ -101,8 +100,8 @@ export function startUtterance(opts: {
   if (crashes >= RESPAWN_LIMIT) return null;
   const voice = voiceOf(opts.entry, opts.voiceId);
   const threads = Math.max(1, Math.min(4, Math.floor(availableParallelism() / 2)));
-  const spec = voice && ttsSpec(opts.entry, modelDir(opts.entry.id), voice, threads);
-  if (!voice || !spec) return null;
+  if (!voice) return null;
+  const spec = ttsSpec(opts.entry, modelDir(opts.entry.id), voice, threads);
   stopUtterance();
   child ??= spawn();
   const id = randomUUID();

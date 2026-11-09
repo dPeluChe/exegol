@@ -44,7 +44,8 @@ function enqueue(event: SpeechAudioEvent): void {
   ctx ??= new AudioContext();
   void ctx.resume();
   const buffer = ctx.createBuffer(1, event.samples.length, event.sampleRate);
-  buffer.copyToChannel(new Float32Array(event.samples), 0);
+  // IPC delivers a structured-clone copy: a Float32Array on its own (non-shared) ArrayBuffer
+  buffer.copyToChannel(event.samples as Float32Array<ArrayBuffer>, 0);
   const source = ctx.createBufferSource();
   source.buffer = buffer;
   source.connect(ctx.destination);
@@ -125,7 +126,7 @@ function subscribe(fn: () => void): () => void {
   return () => subscribers.delete(fn);
 }
 
-/** The reply key being read, null when silent */
-export function useSpeaking(): string | null {
-  return useSyncExternalStore(subscribe, () => playing?.key ?? null);
+/** Whether this reply is the one being read: only its button re-renders on a change */
+export function useSpeaking(key: string): boolean {
+  return useSyncExternalStore(subscribe, () => playing?.key === key);
 }
