@@ -15,6 +15,7 @@ import {
 } from "../agents/agent-messaging";
 import { callBrowserTool, isBrowserTool } from "../browser/agent-browser-tools";
 import { commanderAutonomy, isCommander } from "../commander/home";
+import { recorded } from "../commander/log";
 import { callCommanderTool, projectNamed } from "../commander/tools";
 import { getProject } from "../db/queries";
 import {
@@ -310,9 +311,23 @@ export async function callExegolTool(
   const toolName = tool as ExegolToolName;
   requireWriteAccess(toolName, context);
   if (isBrowserTool(toolName)) return callBrowserTool(db, toolName, args, context);
-  const commander = isCommander(db, context);
+  if (isCommander(db, context)) {
+    return recorded(db, context.agentId, toolName, args, () =>
+      dispatch(db, toolName, args, context, true),
+    );
+  }
+  return dispatch(db, toolName, args, context, false);
+}
+
+async function dispatch(
+  db: Database.Database,
+  toolName: ExegolToolName,
+  args: Record<string, unknown>,
+  context: ExegolToolContext,
+  commander: boolean,
+): Promise<unknown> {
   if (isCommanderTool(toolName)) {
-    if (!commander) throw new ExegolToolError(`Unknown tool: ${tool}`, -32601);
+    if (!commander) throw new ExegolToolError(`Unknown tool: ${toolName}`, -32601);
     return callCommanderTool(db, toolName, args, context);
   }
   // The Commander acts in the project it names; anyone else's `project` is ignored

@@ -2,6 +2,7 @@ import Database from "libsql";
 import { beforeEach, describe, expect, it } from "vitest";
 import { runMigrations } from "../db/migrations";
 import type { ActiveAgent } from "../db/queries/agents";
+import { listCommanderLog } from "../db/queries/commander-log";
 import { listThreads } from "../db/queries/inbox";
 import { setJsonSetting } from "../db/queries/settings";
 import type { ExegolToolContext } from "../mcp/exegol-protocol";
@@ -81,5 +82,30 @@ describe("fleetView", () => {
       ["asks", "waits_on_person", 2],
       ["busy", "working", 2],
     ]);
+  });
+});
+
+describe("the Commander's history", () => {
+  it("keeps what it changed and what was refused, never its reads or another session's calls", async () => {
+    await callExegolTool(
+      db,
+      "inbox_post",
+      { title: "Hero breaks", body: "x", project: "Landing" },
+      commander,
+    );
+    await callExegolTool(db, "inbox_list", {}, commander);
+    await callExegolTool(db, "inbox_post", { title: "Mine", body: "x" }, worker);
+    await expect(
+      callExegolTool(db, "session_suspend", { session: "nope" }, commander),
+    ).rejects.toThrow();
+    const { actions } = (await callExegolTool(db, "my_history", {}, commander)) as {
+      actions: Record<string, unknown>[];
+    };
+    expect(actions.map((a) => [a.action, a.target, a.outcome])).toEqual([
+      ["session_suspend", "nope", "refused"],
+      ["inbox_post", "Landing", "done"],
+    ]);
+    expect(actions[1]?.summary).toBe("Hero breaks");
+    expect(listCommanderLog(db, 10)[1]?.ref).toBeTruthy();
   });
 });
