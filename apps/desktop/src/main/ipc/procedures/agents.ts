@@ -15,6 +15,7 @@ import {
 } from "../../agents/follow-up-queue";
 import { hookCwdOf } from "../../agents/hook-cwd";
 import { setIdleExempt } from "../../agents/idle-exempt";
+import { notePersonInput } from "../../agents/session-activity";
 import { chatTurns, olderChatTurns } from "../../agents/session-chat";
 import { broadcastShellClosed } from "../../agents/spawn-env";
 import { forgetAgentStatusWrites } from "../../agents/status-writes";
@@ -187,7 +188,10 @@ export const agentRouter = router({
     .query(({ input }) => listFollowUps(input.id)),
   queueFollowUp: publicProcedure
     .input(z.object({ id: z.string(), text: z.string().min(1).max(FOLLOW_UP_MAX_CHARS) }))
-    .mutation(({ ctx, input }) => followUpCall(() => queueFollowUp(ctx.db, input.id, input.text))),
+    .mutation(({ ctx, input }) => {
+      notePersonInput(input.id);
+      return followUpCall(() => queueFollowUp(ctx.db, input.id, input.text));
+    }),
   removeFollowUp: publicProcedure
     .input(z.object({ id: z.string(), itemId: z.string().max(100) }))
     .mutation(({ input }) => removeFollowUp(input.id, input.itemId)),

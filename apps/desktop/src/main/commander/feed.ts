@@ -1,7 +1,17 @@
 import type { FleetProject, SessionState } from "./fleet";
 
 export interface FeedSnapshot {
-  sessions: Map<string, { name: string; project: string; state: SessionState }>;
+  sessions: Map<
+    string,
+    {
+      name: string;
+      project: string;
+      state: SessionState;
+      attended: boolean;
+      /** Minutes at its prompt with nothing from the person since; 0 otherwise */
+      unanswered: number;
+    }
+  >;
   /** Threads waiting per project name; "" is the personal inbox */
   inbox: Map<string, number>;
 }
@@ -15,6 +25,16 @@ export interface FeedEvent {
 }
 
 export const FEED_MAX_LINES = 12;
+/** The person wrote to it this recently: its turn ends are theirs to read, not the Commander's */
+const ATTENDED_MINUTES = 10;
+/** At its prompt this long with no word from the person: the Commander asks them how to go on */
+export const UNANSWERED_MINUTES = 15;
+
+function unansweredMinutes(s: FleetProject["sessions"][number]): number {
+  const idle = s.state === "at_prompt" ? (s.minutes_in_state ?? 0) : 0;
+  const wroteSince = s.person_minutes_ago !== null && s.person_minutes_ago <= idle;
+  return wroteSince ? 0 : idle;
+}
 
 export function feedSnapshot(fleet: FleetProject[], personalWaiting: number): FeedSnapshot {
   const sessions: FeedSnapshot["sessions"] = new Map();
@@ -22,7 +42,13 @@ export function feedSnapshot(fleet: FleetProject[], personalWaiting: number): Fe
   for (const p of fleet) {
     inbox.set(p.project, p.inbox_waiting);
     for (const s of p.sessions) {
-      sessions.set(s.id, { name: s.name ?? s.id.slice(0, 8), project: p.project, state: s.state });
+      sessions.set(s.id, {
+        name: s.name ?? s.id.slice(0, 8),
+        project: p.project,
+        state: s.state,
+        attended: s.person_minutes_ago !== null && s.person_minutes_ago < ATTENDED_MINUTES,
+        unanswered: unansweredMinutes(s),
+      });
     }
   }
   return { sessions, inbox };
@@ -33,18 +59,26 @@ export function feedEvents(prev: FeedSnapshot, next: FeedSnapshot): FeedEvent[] 
   const events: FeedEvent[] = [];
   for (const [id, now] of next.sessions) {
     const before = prev.sessions.get(id);
-    if (!before || before.state === now.state) continue;
+    if (!before) continue;
     const who = `${now.name} (${now.project})`;
+    if (before.unanswered < UNANSWERED_MINUTES && now.unanswered >= UNANSWERED_MINUTES) {
+      events.push({
+        key: id,
+        line: `${who} has been at its prompt ${now.unanswered} min with no reply from the person: read it and ask them how to go on`,
+        holds: { sessionId: id, state: "at_prompt" },
+      });
+    }
+    if (before.state === now.state) continue;
     if (now.state === "waits_on_person") {
       events.push({
         key: id,
         line: `${who} waits on the person: a permission or dialog on its screen`,
         holds: { sessionId: id, state: "waits_on_person" },
       });
-    } else if (now.state === "at_prompt" && before.state !== "waits_on_person") {
+    } else if (now.state === "at_prompt" && before.state !== "waits_on_person" && !now.attended) {
       events.push({
         key: id,
-        line: `${who} ended its turn`,
+        line: `${who} ${ENDED}`,
         holds: { sessionId: id, state: "at_prompt" },
       });
     }
@@ -84,3 +118,8 @@ export function feedMessage(
     "Read a session with session_read before you act on it. Tell the person only what they need.",
   ].join("\n");
 }
+
+export const ENDED = "ended its turn";
+
+export const stoppedLine = (who: string) =>
+  `${who} stopped on an API or network error: session_retry continues it`;

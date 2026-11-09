@@ -2,7 +2,12 @@ import { describe, expect, it } from "vitest";
 import { FEED_MAX_LINES, feedEvents, feedMessage, feedSnapshot } from "./feed";
 import type { FleetProject, SessionState } from "./fleet";
 
-const fleet = (states: Record<string, SessionState>, inbox = 0): FleetProject[] => [
+const fleet = (
+  states: Record<string, SessionState>,
+  inbox = 0,
+  attended: string[] = [],
+  idle = 0,
+): FleetProject[] => [
   {
     project: "Landing",
     inbox_waiting: inbox,
@@ -11,8 +16,9 @@ const fleet = (states: Record<string, SessionState>, inbox = 0): FleetProject[] 
       name: id,
       cli: "claude-code",
       state,
-      minutes_in_state: 0,
+      minutes_in_state: idle,
       quiet_minutes: 0,
+      person_minutes_ago: attended.includes(id) ? 1 : null,
       task: "",
     })),
   },
@@ -53,5 +59,21 @@ describe("the Commander's feed", () => {
     expect(feedMessage(events, feedSnapshot(fleet({}), 0), [])).toBeNull();
     const many = Array.from({ length: FEED_MAX_LINES + 3 }, (_, i) => `n${i}`);
     expect(feedMessage([], now, many)).toContain("and 3 more");
+  });
+
+  it("leaves the turn ends of a session the person is writing to", () => {
+    const before = feedSnapshot(fleet({ a: "working", b: "working" }), 0);
+    const after = feedSnapshot(fleet({ a: "at_prompt", b: "at_prompt" }, 0, ["a"]), 0);
+    expect(feedEvents(before, after).map((e) => e.key)).toEqual(["b"]);
+  });
+
+  it("says once when a session has waited at its prompt with no word from the person", () => {
+    const at = (idle: number, attended: string[] = []) =>
+      feedSnapshot(fleet({ a: "at_prompt" }, 0, attended, idle), 0);
+    expect(feedEvents(at(14), at(15)).map((e) => e.line)).toEqual([
+      "a (Landing) has been at its prompt 15 min with no reply from the person: read it and ask them how to go on",
+    ]);
+    expect(feedEvents(at(15), at(16))).toEqual([]);
+    expect(feedEvents(at(14), at(15, ["a"]))).toEqual([]);
   });
 });

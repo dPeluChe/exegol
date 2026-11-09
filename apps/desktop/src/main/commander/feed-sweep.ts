@@ -5,14 +5,23 @@ import { listActiveAgents } from "../db/queries/agents";
 import { countPersonalThreads } from "../db/queries/inbox";
 import { logger } from "../lib/logger";
 import { getNotificationBus } from "../notifications/bus";
-import { type FeedEvent, type FeedSnapshot, feedEvents, feedMessage, feedSnapshot } from "./feed";
+import {
+  ENDED,
+  type FeedEvent,
+  type FeedSnapshot,
+  feedEvents,
+  feedMessage,
+  feedSnapshot,
+  stoppedLine,
+} from "./feed";
 import { sessionState } from "./fleet";
 import { commanderFeed, commanderProjectId } from "./home";
+import { stoppedOnError } from "./retry";
 import { fleetOf } from "./tools";
 
 const CHECK_MS = 30_000;
 /** Each digest is a turn the Commander pays for: at most one per window */
-const FEED_GAP_MS = 2 * 60_000;
+const FEED_GAP_MS = 3 * 60_000;
 /** And a cap per hour: a session and the Commander answering each other cannot run all night */
 const FEED_PER_HOUR = 10;
 const HOUR_MS = 60 * 60_000;
@@ -31,7 +40,7 @@ function reset(): void {
 }
 
 /** One look at the fleet: gather what changed, and send it once the Commander is free */
-function checkFeed(db: Database.Database, now = Date.now()): void {
+async function checkFeed(db: Database.Database, now = Date.now()): Promise<void> {
   const own = commanderFeed(db) ? commanderProjectId(db) : null;
   const agents = own ? listActiveAgents(db) : [];
   const commander = agents.find((a) => a.projectId === own && a.cliType !== "shell");
@@ -40,8 +49,15 @@ function checkFeed(db: Database.Database, now = Date.now()): void {
     return;
   }
   const next = feedSnapshot(fleetOf(db, commander.id, agents), countPersonalThreads(db));
-  if (last) for (const event of feedEvents(last, next)) pending.set(event.key, event);
+  const events = last ? feedEvents(last, next) : [];
   last = next;
+  for (const event of events) {
+    const turnEnded = event.holds?.state === "at_prompt" && event.line.endsWith(ENDED);
+    const ended = turnEnded ? next.sessions.get(event.key) : undefined;
+    const stopped = ended && (await stoppedOnError(db, event.key));
+    const line = stopped ? stoppedLine(`${ended.name} (${ended.project})`) : event.line;
+    pending.set(event.key, { ...event, line });
+  }
 
   sent = sent.filter((at) => now - at < HOUR_MS);
   if (sent.length >= FEED_PER_HOUR || now - (sent.at(-1) ?? 0) < FEED_GAP_MS) return;
@@ -66,12 +82,15 @@ export function startCommanderFeed(db: Database.Database): void {
       if (notices.size < MAX_NOTICES) notices.set(event.agentId, event.title);
     },
   });
+  let busy = false;
   timer = setInterval(() => {
-    try {
-      checkFeed(db);
-    } catch (err) {
-      logger.warn("[Commander] feed check failed:", err);
-    }
+    if (busy) return;
+    busy = true;
+    checkFeed(db)
+      .catch((err) => logger.warn("[Commander] feed check failed:", err))
+      .finally(() => {
+        busy = false;
+      });
   }, CHECK_MS);
   timer.unref?.();
 }
