@@ -1,8 +1,11 @@
 import { stat } from "node:fs/promises";
 import { basename, resolve } from "node:path";
-import type { FolderInspection } from "@exegol/shared";
+import type { FolderInspection, Project } from "@exegol/shared";
 import { TRPCError } from "@trpc/server";
+import type Database from "libsql";
+import { markCookiesMigrated } from "../../browser/browser-cookies";
 import { winKey } from "../../db/queries/path-claims";
+import { createProject, listProjects } from "../../db/queries/projects";
 import { logger } from "../../lib/logger";
 import { runGit } from "../../lib/worktree-safety";
 import { realpathSafe } from "../../security/path-guard";
@@ -64,4 +67,47 @@ export async function initGitRepo(path: string, branch: string): Promise<void> {
   }
   logger.info(`[Projects] git init ${basename(path)}`);
   await runGit(["init", `--initial-branch=${branch}`], path);
+}
+
+async function gitRemoteOf(path: string): Promise<string | null> {
+  return runGit(["config", "--get", "remote.origin.url"], path)
+    .then((out) => out.trim() || null)
+    .catch(() => null);
+}
+
+export class ProjectAddError extends Error {
+  constructor(
+    message: string,
+    readonly existing = false,
+  ) {
+    super(message);
+  }
+}
+
+/** Add project, for the dialog and the Commander alike: a folder already in Exegol, missing or
+ *  not a repo is refused; `initGit` runs `git init` first */
+export async function addProjectFolder(
+  db: Database.Database,
+  input: { name: string; path: string; defaultBranch: string; gitRemote?: string | null },
+  initGit = false,
+): Promise<Project> {
+  const folder = await inspectFolder(input.path, listProjects(db));
+  if (folder.kind === "existing") {
+    throw new ProjectAddError(`Already in Exegol as '${folder.name}'`, true);
+  }
+  const refusal = (
+    {
+      missing: "Path does not exist",
+      notDirectory: "Path is not a directory",
+      noGit: initGit ? undefined : "Path is not a git repository",
+    } as Partial<Record<FolderInspection["kind"], string>>
+  )[folder.kind];
+  if (refusal) throw new ProjectAddError(`${refusal}: ${input.path}`);
+  if (folder.kind === "noGit") await initGitRepo(input.path, input.defaultBranch);
+  const project = createProject(db, {
+    ...input,
+    gitRemote: input.gitRemote ?? (await gitRemoteOf(input.path)),
+  });
+  markCookiesMigrated(db, project.id);
+  return project;
 }

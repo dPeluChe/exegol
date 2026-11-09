@@ -132,6 +132,13 @@ export const displayName = (s: { alias: string | null; cliType: string }) =>
 
 type Outcome = "suspended" | "closed";
 
+/** Suspended and its worktree kept, said to the renderer before the stop so the exit stays quiet */
+export function markSuspending(db: Database.Database, agentId: string): void {
+  setAgentSuspended(db, agentId, Math.floor(Date.now() / 1000));
+  keepWorktreeOnExit(agentId);
+  broadcast("agent:idle-suspended", { type: "suspending", agentId });
+}
+
 /** Stop one session for good only if it is still idle with the live exempt set and activity */
 async function stopIdle(
   db: Database.Database,
@@ -146,10 +153,7 @@ async function stopIdle(
   const host = getPtyHost();
   const shell = s.cliType === "shell";
   if (!shell) {
-    setAgentSuspended(db, s.id, Math.floor(Date.now() / 1000));
-    keepWorktreeOnExit(s.id);
-    // Before its stop: the renderer marks it suspended, so the exit stays quiet
-    broadcast("agent:idle-suspended", { type: "suspending", agentId: s.id });
+    markSuspending(db, s.id);
   }
   await getAgentManager().stop(db, s.id);
   if (host.isAlive(s.id)) throw new Error("did not exit");

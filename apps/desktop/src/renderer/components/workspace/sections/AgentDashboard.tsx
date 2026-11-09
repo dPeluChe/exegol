@@ -15,6 +15,7 @@ import { FilterChip } from "../../common/FilterChip";
 import type { ProjectMeta } from "../../common/ProjectChip";
 import { type SegmentedTab, SegmentedTabs } from "../../common/SegmentedTabs";
 import { ColabsSection } from "./ColabsSection";
+import { CommanderSection } from "./CommanderSection";
 import { CompanySection } from "./CompanySection";
 import { FleetGroups, type GroupBy } from "./FleetGroups";
 import { WatchingSection } from "./WatchingSection";
@@ -144,6 +145,7 @@ export function AgentDashboard() {
   }, []);
 
   const modeTabs: SegmentedTab<DashboardMode>[] = [
+    { id: "commander", label: "Commander" },
     { id: "company", label: "Company" },
     {
       id: "colabs",
@@ -192,7 +194,9 @@ export function AgentDashboard() {
           </div>
         )}
       </div>
-      {all.length === 0 && mode !== "colabs" ? (
+      {mode === "commander" ? (
+        <CommanderSection />
+      ) : all.length === 0 && mode !== "colabs" ? (
         <NoAgents projects={projects} />
       ) : mode === "company" ? (
         <CompanySection projectMeta={projectMeta} />

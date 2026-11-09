@@ -2,7 +2,6 @@ import { existsSync, statSync } from "node:fs";
 import { isAbsolute, resolve } from "node:path";
 import {
   DEFAULT_WORKTREE_COPY,
-  type FolderInspection,
   MAX_BROWSER_HOSTS,
   parseBrowserHosts,
   parseWorktreeCopy,
@@ -13,14 +12,13 @@ import { shell } from "electron";
 import { z } from "zod";
 import { coreRust } from "../../agents/spawn-env";
 import { getWorktreeName, removeManagedWorktree } from "../../agents/worktrees";
-import { copyCookiesForHosts, markCookiesMigrated } from "../../browser/browser-cookies";
+import { copyCookiesForHosts } from "../../browser/browser-cookies";
 import {
   forgetProjectPermissions,
   forgetSitePermission,
   listSitePermissions,
 } from "../../browser/page-permissions";
 import {
-  createProject,
   deleteProject,
   getProject,
   getWorktreeByAgentId,
@@ -42,7 +40,6 @@ import {
 import { runArchiveHook } from "../../hooks/project-hooks";
 import { openInIde, resolveIde } from "../../ide/opener";
 import { runNative } from "../../lib/concurrency";
-import { execFileAsync } from "../../lib/exec-file";
 import { logger } from "../../lib/logger";
 import { isPathAllowed } from "../../security/path-guard";
 import {
@@ -53,20 +50,8 @@ import {
 } from "../../system/project-icons";
 import { projectShapes } from "../../system/project-shape";
 import { publicProcedure, router } from "../trpc";
-import { initGitRepo, inspectFolder } from "./project-folder";
+import { addProjectFolder, inspectFolder, ProjectAddError } from "./project-folder";
 import { resolveProjectFolder } from "./project-paths";
-
-async function getGitRemote(path: string): Promise<string | null> {
-  try {
-    const { stdout } = await execFileAsync("git", ["config", "--get", "remote.origin.url"], {
-      cwd: path,
-    });
-    const remote = stdout.trim();
-    return remote || null;
-  } catch {
-    return null;
-  }
-}
 
 const appearanceSchema = z.object({
   color: z
@@ -133,29 +118,13 @@ export const projectRouter = router({
       }),
     )
     .mutation(async ({ ctx, input: { appearance, initGit, ...input } }) => {
-      const folder = await inspectFolder(input.path, listProjects(ctx.db));
-      if (folder.kind === "existing") {
-        throw new TRPCError({ code: "CONFLICT", message: `Already in Exegol as '${folder.name}'` });
-      }
-      const refusal = (
-        {
-          missing: "Path does not exist",
-          notDirectory: "Path is not a directory",
-          noGit: initGit ? undefined : "Path is not a git repository",
-        } as Partial<Record<FolderInspection["kind"], string>>
-      )[folder.kind];
-      if (refusal) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: `${refusal}: ${input.path}` });
-      }
-      if (folder.kind === "noGit") await initGitRepo(input.path, input.defaultBranch);
-
-      const gitRemote = input.gitRemote ?? (await getGitRemote(input.path));
-
-      const project = createProject(ctx.db, {
-        ...input,
-        gitRemote,
+      const project = await addProjectFolder(ctx.db, input, initGit).catch((err) => {
+        if (!(err instanceof ProjectAddError)) throw err;
+        throw new TRPCError({
+          code: err.existing ? "CONFLICT" : "BAD_REQUEST",
+          message: err.message,
+        });
       });
-      markCookiesMigrated(ctx.db, project.id);
       // What the user picked in the dialog; otherwise its app icon, found once and kept
       if (appearance) await applyAppearance(ctx.db, project, appearance);
       else await adoptDetectedIcon(ctx.db, project.id).catch(() => {});

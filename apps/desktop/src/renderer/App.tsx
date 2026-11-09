@@ -36,6 +36,7 @@ import { useAutoResumeLost, useRelaunchMissedResume } from "./hooks/use-resume-a
 import { useSettingsSync } from "./hooks/use-settings-sync";
 import { useTheme } from "./hooks/use-theme";
 import { useToastEvents } from "./hooks/use-toast-events";
+import { useProjectsSync } from "./hooks/use-trpc";
 import { useUpdateStatusSync } from "./hooks/use-update-status";
 import { useWatchFollow } from "./hooks/use-watch-follow";
 import { useAppStore } from "./stores/app";
@@ -80,6 +81,7 @@ function AppEffects() {
   useCliRestarts();
   useInboxSync();
   useNotesSync();
+  useProjectsSync();
   useCliSelfUpdates();
   useFleetSync();
   useActiveViewSync();

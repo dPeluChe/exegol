@@ -15,6 +15,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - `Cmd+.` no longer stops the focused session: one stray key ended it with no warning. Stop Agent stays in the Command Palette
 
 ### Added
+- Commander (Dashboard > Commander): one conversation about every other session. It reports what needs you, hands your requests to the right session, answers a session only as you allow, and never a tool permission. Start it on the CLI and model you pick.
 - Inbox capture: `exegol inbox add <text or url>` and `exegol://capture` links open a dialog in Exegol to pick the place (Personal by default) and add a line; nothing is saved until you confirm.
 - Inbox: Forward a thread to another project, colab or Personal (the origin is kept), Save as note from any thread, and Send as issue to a GitHub repo of the project after reviewing the text.
 - Notes view in Project > Context: read, write, edit, retire, restore and delete the notes of the project, its colabs and your own, with search and the folder one click away.

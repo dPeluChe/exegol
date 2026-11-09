@@ -9,6 +9,8 @@ import { connect, createServer, type Server, type Socket } from "node:net";
 import type { McpAgentState } from "@exegol/shared";
 import type Database from "libsql";
 import { forgetBrowserAgent } from "../browser/agent-browser-tools";
+import { COMMANDER_LINE } from "../commander/brief";
+import { isCommander } from "../commander/home";
 import { listLiveAgentClis } from "../db/queries/agents";
 import { findBlockingClaim } from "../db/queries/path-claims";
 import { getProject } from "../db/queries/projects";
@@ -96,6 +98,7 @@ export async function handleRequest(
         tools: getToolDefsForAccessMode(
           resolved.ok ? resolved.context.accessMode : "read",
           resolved.ok && !!getProject(db, resolved.context.projectId)?.browserEval,
+          resolved.ok && isCommander(db, resolved.context),
         ),
       }),
     );
@@ -103,7 +106,11 @@ export async function handleRequest(
   }
   if (req.method === "session_context") {
     const resolved = resolveContext(db, caller?.token, caller?.ppid, conn);
-    const text = resolved.ok ? await sessionLine(db, resolved.context.projectId) : "";
+    const text = !resolved.ok
+      ? ""
+      : isCommander(db, resolved.context)
+        ? COMMANDER_LINE
+        : await sessionLine(db, resolved.context.projectId);
     socket.write(encodeResponse(req.id, { text }));
     return;
   }

@@ -393,6 +393,11 @@
       "removeMember",
       "update"
     ],
+    "commander": [
+      "prepare",
+      "setAutonomy",
+      "state"
+    ],
     "notes": [
       "delete",
       "list",
@@ -436,6 +441,7 @@
     "agent:message-held",
     "inbox:changed",
     "notes:changed",
+    "projects:changed",
     "agent:chat-updated",
     "agent:resume-missed",
     "agent:cli-self-updated",

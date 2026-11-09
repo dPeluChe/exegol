@@ -15,7 +15,7 @@ import { resolveTaskLabel } from "../../agents/task-label";
 import { logger } from "../../lib/logger";
 import { mapAgentRow, nanoid } from "./helpers";
 
-type ActiveAgent = Agent & { projectName: string; groupColor: string | null };
+export type ActiveAgent = Agent & { projectName: string; groupColor: string | null };
 
 /** Placeholders for `...LIVE_STATUSES` in an `IN (...)` */
 export const liveIn = () => [...LIVE_STATUSES].map(() => "?").join(",");
