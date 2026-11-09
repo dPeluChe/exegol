@@ -14,8 +14,8 @@ import { BrowserWindow, ipcMain, webContents } from "electron";
 interface FloatingPaneConfig {
   /** Stable id used by the renderer workspace store */
   paneId: string;
-  /** Content kind */
-  type: "terminal" | "browser";
+  /** Content kind; "chat" is a session's chat and takes over no pane */
+  type: "terminal" | "browser" | "chat";
   /** Display title shown in the floating window titlebar */
   title: string;
   /** For terminal: the agent whose PTY we bind to */
@@ -31,6 +31,7 @@ interface FloatingPaneConfig {
 }
 
 const floatingWindows = new Map<string, BrowserWindow>();
+const chatAgents = new Map<string, string | undefined>();
 /** Pending "floating:closed" notifications buffered until renderer attaches listener, with the
  *  page a floating browser was last on (the pane goes back to it, not to where it floated from) */
 const pendingClosedEvents = new Map<string, string | undefined>();
@@ -77,19 +78,34 @@ function buildUrl(config: FloatingPaneConfig): string {
   return `file://${join(__dirname, "../renderer/index.html")}?${query}`;
 }
 
+const SIZES: Record<
+  FloatingPaneConfig["type"],
+  { width: number; height: number; minHeight: number }
+> = {
+  terminal: { width: 720, height: 420, minHeight: 200 },
+  browser: { width: 900, height: 620, minHeight: 200 },
+  chat: { width: 420, height: 560, minHeight: 300 },
+};
+
 function openFloatingPane(config: FloatingPaneConfig): void {
   // If already floating, focus it instead of opening a duplicate
   const existing = floatingWindows.get(config.paneId);
   if (existing && !existing.isDestroyed()) {
+    // The same chat window follows a session that was started again
+    if (config.type === "chat" && chatAgents.get(config.paneId) !== config.agentId) {
+      chatAgents.set(config.paneId, config.agentId);
+      void existing.loadURL(buildUrl(config));
+    }
     existing.focus();
     return;
   }
 
+  const size = SIZES[config.type];
   const win = new BrowserWindow({
-    width: config.type === "terminal" ? 720 : 900,
-    height: config.type === "terminal" ? 420 : 620,
+    width: size.width,
+    height: size.height,
     minWidth: 320,
-    minHeight: 200,
+    minHeight: size.minHeight,
     show: false,
     alwaysOnTop: true,
     frame: false,
@@ -111,11 +127,13 @@ function openFloatingPane(config: FloatingPaneConfig): void {
 
   win.on("closed", () => {
     floatingWindows.delete(config.paneId);
-    notifyMainWindowClosed(config.paneId);
+    chatAgents.delete(config.paneId);
+    if (config.type !== "chat") notifyMainWindowClosed(config.paneId);
   });
 
   win.loadURL(buildUrl(config));
   floatingWindows.set(config.paneId, win);
+  if (config.type === "chat") chatAgents.set(config.paneId, config.agentId);
 }
 
 function closeFloatingPane(paneId: string): void {

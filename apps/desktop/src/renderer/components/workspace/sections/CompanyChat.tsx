@@ -147,7 +147,14 @@ const Bubble = memo(
     sameBubble(a.bubble, b.bubble),
 );
 
-function ChatInput({ agent, onTerminal }: { agent: AgentState; onTerminal: () => void }) {
+interface InputProps {
+  agent: AgentState;
+  /** Absent in a floating window: no terminal to switch to there */
+  onTerminal?: () => void;
+  dictation: boolean;
+}
+
+function ChatInput({ agent, onTerminal, dictation }: InputProps) {
   const draft = useChatDraftStore((s) => s.drafts[agent.id] ?? "");
   const setDraft = (text: string) => setChatDraft(agent.id, text);
   const accepts = acceptsFollowUps(agent);
@@ -184,7 +191,7 @@ function ChatInput({ agent, onTerminal }: { agent: AgentState; onTerminal: () =>
   };
 
   if (!accepts) {
-    return (
+    return onTerminal ? (
       <button
         type="button"
         onClick={onTerminal}
@@ -192,6 +199,8 @@ function ChatInput({ agent, onTerminal }: { agent: AgentState; onTerminal: () =>
       >
         The CLI exited: continue in the terminal
       </button>
+    ) : (
+      <p className="border-t border-border p-2 text-[11px] text-text-muted">The CLI exited.</p>
     );
   }
 
@@ -216,7 +225,8 @@ function ChatInput({ agent, onTerminal }: { agent: AgentState; onTerminal: () =>
       {dialog ? (
         <AgentQuestion agentId={agent.id} enabled={accepts} />
       ) : (
-        claudeAsks && (
+        claudeAsks &&
+        (onTerminal ? (
           <button
             type="button"
             onClick={onTerminal}
@@ -224,7 +234,9 @@ function ChatInput({ agent, onTerminal }: { agent: AgentState; onTerminal: () =>
           >
             Answer in the terminal
           </button>
-        )
+        ) : (
+          <p className="text-[11px] text-text-muted">It asks a question: answer in its terminal.</p>
+        ))
       )}
       {queued.length > 0 && <FollowUpList agentId={agent.id} items={queued} />}
       {typed && (
@@ -265,7 +277,7 @@ function ChatInput({ agent, onTerminal }: { agent: AgentState; onTerminal: () =>
           aria-label="Message this session"
           className="min-w-0 flex-1 resize-none rounded border border-border bg-bg-primary px-2 py-1.5 text-xs text-text-primary outline-none placeholder:text-text-muted focus:border-accent disabled:opacity-60"
         />
-        <DictationWidget />
+        {dictation && <DictationWidget />}
         <button
           type="button"
           onClick={submit}
@@ -280,15 +292,17 @@ function ChatInput({ agent, onTerminal }: { agent: AgentState; onTerminal: () =>
   );
 }
 
-/** The session as turns */
+/** The session as turns. `dictation` off where the widget has no pane to type into */
 export function CompanyChat({
   agent,
   where,
   onTerminal,
+  dictation = true,
 }: {
   agent: AgentState;
   where: string;
-  onTerminal: () => void;
+  onTerminal?: () => void;
+  dictation?: boolean;
 }) {
   const { chat, older } = useChat(agent.id);
   const turns = chat?.turns ?? NO_TURNS;
@@ -345,7 +359,7 @@ export function CompanyChat({
           <ChatWorking agent={agent} />
         </div>
       </div>
-      <ChatInput agent={agent} onTerminal={onTerminal} />
+      <ChatInput agent={agent} onTerminal={onTerminal} dictation={dictation} />
     </div>
   );
 }

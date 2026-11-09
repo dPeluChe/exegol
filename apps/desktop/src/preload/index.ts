@@ -474,7 +474,7 @@ contextBridge.exposeInMainWorld("api", {
     /** Open a floating pane window from the main window */
     open: (config: {
       paneId: string;
-      type: "terminal" | "browser";
+      type: "terminal" | "browser" | "chat";
       title: string;
       agentId?: string;
       url?: string;

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { useAct } from "../../../hooks/use-act";
 import { useLaunchableProviders } from "../../../hooks/use-providers";
 import { useResumeAgent } from "../../../hooks/use-resume-agent";
+import { COMMANDER_CHAT_PANE } from "../../../lib/floating-chat";
 import { takesPrompt } from "../../../lib/github-handoff";
 import { isOpenSession } from "../../../lib/sidebar-views";
 import { openInNewTab } from "../../../lib/spawn-shell";
@@ -72,6 +73,16 @@ function Options({ state }: { state: CommanderState }) {
       </FilterChip>
     </div>
   );
+}
+
+/** Its chat in an always-on-top window; takes over no pane, so nothing is marked floating */
+function floatChat(agentId: string) {
+  void window.api.floating.open({
+    paneId: COMMANDER_CHAT_PANE,
+    type: "chat",
+    title: NAME,
+    agentId,
+  });
 }
 
 /** A tab in the Commander's own project; the Dashboard stays in front */
@@ -197,7 +208,14 @@ export function CommanderSection() {
       <div className="mx-auto flex min-h-0 w-full max-w-3xl flex-1 flex-col gap-2 px-4 pb-4">
         <div className="flex items-center justify-between gap-2">
           {historyChip}
-          {session && <Options state={state} />}
+          {session && (
+            <div className="flex items-center gap-2">
+              <FilterChip active={false} onClick={() => floatChat(session.id)}>
+                <span title="Open the Commander's chat in a floating window">Float</span>
+              </FilterChip>
+              <Options state={state} />
+            </div>
+          )}
         </div>
         {history || !session ? (
           <CommanderHistory />
