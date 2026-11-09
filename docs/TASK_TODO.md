@@ -1444,7 +1444,8 @@ design in `RESEARCH/COMMANDER_DESIGN_2026_11.md`.
 
 - Phase 2 leftover: installing a newer CLI release for a session (today it only restarts onto an
   installed one), and the feed's window and cap tuned on real days
-- Phase 3: it calls the person (a sound and a notice). The floating chat is built: verify it live
+- Phase 3 is built (alert_person, floating chat): hear the chime, see the notice and try the
+  floating chat live
 - Phase 4: voice (T222). Kokoro first; Phonon 40m-es and Supertonic 3 to listen to (design doc)
 - Phase 5: retry after an API or network error (T218)
 - Decide whether its project stays out of Company and the project lists

@@ -8,6 +8,7 @@ export const COMMANDER_TOOLS = [
   "session_restart",
   "project_add",
   "my_history",
+  "alert_person",
 ] as const;
 
 export type CommanderToolName = (typeof COMMANDER_TOOLS)[number];
@@ -95,6 +96,22 @@ export const COMMANDER_TOOL_DEFS: ToolBody<CommanderToolName>[] = [
     inputSchema: {
       type: "object",
       properties: { limit: { type: "number", description: "How many. Default 20, at most 50" } },
+    },
+  },
+  {
+    name: "alert_person",
+    title: "Call the person",
+    description:
+      "A chime and a desktop notice with one short line, for when something needs the person " +
+      "now and they may not be looking: a session blocked on them, a decision only they can " +
+      "make, work they asked to be told about. Not for routine reports. At most one a minute. " +
+      "Write the details in the chat, where they come to read.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        message: { type: "string", description: "One line, up to 200 characters" },
+      },
+      required: ["message"],
     },
   },
 ];
