@@ -1,32 +1,24 @@
-import type { Agent } from "@exegol/shared";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { LoadingSpinner } from "./components/common";
-import { ToastStack } from "./components/common/ToastStack";
 import { ErrorBoundary, paneFallback } from "./components/ErrorBoundary";
 import { CompanyChat } from "./components/workspace/sections/CompanyChat";
 import { useMountEffect } from "./hooks/use-mount-effect";
-import { floatingChatKey, withStatusPush } from "./lib/floating-chat";
+import { useAgent } from "./hooks/use-trpc";
 import { isOpenSession } from "./lib/sidebar-views";
-import { trpcInvoke } from "./lib/trpc-client";
 import { followUpsKey, toAgentState, useAgentStore } from "./stores/agents";
 import { noteDeskActivity } from "./stores/desk-activity";
 
 const ATTENTION_STORAGE = "exegol-agent-attention";
-const FALLBACK_POLL_MS = 30_000;
 
 // No agents store feed here: its writes would persist stale attention over the main window's.
-// The session is a query moved by pushes; attention is re-read from what the main window saves
+// The session is read again on each status push; attention is re-read from what the main saves
 function useFloatingSession(agentId: string) {
   const queryClient = useQueryClient();
-  const queryKey = floatingChatKey(agentId);
   useMountEffect(() => {
     const offStatus = window.api.onAgentStatus((event) => {
       if (event.agentId !== agentId) return;
-      queryClient.setQueryData<Agent | null>(
-        queryKey,
-        (held) => held && withStatusPush(held, event),
-      );
+      void queryClient.invalidateQueries({ queryKey: ["agent", agentId] });
     });
     const offActivity = window.api.onAgentActivity((event) => {
       if (event.agentId === agentId) noteDeskActivity(agentId, event.activity);
@@ -45,11 +37,7 @@ function useFloatingSession(agentId: string) {
       window.removeEventListener("storage", onStorage);
     };
   });
-  const { data, isPending } = useQuery({
-    queryKey,
-    queryFn: () => trpcInvoke<Agent | null>("agents.get", { id: agentId }),
-    refetchInterval: FALLBACK_POLL_MS,
-  });
+  const { data, isPending } = useAgent(agentId);
   const agent = useMemo(() => (data ? toAgentState(data) : null), [data]);
   return { agent, isPending };
 }
@@ -69,8 +57,6 @@ export function FloatingChat({ agentId, title }: { agentId: string; title: strin
           <p className="text-center text-xs text-text-muted">The {title} is not running.</p>
         </div>
       )}
-      {/* Send and load errors (toastError) need a host in this window */}
-      <ToastStack />
     </div>
   );
 }

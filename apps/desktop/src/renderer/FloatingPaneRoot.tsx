@@ -1,5 +1,6 @@
 import { lazy, Suspense } from "react";
 import { LoadingSpinner } from "./components/common";
+import { ToastStack } from "./components/common/ToastStack";
 import { FloatingBrowser } from "./FloatingBrowser";
 import { FloatingChat } from "./FloatingChat";
 import { useTheme } from "./hooks/use-theme";
@@ -80,6 +81,7 @@ export function FloatingPaneRoot() {
           <FloatingChat agentId={params.agentId} title={params.title} />
         )}
       </div>
+      <ToastStack />
     </div>
   );
 }
