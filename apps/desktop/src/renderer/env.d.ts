@@ -256,7 +256,7 @@ interface Window {
     floating: {
       open: (config: {
         paneId: string;
-        type: "terminal" | "browser";
+        type: "terminal" | "browser" | "chat";
         title: string;
         agentId?: string;
         url?: string;

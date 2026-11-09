@@ -1,6 +1,8 @@
 import { lazy, Suspense } from "react";
 import { LoadingSpinner } from "./components/common";
+import { ToastStack } from "./components/common/ToastStack";
 import { FloatingBrowser } from "./FloatingBrowser";
+import { FloatingChat } from "./FloatingChat";
 import { useTheme } from "./hooks/use-theme";
 import { useWindowCloseKeys } from "./hooks/use-window-close-keys";
 
@@ -13,9 +15,11 @@ const TerminalInstance = lazy(() =>
  * Parameters passed to the floating window via query string.
  * See `apps/desktop/src/main/windows/floating.ts#buildUrl`.
  */
+type FloatingType = "terminal" | "browser" | "chat";
+
 interface FloatingParams {
   paneId: string;
-  type: "terminal" | "browser";
+  type: FloatingType;
   title: string;
   agentId?: string;
   url?: string;
@@ -27,7 +31,7 @@ interface FloatingParams {
 function parseParams(): FloatingParams | null {
   const p = new URLSearchParams(window.location.search);
   const paneId = p.get("floatingPane");
-  const type = p.get("floatingType") as "terminal" | "browser" | null;
+  const type = p.get("floatingType") as FloatingType | null;
   if (!paneId || !type) return null;
   return {
     paneId,
@@ -73,12 +77,16 @@ export function FloatingPaneRoot() {
             initialSizeKey={params.viewport}
           />
         )}
+        {params.type === "chat" && params.agentId && (
+          <FloatingChat agentId={params.agentId} title={params.title} />
+        )}
       </div>
+      <ToastStack />
     </div>
   );
 }
 
-function FloatingTitleBar({ title, type }: { title: string; type: "terminal" | "browser" }) {
+function FloatingTitleBar({ title, type }: { title: string; type: FloatingType }) {
   const toggleDevTools = () => window.api.floating.selfToggleDevTools();
   return (
     <div
