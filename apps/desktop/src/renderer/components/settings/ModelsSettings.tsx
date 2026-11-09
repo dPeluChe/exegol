@@ -4,17 +4,7 @@ import {
   type ModelListItem,
   type Settings,
 } from "@exegol/shared";
-import {
-  AlertTriangle,
-  AudioLines,
-  ChevronDown,
-  ChevronRight,
-  Download,
-  RotateCcw,
-  Star,
-  Trash2,
-  X,
-} from "lucide-react";
+import { AlertTriangle, AudioLines, ChevronDown, ChevronRight } from "lucide-react";
 import { useMemo, useState } from "react";
 import { create } from "zustand";
 import { useSettings } from "../../hooks/use-trpc";
@@ -24,10 +14,10 @@ import { benchRunFor, groupModels, languagesLabel } from "../../lib/speech-model
 import { ConfirmDialog } from "../common/ConfirmDialog";
 import { formatBytes } from "../workspace/sections/resource-format";
 import { ModelBenchmarks, ModelRanking } from "./ModelBenchmarks";
-import { SMALL_BUTTON } from "./settings-ui";
+import { ModelCard, ModelStatusActions, type RowAction } from "./ModelCard";
 import { useConfirmDeleteModel } from "./use-confirm-delete-model";
+import { VoiceModels } from "./VoiceModelList";
 
-type RowAction = "download" | "cancel" | "setDefault";
 type LicensedAction = "download" | "setDefault";
 
 const GROUP_HEADING = "text-[11px] font-semibold uppercase tracking-wide text-text-muted";
@@ -50,6 +40,9 @@ export function ModelsSettings() {
         ~/.exegol/models.
       </p>
       <SpeechModelList grouped />
+      <div className="border-t border-border pt-4">
+        <VoiceModels />
+      </div>
     </div>
   );
 }
@@ -185,150 +178,43 @@ function ModelRow({
   onAction: (action: RowAction) => void;
   onDelete: () => void;
 }) {
-  const { status } = model;
   return (
-    <div className="rounded-lg border border-border bg-bg-secondary p-3">
-      <div className="flex items-start gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="text-sm font-medium text-text-primary">{model.name}</span>
-            {model.isDefault && (
-              <span className={`${BADGE} bg-accent/15 text-accent`}>Default</span>
-            )}
-            {model.kind === "streaming" && (
-              <span className={`${BADGE} ${SEMANTIC_BADGE.info}`}>Streaming</span>
-            )}
-            {!model.engineAvailable && (
-              <span className={`${BADGE} ${SEMANTIC_BADGE.muted}`}>Coming</span>
-            )}
-            {model.commercialUse === false && (
-              <span
-                className={`${BADGE} ${SEMANTIC_BADGE.warning} flex items-center gap-1`}
-                title={model.license}
-              >
-                <AlertTriangle className="h-2.5 w-2.5" /> Non-commercial
-              </span>
-            )}
-          </div>
-          <p className="mt-0.5 text-xs text-text-secondary">{model.bestFor}</p>
-          <p
-            className="mt-1 text-[11px] text-text-muted"
-            title={model.languages.join(", ") || undefined}
+    <ModelCard
+      status={model.status}
+      actions={
+        <ModelStatusActions model={model} busy={busy} onAction={onAction} onDelete={onDelete} />
+      }
+    >
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-medium text-text-primary">{model.name}</span>
+        {model.isDefault && <span className={`${BADGE} bg-accent/15 text-accent`}>Default</span>}
+        {model.kind === "streaming" && (
+          <span className={`${BADGE} ${SEMANTIC_BADGE.info}`}>Streaming</span>
+        )}
+        {!model.engineAvailable && (
+          <span className={`${BADGE} ${SEMANTIC_BADGE.muted}`}>Coming</span>
+        )}
+        {model.commercialUse === false && (
+          <span
+            className={`${BADGE} ${SEMANTIC_BADGE.warning} flex items-center gap-1`}
+            title={model.license}
           >
-            {languagesLabel(model)} · {formatBytes(model.sizeBytes)} download ·{" "}
-            {formatBytes(model.installedBytes)} on disk · {model.license}
-          </p>
-          {model.notes && <p className="mt-1 text-[11px] text-text-muted">{model.notes}</p>}
-          {run !== undefined && <ModelBenchmarks model={model} run={run} />}
-          {/* CC-BY and community licenses require the credit next to the model */}
-          <p className="mt-1 text-[10px] leading-relaxed text-text-muted/80">{model.attribution}</p>
-        </div>
-        <div className="flex shrink-0 flex-col items-end gap-1.5">
-          <ModelStatusActions model={model} busy={busy} onAction={onAction} onDelete={onDelete} />
-        </div>
+            <AlertTriangle className="h-2.5 w-2.5" /> Non-commercial
+          </span>
+        )}
       </div>
-      {status.state === "downloading" && (
-        <div className="mt-2 h-1 overflow-hidden rounded bg-bg-tertiary">
-          <div
-            className="h-full bg-accent transition-[width]"
-            style={{ width: `${Math.min(100, (status.receivedBytes / status.totalBytes) * 100)}%` }}
-          />
-        </div>
-      )}
-      {status.state === "failed" && (
-        <p className="mt-2 text-[11px] text-error">Failed: {status.error}</p>
-      )}
-    </div>
+      <p className="mt-0.5 text-xs text-text-secondary">{model.bestFor}</p>
+      <p
+        className="mt-1 text-[11px] text-text-muted"
+        title={model.languages.join(", ") || undefined}
+      >
+        {languagesLabel(model)} · {formatBytes(model.sizeBytes)} download ·{" "}
+        {formatBytes(model.installedBytes)} on disk · {model.license}
+      </p>
+      {model.notes && <p className="mt-1 text-[11px] text-text-muted">{model.notes}</p>}
+      {run !== undefined && <ModelBenchmarks model={model} run={run} />}
+      {/* CC-BY and community licenses require the credit next to the model */}
+      <p className="mt-1 text-[10px] leading-relaxed text-text-muted/80">{model.attribution}</p>
+    </ModelCard>
   );
-}
-
-function ModelStatusActions({
-  model,
-  busy,
-  onAction,
-  onDelete,
-}: {
-  model: ModelListItem;
-  busy: boolean;
-  onAction: (action: RowAction) => void;
-  onDelete: () => void;
-}) {
-  const { status } = model;
-  if (!model.engineAvailable) return null;
-  switch (status.state) {
-    case "downloading":
-      return (
-        <>
-          <span className="text-[11px] text-text-muted">
-            {Math.floor((status.receivedBytes / status.totalBytes) * 100)}% of{" "}
-            {formatBytes(status.totalBytes)}
-          </span>
-          <button type="button" className={SMALL_BUTTON} onClick={() => onAction("cancel")}>
-            <X className="h-3 w-3" /> Cancel
-          </button>
-        </>
-      );
-    case "verifying":
-    case "extracting":
-      return (
-        <>
-          <span className="text-[11px] text-text-muted">
-            {status.state === "verifying" ? "Verifying..." : "Unpacking..."}
-          </span>
-          <button type="button" className={SMALL_BUTTON} onClick={() => onAction("cancel")}>
-            <X className="h-3 w-3" /> Cancel
-          </button>
-        </>
-      );
-    case "ready":
-      return (
-        <>
-          <span className="text-[11px] text-success">Ready</span>
-          <div className="flex gap-1.5">
-            {!model.isDefault && (
-              <button
-                type="button"
-                className={SMALL_BUTTON}
-                disabled={busy}
-                onClick={() => onAction("setDefault")}
-              >
-                <Star className="h-3 w-3" /> Set as default
-              </button>
-            )}
-            <button type="button" className={SMALL_BUTTON} onClick={onDelete}>
-              <Trash2 className="h-3 w-3" /> Delete
-            </button>
-          </div>
-        </>
-      );
-    case "failed":
-      return (
-        <button
-          type="button"
-          className={SMALL_BUTTON}
-          disabled={busy}
-          onClick={() => onAction("download")}
-        >
-          <RotateCcw className="h-3 w-3" /> Retry
-        </button>
-      );
-    default:
-      return (
-        <>
-          <button
-            type="button"
-            className={SMALL_BUTTON}
-            disabled={busy}
-            onClick={() => onAction("download")}
-          >
-            <Download className="h-3 w-3" /> {status.partialBytes > 0 ? "Resume" : "Download"}
-          </button>
-          {status.partialBytes > 0 && (
-            <span className="text-[10px] text-text-muted">
-              {formatBytes(status.partialBytes)} of {formatBytes(model.sizeBytes)}
-            </span>
-          )}
-        </>
-      );
-  }
 }

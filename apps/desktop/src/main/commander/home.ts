@@ -2,7 +2,14 @@ import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { Project } from "@exegol/shared";
+import {
+  COMMANDER_VOICE_KEY,
+  type CommanderVoiceSettings,
+  DEFAULT_COMMANDER_VOICE,
+  type Project,
+  SPEECH_SPEED_MAX,
+  SPEECH_SPEED_MIN,
+} from "@exegol/shared";
 import type Database from "libsql";
 import { createProject, getProject } from "../db/queries/projects";
 import { getJsonSetting, setJsonSetting } from "../db/queries/settings";
@@ -41,6 +48,32 @@ export const commanderFeed = (db: Database.Database): boolean =>
 
 export function setCommanderFeed(db: Database.Database, on: boolean): void {
   setJsonSetting(db, FEED_KEY, on);
+}
+
+/** Its replies read aloud: on click, or each new one when `auto` */
+export function commanderVoice(db: Database.Database): CommanderVoiceSettings {
+  const saved = getJsonSetting<Partial<CommanderVoiceSettings> | null>(
+    db,
+    COMMANDER_VOICE_KEY,
+    null,
+  );
+  const speed = Number(saved?.speed);
+  return {
+    auto: saved?.auto === true,
+    voice: typeof saved?.voice === "string" ? saved.voice : DEFAULT_COMMANDER_VOICE.voice,
+    speed: Number.isFinite(speed)
+      ? Math.min(SPEECH_SPEED_MAX, Math.max(SPEECH_SPEED_MIN, speed))
+      : DEFAULT_COMMANDER_VOICE.speed,
+  };
+}
+
+export function setCommanderVoice(
+  db: Database.Database,
+  patch: Partial<CommanderVoiceSettings>,
+): CommanderVoiceSettings {
+  const next = { ...commanderVoice(db), ...patch };
+  setJsonSetting(db, COMMANDER_VOICE_KEY, next);
+  return commanderVoice(db);
 }
 
 /** Its own project in a folder Exegol owns: the brief is rewritten on every start */

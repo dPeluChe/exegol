@@ -1,15 +1,21 @@
 import { mkdir, rm, stat, statfs } from "node:fs/promises";
 import { join } from "node:path";
-import type { ModelListItem, ModelStatus, SpeechModelEntry } from "@exegol/shared";
+import type {
+  DownloadableModel,
+  ModelListItem,
+  ModelStatus,
+  VoiceModelListItem,
+} from "@exegol/shared";
 import { net } from "electron";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { redact } from "../system/diagnostics";
 import { invalidateStorageReport } from "../system/storage";
 import { EXEGOL_DIR } from "../terminal/pty-sidecar-protocol";
-import { findModel, MODEL_CATALOG } from "./catalog";
+import { MODEL_CATALOG } from "./catalog";
 import { downloadVerified, fileSize } from "./download";
 import { extractTarBz2, pruneJunk } from "./extract";
+import { findDownloadable, VOICE_CATALOG } from "./voice-catalog";
 
 export const MODELS_DIR = join(EXEGOL_DIR, "models");
 const PARTIAL_DIR = join(MODELS_DIR, ".partial");
@@ -33,7 +39,7 @@ const pruned = new Set<string>();
 const mb = (bytes: number) => (bytes / 1024 ** 2).toFixed(1);
 
 /** Models installed before extraction pruned lose their sample audio and READMEs once */
-function pruneInstalled(entry: SpeechModelEntry): void {
+function pruneInstalled(entry: DownloadableModel): void {
   if (pruned.has(entry.id) || jobs.has(entry.id)) return;
   pruned.add(entry.id);
   pruneJunk(modelDir(entry.id))
@@ -51,15 +57,19 @@ function push(id: string, status: ModelStatus): void {
   broadcast("models:progress", { id, status });
 }
 
-async function isInstalled(entry: SpeechModelEntry): Promise<boolean> {
+async function isInstalled(entry: DownloadableModel): Promise<boolean> {
   for (const file of entry.files) {
     const info = await stat(join(modelDir(entry.id), file)).catch(() => null);
     if (!info?.isFile()) return false;
   }
+  for (const folder of entry.keepDirs ?? []) {
+    const info = await stat(join(modelDir(entry.id), folder)).catch(() => null);
+    if (!info?.isDirectory()) return false;
+  }
   return true;
 }
 
-export async function modelStatus(entry: SpeechModelEntry): Promise<ModelStatus> {
+export async function modelStatus(entry: DownloadableModel): Promise<ModelStatus> {
   const job = jobs.get(entry.id);
   if (job) return job.status;
   if (await isInstalled(entry)) {
@@ -83,8 +93,15 @@ export async function listModels(defaultId: string): Promise<ModelListItem[]> {
   );
 }
 
+/** Text-to-speech models, a list of their own: never offered for dictation */
+export async function listVoiceModels(): Promise<VoiceModelListItem[]> {
+  return Promise.all(
+    VOICE_CATALOG.map(async (entry) => ({ ...entry, status: await modelStatus(entry) })),
+  );
+}
+
 /** Throws when the archive plus the unpacked model would not fit, with a margin */
-async function assertFreeSpace(entry: SpeechModelEntry, partialBytes: number): Promise<void> {
+async function assertFreeSpace(entry: DownloadableModel, partialBytes: number): Promise<void> {
   const fsInfo = await statfs(MODELS_DIR).catch(() => null);
   if (!fsInfo) return;
   const free = fsInfo.bavail * fsInfo.bsize;
@@ -97,7 +114,7 @@ async function assertFreeSpace(entry: SpeechModelEntry, partialBytes: number): P
 
 /** Starts (or resumes) a download; resolves when it ends, never throws */
 export function downloadModel(id: string): Promise<void> {
-  const entry = findModel(id);
+  const entry = findDownloadable(id);
   if (!entry || !entry.engineAvailable) return Promise.resolve();
   const running = jobs.get(id);
   if (running) return running.done;
@@ -111,7 +128,7 @@ export function downloadModel(id: string): Promise<void> {
   return job.done;
 }
 
-async function runDownload(entry: SpeechModelEntry, job: Job): Promise<void> {
+async function runDownload(entry: DownloadableModel, job: Job): Promise<void> {
   const { id } = entry;
   failures.delete(id);
   const set = (status: ModelStatus) => {
@@ -164,6 +181,7 @@ async function runDownload(entry: SpeechModelEntry, job: Job): Promise<void> {
       destDir: modelDir(id),
       rootDir: entry.rootDir,
       requiredFiles: entry.files,
+      keepDirs: entry.keepDirs,
     });
     await rm(partialPath(id), { force: true });
     pruned.add(id);
@@ -193,7 +211,7 @@ export function cancelModel(id: string): void {
 
 /** Removes the installed model and any partial download */
 export async function deleteModel(id: string): Promise<void> {
-  const entry = findModel(id);
+  const entry = findDownloadable(id);
   if (!entry) return;
   const job = jobs.get(id);
   job?.abort.abort();

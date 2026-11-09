@@ -8,6 +8,7 @@ import { cn } from "@exegol/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, SendHorizontal } from "lucide-react";
 import { memo, useMemo, useState } from "react";
+import { useCommanderVoice } from "../../../hooks/use-commander-voice";
 import { useMountEffect } from "../../../hooks/use-mount-effect";
 import { isClaudeQuestion } from "../../../lib/claude-question";
 import { hasClipboardImage } from "../../../lib/clipboard-image";
@@ -24,6 +25,8 @@ import {
   sameBubble,
   toolsLine,
 } from "../../../lib/session-chat";
+import { speakReply } from "../../../lib/speech/player";
+import { useLiveReplies } from "../../../lib/speech/use-live-replies";
 import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
 import { type AgentState, useAgentStore } from "../../../stores/agents";
 import { DEFAULT_CHAT_FONT, useAppStore } from "../../../stores/app";
@@ -36,6 +39,7 @@ import { FollowUpList, useFollowUps } from "../../terminal/FollowUpControl";
 import { DELIVERY, peerName, useAgentMessages } from "./AgentMessages";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ChatWorking } from "./ChatWorking";
+import { SpeakButton } from "./SpeakButton";
 
 const FALLBACK_POLL_MS = 15_000;
 const NO_TURNS: ChatHistory["turns"] = [];
@@ -99,9 +103,11 @@ interface BubbleProps {
   agentId: string;
   cliType: string;
   formatted: boolean;
+  /** Speaker button and whether a voice is installed; absent, no button */
+  voiceReady?: boolean;
 }
 
-function BubbleBody({ bubble, agentId, cliType, formatted }: BubbleProps) {
+function BubbleBody({ bubble, agentId, cliType, formatted, voiceReady }: BubbleProps) {
   if (bubble.kind === "tools") {
     return <p className="truncate pl-6 text-[10px] text-text-muted">{toolsLine(bubble.names)}</p>;
   }
@@ -130,7 +136,19 @@ function BubbleBody({ bubble, agentId, cliType, formatted }: BubbleProps) {
             <p className="whitespace-pre-wrap break-words font-mono text-[11px]">{bubble.text}</p>
           )}
         </div>
-        {time && <span className="pl-1 text-[9px] text-text-muted">{time}</span>}
+        {(time || voiceReady !== undefined) && (
+          <div className="flex items-center gap-1 pl-1">
+            {time && <span className="text-[9px] text-text-muted">{time}</span>}
+            {voiceReady !== undefined && (
+              <SpeakButton
+                turnId={bubble.id}
+                text={bubble.text}
+                agentId={agentId}
+                ready={voiceReady}
+              />
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -144,6 +162,7 @@ const Bubble = memo(
     a.agentId === b.agentId &&
     a.cliType === b.cliType &&
     a.formatted === b.formatted &&
+    a.voiceReady === b.voiceReady &&
     sameBubble(a.bubble, b.bubble),
 );
 
@@ -292,19 +311,31 @@ function ChatInput({ agent, onTerminal, dictation }: InputProps) {
   );
 }
 
-/** The session as turns. `dictation` off where the widget has no pane to type into */
+/** The session as turns. `dictation` off where the widget has no pane to type into; `speak`
+ *  (the Commander's chat) reads replies aloud: on click, and new ones when its voice is on */
 export function CompanyChat({
   agent,
   where,
   onTerminal,
   dictation = true,
+  speak = false,
 }: {
   agent: AgentState;
   where: string;
   onTerminal?: () => void;
   dictation?: boolean;
+  speak?: boolean;
 }) {
+  const voice = useCommanderVoice(speak).data;
+  useLiveReplies(
+    agent.id,
+    speak && voice?.settings.auto
+      ? (turn) => void speakReply(turn.id, turn.text, agent.id, true)
+      : undefined,
+  );
   const { chat, older } = useChat(agent.id);
+  // undefined: no speaker buttons; false: they point to Settings > Models
+  const voiceReady = speak ? voice?.ready === true : undefined;
   const turns = chat?.turns ?? NO_TURNS;
   const [shown, setShown] = useState(SHOWN_STEP);
   const { data: messages = NO_MESSAGES } = useAgentMessages(agent.id);
@@ -354,6 +385,7 @@ export function CompanyChat({
               agentId={agent.id}
               cliType={agent.cliType}
               formatted={!!chat?.markdown}
+              voiceReady={voiceReady}
             />
           ))}
           <ChatWorking agent={agent} />

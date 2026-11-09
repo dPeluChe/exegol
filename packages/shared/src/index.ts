@@ -20,6 +20,7 @@ export {
   pathSep,
   samePath,
 } from "./lib/paths";
+export { speechSentences } from "./lib/speech-text";
 export { stripTerminalReports } from "./lib/terminal-reports";
 export { type TestBuild, testBuildOf, testBuildVersion } from "./lib/test-build";
 export * from "./schemas";

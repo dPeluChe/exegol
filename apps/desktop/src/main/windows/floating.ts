@@ -9,7 +9,7 @@
 
 import { join } from "node:path";
 import { is } from "@electron-toolkit/utils";
-import { BrowserWindow, ipcMain, webContents } from "electron";
+import { BrowserWindow, ipcMain, type WebContents, webContents } from "electron";
 
 interface FloatingPaneConfig {
   /** Stable id used by the renderer workspace store */
@@ -148,6 +148,15 @@ export function closeAllFloatingPanes(): void {
     if (!win.isDestroyed()) win.close();
   }
   floatingWindows.clear();
+}
+
+/** The floating chat window showing this session, if one is open */
+export function floatingChatOf(agentId: string): WebContents | null {
+  for (const [paneId, id] of chatAgents) {
+    const win = floatingWindows.get(paneId);
+    if (id === agentId && win && !win.isDestroyed()) return win.webContents;
+  }
+  return null;
 }
 
 export function registerFloatingIpcHandlers(): void {

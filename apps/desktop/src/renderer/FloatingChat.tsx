@@ -43,14 +43,22 @@ function useFloatingSession(agentId: string) {
 }
 
 /** A session's chat in its own always-on-top window */
-export function FloatingChat({ agentId, title }: { agentId: string; title: string }) {
+export function FloatingChat({
+  agentId,
+  title,
+  speak = false,
+}: {
+  agentId: string;
+  title: string;
+  speak?: boolean;
+}) {
   const { agent, isPending } = useFloatingSession(agentId);
   if (isPending) return <LoadingSpinner label="Loading chat..." className="h-full" />;
   return (
     <div className="flex h-full min-h-0 flex-col">
       {agent && isOpenSession(agent) ? (
         <ErrorBoundary fallback={paneFallback}>
-          <CompanyChat agent={agent} where="Every project" dictation={false} />
+          <CompanyChat agent={agent} where="Every project" dictation={false} speak={speak} />
         </ErrorBoundary>
       ) : (
         <div className="flex h-full items-center justify-center p-4">

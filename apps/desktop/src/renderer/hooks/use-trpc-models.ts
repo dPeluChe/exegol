@@ -4,6 +4,7 @@ import type {
   StorageCategory,
   StorageReport,
   StorageRoot,
+  VoiceModelListItem,
 } from "@exegol/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
@@ -11,6 +12,7 @@ import { toastError } from "../stores/toasts";
 import { useMountEffect } from "./use-mount-effect";
 
 const MODELS_KEY = ["models", "list"];
+const VOICES_KEY = ["models", "voices"];
 const STORAGE_KEY = ["storage", "report"];
 
 /** The catalog with each model's status, kept live by `models:progress` while mounted */
@@ -29,6 +31,22 @@ export function useModels() {
   return useQuery({
     queryKey: MODELS_KEY,
     queryFn: () => trpcInvoke<ModelListItem[]>("models.list"),
+  });
+}
+
+/** Text-to-speech models, kept live by `models:progress` while mounted */
+export function useVoiceModels() {
+  const queryClient = useQueryClient();
+  useMountEffect(() =>
+    window.api?.onModelProgress?.((event) => {
+      queryClient.setQueryData<VoiceModelListItem[]>(VOICES_KEY, (list) =>
+        list?.map((m) => (m.id === event.id ? { ...m, status: event.status } : m)),
+      );
+    }),
+  );
+  return useQuery({
+    queryKey: VOICES_KEY,
+    queryFn: () => trpcInvoke<VoiceModelListItem[]>("models.voices"),
   });
 }
 
@@ -58,6 +76,7 @@ export function useModelAction() {
     onSuccess: (_data, { action }) => {
       if (action !== "download" && action !== "cancel") {
         void queryClient.invalidateQueries({ queryKey: MODELS_KEY });
+        void queryClient.invalidateQueries({ queryKey: VOICES_KEY });
       }
       if (action === "delete") void queryClient.invalidateQueries({ queryKey: STORAGE_KEY });
     },

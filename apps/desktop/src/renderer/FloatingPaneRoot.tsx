@@ -5,6 +5,7 @@ import { FloatingBrowser } from "./FloatingBrowser";
 import { FloatingChat } from "./FloatingChat";
 import { useTheme } from "./hooks/use-theme";
 import { useWindowCloseKeys } from "./hooks/use-window-close-keys";
+import { COMMANDER_CHAT_PANE } from "./lib/floating-chat";
 
 // Lazy — only the terminal case needs xterm.js, no reason to pull it for browser floats
 const TerminalInstance = lazy(() =>
@@ -78,7 +79,11 @@ export function FloatingPaneRoot() {
           />
         )}
         {params.type === "chat" && params.agentId && (
-          <FloatingChat agentId={params.agentId} title={params.title} />
+          <FloatingChat
+            agentId={params.agentId}
+            title={params.title}
+            speak={params.paneId === COMMANDER_CHAT_PANE}
+          />
         )}
       </div>
       <ToastStack />

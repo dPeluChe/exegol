@@ -1446,7 +1446,7 @@ design in `RESEARCH/COMMANDER_DESIGN_2026_11.md`.
   installed one), and the feed's window and cap tuned on real days
 - Phase 3 is built (alert_person, floating chat): hear the chime, see the notice and try the
   floating chat live
-- Phase 4: voice (T222). Kokoro first; Phonon 40m-es and Supertonic 3 to listen to (design doc)
+- Phase 4 (voice) is built with Kokoro. Try live: download in Settings > Models > Voice, Speak on a reply, the Voice toggle, voices and speed, speech stopping on dictation, the floating chat. Listen to Phonon 40m-es and Supertonic 3 before adding a second engine (design doc). Before a public release, decide on the eSpeak NG data (GPL-3.0, downloaded by the person, not shipped)
 - Decide whether its project stays out of Company and the project lists
 - Verify live: start on Claude Code, fleet_status, a message to a session, a thread in a project,
   a note of its own, suspend, add a project, a feed message after a session ends its turn,
@@ -1463,7 +1463,7 @@ contents or env values; paths relative to the project.
 
 ### T222: Exegol speaks `added: 2026-11-06`
 
-Agent replies read aloud on the machine, as an option beside dictation. No text leaves it and none reaches a log. After T217 unless Antonio moves it up.
+Agent replies read aloud on the machine, as an option beside dictation. No text leaves it and none reaches a log. Built for the Commander's chat with Kokoro (T224 phase 4, `main/speech/`); left: the other sessions' chats, a second engine, and what follows.
 
 - Engines, chosen in Settings > Models: Phonon 31m (Gradium, English only, Apache-2.0, 64 MB) and Kokoro-82M for Spanish (Apache-2.0, sherpa-onnx has it, already in the app)
 - Phonon 40m Spanish (74.6 MB) is CC BY-NC 4.0 and gated on Hugging Face, so a token and accepted terms. Antonio wants to evaluate it first: `uvx ptts --model hf://gradium/phonon-40m-es --lang es --quant q8`. If it stays, it is the person's own download, marked `commercialUse: false`, never bundled: the licence follows what the voice is used for, even in a free app. Its benchmark voices are Spanish from Spain

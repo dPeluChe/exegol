@@ -26,6 +26,7 @@ export default defineConfig({
           "exegol-mcp-shim-bin": resolve("src/main/mcp/exegol-mcp-shim-bin.ts"),
           "exegol-claim-guard-bin": resolve("src/main/mcp/exegol-claim-guard-bin.ts"),
           "dictation-engine": resolve("src/main/dictation/engine-entry.ts"),
+          "speech-engine": resolve("src/main/speech/tts-entry.ts"),
         },
       },
     },
