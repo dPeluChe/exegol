@@ -6,6 +6,8 @@ export interface SessionFacts {
   needsUser: boolean;
   /** Milliseconds since its PTY last printed; null when never seen */
   quietMs: number | null;
+  /** Milliseconds since the person last wrote to it in this run of the app; null when never */
+  personMs: number | null;
   /** restart: a newer CLI is installed. release: one is out, not installed */
   cliUpdate?: "restart" | "release";
 }
@@ -19,6 +21,8 @@ export interface FleetSession {
   state: SessionState;
   minutes_in_state: number | null;
   quiet_minutes: number | null;
+  /** When the person last wrote to it themselves: a recent one means they are on it */
+  person_minutes_ago: number | null;
   task: string;
   cli_update?: "restart" | "release";
 }
@@ -53,7 +57,7 @@ export function fleetView(
     sessions: agents
       .filter((a) => a.projectId === p.id && a.cliType !== "shell")
       .map((a) => {
-        const { needsUser, quietMs, cliUpdate } = facts(a.id);
+        const { needsUser, quietMs, personMs, cliUpdate } = facts(a.id);
         const since = a.statusChangedAt ? now - a.statusChangedAt * 1000 : null;
         return {
           id: a.id,
@@ -62,6 +66,7 @@ export function fleetView(
           state: sessionState(a.status, needsUser),
           minutes_in_state: minutes(since),
           quiet_minutes: minutes(quietMs),
+          person_minutes_ago: minutes(personMs),
           task: a.taskDescription.slice(0, 120),
           ...(cliUpdate ? { cli_update: cliUpdate } : {}),
         };

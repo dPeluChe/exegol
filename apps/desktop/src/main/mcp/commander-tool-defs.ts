@@ -7,6 +7,7 @@ export const COMMANDER_TOOLS = [
   "session_suspend",
   "session_restart",
   "project_add",
+  "session_retry",
   "my_history",
   "alert_person",
 ] as const;
@@ -33,7 +34,8 @@ export const COMMANDER_TOOL_DEFS: ToolBody<CommanderToolName>[] = [
       "Every project in Exegol with its live sessions and how many inbox threads wait there. " +
       "A session's state: working, at_prompt (its turn ended: read it, it may have asked " +
       "something), waits_on_person (a permission or dialog only the person answers), starting. " +
-      "minutes_in_state and quiet_minutes say how long. cli_update: see session_restart. " +
+      "minutes_in_state and quiet_minutes say how long. person_minutes_ago: when the person last " +
+      "wrote to it themselves; a recent one means they are on it, so leave it to them. cli_update: see session_restart. " +
       "personal_inbox_waiting counts the " +
       "person's own threads.",
     inputSchema: { type: "object", properties: {} },
@@ -69,6 +71,15 @@ export const COMMANDER_TOOL_DEFS: ToolBody<CommanderToolName>[] = [
       "cli_update: restart). Same conversation, model and mode, once its turn ends. With " +
       "cli_update: release a newer version exists but is not installed: installing is the " +
       "person's, from the session's toolbar.",
+    inputSchema: { type: "object", properties: { session: SESSION }, required: ["session"] },
+  },
+  {
+    name: "session_retry",
+    title: "Continue a session that stopped on an API or network error",
+    description:
+      "Tells a session to continue where it left off, when its last turn ended on an API or " +
+      "network error (the feed says so, or its last turn starts with API Error). Refused for " +
+      "any other ending, for an account problem such as a login, and after 3 retries in an hour.",
     inputSchema: { type: "object", properties: { session: SESSION }, required: ["session"] },
   },
   {

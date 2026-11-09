@@ -3,9 +3,10 @@ import { type Agent, type CliUpdateStatus, cliRestartNeeded } from "@exegol/shar
 import type Database from "libsql";
 import { needsUser } from "../agents/agent-message-queue";
 import { msSinceAgentOutput } from "../agents/agent-message-sweep";
-import { resolveTargetAgent } from "../agents/agent-messaging";
+import { resolveTargetAgent, sendSystemMessage } from "../agents/agent-messaging";
 import { markSuspending } from "../agents/idle-suspend-sweep";
 import { getAgentManager } from "../agents/manager";
+import { msSincePersonInput } from "../agents/session-activity";
 import { chatTurns } from "../agents/session-chat";
 import { type ActiveAgent, listActiveAgents } from "../db/queries/agents";
 import { listCommanderLog } from "../db/queries/commander-log";
@@ -19,6 +20,7 @@ import { cliUpdateStatus } from "../system/cli-versions";
 import { alertPerson } from "./alert";
 import { fleetView, type SessionFacts, sessionState } from "./fleet";
 import { commanderProjectId } from "./home";
+import { RETRY_TEXT, stoppedOnError, takeRetry } from "./retry";
 
 const TURN_CHARS = 2_000;
 const text = (value: unknown): string => (typeof value === "string" ? value.trim() : "");
@@ -67,6 +69,7 @@ export function fleetOf(
       return {
         needsUser: needsUser(id),
         quietMs: Number.isFinite(quiet) ? quiet : null,
+        personMs: msSincePersonInput(id),
         cliUpdate: agent && cliUpdate?.(agent),
       };
     },
@@ -156,6 +159,32 @@ async function sessionRestart(
   };
 }
 
+async function sessionRetry(
+  db: Database.Database,
+  args: Record<string, unknown>,
+  context: ExegolToolContext,
+) {
+  const agent = sessionOf(db, args, context.agentId);
+  const name = agent.alias ?? agent.id;
+  const state = sessionState(agent.status, needsUser(agent.id));
+  if (state !== "at_prompt") throw refused(`${name} is ${state}: only a session at its prompt`);
+  if (!(await stoppedOnError(db, agent.id))) {
+    throw refused(
+      `${name} did not stop on an API or network error a retry gets past: read it, and use agent_send if it needs an answer`,
+    );
+  }
+  if (!takeRetry(agent.id)) {
+    throw refused(`${name} was retried 3 times this hour: tell the person, the outage is not over`);
+  }
+  const sent = sendSystemMessage(db, {
+    toAgentId: agent.id,
+    source: "Commander",
+    text: RETRY_TEXT,
+  });
+  if (!sent) throw refused(`${name} cannot take a message now`);
+  return { retried: name, note: "It was told to continue. The feed says how its turn ends." };
+}
+
 async function projectAdd(db: Database.Database, args: Record<string, unknown>) {
   const path = text(args.path);
   if (!isAbsolute(path)) throw refused("project_add needs an absolute path");
@@ -190,6 +219,8 @@ export function callCommanderTool(
       return sessionRestart(db, args, context);
     case "project_add":
       return projectAdd(db, args);
+    case "session_retry":
+      return sessionRetry(db, args, context);
     case "alert_person":
       return alertPerson(db, args);
     case "my_history":

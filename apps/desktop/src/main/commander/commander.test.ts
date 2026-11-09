@@ -75,7 +75,7 @@ describe("fleetView", () => {
     const [project] = fleetView(
       [{ id: "p1", name: "Landing" }],
       [agent("busy", "running"), agent("asks", "running"), agent("sh", "idle", "shell")],
-      (id) => ({ needsUser: id === "asks", quietMs: 120_000 }),
+      (id) => ({ needsUser: id === "asks", quietMs: 120_000, personMs: null }),
       () => 3,
     );
     expect(project).toMatchObject({ project: "Landing", inbox_waiting: 3 });

@@ -15,6 +15,7 @@ const ACTIONS = new Set([
   "note_retire",
   "session_suspend",
   "session_restart",
+  "session_retry",
   "project_add",
   "alert_person",
 ]);

@@ -1,10 +1,12 @@
 import type { FollowUpItem, FollowUpsChangedEvent } from "@exegol/shared";
+import { stripTerminalReports } from "@exegol/shared";
 import type Database from "libsql";
 import { markMessagesUndeliverable } from "../db/queries/messages";
 import { broadcast } from "../lib/event-bus";
 import { getPtyHost } from "../terminal/pty-host";
 import type { PendingMessage } from "./agent-message-state";
 import { draftLengthAfter } from "./input-draft";
+import { notePersonInput } from "./session-activity";
 
 const queues = new Map<string, PendingMessage[]>();
 
@@ -68,6 +70,7 @@ const drafts = new Map<string, { length: number; at: number }>();
 
 /** The person's keys only: what Exegol types goes straight to the PTY and never lands here */
 export function noteDraftInput(agentId: string, data: string): void {
+  if (stripTerminalReports(data) !== "") notePersonInput(agentId);
   const current = drafts.get(agentId)?.length ?? 0;
   const length = draftLengthAfter(current, data);
   if (length === 0) {
