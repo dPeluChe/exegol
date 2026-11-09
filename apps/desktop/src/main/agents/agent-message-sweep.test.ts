@@ -13,7 +13,7 @@ vi.mock("../lib/event-bus", () => ({
   broadcast: (channel: string, payload: unknown) => events.push({ channel, payload }),
 }));
 vi.mock("../terminal/pty-host", () => ({
-  getPtyHost: () => ({ screenDialog: () => screen.dialog }),
+  getPtyHost: () => ({ holdsEnter: () => screen.dialog != null }),
 }));
 
 import { drainQueue, setAgentAwaitingApproval, storeQueue } from "./agent-message-queue";

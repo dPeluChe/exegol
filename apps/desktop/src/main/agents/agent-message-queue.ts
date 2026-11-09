@@ -61,7 +61,7 @@ export function isAgentAwaitingApproval(agentId: string): boolean {
 
 /** A hook-reported approval or a dialog on its screen (CLIs with no hook for it): Enter answers it */
 export function needsUser(agentId: string): boolean {
-  return agentsAwaitingApproval.has(agentId) || getPtyHost().screenDialog(agentId) != null;
+  return agentsAwaitingApproval.has(agentId) || getPtyHost().holdsEnter(agentId);
 }
 
 // Bytes cannot see every way a prompt empties (Esc, Ctrl+K), so a quiet draft stops holding
