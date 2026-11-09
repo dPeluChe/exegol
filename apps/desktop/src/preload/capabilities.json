@@ -394,6 +394,7 @@
       "update"
     ],
     "commander": [
+      "history",
       "prepare",
       "setAutonomy",
       "setFeed",

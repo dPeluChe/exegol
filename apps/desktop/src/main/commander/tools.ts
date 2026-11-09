@@ -8,6 +8,7 @@ import { markSuspending } from "../agents/idle-suspend-sweep";
 import { getAgentManager } from "../agents/manager";
 import { chatTurns } from "../agents/session-chat";
 import { type ActiveAgent, listActiveAgents } from "../db/queries/agents";
+import { listCommanderLog } from "../db/queries/commander-log";
 import { countActiveThreads, countPersonalThreads } from "../db/queries/inbox";
 import { listProjects } from "../db/queries/projects";
 import { addProjectFolder, ProjectAddError } from "../ipc/procedures/project-folder";
@@ -188,5 +189,17 @@ export function callCommanderTool(
       return sessionRestart(db, args, context);
     case "project_add":
       return projectAdd(db, args);
+    case "my_history":
+      return {
+        actions: listCommanderLog(db, Math.min(Math.max(Number(args.limit) || 20, 1), 50)).map(
+          ({ at, action, target, outcome, summary }) => ({
+            at: new Date(at).toISOString(),
+            action,
+            target,
+            outcome,
+            summary,
+          }),
+        ),
+      };
   }
 }

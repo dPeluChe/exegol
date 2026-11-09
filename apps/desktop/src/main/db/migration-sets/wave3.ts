@@ -424,4 +424,20 @@ export const wave3Migrations: Migration[] = [
       ALTER TABLE colabs ADD COLUMN notes_dir TEXT;
     `,
   },
+  {
+    // T224. What the Commander did, kept for good: agent_events is pruned after 30 days
+    id: "w3_039_commander_log",
+    sql: `
+      CREATE TABLE commander_log (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        at INTEGER NOT NULL,
+        session_id TEXT NOT NULL,
+        action TEXT NOT NULL,
+        target TEXT,
+        outcome TEXT NOT NULL,
+        summary TEXT,
+        ref TEXT
+      );
+    `,
+  },
 ];
