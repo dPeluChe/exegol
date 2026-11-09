@@ -35,7 +35,7 @@ import {
 import { resolveShellReady, scanForMarker } from "./pty-shell-ready";
 import type { SidecarClient } from "./pty-sidecar-client";
 import { type SessionMemoryResult, SHELL_RING_BUFFER_CAPACITY } from "./pty-sidecar-protocol";
-import { readScreenDialog } from "./screen-dialog";
+import { awaitsConfirm, readScreenDialog } from "./screen-dialog";
 import { trackSidecarCall } from "./sidecar-health-watch";
 import { isFrameGap, isStaleFrame, lostFrames, resyncFromRing } from "./sidecar-resync";
 
@@ -452,6 +452,12 @@ export class PtyHost {
   screenDialog(id: string): ScreenDialog | null {
     const lines = this.sessions.get(id)?.emulator.visibleLines();
     return lines ? readScreenDialog(lines) : null;
+  }
+
+  /** A dialog or a gate on screen: an Enter typed now would answer it */
+  holdsEnter(id: string): boolean {
+    const lines = this.sessions.get(id)?.emulator.visibleLines();
+    return !!lines && (readScreenDialog(lines) != null || awaitsConfirm(lines));
   }
 
   /** The chat of a CLI with no transcript */

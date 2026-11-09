@@ -94,7 +94,7 @@ function freshContext(days: number): IdleContext {
     days,
     exempt: idleExempt(),
     awaitingApproval: isAgentAwaitingApproval,
-    questionOnScreen: (id) => host.screenDialog(id) != null,
+    questionOnScreen: (id) => host.holdsEnter(id),
     activity: (id) => {
       const out = msSinceAgentOutput(id);
       const times = [lastInputOf(id), Number.isFinite(out) ? now - out : undefined];

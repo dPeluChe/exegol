@@ -17,7 +17,7 @@ vi.mock("../terminal/pty-host", () => ({
   getPtyHost: () => ({
     isAlive: (id: string) => ptyMock.alive.has(id),
     write: (id: string, data: string) => ptyMock.writes.push({ id, data }),
-    screenDialog: (id: string) => (ptyMock.dialogs.has(id) ? {} : null),
+    holdsEnter: (id: string) => ptyMock.dialogs.has(id),
   }),
 }));
 

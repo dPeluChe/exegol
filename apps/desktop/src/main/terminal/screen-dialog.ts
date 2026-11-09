@@ -86,6 +86,21 @@ export function readScreenDialog(lines: string[]): ScreenDialog | null {
   return readPlainList(lines, last) ?? readPicker(lines, last);
 }
 
+const CONFIRM = /\bEnter to (confirm|select|continue)\b/i;
+const SELECTED = /^[\s│|]*[❯›]\s+\S/;
+
+/** A gate with no numbers (Claude's "trust this folder?"): nothing to offer as an answer, but an
+ *  Enter typed now would choose its selected line */
+export function awaitsConfirm(lines: string[]): boolean {
+  let last = lines.length - 1;
+  while (last >= 0 && !(lines[last] ?? "").trim()) last--;
+  const tail = lines.slice(Math.max(0, last - 8), last + 1);
+  const footer = tail.map((l) => CONFIRM.test(l)).lastIndexOf(true);
+  return (
+    footer >= tail.length - 3 && footer > 0 && tail.slice(0, footer).some((l) => SELECTED.test(l))
+  );
+}
+
 function readPlainList(lines: string[], last: number): ScreenDialog | null {
   let end = last;
   while (end >= 0 && !OPTION.test(lines[end] ?? "")) {

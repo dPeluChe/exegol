@@ -195,7 +195,7 @@ export function AgentDashboard() {
         )}
       </div>
       {mode === "commander" ? (
-        <CommanderSection />
+        <CommanderSection projectMeta={projectMeta} />
       ) : all.length === 0 && mode !== "colabs" ? (
         <NoAgents projects={projects} />
       ) : mode === "company" ? (

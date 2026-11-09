@@ -34,8 +34,17 @@ export function inheritedTrust(
   projectRoot: string,
   pathApi: typeof path = path,
 ): ClaudeConfig | null {
+  if (!config.projects?.[trustKey(projectRoot, pathApi)]?.hasTrustDialogAccepted) return null;
+  return ownTrust(config, folder, pathApi);
+}
+
+/** `folder` trusted outright; null when it already is */
+export function ownTrust(
+  config: ClaudeConfig,
+  folder: string,
+  pathApi: typeof path = path,
+): ClaudeConfig | null {
   const projects = config.projects ?? {};
-  if (!projects[trustKey(projectRoot, pathApi)]?.hasTrustDialogAccepted) return null;
   const key = trustKey(folder, pathApi);
   if (projects[key]?.hasTrustDialogAccepted) return null;
   return {
@@ -44,19 +53,31 @@ export function inheritedTrust(
   };
 }
 
+/**
+ * A worktree or pipeline folder of a trusted project opens without Claude's "trust this
+ * folder?" prompt, which stalled unattended steps. True when it wrote the config
+ */
+export async function inheritClaudeTrust(folder: string, projectRoot: string): Promise<boolean> {
+  if (trustKey(folder) === trustKey(projectRoot)) return false;
+  return recordTrust(folder, (config) => inheritedTrust(config, folder, projectRoot));
+}
+
+/** A folder Exegol made and writes itself (the Commander's home): no person to ask about it */
+export const trustOwnFolder = (folder: string): Promise<boolean> =>
+  recordTrust(folder, (config) => ownTrust(config, folder));
+
 /** Folders found trusted this run: a launch there skips the lock and the read of a config that
  *  can be megabytes (a trust revoked meanwhile is seen next run) */
 const knownTrusted = new Set<string>();
 
-/**
- * A worktree or pipeline folder of a trusted project opens without Claude's "trust this
- * folder?" prompt, which stalled unattended steps. Under Claude's own lock on its config, never
- * broken: a held lock means skip and let Claude ask. Written to a temp file, then renamed.
- * True when it wrote the config
- */
-export async function inheritClaudeTrust(folder: string, projectRoot: string): Promise<boolean> {
+/** Under Claude's own lock on its config, never broken: a held lock means skip and let Claude
+ *  ask. Written to a temp file, then renamed */
+async function recordTrust(
+  folder: string,
+  change: (config: ClaudeConfig) => ClaudeConfig | null,
+): Promise<boolean> {
   const key = trustKey(folder);
-  if (key === trustKey(projectRoot) || knownTrusted.has(key)) return false;
+  if (knownTrusted.has(key)) return false;
   const file = claudeConfigFile();
   if (!existsSync(file)) return false;
   let release: (() => Promise<void>) | null = null;
@@ -70,13 +91,13 @@ export async function inheritClaudeTrust(folder: string, projectRoot: string): P
   }
   try {
     const config = JSON.parse(await readFile(file, "utf-8")) as ClaudeConfig;
-    const next = inheritedTrust(config, folder, projectRoot);
+    const next = change(config);
     if (config.projects?.[key]?.hasTrustDialogAccepted || next) knownTrusted.add(key);
     if (!next) return false;
     const tmp = join(dirname(file), `.claude.json.exegol-${process.pid}.tmp`);
     await writeFile(tmp, JSON.stringify(next, null, 2), { mode: (await stat(file)).mode });
     await rename(tmp, file);
-    logger.info("[ClaudeTrust] Trusted a folder of a trusted project");
+    logger.info("[ClaudeTrust] Trusted a folder");
     return true;
   } catch (err) {
     logger.warn("[ClaudeTrust] Could not record folder trust:", err);

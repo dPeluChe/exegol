@@ -1,6 +1,6 @@
 import path from "node:path";
 import { describe, expect, it } from "vitest";
-import { inheritedTrust, trustKey } from "./claude-trust";
+import { inheritedTrust, ownTrust, trustKey } from "./claude-trust";
 
 describe("inheritedTrust", () => {
   const root = "/repo";
@@ -39,5 +39,13 @@ describe("inheritedTrust", () => {
     expect(next?.projects?.["C:/Users/u/.exegol/worktrees/repo-feat"]).toEqual({
       hasTrustDialogAccepted: true,
     });
+  });
+});
+
+describe("ownTrust", () => {
+  it("trusts a folder with no trusted root, once", () => {
+    const next = ownTrust({ projects: {} }, "/home/u/.exegol/commander", path.posix);
+    expect(next?.projects?.["/home/u/.exegol/commander"]).toEqual({ hasTrustDialogAccepted: true });
+    expect(ownTrust(next ?? {}, "/home/u/.exegol/commander", path.posix)).toBeNull();
   });
 });

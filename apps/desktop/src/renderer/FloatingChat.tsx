@@ -2,7 +2,9 @@ import { useQueryClient } from "@tanstack/react-query";
 import { useMemo } from "react";
 import { LoadingSpinner } from "./components/common";
 import { ErrorBoundary, paneFallback } from "./components/ErrorBoundary";
+import { CommanderVoiceOptions } from "./components/workspace/sections/CommanderVoiceOptions";
 import { CompanyChat } from "./components/workspace/sections/CompanyChat";
+import { commanderToast } from "./hooks/use-commander-alerts";
 import { useMountEffect } from "./hooks/use-mount-effect";
 import { useAgent } from "./hooks/use-trpc";
 import { isOpenSession } from "./lib/sidebar-views";
@@ -53,12 +55,23 @@ export function FloatingChat({
   speak?: boolean;
 }) {
   const { agent, isPending } = useFloatingSession(agentId);
+  // The main window plays the chime; here only its line, where the person is looking
+  useMountEffect(() =>
+    speak ? window.api.onCommanderAlert(({ message }) => commanderToast(message)) : undefined,
+  );
   if (isPending) return <LoadingSpinner label="Loading chat..." className="h-full" />;
   return (
     <div className="flex h-full min-h-0 flex-col">
       {agent && isOpenSession(agent) ? (
         <ErrorBoundary fallback={paneFallback}>
-          <CompanyChat agent={agent} where="Every project" dictation={false} speak={speak} />
+          {speak && (
+            <div className="flex shrink-0 justify-end border-b border-border px-2 py-1">
+              <CommanderVoiceOptions compact />
+            </div>
+          )}
+          <div className="min-h-0 flex-1">
+            <CompanyChat agent={agent} where="Every project" dictation={false} speak={speak} />
+          </div>
         </ErrorBoundary>
       ) : (
         <div className="flex h-full items-center justify-center p-4">

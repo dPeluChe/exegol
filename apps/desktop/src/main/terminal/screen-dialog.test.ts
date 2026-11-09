@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readScreenDialog } from "./screen-dialog";
+import { awaitsConfirm, readScreenDialog } from "./screen-dialog";
 
 describe("readScreenDialog", () => {
   it("reads Claude's permission prompt: question, what runs, numbered options", () => {
@@ -122,5 +122,21 @@ describe("readScreenDialog", () => {
     expect(picked?.picked).toBe(true);
     expect(picked?.options.map((o) => o.key)).toEqual(["1", "2", "3"]);
     expect(readScreenDialog(["He said:", "> 1. First", "> 2. Second"])?.picked).not.toBe(true);
+  });
+});
+
+describe("awaitsConfirm", () => {
+  it("holds for Claude's trust gate, not for a prompt or an answer that quotes one", () => {
+    const gate = [
+      " Quick safety check: Is this a project you created or one you trust?",
+      " Security guide",
+      " ❯ No, exit",
+      "   Yes, I trust this folder",
+      " Enter to confirm · Esc to cancel",
+      "",
+    ];
+    expect(awaitsConfirm(gate)).toBe(true);
+    expect(awaitsConfirm(["⏺ Done.", "❯ ", "  ? for shortcuts"])).toBe(false);
+    expect(awaitsConfirm([...gate, "⏺ a", "b", "c", "d", "❯ "])).toBe(false);
   });
 });

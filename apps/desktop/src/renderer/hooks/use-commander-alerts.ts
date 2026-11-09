@@ -9,19 +9,20 @@ function openCommander(): void {
   app.setDashboardMode("commander");
 }
 
+/** Its line when it calls, the same in every window */
+export function commanderToast(body: string, action?: { label: string; run: () => void }): void {
+  useToastStore
+    .getState()
+    .addToast({ type: "info", title: "Commander", body, action, durationMs: 20_000 });
+}
+
 /** The Commander called (`alert_person`): a chime, its line, and one click to its chat.
  *  Shown even with toasts off: it is an explicit call, once a minute at most */
 export function useCommanderAlerts(): void {
   useMountEffect(() => {
     const offAlert = window.api.onCommanderAlert(({ message, sound }) => {
       if (sound) playChime();
-      useToastStore.getState().addToast({
-        type: "info",
-        title: "Commander",
-        body: message,
-        action: { label: "Open", run: openCommander },
-        durationMs: 20_000,
-      });
+      commanderToast(message, { label: "Open", run: openCommander });
     });
     const offOpen = window.api.onCommanderOpen(openCommander);
     return () => {
