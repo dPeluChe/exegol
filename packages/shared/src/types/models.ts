@@ -17,20 +17,12 @@ export interface PublicBenchmark {
   note?: string;
 }
 
-export interface SpeechModelEntry {
+/** What the shared download, verify and extract path needs of any model */
+export interface DownloadableModel {
   id: string;
   name: string;
-  engine: SpeechEngine;
   /** False when the engine cannot run it yet: listed as "coming", no download */
   engineAvailable: boolean;
-  kind: SpeechModelKind;
-  /** ISO 639 codes; empty when `languageSummary` covers a list too long to keep */
-  languages: string[];
-  languageSummary?: string;
-  /** One line for the picker: what this model is good at */
-  bestFor: string;
-  /** Position in the dictation overlay's short list of recommended models (1 = recommended) */
-  featured?: number;
   /** The archive as downloaded */
   sizeBytes: number;
   /** On disk once extracted */
@@ -46,8 +38,42 @@ export interface SpeechModelEntry {
   rootDir: string;
   /** Files the engine needs, relative to rootDir: all present means ready */
   files: string[];
+  /** Folders kept whole on extraction (data the engine reads by folder) */
+  keepDirs?: string[];
   notes?: string;
+}
+
+export interface SpeechModelEntry extends DownloadableModel {
+  engine: SpeechEngine;
+  kind: SpeechModelKind;
+  /** ISO 639 codes; empty when `languageSummary` covers a list too long to keep */
+  languages: string[];
+  languageSummary?: string;
+  /** One line for the picker: what this model is good at */
+  bestFor: string;
+  /** Position in the dictation overlay's short list of recommended models (1 = recommended) */
+  featured?: number;
   benchmarks?: PublicBenchmark[];
+}
+
+export type VoiceEngine = "kokoro";
+
+/** One speaker a voice model ships, by the name and id in the model's own metadata */
+export interface VoiceSpeaker {
+  id: string;
+  label: string;
+  /** Language tag the engine speaks it in */
+  lang: string;
+  speakerId: number;
+}
+
+/** A text-to-speech model (Settings > Models > Voice): never offered for dictation */
+export interface VoiceModelEntry extends DownloadableModel {
+  engine: VoiceEngine;
+  languages: string[];
+  bestFor: string;
+  /** The speakers Exegol offers, a subset of what the model ships */
+  voices: VoiceSpeaker[];
 }
 
 export type ModelStatus =
@@ -61,6 +87,10 @@ export type ModelStatus =
 export interface ModelListItem extends SpeechModelEntry {
   status: ModelStatus;
   isDefault: boolean;
+}
+
+export interface VoiceModelListItem extends VoiceModelEntry {
+  status: ModelStatus;
 }
 
 /** Pushed on `models:progress` whenever a model's status changes */

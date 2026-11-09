@@ -305,6 +305,14 @@ contextBridge.exposeInMainWorld("api", {
     onKey: (callback: (event: unknown) => void) => listen("dictation:key", callback),
     onDone: (callback: (event: unknown) => void) => listen("dictation:done", callback),
   },
+  /** T222: replies read aloud; the audio comes back only to the window that asked */
+  speech: {
+    speak: (input: { text: string; agentId: string; auto?: boolean }) =>
+      safe.invoke("speech:speak", input),
+    stop: (id?: string) => safe.invoke("speech:stop", id),
+    onAudio: (callback: (event: unknown) => void) => listen("speech:audio", callback),
+    onEnd: (callback: (event: unknown) => void) => listen("speech:end", callback),
+  },
   onModelProgress: (callback: (event: unknown) => void) => {
     const handler = (_e: Electron.IpcRendererEvent, data: unknown) => callback(data);
     safe.on("models:progress", handler as never);

@@ -26,6 +26,7 @@ import { formatBytes } from "../workspace/sections/resource-format";
 import { ModelBenchmarks, ModelRanking } from "./ModelBenchmarks";
 import { SMALL_BUTTON } from "./settings-ui";
 import { useConfirmDeleteModel } from "./use-confirm-delete-model";
+import { VoiceModels } from "./VoiceModelList";
 
 type RowAction = "download" | "cancel" | "setDefault";
 type LicensedAction = "download" | "setDefault";
@@ -50,6 +51,9 @@ export function ModelsSettings() {
         ~/.exegol/models.
       </p>
       <SpeechModelList grouped />
+      <div className="border-t border-border pt-4">
+        <VoiceModels />
+      </div>
     </div>
   );
 }

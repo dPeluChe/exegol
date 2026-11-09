@@ -350,7 +350,8 @@
       "delete",
       "download",
       "list",
-      "setDefault"
+      "setDefault",
+      "voices"
     ],
     "storage": [
       "clearBrowserCache",
@@ -398,7 +399,9 @@
       "prepare",
       "setAutonomy",
       "setFeed",
-      "state"
+      "setVoice",
+      "state",
+      "voice"
     ],
     "notes": [
       "delete",
@@ -511,6 +514,10 @@
     "dictation:engine",
     "dictation:key",
     "dictation:done",
+    "speech:speak",
+    "speech:stop",
+    "speech:audio",
+    "speech:end",
     "sidecar:health",
     "gpu:process-gone"
   ]

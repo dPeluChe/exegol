@@ -47,6 +47,8 @@ import { getPipelineExecutor } from "./pipeline/executor";
 import { getSchedulerEngine } from "./scheduler/engine";
 import { ensureDefaultSkills } from "./skills/discovery";
 import { ensureCanonicalPaths } from "./skills/paths";
+import { registerSpeechIpc } from "./speech/ipc";
+import { stopSpeechEngine } from "./speech/tts-engine";
 import { offerMoveToApplications, relocateAppPaths } from "./system/app-relocation";
 import { integrateAppImage } from "./system/appimage-integration";
 import { initAutoUpdater, stopAutoUpdater } from "./system/auto-updater";
@@ -110,6 +112,7 @@ app.whenReady().then(async () => {
   registerFloatingIpcHandlers();
   registerSettingsIpcHandlers();
   registerDictationIpc();
+  registerSpeechIpc();
   applyDictationSettings(getDb(), dictationSettings(getDb()));
   installSessionPermissions();
   installPreviewSession(getDb());
@@ -269,6 +272,7 @@ function teardownSteps() {
     { name: "floatingPanes", run: closeAllFloatingPanes },
     { name: "settingsWindow", run: closeSettingsWindow },
     { name: "dictationEngine", run: stopEngine },
+    { name: "speechEngine", run: stopSpeechEngine },
     { name: "dictationMedia", run: releaseMediaNow },
     // T145: close the MCP socket + revoke all tokens so shim calls fail fast
     // instead of hanging, and the socket file doesn't go stale on disk.

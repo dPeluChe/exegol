@@ -145,6 +145,20 @@ describe("pruneToRequired", () => {
     expect(existsSync(join(dir, "LICENSE"))).toBe(true);
   });
 
+  it("keeps a folder whole when asked, and only that one", async () => {
+    const dir = mkdtempSync(join(tmpdir(), "exegol-prune-"));
+    mkdirSync(join(dir, "espeak-ng-data", "lang", "roa"), { recursive: true });
+    writeFileSync(join(dir, "espeak-ng-data", "phontab"), "p");
+    writeFileSync(join(dir, "espeak-ng-data", "lang", "roa", "es"), "e");
+    mkdirSync(join(dir, "dict"));
+    writeFileSync(join(dir, "dict", "jieba.dict.utf8"), "d");
+    writeFileSync(join(dir, "model.onnx"), "m");
+    const removed = await pruneToRequired(dir, ["model.onnx"], ["espeak-ng-data"]);
+    expect(removed).toEqual(["dict"]);
+    expect(existsSync(join(dir, "espeak-ng-data", "lang", "roa", "es"))).toBe(true);
+    expect(existsSync(join(dir, "espeak-ng-data", "phontab"))).toBe(true);
+  });
+
   it("keeps every file each catalog recognizer reads", async () => {
     for (const entry of MODEL_CATALOG) {
       const dir = mkdtempSync(join(tmpdir(), "exegol-prune-"));

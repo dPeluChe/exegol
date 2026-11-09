@@ -19,6 +19,7 @@ import { FilterChip } from "../../common/FilterChip";
 import { SegmentedTabs } from "../../common/SegmentedTabs";
 import { CommanderHistory } from "./CommanderHistory";
 import { CompanySession } from "./CompanySession";
+import { useCommanderVoice, VOICE_KEY } from "./SpeakButton";
 
 type Autonomy = "answer" | "ask";
 
@@ -71,6 +72,48 @@ function Options({ state }: { state: CommanderState }) {
           {state.feed ? "Feed on" : "Feed off"}
         </span>
       </FilterChip>
+      <VoiceOptions />
+    </div>
+  );
+}
+
+/** Reads new replies aloud when on; the picker lists the installed voice model's speakers */
+function VoiceOptions() {
+  const queryClient = useQueryClient();
+  const { act } = useAct("Voice not changed");
+  const voice = useCommanderVoice().data;
+  if (!voice) return null;
+  const set = async (input: { auto?: boolean; voice?: string }) => {
+    if (await act("commander.setVoice", input))
+      void queryClient.invalidateQueries({ queryKey: VOICE_KEY });
+  };
+  const { settings } = voice;
+  if (!voice.ready) {
+    return (
+      <FilterChip active={false} onClick={() => void window.api.settings.open("models")}>
+        <span title="Download a voice in Settings > Models to hear its replies">Voice</span>
+      </FilterChip>
+    );
+  }
+  return (
+    <div className="flex items-center gap-1">
+      <FilterChip active={settings.auto} onClick={() => void set({ auto: !settings.auto })}>
+        <span title="Read each new reply aloud, on this machine">
+          {settings.auto ? "Voice on" : "Voice off"}
+        </span>
+      </FilterChip>
+      <select
+        value={settings.voice}
+        onChange={(e) => void set({ voice: e.target.value })}
+        aria-label="Voice"
+        className="rounded border border-border bg-bg-primary px-1 py-0.5 text-[11px] text-text-secondary outline-none focus:border-accent"
+      >
+        {voice.voices.map((v) => (
+          <option key={v.id} value={v.id}>
+            {v.label}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }
@@ -221,7 +264,13 @@ export function CommanderSection() {
           <CommanderHistory />
         ) : (
           <div className="min-h-0 flex-1">
-            <CompanySession agent={session} where="Every project" picked={view} onPick={setView} />
+            <CompanySession
+              agent={session}
+              where="Every project"
+              picked={view}
+              onPick={setView}
+              speak
+            />
           </div>
         )}
       </div>

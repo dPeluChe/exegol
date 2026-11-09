@@ -3,28 +3,44 @@ import { z } from "zod";
 import { getJsonSetting, setJsonSetting } from "../../db/queries/settings";
 import { readLatestBenchRuns } from "../../models/bench-results";
 import { DEFAULT_MODEL_ID, findModel } from "../../models/catalog";
-import { cancelModel, deleteModel, downloadModel, listModels } from "../../models/manager";
+import {
+  cancelModel,
+  deleteModel,
+  downloadModel,
+  listModels,
+  listVoiceModels,
+} from "../../models/manager";
+import { findDownloadable } from "../../models/voice-catalog";
 import { publicProcedure, router } from "../trpc";
 
-const id = z
+const anyId = z
   .string()
   .regex(/^[a-z0-9][a-z0-9.-]*$/)
-  .refine((value) => !!findModel(value), "unknown model");
-const modelId = z.object({ id });
+  .refine((value) => !!findDownloadable(value), "unknown model");
+const modelId = z.object({ id: anyId });
+// A voice model is never a dictation model
+const speechId = anyId.refine((value) => !!findModel(value), "not a speech-to-text model");
 
 // A non-commercial license is only accepted with the user's explicit OK from the confirm dialog
-const licensedModel = z
-  .object({ id, acceptNonCommercial: z.boolean().default(false) })
-  .refine(
-    (input) => input.acceptNonCommercial || findModel(input.id)?.commercialUse !== false,
-    "this model's license is non-commercial: confirm it first",
-  );
+const licensed = <T extends z.ZodTypeAny>(id: T) =>
+  z
+    .object({ id, acceptNonCommercial: z.boolean().default(false) })
+    .refine(
+      (input) =>
+        input.acceptNonCommercial || findDownloadable(input.id as string)?.commercialUse !== false,
+      "this model's license is non-commercial: confirm it first",
+    );
+const licensedModel = licensed(anyId);
+const licensedSpeechModel = licensed(speechId);
 
 /** Local speech-to-text models: catalog, downloads, default (Settings > Models) */
 export const modelsRouter = router({
   list: publicProcedure.query(({ ctx }) =>
     listModels(getJsonSetting(ctx.db, DEFAULT_SPEECH_MODEL_KEY, DEFAULT_MODEL_ID)),
   ),
+
+  /** Text-to-speech models (Settings > Models > Voice) */
+  voices: publicProcedure.query(() => listVoiceModels()),
 
   /** The newest local bench run per language, from results.json only (no audio, no text) */
   benchResults: publicProcedure.query(() => readLatestBenchRuns()),
@@ -45,7 +61,7 @@ export const modelsRouter = router({
     return { ok: true };
   }),
 
-  setDefault: publicProcedure.input(licensedModel).mutation(({ ctx, input }) => {
+  setDefault: publicProcedure.input(licensedSpeechModel).mutation(({ ctx, input }) => {
     setJsonSetting(ctx.db, DEFAULT_SPEECH_MODEL_KEY, input.id);
     return { ok: true };
   }),

@@ -29,4 +29,27 @@ declare module "sherpa-onnx-node" {
     getResult(stream: OnlineStream): RecognizerResult;
   }
   export const OnlineRecognizer: new (config: unknown) => OnlineRecognizer;
+  export interface GeneratedAudio {
+    samples: Float32Array;
+    sampleRate: number;
+  }
+  export interface TtsRequest {
+    text: string;
+    /** Speaker id in the model's voices table */
+    sid: number;
+    speed: number;
+    /** Each finished chunk; returning 0 or false stops the generation */
+    onProgress?: (info: {
+      samples: Float32Array;
+      progress: number;
+    }) => number | boolean | undefined;
+  }
+  export interface OfflineTts {
+    readonly numSpeakers: number;
+    readonly sampleRate: number;
+    generateAsync(request: TtsRequest): Promise<GeneratedAudio>;
+  }
+  export const OfflineTts: {
+    createAsync(config: unknown): Promise<OfflineTts>;
+  };
 }

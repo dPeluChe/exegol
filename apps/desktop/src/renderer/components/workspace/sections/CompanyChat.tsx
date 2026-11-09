@@ -3,11 +3,13 @@ import {
   acceptsFollowUps,
   type ChatPage,
   type OlderChatPage,
+  type SessionTurn,
 } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, SendHorizontal } from "lucide-react";
 import { memo, useMemo, useState } from "react";
+import { useLatest } from "../../../hooks/use-latest";
 import { useMountEffect } from "../../../hooks/use-mount-effect";
 import { isClaudeQuestion } from "../../../lib/claude-question";
 import { hasClipboardImage } from "../../../lib/clipboard-image";
@@ -24,6 +26,8 @@ import {
   sameBubble,
   toolsLine,
 } from "../../../lib/session-chat";
+import { liveReply } from "../../../lib/speech/live-reply";
+import { speakReply } from "../../../lib/speech/player";
 import { trpcInvoke, trpcMutate } from "../../../lib/trpc-client";
 import { type AgentState, useAgentStore } from "../../../stores/agents";
 import { DEFAULT_CHAT_FONT, useAppStore } from "../../../stores/app";
@@ -36,20 +40,38 @@ import { FollowUpList, useFollowUps } from "../../terminal/FollowUpControl";
 import { DELIVERY, peerName, useAgentMessages } from "./AgentMessages";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ChatWorking } from "./ChatWorking";
+import { SpeakButton, useCommanderVoice } from "./SpeakButton";
 
 const FALLBACK_POLL_MS = 15_000;
 const NO_TURNS: ChatHistory["turns"] = [];
 const NO_MESSAGES: AgentMessage[] = [];
 const SHOWN_STEP = 100;
 
-function useChat(agentId: string) {
+const turnIds = (history: ChatHistory | undefined) =>
+  history ? new Set(history.turns.map((t) => t.id)) : null;
+
+/** `onLiveReply`: a reply finished while the chat is open (pushed at turn boundaries) */
+function useChat(agentId: string, onLiveReply?: (turn: SessionTurn) => void) {
   const queryClient = useQueryClient();
   const queryKey = ["chatTurns", agentId];
+  const latestReply = useLatest(onLiveReply);
+  // What the chat opened with is never read aloud: the cache, else the first page
+  const [live] = useState(() => ({
+    seen: turnIds(queryClient.getQueryData<ChatHistory>(queryKey)),
+    lastRead: null as string | null,
+  }));
   useMountEffect(() =>
     window.api.onChatUpdated((event) => {
       if (event.agentId !== agentId) return;
-      void queryClient.invalidateQueries({ queryKey });
+      const refreshed = queryClient.invalidateQueries({ queryKey });
       void queryClient.invalidateQueries({ queryKey: ["messages", "agent", agentId] });
+      void refreshed.then(() => {
+        const history = queryClient.getQueryData<ChatHistory>(queryKey);
+        const turn = live.seen && history && liveReply(history.turns, live.seen, live.lastRead);
+        if (!turn || !latestReply.current) return;
+        live.lastRead = turn.id;
+        latestReply.current(turn);
+      });
     }),
   );
   const chat = useQuery({
@@ -58,7 +80,10 @@ function useChat(agentId: string) {
       const cursor = queryClient.getQueryData<ChatHistory>(queryKey)?.cursor ?? undefined;
       const page = await trpcInvoke<ChatPage>("agents.chatTurns", { agentId, cursor });
       // Read after the wait: older turns may have landed meanwhile
-      return appendChatPage(queryClient.getQueryData<ChatHistory>(queryKey), page);
+      const next = appendChatPage(queryClient.getQueryData<ChatHistory>(queryKey), page);
+      if (!live.seen) live.seen = turnIds(next);
+      else if (page.reset) for (const t of page.turns) live.seen.add(t.id);
+      return next;
     },
     refetchInterval: FALLBACK_POLL_MS,
   }).data;
@@ -99,9 +124,10 @@ interface BubbleProps {
   agentId: string;
   cliType: string;
   formatted: boolean;
+  speak: boolean;
 }
 
-function BubbleBody({ bubble, agentId, cliType, formatted }: BubbleProps) {
+function BubbleBody({ bubble, agentId, cliType, formatted, speak }: BubbleProps) {
   if (bubble.kind === "tools") {
     return <p className="truncate pl-6 text-[10px] text-text-muted">{toolsLine(bubble.names)}</p>;
   }
@@ -130,7 +156,12 @@ function BubbleBody({ bubble, agentId, cliType, formatted }: BubbleProps) {
             <p className="whitespace-pre-wrap break-words font-mono text-[11px]">{bubble.text}</p>
           )}
         </div>
-        {time && <span className="pl-1 text-[9px] text-text-muted">{time}</span>}
+        {(time || speak) && (
+          <div className="flex items-center gap-1 pl-1">
+            {time && <span className="text-[9px] text-text-muted">{time}</span>}
+            {speak && <SpeakButton turnId={bubble.id} text={bubble.text} agentId={agentId} />}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -144,6 +175,7 @@ const Bubble = memo(
     a.agentId === b.agentId &&
     a.cliType === b.cliType &&
     a.formatted === b.formatted &&
+    a.speak === b.speak &&
     sameBubble(a.bubble, b.bubble),
 );
 
@@ -292,19 +324,26 @@ function ChatInput({ agent, onTerminal, dictation }: InputProps) {
   );
 }
 
-/** The session as turns. `dictation` off where the widget has no pane to type into */
+/** The session as turns. `dictation` off where the widget has no pane to type into; `speak`
+ *  (the Commander's chat) reads replies aloud: on click, and new ones when its voice is on */
 export function CompanyChat({
   agent,
   where,
   onTerminal,
   dictation = true,
+  speak = false,
 }: {
   agent: AgentState;
   where: string;
   onTerminal?: () => void;
   dictation?: boolean;
+  speak?: boolean;
 }) {
-  const { chat, older } = useChat(agent.id);
+  const auto = useCommanderVoice(speak).data?.settings.auto === true;
+  const { chat, older } = useChat(
+    agent.id,
+    speak && auto ? (turn) => void speakReply(turn.id, turn.text, agent.id, true) : undefined,
+  );
   const turns = chat?.turns ?? NO_TURNS;
   const [shown, setShown] = useState(SHOWN_STEP);
   const { data: messages = NO_MESSAGES } = useAgentMessages(agent.id);
@@ -354,6 +393,7 @@ export function CompanyChat({
               agentId={agent.id}
               cliType={agent.cliType}
               formatted={!!chat?.markdown}
+              speak={speak}
             />
           ))}
           <ChatWorking agent={agent} />

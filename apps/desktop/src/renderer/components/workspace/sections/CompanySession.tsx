@@ -30,11 +30,14 @@ export function CompanySession({
   where,
   picked,
   onPick,
+  speak = false,
 }: {
   agent: AgentState;
   where: string;
   picked: CompanyView;
   onPick: (view: CompanyView) => void;
+  /** The Commander's chat: replies read aloud */
+  speak?: boolean;
 }) {
   const side = useAppStore((s) => s.companySessionSide);
   const toggleSide = useAppStore((s) => s.toggleCompanySessionSide);
@@ -91,7 +94,12 @@ export function CompanySession({
       {view === "chat" ? (
         <div id={PANEL_ID} role="tabpanel" className="min-h-0 flex-1 overflow-hidden">
           <ErrorBoundary fallback={paneFallback}>
-            <CompanyChat agent={agent} where={where} onTerminal={() => onPick("terminal")} />
+            <CompanyChat
+              agent={agent}
+              where={where}
+              onTerminal={() => onPick("terminal")}
+              speak={speak}
+            />
           </ErrorBoundary>
         </div>
       ) : (

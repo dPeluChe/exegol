@@ -79,11 +79,21 @@ async function pruneTree(
   return removed;
 }
 
-/** Extraction: keeps the catalog files and license/notice files, drops the rest */
-export function pruneToRequired(dir: string, required: readonly string[]): Promise<string[]> {
-  return pruneTree(dir, (rel, name, isDir) =>
-    isDir ? !keepsPath(rel, required) : !(required.includes(rel) || isLegalFile(name)),
-  );
+const insideDir = (rel: string, dirs: readonly string[]) =>
+  dirs.some((d) => rel === d || rel.startsWith(`${d}/`));
+
+/** Extraction: keeps the catalog files, the folders kept whole and license/notice files */
+export function pruneToRequired(
+  dir: string,
+  required: readonly string[],
+  keepDirs: readonly string[] = [],
+): Promise<string[]> {
+  return pruneTree(dir, (rel, name, isDir) => {
+    if (insideDir(rel, keepDirs)) return false;
+    return isDir
+      ? !keepsPath(rel, [...required, ...keepDirs])
+      : !(required.includes(rel) || isLegalFile(name));
+  });
 }
 
 /** An installed model folder: removes only known junk, everything else stays */
@@ -102,6 +112,7 @@ export async function extractTarBz2(opts: {
   destDir: string;
   rootDir: string;
   requiredFiles: readonly string[];
+  keepDirs?: readonly string[];
   signal?: AbortSignal;
 }): Promise<void> {
   await rm(opts.tmpDir, { recursive: true, force: true });
@@ -123,7 +134,11 @@ export async function extractTarBz2(opts: {
       const info = await stat(join(extracted, file)).catch(() => null);
       if (!info?.isFile()) throw new Error(`archive is missing ${file}`);
     }
-    await pruneToRequired(extracted, opts.requiredFiles);
+    for (const folder of opts.keepDirs ?? []) {
+      const info = await stat(join(extracted, folder)).catch(() => null);
+      if (!info?.isDirectory()) throw new Error(`archive is missing ${folder}/`);
+    }
+    await pruneToRequired(extracted, opts.requiredFiles, opts.keepDirs);
     await rm(opts.destDir, { recursive: true, force: true });
     await rename(extracted, opts.destDir);
   } finally {

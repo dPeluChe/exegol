@@ -173,6 +173,14 @@ interface Window {
     onModelProgress: (
       callback: (event: import("@exegol/shared").ModelProgressEvent) => void,
     ) => () => void;
+    speech: {
+      speak: (
+        input: import("@exegol/shared").SpeakRequest,
+      ) => Promise<import("@exegol/shared").SpeakResult>;
+      stop: (id?: string) => Promise<void>;
+      onAudio: (callback: (event: import("@exegol/shared").SpeechAudioEvent) => void) => () => void;
+      onEnd: (callback: (event: import("@exegol/shared").SpeechEndEvent) => void) => () => void;
+    };
     /** T200.4: an agent's follow-up queue changed */
     onFollowUps: (
       callback: (event: import("@exegol/shared").FollowUpsChangedEvent) => void,
