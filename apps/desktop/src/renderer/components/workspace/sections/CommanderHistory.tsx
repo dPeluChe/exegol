@@ -23,7 +23,9 @@ const LABELS: Record<string, string> = {
   note_retire: "Retired a note in",
   session_suspend: "Suspended",
   session_restart: "Restarted",
+  session_retry: "Retried",
   project_add: "Added project",
+  alert_person: "Called you",
 };
 
 /** What the Commander changed, newest first, across all its conversations */

@@ -1,6 +1,6 @@
 # Commander: one conversation about every session (T224)
 
-**Date**: 2026-11-09 | **Status**: phases 1-2 built, phases 3-5 planned | **Source**: Antonio
+**Date**: 2026-11-09 | **Status**: phases 1-3 and 5 built, phase 4 (voice) in progress | **Source**: Antonio
 
 ## What it is
 
@@ -55,10 +55,10 @@ returns the last turns of one session (text only, 2,000 characters each, 12 at m
 | Phase | Content | State |
 |---|---|---|
 | 1 | Project, brief, role, tools, Dashboard tab, start and resume | Built |
-| 2 | Feed: turn ends, sessions that wait on the person, closed sessions, stuck turns and new inbox threads reach it as one message while it is at its prompt, at most one per 2 minutes and 10 an hour, so it reports without being asked. `session_restart` moves a session onto a newer installed CLI | Built |
-| 3 | It calls the person: a sound and a desktop notice from `alert_person`; a floating window with its chat | Planned |
+| 2 | Feed: turn ends, sessions that wait on the person, closed sessions, stuck turns and new inbox threads reach it as one message while it is at its prompt, at most one per 3 minutes and 10 an hour, so it reports without being asked. `session_restart` moves a session onto a newer installed CLI | Built |
+| 3 | It calls the person: `alert_person` plays a chime and shows a notice and a toast, once a minute at most. Its chat in a floating always-on-top window. A history of what it did, kept for good (`my_history`, History) | Built |
 | 4 | Voice (T222): its replies read aloud. Kokoro first, see below | Planned, research first |
-| 5 | Retry after an API or network error (T218), through the Commander's rules | Planned |
+| 5 | `session_retry` continues a session that stopped on an API or network error, 3 an hour; the feed names such a stop. Sessions the person is writing to are left to them | Built |
 
 ## Voice engines (phase 4, read 2026-11-09)
 
@@ -83,5 +83,5 @@ Everything here is from each vendor's own page; nothing was listened to.
 
 ## Open
 
-- The feed's window (2 minutes), cap (10 an hour) and what counts as worth a wake, measured on real days.
+- The feed's window (3 minutes), cap (10 an hour) and what counts as worth a wake, measured on real days.
 - Whether the Commander's project should stay out of Company and the project lists.

@@ -22,6 +22,7 @@ import { ProjectProvider } from "./contexts/ProjectContext";
 import { useActiveViewSync } from "./hooks/use-active-view-sync";
 import { useAutoSelectProject } from "./hooks/use-auto-select-project";
 import { useCliRestarts, useCliSelfUpdates, useCommanderRestarts } from "./hooks/use-cli-updates";
+import { useCommanderAlerts } from "./hooks/use-commander-alerts";
 import { useDeepLink } from "./hooks/use-deeplink";
 import { useDictation } from "./hooks/use-dictation";
 import { useFleetSync } from "./hooks/use-fleet-sync";
@@ -83,6 +84,7 @@ function AppEffects() {
   useNotesSync();
   useProjectsSync();
   useCommanderRestarts();
+  useCommanderAlerts();
   useCliSelfUpdates();
   useFleetSync();
   useActiveViewSync();

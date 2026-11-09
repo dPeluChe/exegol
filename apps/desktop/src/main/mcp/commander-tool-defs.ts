@@ -7,7 +7,9 @@ export const COMMANDER_TOOLS = [
   "session_suspend",
   "session_restart",
   "project_add",
+  "session_retry",
   "my_history",
+  "alert_person",
 ] as const;
 
 export type CommanderToolName = (typeof COMMANDER_TOOLS)[number];
@@ -32,7 +34,8 @@ export const COMMANDER_TOOL_DEFS: ToolBody<CommanderToolName>[] = [
       "Every project in Exegol with its live sessions and how many inbox threads wait there. " +
       "A session's state: working, at_prompt (its turn ended: read it, it may have asked " +
       "something), waits_on_person (a permission or dialog only the person answers), starting. " +
-      "minutes_in_state and quiet_minutes say how long. cli_update: see session_restart. " +
+      "minutes_in_state and quiet_minutes say how long. person_minutes_ago: when the person last " +
+      "wrote to it themselves; a recent one means they are on it, so leave it to them. cli_update: see session_restart. " +
       "personal_inbox_waiting counts the " +
       "person's own threads.",
     inputSchema: { type: "object", properties: {} },
@@ -71,6 +74,15 @@ export const COMMANDER_TOOL_DEFS: ToolBody<CommanderToolName>[] = [
     inputSchema: { type: "object", properties: { session: SESSION }, required: ["session"] },
   },
   {
+    name: "session_retry",
+    title: "Continue a session that stopped on an API or network error",
+    description:
+      "Tells a session to continue where it left off, when its last turn ended on an API or " +
+      "network error (the feed says so, or its last turn starts with API Error). Refused for " +
+      "any other ending, for an account problem such as a login, and after 3 retries in an hour.",
+    inputSchema: { type: "object", properties: { session: SESSION }, required: ["session"] },
+  },
+  {
     name: "project_add",
     title: "Add a project to Exegol",
     description:
@@ -95,6 +107,22 @@ export const COMMANDER_TOOL_DEFS: ToolBody<CommanderToolName>[] = [
     inputSchema: {
       type: "object",
       properties: { limit: { type: "number", description: "How many. Default 20, at most 50" } },
+    },
+  },
+  {
+    name: "alert_person",
+    title: "Call the person",
+    description:
+      "A chime and a desktop notice with one short line, for when something needs the person " +
+      "now and they may not be looking: a session blocked on them, a decision only they can " +
+      "make, work they asked to be told about. Not for routine reports. At most one a minute. " +
+      "Write the details in the chat, where they come to read.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        message: { type: "string", description: "One line, up to 200 characters" },
+      },
+      required: ["message"],
     },
   },
 ];

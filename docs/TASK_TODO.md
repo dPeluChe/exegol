@@ -1421,7 +1421,7 @@ Design, decisions and plan: `docs/RESEARCH/COLABS_INBOX_NOTES_DESIGN_2026_11.md`
 
 ### T218: Recover sessions after an API or network error `added: 2026-11-06`
 
-A session stopped by an API error, or by moving to another network, retries by itself after about 3 minutes, or gets a retry message. Sessions in that state are identifiable and listed. Detect through hooks and screen rules per CLI, cap the attempts, never retry a turn waiting on a person. Hide's `watch` is a reference for the timing.
+Done through the Commander (`session_retry`, T224, in `TASK_COMPLETED/2611.md`): it continues a session whose last turn is an API or network error, 3 times an hour. Left: the same with no Commander running (a sweep of its own, after about 3 minutes), the sessions in that state listed in the UI, and the error lines of Codex and the other CLIs taken from real samples. Never retry a turn waiting on a person. Hide's `watch` is a reference for the timing.
 
 ### T219: Sessions survive an app update `added: 2026-11-06`
 
@@ -1444,9 +1444,9 @@ design in `RESEARCH/COMMANDER_DESIGN_2026_11.md`.
 
 - Phase 2 leftover: installing a newer CLI release for a session (today it only restarts onto an
   installed one), and the feed's window and cap tuned on real days
-- Phase 3: it calls the person (a sound and a notice). The floating chat is built: verify it live
+- Phase 3 is built (alert_person, floating chat): hear the chime, see the notice and try the
+  floating chat live
 - Phase 4: voice (T222). Kokoro first; Phonon 40m-es and Supertonic 3 to listen to (design doc)
-- Phase 5: retry after an API or network error (T218)
 - Decide whether its project stays out of Company and the project lists
 - Verify live: start on Claude Code, fleet_status, a message to a session, a thread in a project,
   a note of its own, suspend, add a project, a feed message after a session ends its turn,

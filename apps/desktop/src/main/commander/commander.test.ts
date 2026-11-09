@@ -8,6 +8,7 @@ import { setJsonSetting } from "../db/queries/settings";
 import type { ExegolToolContext } from "../mcp/exegol-protocol";
 import { getToolDefsForAccessMode } from "../mcp/exegol-tool-defs";
 import { callExegolTool } from "../mcp/exegol-tools";
+import { resetAlertGap } from "./alert";
 import { fleetView } from "./fleet";
 import { isCommander, setCommanderAutonomy } from "./home";
 
@@ -74,7 +75,7 @@ describe("fleetView", () => {
     const [project] = fleetView(
       [{ id: "p1", name: "Landing" }],
       [agent("busy", "running"), agent("asks", "running"), agent("sh", "idle", "shell")],
-      (id) => ({ needsUser: id === "asks", quietMs: 120_000 }),
+      (id) => ({ needsUser: id === "asks", quietMs: 120_000, personMs: null }),
       () => 3,
     );
     expect(project).toMatchObject({ project: "Landing", inbox_waiting: 3 });
@@ -107,5 +108,19 @@ describe("the Commander's history", () => {
     ]);
     expect(actions[1]?.summary).toBe("Hero breaks");
     expect(listCommanderLog(db, 10)[1]?.ref).toBeTruthy();
+  });
+});
+
+describe("alert_person", () => {
+  it("calls once a minute and is kept in the history", async () => {
+    resetAlertGap();
+    await callExegolTool(db, "alert_person", { message: "Landing waits on you" }, commander);
+    await expect(
+      callExegolTool(db, "alert_person", { message: "Again" }, commander),
+    ).rejects.toThrow("less than a minute ago");
+    expect(listCommanderLog(db, 10).map((e) => [e.action, e.outcome, e.target])).toEqual([
+      ["alert_person", "refused", null],
+      ["alert_person", "done", null],
+    ]);
   });
 });
