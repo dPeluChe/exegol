@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   appliedModelRoles,
   classifyActivity,
+  cliRestartNeeded,
   deriveIsolationMode,
   injectedHeaders,
   injectedMessageId,
@@ -112,6 +113,29 @@ describe("isNewerVersion", () => {
     expect(isNewerVersion("0.0.1769000000-gabc", "0.0.1768000000-gdef")).toBe(true);
     expect(isNewerVersion("3000.11.3 (a1b2)", "3000.12.0")).toBe(false);
     expect(isNewerVersion(null, "1.0.0")).toBe(false);
+  });
+});
+
+describe("cliRestartNeeded", () => {
+  const status = (installed: string | null, installedAt: number | null = null) => ({
+    installed,
+    installedAt,
+  });
+
+  it("when the installed CLI is newer than the one the session started with", () => {
+    expect(cliRestartNeeded({ cliVersion: "2.1.286" }, status("2.1.290"))).toBe(true);
+    expect(cliRestartNeeded({ cliVersion: "2.1.290" }, status("2.1.290"))).toBe(false);
+    expect(cliRestartNeeded({ cliVersion: "2.1.286" }, undefined)).toBe(false);
+  });
+
+  it("a session without a recorded version: behind if the binary was written after it started", () => {
+    const started = 1_790_000_000; // seconds, as agents store it
+    const at = (ms: number) => status("2.1.290", started * 1000 + ms);
+    expect(cliRestartNeeded({ startedAt: started }, at(3_600_000))).toBe(true);
+    expect(cliRestartNeeded({ startedAt: started }, at(-1000))).toBe(false);
+    // launched right after an install: not older
+    expect(cliRestartNeeded({ startedAt: started }, at(10_000))).toBe(false);
+    expect(cliRestartNeeded({ startedAt: null }, status("2.1.290", 1))).toBe(false);
   });
 });
 

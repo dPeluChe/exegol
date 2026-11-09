@@ -2,7 +2,7 @@ import {
   type CliInstallCopy,
   type CliInstallInfo,
   type CliUpdateStatus,
-  isNewerVersion,
+  cliRestartNeeded,
   LIVE_STATUSES,
 } from "@exegol/shared";
 import { useQuery } from "@tanstack/react-query";
@@ -57,22 +57,6 @@ export function useCliUpdates(): Map<string, CliUpdateStatus> {
     staleTime: CHECK_MS / 2,
   });
   return useMemo(() => new Map((data ?? []).map((s) => [s.cliType, s])), [data]);
-}
-
-/** A newer CLI than the one this session started with is installed. A session from before the
- *  version was recorded (0.5.10) has none: it is behind when the binary was written after it
- *  started (a minute of slack: launching right after an install is not "older") */
-export function restartNeeded(
-  agent: { cliVersion?: string | null; startedAt?: number | null },
-  status?: CliUpdateStatus,
-): boolean {
-  if (!status) return false;
-  if (agent.cliVersion) return isNewerVersion(status.installed, agent.cliVersion);
-  return (
-    !!status.installedAt &&
-    !!agent.startedAt &&
-    status.installedAt > agent.startedAt * 1000 + 60_000
-  );
 }
 
 /** Run the update commands in one visible shell and restart these sessions once the new version
@@ -131,7 +115,7 @@ export function useCliRestarts(): void {
         continue;
       }
       const when = pending[id];
-      if (when === "update" && !restartNeeded(agent, statuses.get(agent.cliType))) {
+      if (when === "update" && !cliRestartNeeded(agent, statuses.get(agent.cliType))) {
         const run = updates[id];
         const shell = run?.shellId ? agents[run.shellId] : undefined;
         const shellLive = !!shell && LIVE_STATUSES.has(shell.status);
@@ -167,6 +151,13 @@ export function useCliRestarts(): void {
         .finally(() => markResuming([agent.id], false));
     }
   }, [pending, updates, agents, statuses, resume, now]);
+}
+
+/** The Commander asked for a session on the newer CLI: the same restart as the toolbar's */
+export function useCommanderRestarts(): void {
+  useMountEffect(() =>
+    window.api.onCommanderRestart(({ agentId }) => useCliRestartStore.getState().request(agentId)),
+  );
 }
 
 /** Every copy of each installed CLI on PATH (first = the one that runs): Settings > CLIs and the

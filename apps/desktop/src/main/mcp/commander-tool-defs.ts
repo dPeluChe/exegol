@@ -5,6 +5,7 @@ export const COMMANDER_TOOLS = [
   "fleet_status",
   "session_read",
   "session_suspend",
+  "session_restart",
   "project_add",
 ] as const;
 
@@ -30,7 +31,8 @@ export const COMMANDER_TOOL_DEFS: ToolBody<CommanderToolName>[] = [
       "Every project in Exegol with its live sessions and how many inbox threads wait there. " +
       "A session's state: working, at_prompt (its turn ended: read it, it may have asked " +
       "something), waits_on_person (a permission or dialog only the person answers), starting. " +
-      "minutes_in_state and quiet_minutes say how long. personal_inbox_waiting counts the " +
+      "minutes_in_state and quiet_minutes say how long. cli_update: see session_restart. " +
+      "personal_inbox_waiting counts the " +
       "person's own threads.",
     inputSchema: { type: "object", properties: {} },
   },
@@ -55,6 +57,16 @@ export const COMMANDER_TOOL_DEFS: ToolBody<CommanderToolName>[] = [
     description:
       "Stop a session that is at its prompt with nothing left to do. It stays resumable from " +
       "its pane. Refused while it works or waits on the person.",
+    inputSchema: { type: "object", properties: { session: SESSION }, required: ["session"] },
+  },
+  {
+    name: "session_restart",
+    title: "Restart a session onto the newer CLI",
+    description:
+      "Restart a session whose CLI has a newer version installed (fleet_status marks it " +
+      "cli_update: restart). Same conversation, model and mode, once its turn ends. With " +
+      "cli_update: release a newer version exists but is not installed: installing is the " +
+      "person's, from the session's toolbar.",
     inputSchema: { type: "object", properties: { session: SESSION }, required: ["session"] },
   },
   {

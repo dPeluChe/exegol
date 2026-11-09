@@ -19,6 +19,7 @@ import { endMark, startMark } from "./bootstrap/startup-timings";
 import { createWindow, showMainWindow } from "./bootstrap/window";
 import { migrateBrowserCookies } from "./browser/browser-cookies";
 import { installAgentBrowser } from "./browser/electron-host";
+import { startCommanderFeed } from "./commander/feed-sweep";
 import { closeDatabase, getDb, initializeDatabase } from "./db/client";
 import { getAppSettings } from "./db/queries/settings";
 import { stopEngine } from "./dictation/engine";
@@ -163,6 +164,7 @@ app.whenReady().then(async () => {
     startIdleSuspend(getDb());
     startStuckTurnSweep(getDb());
     startQuestionWatch(getDb());
+    startCommanderFeed(getDb());
   });
 
   // Background services (non-blocking, start after window)

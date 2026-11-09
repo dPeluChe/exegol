@@ -1,8 +1,8 @@
-import { type CliUpdateStatus, LIVE_STATUSES } from "@exegol/shared";
+import { type CliUpdateStatus, cliRestartNeeded, LIVE_STATUSES } from "@exegol/shared";
 import * as Dialog from "@radix-ui/react-dialog";
 import { ArrowUpCircle, RefreshCw } from "lucide-react";
 import { useState } from "react";
-import { restartNeeded, updateAndRestart, useCliUpdates } from "../../hooks/use-cli-updates";
+import { updateAndRestart, useCliUpdates } from "../../hooks/use-cli-updates";
 import { useProjects } from "../../hooks/use-trpc";
 import { sessionName } from "../../lib/agent-label";
 import { type AgentState, useAgentStore } from "../../stores/agents";
@@ -27,7 +27,7 @@ function otherSessions(agent: AgentState, status: CliUpdateStatus, update: boole
       a.cliType === agent.cliType &&
       !a.launchedInShell &&
       LIVE_STATUSES.has(a.status) &&
-      (update || restartNeeded(a, status)),
+      (update || cliRestartNeeded(a, status)),
   );
 }
 
@@ -96,7 +96,7 @@ export function CliUpdateControl({ agentId }: { agentId: string }) {
 
   // A CLI typed in a shell restarts by Continue there: Suspend + Resume would replace the shell
   const restartable = !agent.launchedInShell;
-  if (status && restartable && restartNeeded(agent, status)) {
+  if (status && restartable && cliRestartNeeded(agent, status)) {
     return (
       <>
         <button
