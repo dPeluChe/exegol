@@ -116,6 +116,10 @@ interface Window {
     onInboxChanged: (callback: () => void) => () => void;
     onNotesChanged: (callback: () => void) => () => void;
     onProjectsChanged: (callback: () => void) => () => void;
+    onCommanderAlert: (
+      callback: (event: { message: string; sound: boolean }) => void,
+    ) => () => void;
+    onCommanderOpen: (callback: () => void) => () => void;
     onCommanderRestart: (callback: (event: { agentId: string }) => void) => () => void;
     onStuckTurn: (
       callback: (event: { agentId: string; projectId: string; reason: string }) => void,

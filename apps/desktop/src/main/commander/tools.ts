@@ -16,6 +16,7 @@ import { broadcast } from "../lib/event-bus";
 import type { CommanderToolName } from "../mcp/commander-tool-defs";
 import { type ExegolToolContext, ExegolToolError } from "../mcp/exegol-protocol";
 import { cliUpdateStatus } from "../system/cli-versions";
+import { alertPerson } from "./alert";
 import { fleetView, type SessionFacts, sessionState } from "./fleet";
 import { commanderProjectId } from "./home";
 
@@ -189,6 +190,8 @@ export function callCommanderTool(
       return sessionRestart(db, args, context);
     case "project_add":
       return projectAdd(db, args);
+    case "alert_person":
+      return alertPerson(db, args);
     case "my_history":
       return {
         actions: listCommanderLog(db, Math.min(Math.max(Number(args.limit) || 20, 1), 50)).map(

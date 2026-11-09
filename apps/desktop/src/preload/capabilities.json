@@ -445,6 +445,8 @@
     "notes:changed",
     "projects:changed",
     "commander:restart-session",
+    "commander:alert",
+    "commander:open",
     "agent:chat-updated",
     "agent:resume-missed",
     "agent:cli-self-updated",

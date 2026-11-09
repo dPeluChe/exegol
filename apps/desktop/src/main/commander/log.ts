@@ -16,6 +16,7 @@ const ACTIONS = new Set([
   "session_suspend",
   "session_restart",
   "project_add",
+  "alert_person",
 ]);
 
 const SUMMARY_CHARS = 160;
@@ -29,13 +30,14 @@ function logTarget(action: string, args: Record<string, unknown>): string | null
     return str(args.name) ?? (str(args.path) ? basename(str(args.path) as string) : null);
   }
   if (action === "agent_send") return str(args.target) ?? str(args.target_id);
+  if (action === "alert_person") return null;
   if (action.startsWith("session_")) return str(args.session);
   return str(args.project) ?? (args.target === "personal" ? "Personal" : "Commander");
 }
 
 /** Its own words, cut short: the full text stays in the message, thread or note */
 function logSummary(action: string, args: Record<string, unknown>): string | null {
-  if (action === "agent_send") return short(args.message);
+  if (action === "agent_send" || action === "alert_person") return short(args.message);
   if (action === "inbox_close") return short(args.resolution);
   if (action === "note_retire") return short(args.reason);
   if (action === "inbox_reply") return short(args.body);
