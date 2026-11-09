@@ -15,6 +15,7 @@ import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
 import { useNotificationPrefsStore } from "../stores/notification-prefs";
 import { useShortcutStore } from "../stores/shortcuts";
 import { useWorkspaceStore } from "../stores/workspace";
+import { useMountEffect } from "./use-mount-effect";
 
 // ─── Domain re-exports (barrel) ─────────────────────────────────────────────
 
@@ -36,6 +37,16 @@ export function useProjects() {
     queryKey: ["projects"],
     queryFn: () => trpcInvoke<Project[]>("projects.list"),
   });
+}
+
+/** A project added outside the dialog (the Commander) shows at once */
+export function useProjectsSync() {
+  const queryClient = useQueryClient();
+  useMountEffect(() =>
+    window.api.onProjectsChanged(() => {
+      void queryClient.invalidateQueries({ queryKey: ["projects"] });
+    }),
+  );
 }
 
 export function useProject(id: string | null) {

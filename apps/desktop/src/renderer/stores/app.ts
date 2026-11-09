@@ -116,7 +116,7 @@ export function projectOrderFromTabKeys(keys: string[]): string[] {
  * v2 (T120): a persisted 'settings' view would rehydrate sidebarless. v3: the welcome tour.
  * v4: the sidebar orders projects, not tabs. v5: one sidebar view selector, no Projects split
  */
-export type DashboardMode = "company" | "colabs" | "watching" | "all";
+export type DashboardMode = "commander" | "company" | "colabs" | "watching" | "all";
 /** Chat text is laid out in Tailwind's px sizes: this scales the whole of it */
 export const DEFAULT_CHAT_FONT = 12;
 const MIN_CHAT_FONT = 10;

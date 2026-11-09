@@ -14,6 +14,8 @@ import {
   sendAgentMessage,
 } from "../agents/agent-messaging";
 import { callBrowserTool, isBrowserTool } from "../browser/agent-browser-tools";
+import { commanderAutonomy, isCommander } from "../commander/home";
+import { callCommanderTool, projectNamed } from "../commander/tools";
 import { getProject } from "../db/queries";
 import {
   AGENT_LINK_ROLES,
@@ -25,6 +27,7 @@ import { listActiveAgents } from "../db/queries/agents";
 import { claimPaths, listProjectClaims, releasePaths } from "../db/queries/path-claims";
 import { getWorktreeByAgentId } from "../db/queries/worktrees";
 import { isPathInside, realpathSafeSync } from "../security/path-guard";
+import { isCommanderTool } from "./commander-tool-defs";
 import { callInboxTool } from "./exegol-inbox-tools";
 import { callNotesTool } from "./exegol-notes-tools";
 import { type ExegolToolContext, ExegolToolError, type ExegolToolName } from "./exegol-protocol";
@@ -88,6 +91,12 @@ function handleAgentSend(
   const targetId = String(args.target ?? "");
   const message = String(args.message ?? "");
   if (!targetId) throw new ExegolToolError("agent_send requires target (name or id)", -32602);
+  if (isCommander(db, context) && commanderAutonomy(db) === "ask") {
+    throw new ExegolToolError(
+      "The person set you to ask first: show them the message and the session it is for, and let them send it.",
+      -32010,
+    );
+  }
   const result = sendAgentMessage(db, {
     fromAgentId: context.agentId,
     toAgentId: targetId,
@@ -301,8 +310,18 @@ export async function callExegolTool(
   const toolName = tool as ExegolToolName;
   requireWriteAccess(toolName, context);
   if (isBrowserTool(toolName)) return callBrowserTool(db, toolName, args, context);
-  if (isInboxTool(toolName)) return callInboxTool(db, toolName, args, context);
-  if (isNotesTool(toolName)) return callNotesTool(db, toolName, args, context);
+  const commander = isCommander(db, context);
+  if (isCommanderTool(toolName)) {
+    if (!commander) throw new ExegolToolError(`Unknown tool: ${tool}`, -32601);
+    return callCommanderTool(db, toolName, args, context);
+  }
+  // The Commander acts in the project it names; anyone else's `project` is ignored
+  const acting =
+    commander && args.project
+      ? { ...context, projectId: projectNamed(db, args.project).id }
+      : context;
+  if (isInboxTool(toolName)) return callInboxTool(db, toolName, args, acting);
+  if (isNotesTool(toolName)) return callNotesTool(db, toolName, args, acting);
 
   // Single translation point: messaging throws AgentMessagingError (its own
   // JSON-RPC codes), which the socket layer surfaces to the agent verbatim.

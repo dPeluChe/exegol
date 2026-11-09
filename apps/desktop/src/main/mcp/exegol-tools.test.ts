@@ -4,6 +4,7 @@ import { join } from "node:path";
 import Database from "libsql";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { runMigrations } from "../db/migrations";
+import { isCommanderTool } from "./commander-tool-defs";
 import type { ExegolToolContext } from "./exegol-protocol";
 import { EXEGOL_TOOL_DEFS, getToolDefsForAccessMode } from "./exegol-tool-defs";
 import { callExegolTool, ExegolToolError } from "./exegol-tools";
@@ -34,8 +35,10 @@ describe("exegol-tools", () => {
   });
 
   describe("getToolDefsForAccessMode", () => {
-    it("returns all tools for write access", () => {
-      expect(getToolDefsForAccessMode("write")).toEqual(EXEGOL_TOOL_DEFS);
+    it("returns all tools but the Commander's for write access", () => {
+      expect(getToolDefsForAccessMode("write")).toEqual(
+        EXEGOL_TOOL_DEFS.filter((t) => !isCommanderTool(t.name)),
+      );
     });
 
     it("hides the browser's write tools for read/plan access, keeps notes and inbox", () => {

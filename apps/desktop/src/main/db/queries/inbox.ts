@@ -227,6 +227,16 @@ export function countActiveThreads(db: Database.Database, projectId: string): nu
   return n;
 }
 
+/** The person's own threads still open */
+export function countPersonalThreads(db: Database.Database): number {
+  const { n } = db
+    .prepare(
+      `SELECT COUNT(*) AS n FROM inbox_threads t WHERE t.scope = 'personal' ${STATE_SQL.active}`,
+    )
+    .get() as { n: number };
+  return n;
+}
+
 export function markRead(db: Database.Database, key: string, projectId: string, seq: number): void {
   db.prepare(
     `INSERT INTO inbox_reads (thread_id, project_id, last_read_seq) VALUES (?, ?, ?)

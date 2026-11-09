@@ -3,6 +3,7 @@ import { agentRouter } from "./procedures/agents";
 import { apiKeysRouter } from "./procedures/apikeys";
 import { budgetsRouter } from "./procedures/budgets";
 import { colabsRouter } from "./procedures/colabs";
+import { commanderRouter } from "./procedures/commander";
 import { diagnosticsRouter } from "./procedures/diagnostics";
 import { dictationRouter } from "./procedures/dictation";
 import { diffRouter } from "./procedures/diff";
@@ -64,6 +65,7 @@ export const appRouter = router({
   colabs: colabsRouter,
   notes: notesRouter,
   inbox: inboxRouter,
+  commander: commanderRouter,
   queue: queueRouter,
   qaTests: qaTestRouter,
   activities: activitiesRouter,

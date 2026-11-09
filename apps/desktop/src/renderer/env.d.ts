@@ -115,6 +115,7 @@ interface Window {
     onChatUpdated: (callback: (event: { agentId: string }) => void) => () => void;
     onInboxChanged: (callback: () => void) => () => void;
     onNotesChanged: (callback: () => void) => () => void;
+    onProjectsChanged: (callback: () => void) => () => void;
     onStuckTurn: (
       callback: (event: { agentId: string; projectId: string; reason: string }) => void,
     ) => () => void;

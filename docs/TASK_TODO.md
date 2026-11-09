@@ -1438,15 +1438,18 @@ codename, not the name he gave with /rename). Read the name a CLI stores when th
 session (Claude Code `/rename` in its transcript, Codex and others where they keep one) and set it as
 the agent's alias, so panes, Company, the inbox and the sidebar use it. Check each CLI that has a rename.
 
-### T224: Commander, one session that watches the rest `added: 2026-11-07`
-**Priority**: P2 | **Effort**: L | **Source**: Antonio, 2026-11-07. A session inside Exegol that
-watches every project's sessions and tells Antonio what he missed: a question nobody answered, a
-session stuck, a turn that ended with something important. It may answer only what is safe by rule
-(a retry after an API or network error, T218), never a tool permission. It is who speaks (T222),
-and Antonio hands it points to review, which it turns into inbox threads in the right project or
-colab: the full loop. To weigh: it reads Exegol's signals (attention items, turn ends, stuck turns,
-inbox Pending) rather than every terminal, so it costs few tokens; T215 (voice orchestrator) and
-the `watch` role of T221 likely fold into it.
+### T224: Commander, what is left `added: 2026-11-07`
+**Priority**: P2 | **Effort**: M | **Source**: Antonio. Phase 1 is in `TASK_COMPLETED/2611.md`;
+design in `RESEARCH/COMMANDER_DESIGN_2026_11.md`.
+
+- Phase 2: the feed. Attention items, stuck turns, turn ends and new inbox threads reach it as one
+  digest per quiet window, so it reports without being asked. Restart a session to update its CLI
+- Phase 3: it calls the person (a sound and a notice), and a floating window with its chat
+- Phase 4: voice (T222). Weigh Kokoro, Phonon and Woof (underdog.ai)
+- Phase 5: retry after an API or network error (T218)
+- Decide whether its project stays out of Company and the project lists
+- Verify live: start on Claude Code, fleet_status, a message to a session, a thread in a project,
+  a note of its own, suspend, add a project; then on another CLI
 
 ### T225: Company chat shows what each tool did `added: 2026-11-07`
 **Priority**: P2 | **Effort**: S | **Source**: Antonio, 2026-11-07 (screenshot: "Bash x5" says

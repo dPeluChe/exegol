@@ -5,8 +5,14 @@ import {
   type ExegolToolDef,
   type ToolBody,
 } from "./browser-tool-defs";
-import { INBOX_TOOL_DEFS, INBOX_TOOLS } from "./inbox-tool-defs";
-import { NOTES_TOOL_DEFS, NOTES_TOOLS } from "./notes-tool-defs";
+import {
+  COMMANDER_TOOL_DEFS,
+  COMMANDER_TOOLS,
+  isCommanderTool,
+  PROJECT_ARG,
+} from "./commander-tool-defs";
+import { INBOX_TOOL_DEFS, INBOX_TOOLS, isInboxTool } from "./inbox-tool-defs";
+import { isNotesTool, NOTES_TOOL_DEFS, NOTES_TOOLS } from "./notes-tool-defs";
 
 export type ExegolAccessMode = "read" | "plan" | "write";
 
@@ -22,6 +28,7 @@ export const EXEGOL_TOOL_NAMES = [
   "list_claims",
   ...INBOX_TOOLS,
   ...NOTES_TOOLS,
+  ...COMMANDER_TOOLS,
   ...BROWSER_READ_TOOLS,
   ...BROWSER_WRITE_TOOLS,
 ] as const;
@@ -44,12 +51,15 @@ export const NON_WRITE_TOOLS = new Set<ExegolToolName>([
   // Coordination too: a thread or a note changes nothing in the repo
   ...INBOX_TOOLS,
   ...NOTES_TOOLS,
+  // The Commander's own: its session is the only caller they answer
+  ...COMMANDER_TOOLS,
   ...BROWSER_READ_TOOLS,
 ]);
 
 const OWN_TOOLS: ToolBody<ExegolToolName>[] = [
   ...INBOX_TOOL_DEFS,
   ...NOTES_TOOL_DEFS,
+  ...COMMANDER_TOOL_DEFS,
   {
     name: "agents_list",
     title: "List agents",
@@ -246,10 +256,23 @@ export const EXEGOL_TOOL_DEFS: ExegolToolDef<ExegolToolName>[] = [
 export function getToolDefsForAccessMode(
   accessMode: ExegolAccessMode,
   browserEval = true,
+  commander = false,
 ): ExegolToolDef<ExegolToolName>[] {
-  const tools = browserEval
-    ? EXEGOL_TOOL_DEFS
-    : EXEGOL_TOOL_DEFS.filter((t) => t.name !== "browser_eval");
-  if (accessMode === "write") return tools;
-  return tools.filter((t) => NON_WRITE_TOOLS.has(t.name));
+  const tools = EXEGOL_TOOL_DEFS.filter(
+    (t) =>
+      (browserEval || t.name !== "browser_eval") &&
+      (commander || !isCommanderTool(t.name)) &&
+      (accessMode === "write" || NON_WRITE_TOOLS.has(t.name)),
+  );
+  return commander ? tools.map(withProjectArg) : tools;
+}
+
+/** The Commander's inbox and note tools take the project they act in */
+function withProjectArg(tool: ExegolToolDef<ExegolToolName>): ExegolToolDef<ExegolToolName> {
+  if (!isInboxTool(tool.name) && !isNotesTool(tool.name)) return tool;
+  const schema = tool.inputSchema as { properties?: Record<string, unknown> };
+  return {
+    ...tool,
+    inputSchema: { ...schema, properties: { ...schema.properties, project: PROJECT_ARG } },
+  };
 }
