@@ -367,7 +367,8 @@ export const injectedHeaders = (messageId: string): [string, string] => [
   `[Exegol notice ${messageId} `,
 ];
 
-const INJECTED_HEADER = /^\[Exegol (?:message|notice) (\S+) /;
+// Claude Code wraps a long paste in <pasted_content> in its transcript
+const INJECTED_HEADER = /^(?:<pasted_content[^>]*>\s*)?\[Exegol (?:message|notice) (\S+) /;
 
 /** The message a turn was typed in for, read from its header; null for any other turn */
 export const injectedMessageId = (text: string): string | null =>

@@ -165,6 +165,7 @@ describe("injectedMessageId", () => {
     for (const header of injectedHeaders("m-1")) {
       expect(injectedMessageId(`${header}from x]`)).toBe("m-1");
       expect(injectedMessageId(`see ${header}from x]`)).toBeNull();
+      expect(injectedMessageId(`<pasted_content id="15a8">\n${header}from x]`)).toBe("m-1");
     }
     expect(injectedMessageId("[Exegol said hi")).toBeNull();
   });
