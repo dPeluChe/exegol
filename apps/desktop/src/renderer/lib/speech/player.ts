@@ -20,8 +20,19 @@ let listening = false;
 let waiting: WaitingReply[] = [];
 const subscribers = new Set<() => void>();
 
+let reported = false;
+
 function emit(): void {
   for (const fn of subscribers) fn();
+  if ((playing !== null) !== reported) report(playing !== null);
+}
+
+/** Main holds the Commander's feed while a reply is heard; each reading that starts renews it */
+function report(busy: boolean): void {
+  reported = busy;
+  void window.api.speech.reading(busy).catch(() => {
+    reported = !busy;
+  });
 }
 
 function silence(): void {
@@ -44,8 +55,8 @@ function finish(next = false): void {
   playing = null;
   const up = next ? waiting.shift() : undefined;
   if (!next) waiting = [];
-  emit();
   if (up) void start(up);
+  else emit();
 }
 
 function enqueue(event: SpeechAudioEvent): void {
@@ -102,6 +113,7 @@ function listen(): void {
 async function start(reply: WaitingReply, auto = true): Promise<void> {
   const mine: Playing = { key: reply.key, id: null };
   playing = mine;
+  report(true);
   emit();
   const result: SpeakResult = await window.api.speech
     .speak({ text: reply.text, agentId: reply.agentId, auto })
