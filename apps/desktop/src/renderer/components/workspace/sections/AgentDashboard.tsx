@@ -144,9 +144,11 @@ export function AgentDashboard() {
     jumpToAgent(agent.id, agent.projectId);
   }, []);
 
+  const companyLike = mode === "company" || mode === "combined";
   const modeTabs: SegmentedTab<DashboardMode>[] = [
     { id: "commander", label: "Commander" },
     { id: "company", label: "Company" },
+    { id: "combined", label: "Combined" },
     {
       id: "colabs",
       label: "Colabs",
@@ -171,13 +173,13 @@ export function AgentDashboard() {
           <span className="h-2 w-2 rounded-full bg-green-500" />
           {runningCount} running
         </span>
-        {mode !== "company" && (
+        {!companyLike && (
           <span className="flex items-center gap-1.5">
             <span className="h-2 w-2 rounded-full bg-amber-500" />
             {unread.size} need attention
           </span>
         )}
-        {mode === "company" && (
+        {companyLike && (
           <span className="ml-auto">
             P next that needs you, {IS_MAC ? "Option" : "Alt"}+Up/Down moves between sessions, Enter
             opens it in its layout
@@ -196,6 +198,8 @@ export function AgentDashboard() {
       </div>
       {mode === "commander" ? (
         <CommanderSection projectMeta={projectMeta} />
+      ) : mode === "combined" ? (
+        <CompanySection projectMeta={projectMeta} commander />
       ) : all.length === 0 && mode !== "colabs" ? (
         <NoAgents projects={projects} />
       ) : mode === "company" ? (

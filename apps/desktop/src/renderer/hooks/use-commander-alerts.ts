@@ -1,13 +1,7 @@
 import { playChime } from "../lib/chime";
-import { useAppStore } from "../stores/app";
+import { showCommander } from "../lib/commander-view";
 import { useToastStore } from "../stores/toasts";
 import { useMountEffect } from "./use-mount-effect";
-
-function openCommander(): void {
-  const app = useAppStore.getState();
-  app.openDashboard();
-  app.setDashboardMode("commander");
-}
 
 /** Its line when it calls, the same in every window */
 export function commanderToast(body: string, action?: { label: string; run: () => void }): void {
@@ -22,9 +16,9 @@ export function useCommanderAlerts(): void {
   useMountEffect(() => {
     const offAlert = window.api.onCommanderAlert(({ message, sound }) => {
       if (sound) playChime();
-      commanderToast(message, { label: "Open", run: openCommander });
+      commanderToast(message, { label: "Open", run: showCommander });
     });
-    const offOpen = window.api.onCommanderOpen(openCommander);
+    const offOpen = window.api.onCommanderOpen(showCommander);
     return () => {
       offAlert();
       offOpen();
