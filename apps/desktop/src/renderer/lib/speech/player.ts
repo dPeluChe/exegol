@@ -24,10 +24,15 @@ let reported = false;
 
 function emit(): void {
   for (const fn of subscribers) fn();
-  const busy = playing !== null || waiting.length > 0;
-  if (busy === reported) return;
+  if ((playing !== null) !== reported) report(playing !== null);
+}
+
+/** Main holds the Commander's feed while a reply is heard; each reading that starts renews it */
+function report(busy: boolean): void {
   reported = busy;
-  void window.api.speech.reading(busy).catch(() => {});
+  void window.api.speech.reading(busy).catch(() => {
+    reported = !busy;
+  });
 }
 
 function silence(): void {
@@ -108,6 +113,7 @@ function listen(): void {
 async function start(reply: WaitingReply, auto = true): Promise<void> {
   const mine: Playing = { key: reply.key, id: null };
   playing = mine;
+  report(true);
   emit();
   const result: SpeakResult = await window.api.speech
     .speak({ text: reply.text, agentId: reply.agentId, auto })

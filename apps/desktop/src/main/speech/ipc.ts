@@ -38,6 +38,8 @@ async function speak(sender: WebContents, raw: unknown): Promise<SpeakResult> {
   return id ? { id } : { skipped: "no-model" };
 }
 
+const watched = new Set<number>();
+
 /** IPC, not tRPC: the audio goes back only to the window that asked */
 export function registerSpeechIpc(): void {
   ipcMain.handle("speech:speak", (event, input) => speak(event.sender, input));
@@ -46,7 +48,14 @@ export function registerSpeechIpc(): void {
   });
   ipcMain.handle("speech:reading", (event, on: unknown) => {
     const { sender } = event;
-    if (on === true) sender.once("destroyed", () => noteReading(sender.id, false));
-    noteReading(sender.id, on === true);
+    const id = sender.id;
+    if (!watched.has(id)) {
+      watched.add(id);
+      sender.once("destroyed", () => {
+        watched.delete(id);
+        noteReading(id, false);
+      });
+    }
+    noteReading(id, on === true);
   });
 }
