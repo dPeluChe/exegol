@@ -72,6 +72,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Browser panes search from the address bar: `?telnyx`, or words that are not an address, open a Google search; `localhost:3000`, `example.com` and full URLs still go straight there
 
 ### Fixed
+- A message for a session no longer waits on a draft each time its terminal is visited: focus, arrows and clicks no longer restart the 10 quiet minutes
+- A turn started in the background (a task notice, the CLI's own queue) no longer drops the protection of the text still in the prompt
+- The Commander's feed notice shows its closing line apart from the last item
 - Chat: a message Exegol typed into a Claude Code session shows once. A long one appeared twice, as its card and again as a raw bubble starting with `<pasted_content>`
 - A message from the Commander or another agent held at a session's prompt now says why: the sender is told (unsent text in its prompt, a dialog on its screen, an approval), and the log keeps the reason. A session already at its prompt gets the message 4 seconds after it goes quiet, no longer a full minute.
 - Commander voice: it reads replies in the installed app. Every reply failed with "The voice could not read this reply": the speech engine handed its audio back in a way Electron refuses.

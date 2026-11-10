@@ -24,7 +24,6 @@ import {
   noteOutputDropped,
 } from "../terminal/pty-visibility";
 import { noteTurnStarted } from "./agent-message-injection";
-import { clearDraft } from "./agent-message-queue";
 import { noteAgentBoundarySignal, noteAgentOutput } from "./agent-message-sweep";
 import { clearAgentLinks, clearAgentMessageQueue, isEchoingInjection } from "./agent-messaging";
 import type { OutputProcessor } from "./agent-output-processor";
@@ -119,7 +118,6 @@ function applyAgentSignals(
     trackTurn(db, agent, maps, sig.event);
     if (sig.event === "turn_started") {
       noteTurnStarted(agent.id);
-      clearDraft(agent.id);
       noteStuckTurnStart(agent.id);
     }
 
