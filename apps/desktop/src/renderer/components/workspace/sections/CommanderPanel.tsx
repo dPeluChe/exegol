@@ -3,6 +3,7 @@ import { Button } from "@exegol/ui";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { type ReactNode, useState } from "react";
 import { useAct } from "../../../hooks/use-act";
+import { useSeesCommander } from "../../../hooks/use-commander-unread";
 import { useLaunchableProviders } from "../../../hooks/use-providers";
 import { useResumeAgent } from "../../../hooks/use-resume-agent";
 import { showCommander } from "../../../lib/commander-view";
@@ -181,6 +182,12 @@ function StartCard({ state }: { state: CommanderState }) {
   );
 }
 
+/** Its mirror shows the replies too: watching it reads them */
+function SeenInTerminal() {
+  useSeesCommander(true);
+  return null;
+}
+
 /** Its project (set once made), its open session and its settings */
 export function useCommanderSession(enabled = true) {
   // Its project never changes once made; `last` does, so that read follows the session
@@ -244,6 +251,7 @@ export function CommanderPanel({
           <CommanderHistory />
         ) : (
           <div className="min-h-0 flex-1">
+            {view === "terminal" && <SeenInTerminal />}
             <CompanySession
               agent={session}
               where="Every project"

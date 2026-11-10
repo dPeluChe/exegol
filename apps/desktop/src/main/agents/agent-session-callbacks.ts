@@ -6,6 +6,7 @@ import {
   LIVE_STATUSES,
 } from "@exegol/shared";
 import type Database from "libsql";
+import { noteCommanderTurn } from "../commander/unread";
 import { isAgentQuiet } from "../db/queries";
 import { getAgentCwd, setAgentFinalOutput } from "../db/queries/agents";
 import { releasePaths } from "../db/queries/path-claims";
@@ -207,6 +208,7 @@ function trackTurn(
 ): void {
   if (event === "turn_started" || event === "finished") noteChatBoundary(agent.id, agent.cliType);
   if (event === "finished") prepareCommanderReply(db, agent);
+  if (event === "turn_started" || event === "finished") noteCommanderTurn(db, agent, event);
   if (event === "turn_started") {
     clearHookTool(agent.id);
     try {

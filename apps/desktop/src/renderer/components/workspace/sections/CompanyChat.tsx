@@ -8,12 +8,14 @@ import {
 import { cn } from "@exegol/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Copy, SendHorizontal } from "lucide-react";
-import { memo, useMemo, useState } from "react";
+import { Fragment, memo, useMemo, useState } from "react";
+import { useSeesCommander } from "../../../hooks/use-commander-unread";
 import { useCommanderVoice } from "../../../hooks/use-commander-voice";
 import { useMountEffect } from "../../../hooks/use-mount-effect";
 import { useVoiceFeedback } from "../../../hooks/use-voice-feedback";
 import { isClaudeQuestion } from "../../../lib/claude-question";
 import { hasClipboardImage } from "../../../lib/clipboard-image";
+import { firstUnreadId } from "../../../lib/commander-unread";
 import { answersPrompt } from "../../../lib/dictation/target";
 import { fileDragToPaste, finderFilesToPaste, hasFileDragData } from "../../../lib/file-drag";
 import {
@@ -325,6 +327,16 @@ function ChatInput({ agent, onTerminal, dictation }: InputProps) {
   );
 }
 
+function UnreadMark() {
+  return (
+    <div className="flex items-center gap-2 text-[10px] font-medium text-accent">
+      <span className="h-px flex-1 bg-accent/40" />
+      New since you last looked
+      <span className="h-px flex-1 bg-accent/40" />
+    </div>
+  );
+}
+
 /** The session as turns. `dictation` off where the widget has no pane to type into; `speak`
  *  (the Commander's chat) reads replies aloud: on click, and new ones when its voice is on */
 export function CompanyChat({
@@ -355,6 +367,7 @@ export function CompanyChat({
   const { data: messages = NO_MESSAGES } = useAgentMessages(agent.id);
   const bubbles = useMemo(() => mergeChat(turns, messages, agent.id), [turns, messages, agent.id]);
   const visible = bubbles.slice(-shown);
+  const unreadFrom = firstUnreadId(bubbles, useSeesCommander(speak));
   const feedback = useVoiceFeedback(agent.id, voiceReady === true);
   const showEarlier = () => {
     setShown(shown + SHOWN_STEP);
@@ -395,15 +408,17 @@ export function CompanyChat({
             <p className="text-xs text-text-muted">Nothing to show yet.</p>
           )}
           {visible.map((bubble) => (
-            <Bubble
-              key={bubble.id}
-              bubble={bubble}
-              agentId={agent.id}
-              cliType={agent.cliType}
-              formatted={!!chat?.markdown}
-              voiceReady={voiceReady}
-              feedback={feedback.get(bubble.id)}
-            />
+            <Fragment key={bubble.id}>
+              {bubble.id === unreadFrom && <UnreadMark />}
+              <Bubble
+                bubble={bubble}
+                agentId={agent.id}
+                cliType={agent.cliType}
+                formatted={!!chat?.markdown}
+                voiceReady={voiceReady}
+                feedback={feedback.get(bubble.id)}
+              />
+            </Fragment>
           ))}
           <ChatWorking agent={agent} />
         </div>
