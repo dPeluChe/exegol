@@ -440,4 +440,22 @@ export const wave3Migrations: Migration[] = [
       );
     `,
   },
+  {
+    // T224. A mark and note per reply read aloud, to compare voices over time; kept for good
+    id: "w3_040_speech_feedback",
+    sql: `
+      CREATE TABLE speech_feedback (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        at INTEGER NOT NULL,
+        agent_id TEXT NOT NULL,
+        turn_id TEXT NOT NULL UNIQUE,
+        rating TEXT NOT NULL,
+        note TEXT,
+        voice TEXT NOT NULL,
+        speed REAL NOT NULL,
+        model TEXT NOT NULL,
+        spoken TEXT NOT NULL
+      );
+    `,
+  },
 ];

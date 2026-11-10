@@ -3,6 +3,7 @@ import {
   acceptsFollowUps,
   type ChatPage,
   type OlderChatPage,
+  type SpeechFeedback,
 } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -10,6 +11,7 @@ import { Copy, SendHorizontal } from "lucide-react";
 import { memo, useMemo, useState } from "react";
 import { useCommanderVoice } from "../../../hooks/use-commander-voice";
 import { useMountEffect } from "../../../hooks/use-mount-effect";
+import { useVoiceFeedback } from "../../../hooks/use-voice-feedback";
 import { isClaudeQuestion } from "../../../lib/claude-question";
 import { hasClipboardImage } from "../../../lib/clipboard-image";
 import { answersPrompt } from "../../../lib/dictation/target";
@@ -39,6 +41,7 @@ import { FollowUpList, useFollowUps } from "../../terminal/FollowUpControl";
 import { DELIVERY, peerName, useAgentMessages } from "./AgentMessages";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ChatWorking } from "./ChatWorking";
+import { RateReading } from "./RateReading";
 import { SpeakButton } from "./SpeakButton";
 
 const FALLBACK_POLL_MS = 15_000;
@@ -105,9 +108,10 @@ interface BubbleProps {
   formatted: boolean;
   /** Speaker button and whether a voice is installed; absent, no button */
   voiceReady?: boolean;
+  feedback?: SpeechFeedback;
 }
 
-function BubbleBody({ bubble, agentId, cliType, formatted, voiceReady }: BubbleProps) {
+function BubbleBody({ bubble, agentId, cliType, formatted, voiceReady, feedback }: BubbleProps) {
   if (bubble.kind === "tools") {
     return <p className="truncate pl-6 text-[10px] text-text-muted">{toolsLine(bubble.names)}</p>;
   }
@@ -147,6 +151,14 @@ function BubbleBody({ bubble, agentId, cliType, formatted, voiceReady }: BubbleP
                 ready={voiceReady}
               />
             )}
+            {voiceReady && (
+              <RateReading
+                turnId={bubble.id}
+                text={bubble.text}
+                agentId={agentId}
+                saved={feedback}
+              />
+            )}
           </div>
         )}
       </div>
@@ -163,6 +175,7 @@ const Bubble = memo(
     a.cliType === b.cliType &&
     a.formatted === b.formatted &&
     a.voiceReady === b.voiceReady &&
+    a.feedback === b.feedback &&
     sameBubble(a.bubble, b.bubble),
 );
 
@@ -341,6 +354,8 @@ export function CompanyChat({
   const [shown, setShown] = useState(SHOWN_STEP);
   const { data: messages = NO_MESSAGES } = useAgentMessages(agent.id);
   const bubbles = useMemo(() => mergeChat(turns, messages, agent.id), [turns, messages, agent.id]);
+  const visible = bubbles.slice(-shown);
+  const feedback = useVoiceFeedback(agent.id, voiceReady === true);
   const showEarlier = () => {
     setShown(shown + SHOWN_STEP);
     if (chat?.older && bubbles.length < shown + SHOWN_STEP) older.mutate(chat.older);
@@ -379,7 +394,7 @@ export function CompanyChat({
           {bubbles.length === 0 && chat && (
             <p className="text-xs text-text-muted">Nothing to show yet.</p>
           )}
-          {bubbles.slice(-shown).map((bubble) => (
+          {visible.map((bubble) => (
             <Bubble
               key={bubble.id}
               bubble={bubble}
@@ -387,6 +402,7 @@ export function CompanyChat({
               cliType={agent.cliType}
               formatted={!!chat?.markdown}
               voiceReady={voiceReady}
+              feedback={feedback.get(bubble.id)}
             />
           ))}
           <ChatWorking agent={agent} />

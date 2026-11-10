@@ -45,3 +45,23 @@ export interface SpeechEndEvent {
   /** To every window, whatever it plays: a dictation starts and the mic must not hear it */
   all?: boolean;
 }
+
+export type SpeechRating = "good" | "bad";
+
+/** How one reply was read aloud, marked by the person (`speech_feedback`) */
+export interface SpeechFeedback {
+  id: number;
+  at: number;
+  agentId: string;
+  turnId: string;
+  rating: SpeechRating;
+  note: string | null;
+  voice: string;
+  speed: number;
+  model: string;
+}
+
+/** The text as the engine received it, for the review list */
+export interface SpeechFeedbackEntry extends SpeechFeedback {
+  spoken: string;
+}

@@ -398,11 +398,15 @@
     "commander": [
       "history",
       "prepare",
+      "rateVoice",
+      "removeVoiceFeedback",
       "setAutonomy",
       "setFeed",
       "setVoice",
       "state",
-      "voice"
+      "voice",
+      "voiceFeedback",
+      "voiceFeedbackList"
     ],
     "notes": [
       "delete",
