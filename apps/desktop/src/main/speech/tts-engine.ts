@@ -3,6 +3,7 @@ import { availableParallelism } from "node:os";
 import { join } from "node:path";
 import type { SpeechAudioEvent, SpeechEndEvent, VoiceModelEntry } from "@exegol/shared";
 import { type UtilityProcess, utilityProcess, type WebContents } from "electron";
+import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { MODELS_DIR, modelDir } from "../models/manager";
 import { type AudioChunk, CACHE_MAX_BYTES, clipKey, getClip, putClip } from "./audio-cache";
@@ -191,6 +192,12 @@ export function stopUtterance(id?: string): void {
   if (!u || (id && u.id !== id)) return;
   send({ type: "cancel", id: u.id });
   end(u, { stopped: true });
+}
+
+/** Synthesis stops and every window drops the audio it still holds: a finished clip keeps playing otherwise */
+export function hushSpeech(): void {
+  stopUtterance();
+  broadcast("speech:end", { id: "", stopped: true, all: true });
 }
 
 /** Frees the model: the process (and its memory) goes away */

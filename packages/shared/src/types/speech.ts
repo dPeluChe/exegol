@@ -42,4 +42,6 @@ export interface SpeechEndEvent {
   error?: string;
   /** Stopped before its end (another reply started): what was queued stops too */
   stopped?: boolean;
+  /** To every window, whatever it plays: a dictation starts and the mic must not hear it */
+  all?: boolean;
 }
