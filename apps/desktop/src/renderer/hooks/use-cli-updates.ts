@@ -4,23 +4,28 @@ import {
   type CliUpdateStatus,
   cliRestartNeeded,
   LIVE_STATUSES,
+  type Project,
 } from "@exegol/shared";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
+import { sessionWhere } from "../lib/agent-label";
 import { queryClient } from "../lib/query-client";
 import { suspendAgent } from "../lib/session-quiet";
 import { runCommandBeside, runCommandInNewTab } from "../lib/spawn-shell";
 import { trpcInvoke } from "../lib/trpc-client";
 import {
+  type AgentState,
   findAgentPane,
   isLiveAgent,
   isWorking,
   showProject,
   useAgentStore,
 } from "../stores/agents";
-import { updateGaveUp, useCliRestartStore } from "../stores/cli-restarts";
+import { useAppStore } from "../stores/app";
+import { restartOrder, updateGaveUp, useCliRestartStore } from "../stores/cli-restarts";
 import { useCliSelfUpdateStore } from "../stores/cli-self-updates";
 import { toastError, useToastStore } from "../stores/toasts";
+import { selectFocusedAgentId, useWorkspaceStore } from "../stores/workspace";
 import { useLatest } from "./use-latest";
 import { useMountEffect } from "./use-mount-effect";
 import { useEnabledProviders } from "./use-providers";
@@ -89,6 +94,19 @@ export async function updateAndRestart(
   restarts.watchUpdate(restartIds, shellId);
 }
 
+function focusedSessionId(): string | null {
+  const projectId = useAppStore.getState().activeProjectId;
+  return selectFocusedAgentId(useWorkspaceStore.getState(), projectId) ?? null;
+}
+
+/** A restart happens away from the session, often in another project: its toast says where */
+function sessionAndProject(a: AgentState): string {
+  return sessionWhere(a, queryClient.getQueryData<Project[]>(["projects"]) ?? []);
+}
+
+/** Sessions already said to be waiting for their turn to end: one toast per request */
+const toldWaiting = new Set<string>();
+
 /** Restart the requested sessions once each is free: stop it quietly and resume the same
  *  conversation in its pane (the Suspend + Resume path). Mounted once, in App */
 export function useCliRestarts(): void {
@@ -107,8 +125,16 @@ export function useCliRestarts(): void {
   }, [awaiting]);
 
   useEffect(() => {
+    for (const id of toldWaiting) if (!(id in pending)) toldWaiting.delete(id);
+    if (Object.keys(pending).length === 0) return;
     const restarts = useCliRestartStore.getState();
-    for (const id of Object.keys(pending)) {
+    const ids = restartOrder(
+      Object.keys(pending),
+      (id) => agents[id]?.projectId,
+      focusedSessionId(),
+      useAppStore.getState().activeProjectId,
+    );
+    for (const id of ids) {
       const agent = agents[id];
       if (!agent) {
         restarts.cancel(id);
@@ -126,19 +152,29 @@ export function useCliRestarts(): void {
           restarts.cancel(id);
           useToastStore.getState().addToast({
             type: "info",
-            title: `${agent.cliType} update finished without a newer version: restart cancelled`,
+            title: `${sessionAndProject(agent)}: update finished without a newer version, restart cancelled`,
             agentId: agent.id,
           });
         }
         continue;
       }
-      if (isWorking(agent) && when !== "now") continue;
+      if (isWorking(agent) && when !== "now") {
+        if (!toldWaiting.has(id)) {
+          toldWaiting.add(id);
+          useToastStore.getState().addToast({
+            type: "info",
+            title: `${sessionAndProject(agent)} is mid-turn: it restarts when free`,
+            agentId: agent.id,
+          });
+        }
+        continue;
+      }
       restarts.cancel(id);
       const pane = findAgentPane(agent.id, agent.projectId)?.paneId;
       // Said out loud: it happens away from the click (after the turn), or nothing seemed to
       useToastStore.getState().addToast({
         type: "info",
-        title: `Restarting ${agent.alias ?? agent.cliType}`,
+        title: `Restarting ${sessionAndProject(agent)}`,
         agentId: agent.id,
       });
       // Held from the suspend on: the ended pane must not offer to replace it meanwhile
@@ -147,7 +183,7 @@ export function useCliRestarts(): void {
         if (LIVE_STATUSES.has(agent.status)) await suspendAgent(agent.id);
         await resume(agent, pane);
       })()
-        .catch(toastError(`${agent.alias ?? agent.cliType} did not restart`))
+        .catch(toastError(`${sessionAndProject(agent)} did not restart`))
         .finally(() => markResuming([agent.id], false));
     }
   }, [pending, updates, agents, statuses, resume, now]);
@@ -203,7 +239,7 @@ export function useCliSelfUpdates(): void {
             const pane = findAgentPane(agent.id, agent.projectId)?.paneId;
             latest.current
               .resume(agent, pane)
-              .catch(toastError(`${agent.alias ?? agent.cliType} did not restart`));
+              .catch(toastError(`${sessionAndProject(agent)} did not restart`));
           },
         },
       });

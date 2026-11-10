@@ -122,4 +122,13 @@ export function selectActivePaneId(s: WorkspaceStore): string | null {
   return activePaneId(getPw(s), s.focusedPaneId);
 }
 
+/** The agent in the focused pane of the project shown, if any */
+export function selectFocusedAgentId(
+  s: WorkspaceStore,
+  projectId: string | null,
+): string | undefined {
+  const paneId = selectActivePaneId(s);
+  return projectId && paneId ? s.projectWorkspaces[projectId]?.panes[paneId]?.agentId : undefined;
+}
+
 export { collectPaneIds, findFirstPaneId, layoutHasPane };
