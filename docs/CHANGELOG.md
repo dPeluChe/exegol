@@ -15,6 +15,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - `Cmd+.` no longer stops the focused session: one stray key ended it with no warning. Stop Agent stays in the Command Palette
 
 ### Added
+- Commander voice: the audio of each reply is made as soon as the Commander finishes it, so Speak plays at once, and a reply already read plays again without waiting. Kept in memory only, the newest ones (about 8 minutes of speech).
 - Commander tab: its chat sits beside a Fleet panel with the sessions that need you, are stuck, unread or working, each one click from its layout. The floating chat has the Voice toggle and shows the Commander's calls. On a wide window the panel takes up to half the width, in two or three columns.
 - Commander voice: its replies read aloud on your machine (Kokoro, downloaded once in Settings > Models > Voice, about 130 MB; nothing leaves the machine). Voice toggle in its tab for every new reply, a Speak button on each reply, voices in Spanish and English and a speed. Speech stops when you start a dictation.
 - Commander: it continues a session that stopped on an API or network error (up to 3 times an hour per session, never for a login or account problem), it leaves alone the sessions you are writing to yourself and reports on the rest, and it asks you how to go on when a session has waited 15 minutes at its prompt with no reply.

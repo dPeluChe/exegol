@@ -15,6 +15,7 @@ import { logger } from "../lib/logger";
 import { removeAgentMcpConfig, removePerAgentMcpConfig } from "../mcp/exegol-mcp-config";
 import { revokeAgentMcpToken } from "../mcp/exegol-server";
 import { getNotificationBus } from "../notifications/bus";
+import { prepareCommanderReply } from "../speech/prepare";
 import { forgetTerminalLogs } from "../terminal/mount-log";
 import { getPtyHost } from "../terminal/pty-host";
 import {
@@ -207,6 +208,7 @@ function trackTurn(
   event: AgentSignalType,
 ): void {
   if (event === "turn_started" || event === "finished") noteChatBoundary(agent.id, agent.cliType);
+  if (event === "finished") prepareCommanderReply(db, agent);
   if (event === "turn_started") {
     clearHookTool(agent.id);
     try {
