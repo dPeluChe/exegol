@@ -20,8 +20,14 @@ let listening = false;
 let waiting: WaitingReply[] = [];
 const subscribers = new Set<() => void>();
 
+let reported = false;
+
 function emit(): void {
   for (const fn of subscribers) fn();
+  const busy = playing !== null || waiting.length > 0;
+  if (busy === reported) return;
+  reported = busy;
+  void window.api.speech.reading(busy).catch(() => {});
 }
 
 function silence(): void {
@@ -44,8 +50,8 @@ function finish(next = false): void {
   playing = null;
   const up = next ? waiting.shift() : undefined;
   if (!next) waiting = [];
-  emit();
   if (up) void start(up);
+  else emit();
 }
 
 function enqueue(event: SpeechAudioEvent): void {

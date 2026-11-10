@@ -312,6 +312,7 @@ contextBridge.exposeInMainWorld("api", {
     speak: (input: { text: string; agentId: string; auto?: boolean }) =>
       safe.invoke("speech:speak", input),
     stop: (id?: string) => safe.invoke("speech:stop", id),
+    reading: (on: boolean) => safe.invoke("speech:reading", on),
     onAudio: (callback: (event: unknown) => void) => listen("speech:audio", callback),
     onEnd: (callback: (event: unknown) => void) => listen("speech:end", callback),
   },

@@ -6,6 +6,7 @@ import { getDb } from "../db/client";
 import { modelStatus } from "../models/manager";
 import { VOICE_CATALOG } from "../models/voice-catalog";
 import { floatingChatOf } from "../windows/floating";
+import { noteReading } from "./reading";
 import { startUtterance, stopUtterance } from "./tts-engine";
 
 const speakInput = z.object({
@@ -42,5 +43,10 @@ export function registerSpeechIpc(): void {
   ipcMain.handle("speech:speak", (event, input) => speak(event.sender, input));
   ipcMain.handle("speech:stop", (_event, id: unknown) => {
     stopUtterance(typeof id === "string" ? id : undefined);
+  });
+  ipcMain.handle("speech:reading", (event, on: unknown) => {
+    const { sender } = event;
+    if (on === true) sender.once("destroyed", () => noteReading(sender.id, false));
+    noteReading(sender.id, on === true);
   });
 }

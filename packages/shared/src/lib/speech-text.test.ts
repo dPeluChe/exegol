@@ -11,6 +11,12 @@ describe("speechSentences", () => {
     ]);
   });
 
+  it("reads a numbered reference without naming its sign", () => {
+    expect(speechSentences("Listo el PR #37 y el issue #1204.")).toEqual([
+      "Listo el PR 37 y el issue 1204.",
+    ]);
+  });
+
   it("skips code blocks, an unclosed fence and tables entirely", () => {
     const reply = [
       "Before.",

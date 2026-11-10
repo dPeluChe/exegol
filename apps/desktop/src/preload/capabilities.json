@@ -519,6 +519,7 @@
     "dictation:done",
     "speech:speak",
     "speech:stop",
+    "speech:reading",
     "speech:audio",
     "speech:end",
     "sidecar:health",

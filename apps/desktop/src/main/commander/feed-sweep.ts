@@ -5,6 +5,7 @@ import { listActiveAgents } from "../db/queries/agents";
 import { countPersonalThreads } from "../db/queries/inbox";
 import { logger } from "../lib/logger";
 import { getNotificationBus } from "../notifications/bus";
+import { isReadingAloud } from "../speech/reading";
 import {
   ENDED,
   type FeedEvent,
@@ -62,6 +63,8 @@ async function checkFeed(db: Database.Database, now = Date.now()): Promise<void>
   sent = sent.filter((at) => now - at < HOUR_MS);
   if (sent.length >= FEED_PER_HOUR || now - (sent.at(-1) ?? 0) < FEED_GAP_MS) return;
   if (sessionState(commander.status, needsUser(commander.id)) !== "at_prompt") return;
+  // A reply is being heard: what gathers meanwhile goes as one message when it ends
+  if (isReadingAloud(now)) return;
   notices.delete(commander.id);
   const text = feedMessage(pending.values(), next, [...notices.values()]);
   pending.clear();

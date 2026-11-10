@@ -182,6 +182,7 @@ interface Window {
         input: import("@exegol/shared").SpeakRequest,
       ) => Promise<import("@exegol/shared").SpeakResult>;
       stop: (id?: string) => Promise<void>;
+      reading: (on: boolean) => Promise<void>;
       onAudio: (callback: (event: import("@exegol/shared").SpeechAudioEvent) => void) => () => void;
       onEnd: (callback: (event: import("@exegol/shared").SpeechEndEvent) => void) => () => void;
     };
