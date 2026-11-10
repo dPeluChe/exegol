@@ -69,7 +69,7 @@ async function checkFeed(db: Database.Database, now = Date.now()): Promise<void>
   if (!text) return;
   if (!sendSystemMessage(db, { toAgentId: commander.id, source: "Exegol feed", text })) return;
   sent.push(now);
-  logger.info(`[Commander] feed sent: ${text.split("\n").length - 2} line(s)`);
+  logger.info(`[Commander] feed sent: ${text.split("\n- ").length - 1} line(s)`);
 }
 
 export function startCommanderFeed(db: Database.Database): void {
