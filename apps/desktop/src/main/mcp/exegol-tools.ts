@@ -3,6 +3,7 @@
 import { resolve } from "node:path";
 import { acceptsFollowUps } from "@exegol/shared";
 import type Database from "libsql";
+import { HOLD_NOTE } from "../agents/agent-message-queue";
 import {
   AgentMessagingError,
   assertReachable,
@@ -106,9 +107,13 @@ function handleAgentSend(
     clientKey: typeof args.message_id === "string" ? args.message_id.slice(0, 200) : undefined,
     inReplyTo: typeof args.in_reply_to === "string" ? args.in_reply_to : undefined,
   });
+  const held = result.delivered
+    ? undefined
+    : getMessageDeliveryState(db, result.messageId, context.agentId).heldBy;
   return {
     messageId: result.messageId,
     status: result.delivered ? "delivered" : "queued_for_next_turn_boundary",
+    ...(held ? { held_by: HOLD_NOTE[held] } : {}),
     ...(result.duplicate
       ? { duplicate: true, note: "Already sent earlier with this message_id — not re-sent." }
       : {}),
@@ -123,7 +128,8 @@ function handleMessageStatus(
 ) {
   const messageId = String(args.message_id ?? "");
   if (!messageId) throw new ExegolToolError("message_status requires message_id", -32602);
-  return getMessageDeliveryState(db, messageId, context.agentId);
+  const { heldBy, ...state } = getMessageDeliveryState(db, messageId, context.agentId);
+  return heldBy ? { ...state, held_by: HOLD_NOTE[heldBy] } : state;
 }
 
 /** T172: a queued message is still ours — withdrawing it beats sending a

@@ -18,7 +18,13 @@ vi.mock("../terminal/pty-host", () => ({
 
 import { drainQueue, setAgentAwaitingApproval, storeQueue } from "./agent-message-queue";
 import type { PendingMessage } from "./agent-message-state";
-import { ensureSweep, forgetSweepState, noteAgentOutput, stopSweep } from "./agent-message-sweep";
+import {
+  ensureSweep,
+  forgetSweepState,
+  noteAgentBoundarySignal,
+  noteAgentOutput,
+  stopSweep,
+} from "./agent-message-sweep";
 
 const AGENT = "held";
 const STALL_MS = 60_000;
@@ -84,5 +90,22 @@ describe("a queue behind a screen dialog", () => {
     screen.dialog = { question: "Allow?" };
     vi.advanceTimersByTime(2_000);
     expect(held()).toHaveLength(2);
+  });
+
+  it("delivers to a hooked session at its prompt without the long wait", () => {
+    screen.dialog = null;
+    noteAgentBoundarySignal(AGENT);
+    vi.advanceTimersByTime(6_000);
+    expect(deliver).toHaveBeenCalledWith(AGENT);
+  });
+
+  it("gives a hooked session mid-turn the full wait for its boundary", () => {
+    screen.dialog = null;
+    noteAgentBoundarySignal(AGENT);
+    dbHolder.db.prepare("UPDATE agents SET status = 'running' WHERE id = ?").run(AGENT);
+    vi.advanceTimersByTime(STALL_MS - 2_000);
+    expect(deliver).not.toHaveBeenCalled();
+    vi.advanceTimersByTime(4_000);
+    expect(deliver).toHaveBeenCalledWith(AGENT);
   });
 });

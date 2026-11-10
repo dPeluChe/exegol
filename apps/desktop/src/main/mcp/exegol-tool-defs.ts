@@ -122,7 +122,8 @@ const OWN_TOOLS: ToolBody<ExegolToolName>[] = [
     description:
       "Check what happened to a message you sent (or received) when a call timed out and " +
       "you can't tell whether it went through. Returns state: delivered | queued " +
-      "(with queuePosition) | undeliverable (the target's session ended) | unknown.",
+      "(with queuePosition, and held_by when something on the target's side keeps it waiting) | " +
+      "undeliverable (the target's session ended) | unknown.",
     inputSchema: {
       type: "object",
       properties: {
