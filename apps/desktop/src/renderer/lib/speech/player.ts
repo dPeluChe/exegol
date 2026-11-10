@@ -15,6 +15,7 @@ let sources: AudioBufferSourceNode[] = [];
 let nextAt = 0;
 let mainDone = false;
 let early: SpeechAudioEvent[] = [];
+let earlyEnd: SpeechEndEvent | null = null;
 let listening = false;
 let waiting: WaitingReply[] = [];
 const subscribers = new Set<() => void>();
@@ -32,6 +33,7 @@ function silence(): void {
   }
   sources = [];
   early = [];
+  earlyEnd = null;
   nextAt = 0;
   mainDone = false;
 }
@@ -72,7 +74,14 @@ function onAudio(event: SpeechAudioEvent): void {
 }
 
 function onEnd(event: SpeechEndEvent): void {
-  if (!playing || playing.id !== event.id) return;
+  if (!playing) return;
+  if (event.all) {
+    finish();
+    return;
+  }
+  // A kept clip can end before the window knows its id
+  if (playing.id === null) earlyEnd = event;
+  if (playing.id !== event.id) return;
   if (event.error || event.stopped) {
     if (event.error) useToastStore.getState().addToast({ type: "warning", title: event.error });
     finish(!event.stopped);
@@ -107,8 +116,11 @@ async function start(reply: WaitingReply, auto = true): Promise<void> {
   }
   mine.id = result.id;
   const held = early.filter((e) => e.id === result.id);
+  const ended = earlyEnd?.id === result.id ? earlyEnd : null;
   early = [];
+  earlyEnd = null;
   for (const event of held) enqueue(event);
+  if (ended) onEnd(ended);
 }
 
 /** Reads a reply aloud. One the person asked for stops whatever plays; one read by itself (`auto`)
