@@ -8,11 +8,13 @@ import {
 } from "@exegol/shared";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
+import { sessionWhere } from "../lib/agent-label";
 import { queryClient } from "../lib/query-client";
 import { suspendAgent } from "../lib/session-quiet";
 import { runCommandBeside, runCommandInNewTab } from "../lib/spawn-shell";
 import { trpcInvoke } from "../lib/trpc-client";
 import {
+  type AgentState,
   findAgentPane,
   isLiveAgent,
   isWorking,
@@ -23,7 +25,7 @@ import { useAppStore } from "../stores/app";
 import { restartOrder, updateGaveUp, useCliRestartStore } from "../stores/cli-restarts";
 import { useCliSelfUpdateStore } from "../stores/cli-self-updates";
 import { toastError, useToastStore } from "../stores/toasts";
-import { getActivePaneId, useWorkspaceStore } from "../stores/workspace";
+import { selectFocusedAgentId, useWorkspaceStore } from "../stores/workspace";
 import { useLatest } from "./use-latest";
 import { useMountEffect } from "./use-mount-effect";
 import { useEnabledProviders } from "./use-providers";
@@ -92,23 +94,14 @@ export async function updateAndRestart(
   restarts.watchUpdate(restartIds, shellId);
 }
 
-/** The session in the focused pane of the project shown */
 export function focusedSessionId(): string | null {
   const projectId = useAppStore.getState().activeProjectId;
-  const paneId = getActivePaneId();
-  if (!projectId || !paneId) return null;
-  return useWorkspaceStore.getState().projectWorkspaces[projectId]?.panes[paneId]?.agentId ?? null;
+  return selectFocusedAgentId(useWorkspaceStore.getState(), projectId) ?? null;
 }
 
-/** "argon · Orbital": a restart happens away from the session, often in another project */
-export function sessionAndProject(a: {
-  alias?: string | null;
-  cliType: string;
-  projectId: string;
-}): string {
-  const projects = queryClient.getQueryData<Project[]>(["projects"]) ?? [];
-  const project = projects.find((p) => p.id === a.projectId)?.name;
-  return `${a.alias ?? a.cliType}${project ? ` · ${project}` : ""}`;
+/** A restart happens away from the session, often in another project: its toast says where */
+export function sessionAndProject(a: AgentState): string {
+  return sessionWhere(a, queryClient.getQueryData<Project[]>(["projects"]) ?? []);
 }
 
 /** Restart the requested sessions once each is free: stop it quietly and resume the same
@@ -129,6 +122,7 @@ export function useCliRestarts(): void {
   }, [awaiting]);
 
   useEffect(() => {
+    if (Object.keys(pending).length === 0) return;
     const restarts = useCliRestartStore.getState();
     const ids = restartOrder(
       Object.keys(pending),

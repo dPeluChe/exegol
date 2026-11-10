@@ -4,7 +4,7 @@ import { ArrowUpCircle, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { updateAndRestart, useCliUpdates } from "../../hooks/use-cli-updates";
 import { useProjects } from "../../hooks/use-trpc";
-import { sessionName } from "../../lib/agent-label";
+import { sessionWhere } from "../../lib/agent-label";
 import { type AgentState, useAgentStore } from "../../stores/agents";
 import { useCliRestartStore } from "../../stores/cli-restarts";
 import { SessionChips } from "../common/SessionChips";
@@ -34,8 +34,7 @@ function otherSessions(agent: AgentState, status: CliUpdateStatus, update: boole
 /** "name · project" for a session, so the list says where each one is */
 function useSessionWhere(): (a: AgentState) => string {
   const { data: projects = [] } = useProjects();
-  const nameOf = new Map(projects.map((p) => [p.id, p.name]));
-  return (a) => `${sessionName(a)} · ${nameOf.get(a.projectId) ?? "another project"}`;
+  return (a) => sessionWhere(a, projects);
 }
 
 interface ScopeChoice {

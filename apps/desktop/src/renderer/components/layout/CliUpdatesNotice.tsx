@@ -99,7 +99,8 @@ export function CliUpdatesNotice() {
   const apply = () => {
     const restarts = useCliRestartStore.getState();
     for (const id of behind) restarts.request(id);
-    const here = agents[focusedSessionId() ?? ""];
+    const focused = focusedSessionId();
+    const here = focused ? agents[focused] : undefined;
     if (here && behind.includes(here.id) && isWorking(here)) {
       useToastStore.getState().addToast({
         type: "info",
