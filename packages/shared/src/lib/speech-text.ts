@@ -51,6 +51,8 @@ function inline(text: string): string {
       .replace(/`([^`]*)`/g, (_m, code: string) => (code.length <= 40 ? code : ""))
       .replace(/(\*\*|__|~~)(.+?)\1/g, "$2")
       .replace(/(^|[\s(])[*_]([^*_\s][^*_]*?)[*_](?=[\s).,;:!?]|$)/g, "$1$2")
+      // "#37" reads as a number, not as the name of the sign
+      .replace(/#(?=\d)/g, "")
       .replace(/\p{Extended_Pictographic}️?/gu, "")
       .replace(/\s+/g, " ")
       .trim()

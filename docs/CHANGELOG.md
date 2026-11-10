@@ -16,6 +16,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 - Commander: rate how a reply was read aloud. A thumb beside the speaker button marks it Good or Bad with an optional note on what it said wrong; Settings > Models > Voice lists the notes with the text as it was spoken and copies them as Markdown. Stored on this machine only.
+- Commander voice: while a reply is being read, the feed waits. What changes meanwhile reaches the Commander as one message when the reading ends, so it answers once instead of once per change. Its brief asks for replies written to be heard
+- Commander voice: a reply that arrives while another is being read waits its turn instead of cutting it off (up to 5 wait; Speak on a reply, Stop or a dictation still stop the reading and drop the ones waiting)
 - Dashboard: a Combined tab to try beside Commander and Company. It is Company with the Commander's chat as a third column next to the selected session, so you talk to it and to a session without changing view. On a narrow window the two chats share one column behind a Commander | Session switch. Commander and Company stay as they were.
 - Commander voice: the audio of each reply is made as soon as the Commander finishes it, so Speak plays at once, and a reply already read plays again without waiting. Kept in memory only, the newest ones (about 8 minutes of speech).
 - Commander tab: its chat sits beside a Fleet panel with the sessions that need you, are stuck, unread or working, each one click from its layout. The floating chat has the Voice toggle and shows the Commander's calls. On a wide window the panel takes up to half the width, in two or three columns.
@@ -73,6 +75,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Browser panes search from the address bar: `?telnyx`, or words that are not an address, open a Google search; `localhost:3000`, `example.com` and full URLs still go straight there
 
 ### Fixed
+- Commander voice: "PR #37" is read as "PR 37", without naming the sign
+- Starting a dictation stops a reply being read even when its audio was already made
 - A message for a session no longer waits on a draft each time its terminal is visited: focus, arrows and clicks no longer restart the 10 quiet minutes
 - A turn started in the background (a task notice, the CLI's own queue) no longer drops the protection of the text still in the prompt
 - The Commander's feed notice shows its closing line apart from the last item

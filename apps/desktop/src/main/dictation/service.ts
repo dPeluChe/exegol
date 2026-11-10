@@ -22,7 +22,7 @@ import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { DEFAULT_MODEL_ID, findModel, MODEL_CATALOG } from "../models/catalog";
 import { modelDir, modelStatus } from "../models/manager";
-import { stopUtterance } from "../speech/tts-engine";
+import { hushSpeech } from "../speech/tts-engine";
 import { armDictationSession, disarmDictationSession, pauseDictationSession } from "./background";
 import {
   beginSession,
@@ -159,7 +159,7 @@ export async function startDictation(
   const settings = dictationSettings(db);
   disarmMic();
   // The mic must not hear Exegol reading a reply
-  stopUtterance();
+  hushSpeech();
   if (!settings.enabled) throw new Error("dictation is off in Settings > Dictation");
   if (!(await probeEngine()).ok) throw new Error("the speech engine cannot run on this system");
   const { entry, ready } = await pickModel(db);

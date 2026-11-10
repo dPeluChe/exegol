@@ -6,6 +6,7 @@ import { getDb } from "../db/client";
 import { modelStatus } from "../models/manager";
 import { VOICE_CATALOG } from "../models/voice-catalog";
 import { floatingChatOf } from "../windows/floating";
+import { noteReading } from "./reading";
 import { noteSpokenWith } from "./spoken-with";
 import { startUtterance, stopUtterance } from "./tts-engine";
 
@@ -40,10 +41,24 @@ async function speak(sender: WebContents, raw: unknown): Promise<SpeakResult> {
   return { id };
 }
 
+const watched = new Set<number>();
+
 /** IPC, not tRPC: the audio goes back only to the window that asked */
 export function registerSpeechIpc(): void {
   ipcMain.handle("speech:speak", (event, input) => speak(event.sender, input));
   ipcMain.handle("speech:stop", (_event, id: unknown) => {
     stopUtterance(typeof id === "string" ? id : undefined);
+  });
+  ipcMain.handle("speech:reading", (event, on: unknown) => {
+    const { sender } = event;
+    const id = sender.id;
+    if (!watched.has(id)) {
+      watched.add(id);
+      sender.once("destroyed", () => {
+        watched.delete(id);
+        noteReading(id, false);
+      });
+    }
+    noteReading(id, on === true);
   });
 }
