@@ -136,6 +136,16 @@ describe("follow-up queue", () => {
     expect(queueFollowUp(db, "a1", "go on").delivered).toBe(true);
   });
 
+  it("keeps the 10 minutes running through keys that add no text", () => {
+    insertAgent("a1", "waiting_input");
+    noteDraftInput("a1", "gone for lunch");
+    vi.advanceTimersByTime(9 * 60_000);
+    noteDraftInput("a1", "\x1b[I");
+    noteDraftInput("a1", "\x1b[A");
+    vi.advanceTimersByTime(60_000);
+    expect(queueFollowUp(db, "a1", "go on").delivered).toBe(true);
+  });
+
   it("takes a key that answers a dialog as no draft", () => {
     insertAgent("a1", "waiting_input");
     setAgentAwaitingApproval("a1", true);

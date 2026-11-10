@@ -4,7 +4,7 @@ import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { getNotificationBus } from "../notifications/bus";
 import { isEchoingInjection } from "./agent-message-injection";
-import { type HoldReason, holdReason, queuedAgentIds } from "./agent-message-queue";
+import { draftNote, type HoldReason, holdReason, queuedAgentIds } from "./agent-message-queue";
 
 // Delivery waits for a turn boundary, but only providers with hooks (claude,
 // codex) reliably emit one — opencode's TUI produces nothing the scraper
@@ -79,7 +79,9 @@ const holdLogged = new Map<string, HoldReason>();
 function logHold(agentId: string, reason: HoldReason): void {
   if (holdLogged.get(agentId) === reason) return;
   holdLogged.set(agentId, reason);
-  logger.info(`[AgentMsg] ${agentId} queue held: ${reason}`);
+  logger.info(
+    `[AgentMsg] ${agentId} queue held: ${reason}${reason === "draft" ? draftNote(agentId) : ""}`,
+  );
 }
 
 /** A hooked session already at its prompt announced its boundary: waiting for more silence adds nothing */
