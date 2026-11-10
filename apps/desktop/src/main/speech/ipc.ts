@@ -1,9 +1,9 @@
-import { type SpeakResult, speechSentences } from "@exegol/shared";
+import { dictationSettingsOf, type SpeakResult, speechSentences } from "@exegol/shared";
 import { ipcMain, type WebContents } from "electron";
 import { z } from "zod";
 import { commanderVoice } from "../commander/home";
 import { getDb } from "../db/client";
-import { dictationSettings } from "../dictation/service";
+import { getAppSettings } from "../db/queries/settings";
 import { modelStatus } from "../models/manager";
 import { VOICE_CATALOG } from "../models/voice-catalog";
 import { floatingChatOf } from "../windows/floating";
@@ -44,7 +44,7 @@ async function speak(sender: WebContents, raw: unknown): Promise<SpeakResult> {
 }
 
 const watched = new Set<number>();
-const mediaSettings = () => dictationSettings(getDb());
+const mediaSettings = () => dictationSettingsOf(getAppSettings(getDb()).dictation);
 
 /** IPC, not tRPC: the audio goes back only to the window that asked */
 export function registerSpeechIpc(): void {

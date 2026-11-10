@@ -61,7 +61,8 @@ export interface MediaHold {
 }
 
 let chain: Promise<unknown> = Promise.resolve();
-let live: Hold | null = null;
+// A reading and a dictation can each hold one
+const live = new Set<Hold>();
 /** Released, resume not started yet: a dictation starting now takes its pause over */
 let waiting: Hold | null = null;
 
@@ -94,7 +95,7 @@ export function holdMedia(
   void paused.then((p) => {
     hold.done = p;
   });
-  live = hold;
+  live.add(hold);
   const arm = (ms: number) => {
     if (hold.timer) clearTimeout(hold.timer);
     hold.timer = setTimeout(() => release(hold, runner), ms);
@@ -115,7 +116,7 @@ function release(hold: Hold, runner: Runner): void {
   if (hold.released) return;
   hold.released = true;
   if (hold.timer) clearTimeout(hold.timer);
-  if (live === hold) live = null;
+  live.delete(hold);
   waiting = hold;
   void hold.paused.then((p) =>
     serial(async () => {
@@ -128,7 +129,7 @@ function release(hold: Hold, runner: Runner): void {
 
 /** Quit: the app will not live to await, so the resume runs in a detached process */
 export function releaseMediaNow(): void {
-  for (const hold of [live, waiting]) {
+  for (const hold of [...live, waiting]) {
     if (!hold) continue;
     hold.released = true;
     if (hold.timer) clearTimeout(hold.timer);
@@ -139,13 +140,13 @@ export function releaseMediaNow(): void {
       }).unref();
     }
   }
-  live = null;
+  live.clear();
   waiting = null;
 }
 
 /** Tests only */
 export function resetMediaHolds(): void {
-  live = null;
+  live.clear();
   waiting = null;
   chain = Promise.resolve();
 }

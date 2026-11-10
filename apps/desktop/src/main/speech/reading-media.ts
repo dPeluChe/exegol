@@ -20,8 +20,14 @@ export function syncReadingMedia(
   hold = pauseMedia ? start(HOLD_MS, mediaBackend({ direct: pauseMediaDirect })) : null;
 }
 
-/** Also before a dictation takes the pause over: released first, it resumes nothing in between */
 export function releaseReadingMedia(): void {
   hold?.release();
   hold = null;
+}
+
+/** A dictation keeps the pause as its own: released and held again, the music plays in between */
+export function takeReadingMedia(): MediaHold | null {
+  const taken = hold;
+  hold = null;
+  return taken;
 }

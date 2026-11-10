@@ -1,6 +1,6 @@
 import { beforeEach, expect, it, vi } from "vitest";
 import { noteReading } from "./reading";
-import { releaseReadingMedia, syncReadingMedia } from "./reading-media";
+import { releaseReadingMedia, syncReadingMedia, takeReadingMedia } from "./reading-media";
 
 vi.mock("../dictation/media-pause", () => ({ holdMedia: vi.fn(), mediaBackend: () => null }));
 
@@ -29,4 +29,14 @@ it("pauses nothing when the setting is off", () => {
   noteReading(1, true);
   syncReadingMedia(() => ({ pauseMedia: false, pauseMediaDirect: false }), start);
   expect(start).not.toHaveBeenCalled();
+});
+
+it("a hold taken over is no longer released by the reading's end", () => {
+  const held = { release: vi.fn(), extend: vi.fn(() => true) };
+  noteReading(1, true);
+  syncReadingMedia(on, () => held);
+  expect(takeReadingMedia()).toBe(held);
+  noteReading(1, false);
+  syncReadingMedia(on, () => held);
+  expect(held.release).not.toHaveBeenCalled();
 });

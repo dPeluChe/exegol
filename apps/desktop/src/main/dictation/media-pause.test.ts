@@ -244,6 +244,15 @@ describe("holdMedia", () => {
     expect(spawned).toHaveLength(1);
   });
 
+  it("on quit, a second hold does not hide the one that paused", async () => {
+    const runner = vi.fn<Runner>(async () => "");
+    holdMedia(60_000, backendOf(pausedAs("first")), runner);
+    holdMedia(60_000, backendOf(null), runner);
+    await new Promise((r) => setTimeout(r, 10));
+    releaseMediaNow();
+    expect(spawned.map((s) => s.args)).toEqual([["first"]]);
+  });
+
   it("is a no-op without a backend or when nothing was playing", async () => {
     const runner = vi.fn<Runner>(async () => "");
     holdMedia(1_000, null, runner).release();
