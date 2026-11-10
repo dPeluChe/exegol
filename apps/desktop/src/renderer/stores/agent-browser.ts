@@ -45,7 +45,7 @@ function apply(state: AgentBrowserPaneState, mainWindow: boolean): void {
 }
 
 /** browser_open with no live pane: beside the agent when its project is on screen, else a
- *  floating window (only the shown project's panes are mounted, so only they can load a page) */
+ *  floating window (a project not kept mounted has no pane to load a page) */
 function openForAgent(req: { projectId: string; agentId: string; url: string }): string {
   const paneId = nanoid(8);
   const ws = useWorkspaceStore.getState();

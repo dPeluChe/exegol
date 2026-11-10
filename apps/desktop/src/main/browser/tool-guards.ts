@@ -177,7 +177,7 @@ export function resolvePane(
   if (pick) return pick;
   if (own.length === 0) {
     throw new ExegolToolError(
-      "No browser pane is open in your project (or its project is not on screen). Call browser_open.",
+      "No browser pane is open in your project (or its project is not loaded). Call browser_open.",
       -32020,
     );
   }

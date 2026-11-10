@@ -6,7 +6,7 @@ import { useProjectContext } from "./ProjectContext";
 interface ProjectScopeValue {
   projectId: string | null;
   project: Project | null;
-  /** The layer is the active project's: hidden kept layers stop polling and mount no webview */
+  /** The layer is the active project's: hidden kept layers stop polling */
   shown: boolean;
 }
 

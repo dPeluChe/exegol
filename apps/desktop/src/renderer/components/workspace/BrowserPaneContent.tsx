@@ -33,7 +33,7 @@ import { type LoadError, useWebviewControls, useWebviewNavState } from "./use-we
 // ─── Browser Pane ──────────────────────────────────────────────────────────
 
 /** The pane's URL: the saved one wins; until there is one, follow the project's dev server.
- *  `pane.url` follows every page it lands on, so a remount (project switch) reopens it there.
+ *  `pane.url` follows every page it lands on, so a remount (a project no longer kept, a restart) reopens it there.
  *  The webview's `src` is only what the user chose (or what it opened with): it never takes
  *  `pane.url` back, because setting it to the page it is on loads that page again */
 function usePaneUrl(pane: Pane, autoPort: number | undefined) {
