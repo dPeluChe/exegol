@@ -1,12 +1,14 @@
-import { type SpeakResult, speechSentences } from "@exegol/shared";
+import { dictationSettingsOf, type SpeakResult, speechSentences } from "@exegol/shared";
 import { ipcMain, type WebContents } from "electron";
 import { z } from "zod";
 import { commanderVoice } from "../commander/home";
 import { getDb } from "../db/client";
+import { getAppSettings } from "../db/queries/settings";
 import { modelStatus } from "../models/manager";
 import { VOICE_CATALOG } from "../models/voice-catalog";
 import { floatingChatOf } from "../windows/floating";
 import { noteReading } from "./reading";
+import { syncReadingMedia } from "./reading-media";
 import { noteSpokenWith } from "./spoken-with";
 import { startUtterance, stopUtterance } from "./tts-engine";
 
@@ -42,6 +44,7 @@ async function speak(sender: WebContents, raw: unknown): Promise<SpeakResult> {
 }
 
 const watched = new Set<number>();
+const mediaSettings = () => dictationSettingsOf(getAppSettings(getDb()).dictation);
 
 /** IPC, not tRPC: the audio goes back only to the window that asked */
 export function registerSpeechIpc(): void {
@@ -57,8 +60,10 @@ export function registerSpeechIpc(): void {
       sender.once("destroyed", () => {
         watched.delete(id);
         noteReading(id, false);
+        syncReadingMedia(mediaSettings);
       });
     }
     noteReading(id, on === true);
+    syncReadingMedia(mediaSettings);
   });
 }

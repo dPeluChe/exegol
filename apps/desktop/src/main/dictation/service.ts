@@ -22,6 +22,7 @@ import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { DEFAULT_MODEL_ID, findModel, MODEL_CATALOG } from "../models/catalog";
 import { modelDir, modelStatus } from "../models/manager";
+import { takeReadingMedia } from "../speech/reading-media";
 import { hushSpeech } from "../speech/tts-engine";
 import { armDictationSession, disarmDictationSession, pauseDictationSession } from "./background";
 import {
@@ -151,6 +152,18 @@ export async function dictationStatus(db: Database.Database): Promise<DictationS
   };
 }
 
+async function dictationModel(
+  db: Database.Database,
+  settings: DictationSettings,
+  projectId: string | null,
+) {
+  if (!settings.enabled) throw new Error("dictation is off in Settings > Dictation");
+  if (!(await probeEngine()).ok) throw new Error("the speech engine cannot run on this system");
+  const { entry, ready } = await pickModel(db);
+  if (!ready) throw new Error("no speech model is downloaded");
+  return { entry, vocabulary: await vocabularyFor(settings, entry, projectId) };
+}
+
 export async function startDictation(
   db: Database.Database,
   input: DictationInput = "default",
@@ -158,13 +171,13 @@ export async function startDictation(
 ) {
   const settings = dictationSettings(db);
   disarmMic();
+  const reading = takeReadingMedia();
   // The mic must not hear Exegol reading a reply
   hushSpeech();
-  if (!settings.enabled) throw new Error("dictation is off in Settings > Dictation");
-  if (!(await probeEngine()).ok) throw new Error("the speech engine cannot run on this system");
-  const { entry, ready } = await pickModel(db);
-  if (!ready) throw new Error("no speech model is downloaded");
-  const vocabulary = await vocabularyFor(settings, entry, projectId);
+  const { entry, vocabulary } = await dictationModel(db, settings, projectId).catch((err) => {
+    reading?.release();
+    throw err;
+  });
   const want = { id: entry.id, language: settings.language, vocab: vocabulary.spec };
   // Past the longest dictation the music comes back even if no end arrives (renderer died)
   const holdMs = (settings.maxSeconds + 30) * 1000;
@@ -175,6 +188,8 @@ export async function startDictation(
     cancelSession(active.id);
     active = null;
   }
+  if (!media && reading?.extend(holdMs)) media = reading;
+  else reading?.release();
   if (!media && settings.pauseMedia) {
     media = holdMedia(holdMs, mediaBackend({ direct: settings.pauseMediaDirect }));
   }
