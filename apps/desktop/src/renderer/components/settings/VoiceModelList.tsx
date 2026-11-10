@@ -2,6 +2,7 @@ import { Volume2 } from "lucide-react";
 import { useModelAction, useVoiceModels } from "../../hooks/use-trpc-models";
 import { formatBytes } from "../workspace/sections/resource-format";
 import { ModelCard, ModelStatusActions } from "./ModelCard";
+import { ReadingNotes } from "./ReadingNotes";
 import { useConfirmDeleteModel } from "./use-confirm-delete-model";
 
 /** Settings > Models > Voice: text-to-speech models, apart from the dictation ones */
@@ -42,6 +43,7 @@ export function VoiceModels() {
           <p className="mt-1 text-[10px] leading-relaxed text-text-muted/80">{model.attribution}</p>
         </ModelCard>
       ))}
+      <ReadingNotes />
       {dialog}
     </div>
   );
