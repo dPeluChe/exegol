@@ -15,6 +15,7 @@ describe("draftLengthAfter", () => {
 
   it("keeps a new line as text", () => {
     expect(draftLengthAfter(2, "\n")).toBe(3);
+    expect(draftLengthAfter(2, "\\\r")).toBe(3);
   });
 
   it("counts a bracketed paste, even with a return inside", () => {

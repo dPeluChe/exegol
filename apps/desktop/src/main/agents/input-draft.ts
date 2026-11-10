@@ -6,7 +6,12 @@ const PASTE_END = "\x1b[201~";
 
 function typedLength(length: number, typed: string): number {
   let next = length;
+  let prev = "";
   for (const char of typed) {
+    const continued = char === "\r" && prev === "\\";
+    prev = char;
+    // Shift+Enter reaches Claude Code as backslash + CR in one write: a new line, not a submit
+    if (continued) continue;
     if (char === "\r" || char === "\x03" || char === "\x15") next = 0;
     else if (char === "\x7f" || char === "\b") next = Math.max(0, next - 1);
     else if (char === "\n" || char >= " ") next += 1;
