@@ -454,6 +454,12 @@ export class PtyHost {
     return lines ? readScreenDialog(lines) : null;
   }
 
+  /** A gate with no numbers on screen (a trust prompt): only its terminal answers it */
+  screenGate(id: string): boolean {
+    const lines = this.sessions.get(id)?.emulator.visibleLines();
+    return !!lines && readScreenDialog(lines) == null && awaitsConfirm(lines);
+  }
+
   /** A dialog or a gate on screen: an Enter typed now would answer it */
   holdsEnter(id: string): boolean {
     const lines = this.sessions.get(id)?.emulator.visibleLines();

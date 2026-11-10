@@ -213,7 +213,7 @@ export function CommanderSection({
   );
   if (history || session) {
     return (
-      <div className="mx-auto flex min-h-0 w-full max-w-6xl flex-1 gap-3 px-4 pb-4">
+      <div className="flex min-h-0 w-full flex-1 gap-3 px-4 pb-4">
         <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-2">
           <div className="flex items-center justify-between gap-2">
             {historyChip}

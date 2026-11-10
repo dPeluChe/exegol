@@ -1,5 +1,12 @@
-import { type Agent, type AgentCreate, appliedModelRoles, YOLO_FLAGS } from "@exegol/shared";
+import {
+  type Agent,
+  type AgentCreate,
+  appliedModelRoles,
+  samePath,
+  YOLO_FLAGS,
+} from "@exegol/shared";
 import type Database from "libsql";
+import { COMMANDER_DIR } from "../commander/dir";
 import {
   activateAgent,
   agentPtySize,
@@ -27,7 +34,7 @@ import {
 } from "./agent-session-callbacks";
 import { buildPtyInvocation, setupAgentCwd } from "./agent-spawn-flow";
 import { cleanupWorktree, type WorktreeRecord } from "./agent-worktree-ops";
-import { inheritClaudeTrust } from "./claude-trust";
+import { inheritClaudeTrust, trustOwnFolder } from "./claude-trust";
 import { applyLaunchModel } from "./launch-model";
 import { noteAgentInput, noteBlindResume, takeMissedResume } from "./missed-resume";
 import { attachOutputPipeline } from "./output-pipeline";
@@ -187,7 +194,11 @@ export class AgentManager {
       this.initialSnapshots,
     );
     await ready;
-    if (agent.cliType === "claude-code") await inheritClaudeTrust(cwd, project.path);
+    if (agent.cliType === "claude-code") {
+      // The Commander's folder is Exegol's own: its trust gate would take the first message's Enter
+      if (samePath(project.path, COMMANDER_DIR)) await trustOwnFolder(cwd);
+      else await inheritClaudeTrust(cwd, project.path);
+    }
 
     // A known session id makes the store check moot; it only guards the generic resume flag
     const knownSession = config.resumeLocalSessionId

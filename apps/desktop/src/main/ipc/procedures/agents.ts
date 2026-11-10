@@ -147,6 +147,10 @@ export const agentRouter = router({
   screenDialog: publicProcedure
     .input(z.object({ id: z.string() }))
     .query(({ input }) => getPtyHost().screenDialog(input.id)),
+  /** A prompt with no numbered options on its screen: answered only in its terminal */
+  screenGate: publicProcedure
+    .input(z.object({ id: z.string() }))
+    .query(({ input }) => getPtyHost().screenGate(input.id)),
   /** Press one option, only on an agent waiting on the same question the user saw: two prompts
    *  in a row both offer 1/2/3, and a stale click must not answer the next one */
   answerDialog: publicProcedure

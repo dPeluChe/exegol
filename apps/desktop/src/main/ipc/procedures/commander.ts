@@ -1,6 +1,5 @@
 import { SPEECH_SPEED_MAX, SPEECH_SPEED_MIN } from "@exegol/shared";
 import { z } from "zod";
-import { trustOwnFolder } from "../../agents/claude-trust";
 import {
   commanderAutonomy,
   commanderFeed,
@@ -34,8 +33,6 @@ export const commanderRouter = router({
   /** The folder with its brief and its project row, before a session starts in it */
   prepare: publicProcedure.mutation(async ({ ctx }) => {
     const project = await ensureCommanderHome(ctx.db);
-    // Its brief is Exegol's own: Claude's trust gate there would take the first message as its answer
-    await trustOwnFolder(project.path);
     return { projectId: project.id };
   }),
 

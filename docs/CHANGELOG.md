@@ -15,7 +15,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - `Cmd+.` no longer stops the focused session: one stray key ended it with no warning. Stop Agent stays in the Command Palette
 
 ### Added
-- Commander tab: its chat sits beside a Fleet panel with the sessions that need you, are stuck, unread or working, each one click from its layout. The floating chat has the Voice toggle and shows the Commander's calls.
+- Commander tab: its chat sits beside a Fleet panel with the sessions that need you, are stuck, unread or working, each one click from its layout. The floating chat has the Voice toggle and shows the Commander's calls. On a wide window the panel takes up to half the width, in two or three columns.
 - Commander voice: its replies read aloud on your machine (Kokoro, downloaded once in Settings > Models > Voice, about 130 MB; nothing leaves the machine). Voice toggle in its tab for every new reply, a Speak button on each reply, voices in Spanish and English and a speed. Speech stops when you start a dictation.
 - Commander: it continues a session that stopped on an API or network error (up to 3 times an hour per session, never for a login or account problem), it leaves alone the sessions you are writing to yourself and reports on the rest, and it asks you how to go on when a session has waited 15 minutes at its prompt with no reply.
 - Commander calls you: a chime, a desktop notice and a toast with its line when something cannot wait, at most once a minute; one click opens its chat. With notifications off in Settings only the toast shows.
@@ -70,6 +70,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Browser panes search from the address bar: `?telnyx`, or words that are not an address, open a Google search; `localhost:3000`, `example.com` and full URLs still go straight there
 
 ### Fixed
+- Commander voice: it reads replies in the installed app. Every reply failed with "The voice could not read this reply": the speech engine handed its audio back in a way Electron refuses.
+- Commander: a resumed conversation no longer stops at Claude's "trust this folder?" prompt (the folder is trusted on every start, not only the first), and a chat whose session sits on such a prompt says so with a link to its terminal instead of showing it as thinking.
 - Commander: its first message no longer closes it. Claude's "trust this folder?" gate took the message's Enter as "No, exit"; the Commander's own folder is now trusted before it starts, and a queued message waits behind any such gate in every session.
 - Commander voice: the Voice toggle shows as soon as the voice finishes downloading, without reopening the tab.
 - A message or follow-up no longer lands on text you are typing in a session: it waits until you send it

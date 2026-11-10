@@ -38,6 +38,8 @@ declare module "sherpa-onnx-node" {
     /** Speaker id in the model's voices table */
     sid: number;
     speed: number;
+    /** false: samples are copied into V8 memory, which Electron requires */
+    enableExternalBuffer?: boolean;
     /** Each finished chunk; returning 0 or false stops the generation */
     onProgress?: (info: {
       samples: Float32Array;

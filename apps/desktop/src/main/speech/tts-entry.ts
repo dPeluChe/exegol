@@ -23,6 +23,13 @@ const port = process.parentPort;
 const reply = (message: TtsReply) => port.postMessage(message);
 const errorText = (err: unknown) => (err instanceof Error ? err.message : String(err));
 
+/** What went wrong, for the log: never a message that quotes the text, no folder names */
+function engineError(err: unknown, sentences: string[]): string {
+  const text = errorText(err);
+  if (sentences.some((s) => text.includes(s))) return "engine error";
+  return text.replace(/\/[^\s'"]+/g, "<path>").slice(0, 160);
+}
+
 function assertModelPaths(spec: TtsSpec): void {
   if (!modelsRoot) throw new Error("no models folder");
   const root = realpathSync(modelsRoot);
@@ -57,6 +64,8 @@ async function speak(msg: Extract<TtsRequest, { type: "speak" }>): Promise<void>
         text,
         sid: msg.sid,
         speed: msg.speed,
+        // Electron refuses external buffers (V8 memory cage): the addon must copy the samples
+        enableExternalBuffer: false,
         onProgress: () => (cancelled() ? 0 : 1),
       });
       if (cancelled()) break;
@@ -65,7 +74,11 @@ async function speak(msg: Extract<TtsRequest, { type: "speak" }>): Promise<void>
     }
     reply({ type: "done", id, sentences: spoken, loadMs, synthMs: Date.now() - started });
   } catch (err) {
-    reply({ type: "failed", id, error: cancelled() ? "cancelled" : errorText(err) });
+    reply({
+      type: "failed",
+      id,
+      error: cancelled() ? "cancelled" : engineError(err, msg.sentences),
+    });
   }
 }
 
