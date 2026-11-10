@@ -83,11 +83,16 @@ export function noteDraftInput(agentId: string, data: string): void {
     if (needsUser(agentId)) return;
     logger.info(`[Draft] ${agentId} started: ${inputShape(data)}`);
   }
+  // Focus reports, arrows and clicks change no text: they must not restart the quiet period
+  if (length === current) return;
   drafts.set(agentId, { length, at: Date.now() });
 }
 
-export function clearDraft(agentId: string): void {
-  drafts.delete(agentId);
+/** Counts only: how much unsent text the keys add up to, and how long since it last changed */
+export function draftNote(agentId: string): string {
+  const draft = drafts.get(agentId);
+  if (!draft) return "";
+  return ` (${draft.length} char(s), ${Math.round((Date.now() - draft.at) / 1000)}s since the last one)`;
 }
 
 function hasDraft(agentId: string): boolean {

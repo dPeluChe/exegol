@@ -115,6 +115,7 @@ export function feedMessage(
   return [
     "Feed from Exegol, not from the person. Since your last look:",
     ...shown,
+    "",
     "Read a session with session_read before you act on it. Tell the person only what they need.",
   ].join("\n");
 }
