@@ -4,6 +4,7 @@ import {
   type CliUpdateStatus,
   cliRestartNeeded,
   LIVE_STATUSES,
+  type Project,
 } from "@exegol/shared";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
@@ -18,9 +19,11 @@ import {
   showProject,
   useAgentStore,
 } from "../stores/agents";
-import { updateGaveUp, useCliRestartStore } from "../stores/cli-restarts";
+import { useAppStore } from "../stores/app";
+import { restartOrder, updateGaveUp, useCliRestartStore } from "../stores/cli-restarts";
 import { useCliSelfUpdateStore } from "../stores/cli-self-updates";
 import { toastError, useToastStore } from "../stores/toasts";
+import { getActivePaneId, useWorkspaceStore } from "../stores/workspace";
 import { useLatest } from "./use-latest";
 import { useMountEffect } from "./use-mount-effect";
 import { useEnabledProviders } from "./use-providers";
@@ -89,6 +92,25 @@ export async function updateAndRestart(
   restarts.watchUpdate(restartIds, shellId);
 }
 
+/** The session in the focused pane of the project shown */
+export function focusedSessionId(): string | null {
+  const projectId = useAppStore.getState().activeProjectId;
+  const paneId = getActivePaneId();
+  if (!projectId || !paneId) return null;
+  return useWorkspaceStore.getState().projectWorkspaces[projectId]?.panes[paneId]?.agentId ?? null;
+}
+
+/** "argon · Orbital": a restart happens away from the session, often in another project */
+export function sessionAndProject(a: {
+  alias?: string | null;
+  cliType: string;
+  projectId: string;
+}): string {
+  const projects = queryClient.getQueryData<Project[]>(["projects"]) ?? [];
+  const project = projects.find((p) => p.id === a.projectId)?.name;
+  return `${a.alias ?? a.cliType}${project ? ` · ${project}` : ""}`;
+}
+
 /** Restart the requested sessions once each is free: stop it quietly and resume the same
  *  conversation in its pane (the Suspend + Resume path). Mounted once, in App */
 export function useCliRestarts(): void {
@@ -108,7 +130,13 @@ export function useCliRestarts(): void {
 
   useEffect(() => {
     const restarts = useCliRestartStore.getState();
-    for (const id of Object.keys(pending)) {
+    const ids = restartOrder(
+      Object.keys(pending),
+      (id) => agents[id]?.projectId,
+      focusedSessionId(),
+      useAppStore.getState().activeProjectId,
+    );
+    for (const id of ids) {
       const agent = agents[id];
       if (!agent) {
         restarts.cancel(id);
@@ -126,7 +154,7 @@ export function useCliRestarts(): void {
           restarts.cancel(id);
           useToastStore.getState().addToast({
             type: "info",
-            title: `${agent.cliType} update finished without a newer version: restart cancelled`,
+            title: `${sessionAndProject(agent)}: update finished without a newer version, restart cancelled`,
             agentId: agent.id,
           });
         }
@@ -138,7 +166,7 @@ export function useCliRestarts(): void {
       // Said out loud: it happens away from the click (after the turn), or nothing seemed to
       useToastStore.getState().addToast({
         type: "info",
-        title: `Restarting ${agent.alias ?? agent.cliType}`,
+        title: `Restarting ${sessionAndProject(agent)}`,
         agentId: agent.id,
       });
       // Held from the suspend on: the ended pane must not offer to replace it meanwhile
@@ -147,7 +175,7 @@ export function useCliRestarts(): void {
         if (LIVE_STATUSES.has(agent.status)) await suspendAgent(agent.id);
         await resume(agent, pane);
       })()
-        .catch(toastError(`${agent.alias ?? agent.cliType} did not restart`))
+        .catch(toastError(`${sessionAndProject(agent)} did not restart`))
         .finally(() => markResuming([agent.id], false));
     }
   }, [pending, updates, agents, statuses, resume, now]);
@@ -203,7 +231,7 @@ export function useCliSelfUpdates(): void {
             const pane = findAgentPane(agent.id, agent.projectId)?.paneId;
             latest.current
               .resume(agent, pane)
-              .catch(toastError(`${agent.alias ?? agent.cliType} did not restart`));
+              .catch(toastError(`${sessionAndProject(agent)} did not restart`));
           },
         },
       });

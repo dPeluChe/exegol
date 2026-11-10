@@ -22,6 +22,17 @@ export function updateGaveUp(run: UpdateRun | undefined, now: number): boolean {
   return run.shellEndedAt !== undefined && now - run.shellEndedAt > AFTER_SHELL_MS;
 }
 
+/** The session the person is in first, then its project's, then the rest as asked */
+export function restartOrder(
+  ids: string[],
+  projectOf: (id: string) => string | undefined,
+  focusedId: string | null,
+  activeProjectId: string | null,
+): string[] {
+  const rank = (id: string) => (id === focusedId ? 0 : projectOf(id) === activeProjectId ? 1 : 2);
+  return [...ids].sort((a, b) => rank(a) - rank(b));
+}
+
 /** Sessions to restart onto a newer CLI (Suspend + Resume keeps model, YOLO, mode and name) */
 interface CliRestartStore {
   pending: Record<string, RestartWhen>;

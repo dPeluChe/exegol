@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { updateGaveUp, useCliRestartStore } from "./cli-restarts";
+import { restartOrder, updateGaveUp, useCliRestartStore } from "./cli-restarts";
 
 describe("updateGaveUp", () => {
   it("waits for the update, 10 min at most or 30 s after its shell ended", () => {
@@ -9,6 +9,15 @@ describe("updateGaveUp", () => {
     const ended = { startedAt: 0, shellId: "s", shellEndedAt: 60_000 };
     expect(updateGaveUp(ended, 80_000)).toBe(false);
     expect(updateGaveUp(ended, 95_000)).toBe(true);
+  });
+});
+
+describe("restartOrder", () => {
+  it("puts the focused session first, then its project's, the rest as asked", () => {
+    const project: Record<string, string> = { a: "p1", b: "p2", c: "p2", d: "p1" };
+    const of = (id: string) => project[id];
+    expect(restartOrder(["a", "b", "c", "d"], of, "c", "p2")).toEqual(["c", "b", "a", "d"]);
+    expect(restartOrder(["a", "b"], of, null, null)).toEqual(["a", "b"]);
   });
 });
 
