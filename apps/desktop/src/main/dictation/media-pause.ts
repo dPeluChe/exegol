@@ -188,7 +188,10 @@ sub now_playing {
   my $item = MRNowPlayingRequest->localNowPlayingItem;
   my $info = ok($item) ? $item->nowPlayingInfo : undef;
   if (ok($info)) {
-    $track = md5_hex(join("\\0", map { field($info, $_) } qw(Title Artist Album)));
+    # md5_hex dies on a character over 255 (a title in Japanese, an emoji): hash the bytes
+    my $key = join("\\0", map { field($info, $_) } qw(Title Artist Album));
+    utf8::encode($key);
+    $track = md5_hex($key);
     my $e = $info->objectForKey_("kMRMediaRemoteNowPlayingInfoElapsedTime");
     $at = $e->doubleValue if ok($e);
     my $rate = $info->objectForKey_("kMRMediaRemoteNowPlayingInfoPlaybackRate");
@@ -304,8 +307,10 @@ export function macBackend(runner: Runner, direct: boolean): MediaBackend {
       try {
         const paused = parseMrPause(await runner({ file: PERL, args: ["-e", MR_PAUSE] }));
         if (paused) return paused;
-      } catch {
+      } catch (err) {
         // perl, its bridge or MediaRemote is gone: the direct path may still work
+        const code = (err as { code?: unknown }).code;
+        logger.warn(`[Dictation] Now Playing query failed (exit ${String(code ?? "?")})`);
       }
       if (!direct) return null;
       try {
