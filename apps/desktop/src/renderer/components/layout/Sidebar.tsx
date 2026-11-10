@@ -59,12 +59,7 @@ export function Sidebar() {
           </span>
         )}
         {/* Right edge, like the ⌘n of the tab groups */}
-        <kbd
-          className={cn(
-            "shrink-0 rounded border border-border px-1 font-mono text-[9px] font-normal text-text-muted",
-            unreadCount === 0 && "ml-auto",
-          )}
-        >
+        <kbd className="shrink-0 rounded border border-border px-1 font-mono text-[9px] font-normal text-text-muted">
           {chordBadge("1")}
         </kbd>
       </button>

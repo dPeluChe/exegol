@@ -367,7 +367,7 @@ export function CompanyChat({
   const { data: messages = NO_MESSAGES } = useAgentMessages(agent.id);
   const bubbles = useMemo(() => mergeChat(turns, messages, agent.id), [turns, messages, agent.id]);
   const visible = bubbles.slice(-shown);
-  const unreadFrom = firstUnreadId(visible, useSeesCommander(speak));
+  const unreadFrom = firstUnreadId(bubbles, useSeesCommander(speak));
   const feedback = useVoiceFeedback(agent.id, voiceReady === true);
   const showEarlier = () => {
     setShown(shown + SHOWN_STEP);

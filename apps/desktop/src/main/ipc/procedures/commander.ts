@@ -59,11 +59,11 @@ export const commanderRouter = router({
     return { feed: input.on };
   }),
 
-  /** How its replies are read aloud, the voices offered and whether a voice model is installed */
   unread: publicProcedure.query(({ ctx }) => commanderUnread(ctx.db)),
 
   markRead: publicProcedure.mutation(({ ctx }) => markCommanderRead(ctx.db)),
 
+  /** How its replies are read aloud, the voices offered and whether a voice model is installed */
   voice: publicProcedure.query(async ({ ctx }) => {
     const model = (await listVoiceModels())[0];
     return {

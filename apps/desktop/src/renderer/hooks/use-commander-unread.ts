@@ -8,7 +8,8 @@ const UNREAD_KEY = ["commander", "unread"];
 // Always on top: in view without the focus
 const FLOATING = new URLSearchParams(window.location.search).has("floatingPane");
 
-const inView = () => document.visibilityState === "visible" && (FLOATING || document.hasFocus());
+const inView = (focused: boolean) =>
+  document.visibilityState === "visible" && (FLOATING || focused);
 
 /** Replies the Commander ended with its chat out of view (`commander.unread`, pushed on change) */
 export function useCommanderUnread(enabled = true) {
@@ -31,18 +32,22 @@ export function useCommanderUnread(enabled = true) {
  *  Returns where the unread replies began on arrival, for the mark in the chat */
 export function useSeesCommander(active: boolean): number | null {
   const { unread, loaded } = useCommanderUnread(active);
-  const [seeing, setSeeing] = useState(() => active && inView());
+  const [seeing, setSeeing] = useState(() => active && inView(document.hasFocus()));
   const [since, setSince] = useState<number | null>(null);
   const arriving = useRef(true);
+  // `active` is fixed for a mounted chat
   useMountEffect(() => {
     if (!active) return;
-    const check = () => setSeeing(inView());
-    window.addEventListener("focus", check);
-    window.addEventListener("blur", check);
+    let focused = document.hasFocus();
+    const check = () => setSeeing(inView(focused));
+    // App-level focus (main's relay), not the DOM blur: a browser pane's webview blurs the page
+    const offFocus = window.api.onWindowFocus((now) => {
+      focused = now;
+      check();
+    });
     document.addEventListener("visibilitychange", check);
     return () => {
-      window.removeEventListener("focus", check);
-      window.removeEventListener("blur", check);
+      offFocus();
       document.removeEventListener("visibilitychange", check);
     };
   });
