@@ -7,17 +7,11 @@ import {
 import * as Dialog from "@radix-ui/react-dialog";
 import { X } from "lucide-react";
 import { useState } from "react";
-import {
-  focusedSessionId,
-  sessionAndProject,
-  updateAndRestart,
-  useCliUpdates,
-} from "../../hooks/use-cli-updates";
+import { updateAndRestart, useCliUpdates } from "../../hooks/use-cli-updates";
 import { useEnabledProviders } from "../../hooks/use-providers";
-import { isWorking, useAgentStore } from "../../stores/agents";
+import { useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import { useCliRestartStore } from "../../stores/cli-restarts";
-import { useToastStore } from "../../stores/toasts";
 import { AgentIcon } from "../common/AgentIcon";
 import { SessionChips } from "../common/SessionChips";
 
@@ -99,15 +93,6 @@ export function CliUpdatesNotice() {
   const apply = () => {
     const restarts = useCliRestartStore.getState();
     for (const id of behind) restarts.request(id);
-    const focused = focusedSessionId();
-    const here = focused ? agents[focused] : undefined;
-    if (here && behind.includes(here.id) && isWorking(here)) {
-      useToastStore.getState().addToast({
-        type: "info",
-        title: `${sessionAndProject(here)} restarts when its turn ends`,
-        agentId: here.id,
-      });
-    }
     if (toUpdate.length > 0) {
       const projectId =
         useAppStore.getState().activeProjectId ?? agents[toUpdate[0]?.sessions[0] ?? ""]?.projectId;

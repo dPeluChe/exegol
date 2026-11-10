@@ -77,7 +77,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Browser panes search from the address bar: `?telnyx`, or words that are not an address, open a Google search; `localhost:3000`, `example.com` and full URLs still go straight there
 
 ### Fixed
-- CLI restarts after an update start with the session you are in, then the rest of its project, and each toast names the project ("Restarting argon · Orbital"). A session in the middle of a turn still waits for it, and the notice now says so for the one you are in
+- CLI restarts after an update start with the session you are in, then the rest of its project, and each toast names the project ("Restarting argon · Orbital"). A session in the middle of a turn still waits for it, and a toast now says so for each one ("onyx · Brow is mid-turn: it restarts when free")
 - Commander voice: "PR #37" is read as "PR 37", without naming the sign
 - Starting a dictation stops a reply being read even when its audio was already made
 - A message for a session no longer waits on a draft each time its terminal is visited: focus, arrows and clicks no longer restart the 10 quiet minutes

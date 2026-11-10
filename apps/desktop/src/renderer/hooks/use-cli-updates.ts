@@ -94,15 +94,18 @@ export async function updateAndRestart(
   restarts.watchUpdate(restartIds, shellId);
 }
 
-export function focusedSessionId(): string | null {
+function focusedSessionId(): string | null {
   const projectId = useAppStore.getState().activeProjectId;
   return selectFocusedAgentId(useWorkspaceStore.getState(), projectId) ?? null;
 }
 
 /** A restart happens away from the session, often in another project: its toast says where */
-export function sessionAndProject(a: AgentState): string {
+function sessionAndProject(a: AgentState): string {
   return sessionWhere(a, queryClient.getQueryData<Project[]>(["projects"]) ?? []);
 }
+
+/** Sessions already said to be waiting for their turn to end: one toast per request */
+const toldWaiting = new Set<string>();
 
 /** Restart the requested sessions once each is free: stop it quietly and resume the same
  *  conversation in its pane (the Suspend + Resume path). Mounted once, in App */
@@ -122,6 +125,7 @@ export function useCliRestarts(): void {
   }, [awaiting]);
 
   useEffect(() => {
+    for (const id of toldWaiting) if (!(id in pending)) toldWaiting.delete(id);
     if (Object.keys(pending).length === 0) return;
     const restarts = useCliRestartStore.getState();
     const ids = restartOrder(
@@ -154,7 +158,17 @@ export function useCliRestarts(): void {
         }
         continue;
       }
-      if (isWorking(agent) && when !== "now") continue;
+      if (isWorking(agent) && when !== "now") {
+        if (!toldWaiting.has(id)) {
+          toldWaiting.add(id);
+          useToastStore.getState().addToast({
+            type: "info",
+            title: `${sessionAndProject(agent)} is mid-turn: it restarts when free`,
+            agentId: agent.id,
+          });
+        }
+        continue;
+      }
       restarts.cancel(id);
       const pane = findAgentPane(agent.id, agent.projectId)?.paneId;
       // Said out loud: it happens away from the click (after the turn), or nothing seemed to
