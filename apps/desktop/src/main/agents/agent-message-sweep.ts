@@ -4,12 +4,7 @@ import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { getNotificationBus } from "../notifications/bus";
 import { isEchoingInjection } from "./agent-message-injection";
-import {
-  holdsDelivery,
-  isAgentAwaitingApproval,
-  needsUser,
-  queuedAgentIds,
-} from "./agent-message-queue";
+import { type HoldReason, holdReason, queuedAgentIds } from "./agent-message-queue";
 
 // Delivery waits for a turn boundary, but only providers with hooks (claude,
 // codex) reliably emit one — opencode's TUI produces nothing the scraper
@@ -78,9 +73,25 @@ function noticeHeldBehindDialog(agentId: string): void {
   }
 }
 
+// The reason is the only trace of why a message for a session at its prompt did not go out
+const holdLogged = new Map<string, HoldReason>();
+
+function logHold(agentId: string, reason: HoldReason): void {
+  if (holdLogged.get(agentId) === reason) return;
+  holdLogged.set(agentId, reason);
+  logger.info(`[AgentMsg] ${agentId} queue held: ${reason}`);
+}
+
+/** A hooked session already at its prompt announced its boundary: waiting for more silence adds nothing */
+function atPrompt(agentId: string): boolean {
+  const status = getAgent(getDb(), agentId)?.status;
+  return status === "waiting_input" || status === "idle";
+}
+
 function sweepQuietAgents(deliver: (agentId: string) => void): void {
   const agentIds = queuedAgentIds();
   for (const id of heldNoticed) if (!agentIds.includes(id)) heldNoticed.delete(id);
+  for (const id of holdLogged.keys()) if (!agentIds.includes(id)) holdLogged.delete(id);
   if (agentIds.length === 0) {
     stopSweep();
     return;
@@ -91,25 +102,24 @@ function sweepQuietAgents(deliver: (agentId: string) => void): void {
     // exemption: normally their signal arrives first, but if it never does the
     // queue must not stall forever.
     const announces = boundarySignalling.has(agentId);
-    if (quietFor < (announces ? BOUNDARY_STALL_MS : QUIET_MS)) continue;
+    if (quietFor < QUIET_MS) continue;
+    const stalled = announces && !atPrompt(agentId);
+    if (stalled && quietFor < BOUNDARY_STALL_MS) continue;
     if (isEchoingInjection(agentId)) continue;
-    if (holdsDelivery(agentId)) {
-      if (
-        needsUser(agentId) &&
-        !isAgentAwaitingApproval(agentId) &&
-        quietFor >= BOUNDARY_STALL_MS
-      ) {
-        noticeHeldBehindDialog(agentId);
-      }
+    const held = holdReason(agentId);
+    if (held) {
+      logHold(agentId, held);
+      if (held === "dialog" && quietFor >= BOUNDARY_STALL_MS) noticeHeldBehindDialog(agentId);
       continue;
     }
     heldNoticed.delete(agentId);
-    if (announces) {
+    holdLogged.delete(agentId);
+    if (stalled) {
       logger.warn(
         `[AgentMsg] ${agentId} announces turn boundaries but none arrived in ${BOUNDARY_STALL_MS / 1000}s — delivering anyway`,
       );
     } else {
-      logger.info(`[AgentMsg] Delivering to ${agentId} on quiescence (no boundary signal)`);
+      logger.info(`[AgentMsg] Delivering to ${agentId} on quiescence`);
     }
     deliver(agentId);
   }
@@ -137,4 +147,5 @@ export function forgetSweepState(agentId: string): void {
   lastOutputAt.delete(agentId);
   boundarySignalling.delete(agentId);
   heldNoticed.delete(agentId);
+  holdLogged.delete(agentId);
 }

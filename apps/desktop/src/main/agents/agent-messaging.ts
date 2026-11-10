@@ -28,7 +28,9 @@ import {
   countQueued,
   drainQueue,
   forgetQueueState,
+  type HoldReason,
   hasQueuedMessages,
+  holdReason,
   holdsDelivery,
   markUndeliverable,
   notifyFollowUps,
@@ -128,7 +130,7 @@ export function getMessageDeliveryState(
   db: Database.Database,
   messageId: string,
   askerAgentId: string,
-): { state: MessageDeliveryState | "unknown"; queuePosition?: number } {
+): { state: MessageDeliveryState | "unknown"; queuePosition?: number; heldBy?: HoldReason } {
   const entry = getMessageEntry(db, messageId);
   // Scoped to the asker's own conversations: a message id is not a capability
   // to inspect traffic between two other agents. (The sender/receiver ids go
@@ -147,9 +149,12 @@ export function getMessageDeliveryState(
 function deriveState(
   entry: { toAgentId: string; outcome?: MessageDeliveryState },
   messageId: string,
-): { state: MessageDeliveryState; queuePosition?: number } {
+): { state: MessageDeliveryState; queuePosition?: number; heldBy?: HoldReason } {
   const idx = queuedFor(entry.toAgentId).findIndex((p) => p.messageId === messageId);
-  if (idx !== -1) return { state: "queued", queuePosition: idx + 1 };
+  if (idx !== -1) {
+    const heldBy = holdReason(entry.toAgentId);
+    return { state: "queued", queuePosition: idx + 1, ...(heldBy ? { heldBy } : {}) };
+  }
   return { state: entry.outcome ?? "delivered" };
 }
 
@@ -341,10 +346,11 @@ function route(
   first: boolean,
 ): boolean {
   const { toAgentId } = pending;
+  const held = holdReason(toAgentId);
   const atIdlePrompt =
     (targetStatus === "waiting_input" || targetStatus === "idle") &&
     !(pending.onDelivered && !first && queue.some((p) => p.onDelivered)) &&
-    !holdsDelivery(toAgentId);
+    !held;
   if (atIdlePrompt && injectNow(pending)) {
     if (!pending.onDelivered) setOutcome(db, pending.messageId, "delivered");
     return true;
@@ -358,7 +364,7 @@ function route(
   storeQueue(toAgentId, queue);
   ensureSweep(deliverQueued);
   logger.info(
-    `[AgentMsg] Queued ${pending.messageId} ${pending.fromAgentId} → ${toAgentId} (target ${targetStatus}, ${queue.length} pending)`,
+    `[AgentMsg] Queued ${pending.messageId} ${pending.fromAgentId} → ${toAgentId} (target ${targetStatus}${held ? `, held by ${held}` : ""}, ${queue.length} pending)`,
   );
   return false;
 }

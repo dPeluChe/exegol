@@ -3,9 +3,10 @@ import { stripTerminalReports } from "@exegol/shared";
 import type Database from "libsql";
 import { markMessagesUndeliverable } from "../db/queries/messages";
 import { broadcast } from "../lib/event-bus";
+import { logger } from "../lib/logger";
 import { getPtyHost } from "../terminal/pty-host";
 import type { PendingMessage } from "./agent-message-state";
-import { draftLengthAfter } from "./input-draft";
+import { draftLengthAfter, inputShape } from "./input-draft";
 import { notePersonInput } from "./session-activity";
 
 const queues = new Map<string, PendingMessage[]>();
@@ -78,7 +79,10 @@ export function noteDraftInput(agentId: string, data: string): void {
     return;
   }
   // A key that answers a dialog is no text in the prompt
-  if (current === 0 && needsUser(agentId)) return;
+  if (current === 0) {
+    if (needsUser(agentId)) return;
+    logger.info(`[Draft] ${agentId} started: ${inputShape(data)}`);
+  }
   drafts.set(agentId, { length, at: Date.now() });
 }
 
@@ -91,9 +95,24 @@ function hasDraft(agentId: string): boolean {
   return !!draft && Date.now() - draft.at < DRAFT_HOLD_MS;
 }
 
+export type HoldReason = "approval" | "dialog" | "draft";
+
+/** What a sender is told: the person clears each of these in the session's terminal */
+export const HOLD_NOTE: Record<HoldReason, string> = {
+  approval: "the session waits on an approval",
+  dialog: "a dialog is on its screen",
+  draft: "the person has unsent text in its prompt",
+};
+
 /** Pasted text ends with Enter: it would answer a dialog, or send the person's half-typed prompt */
+export function holdReason(agentId: string): HoldReason | null {
+  if (agentsAwaitingApproval.has(agentId)) return "approval";
+  if (getPtyHost().holdsEnter(agentId)) return "dialog";
+  return hasDraft(agentId) ? "draft" : null;
+}
+
 export function holdsDelivery(agentId: string): boolean {
-  return hasDraft(agentId) || needsUser(agentId);
+  return holdReason(agentId) !== null;
 }
 
 /** The queue died; the row is where the sender can still learn that (follow-ups have no row). */

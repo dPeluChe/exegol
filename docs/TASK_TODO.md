@@ -1449,6 +1449,8 @@ design in `RESEARCH/COMMANDER_DESIGN_2026_11.md`.
 - Phase 4 (voice) is built with Kokoro. Try live: download in Settings > Models > Voice, Speak on a reply, the Voice toggle, voices and speed, speech stopping on dictation, the floating chat. Listen to Phonon 40m-es and Supertonic 3 before adding a second engine (design doc). Before a public release, decide on the eSpeak NG data (GPL-3.0, downloaded by the person, not shipped)
 - Decide whether its project stays out of Company and the project lists
 - First run for someone else (Antonio, 2026-11-09): a clean machine must reach the Commander's prompt with no terminal step. Claude's trust gate is pre-answered; check each other CLI's first-run prompts in its home (Codex's trust prompt, logins) and answer or show them. And a first look: on its first start the Commander reviews the fleet and says what needs the person, with that state shown in the tab ("Reviewing the fleet") instead of an empty chat
+- A session at its prompt counted as holding a draft with nothing typed (Antonio, 2026-11-09): each visit to its terminal renewed the hold and a Commander message waited 16 minutes. The hold now names itself; read the `[Draft] <id> started` line of the next live round to find the input and fix the count
+- Each feed notice shows twice in the Commander's chat: a "From Exegol" card and a bubble with the raw pasted text
 - Verify live: start on Claude Code, fleet_status, a message to a session, a thread in a project,
   a note of its own, suspend, add a project, a feed message after a session ends its turn,
   session_restart; then on another CLI

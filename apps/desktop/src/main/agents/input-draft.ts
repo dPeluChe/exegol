@@ -29,3 +29,14 @@ export function draftLengthAfter(length: number, data: string): number {
   }
   return input.startsWith(ESC) ? length : typedLength(length, input);
 }
+
+/** Sizes and control codes only, never the text: what made Exegol think a prompt holds a draft */
+export function inputShape(data: string): string {
+  const input = stripTerminalReports(data);
+  const controls = [...input]
+    .filter((c) => c < " " || c === "\x7f")
+    .slice(0, 6)
+    .map((c) => `0x${c.charCodeAt(0).toString(16).padStart(2, "0")}`);
+  const printable = [...input].filter((c) => c >= " " && c !== "\x7f").length;
+  return `${input.length} char(s), ${printable} printable${controls.length ? `, controls ${controls.join(" ")}` : ""}`;
+}

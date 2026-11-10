@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { draftLengthAfter } from "./input-draft";
+import { draftLengthAfter, inputShape } from "./input-draft";
 
 describe("draftLengthAfter", () => {
   it("counts typed text and deletes", () => {
@@ -31,5 +31,12 @@ describe("draftLengthAfter", () => {
 
   it("does not count a terminal reply mixed with typing", () => {
     expect(draftLengthAfter(0, "ab\x1b[3;1R")).toBe(2);
+  });
+});
+
+describe("inputShape", () => {
+  it("gives sizes and control codes, never the text", () => {
+    expect(inputShape("hola\x17")).toBe("5 char(s), 4 printable, controls 0x17");
+    expect(inputShape("\x1b[Ia")).toBe("1 char(s), 1 printable");
   });
 });
