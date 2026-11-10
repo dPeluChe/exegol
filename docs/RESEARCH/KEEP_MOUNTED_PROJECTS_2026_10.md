@@ -115,8 +115,10 @@ projects stay mounted; browser panes do not.
   holding the pane or tab (`projectOfPane`, `projectOfTab`, active first); a hidden project's
   change never moves the focus. This also fixes a spawn that finished after a switch (its
   `updatePane` used to land nowhere) and a split drag saved 200 ms after one.
-- **Browser panes**: `ScopedBrowserPane` renders a placeholder in a hidden layer, so a webview
-  only ever mounts in the active project, with its partition, as before.
+- **Browser panes**: since 2026-11-10 they stay mounted in a kept hidden layer like the other
+  panes (the placeholder made every switch reload the page and lose a half-filled form). The
+  partition comes from the layer's `ProjectScope`. Cost: up to two hidden projects keep their
+  webview processes; a page that plays audio keeps playing, as in a hidden tab. Not measured.
 - **Focus**: a layer being hidden blurs the element it held (layout effect, before paint); a layer
   shown again without a remount sends `exegol:focus-pane` to the active pane after two frames when
   nothing else holds the focus (what a mounting terminal's `takeKeyboard` did).
@@ -135,4 +137,4 @@ focus path (an open context menu or Radix popover in the hidden layer).
 
 - **Phase 2**: measure renderer RSS, JS heap, live xterms and WebGL contexts with N = 1, 3, 4 and
   the `[ProjectSwitch]` "already mounted" counts in real use; pick N (maybe a setting).
-- **Phase 3**: browser panes, by option (a) or (b) above, or the main-owned `WebContentsView` (c).
+- **Phase 3**: done the plain way (kept with the layer). A cap on kept webviews (option b) only if the memory measured in phase 2 asks for it.

@@ -373,22 +373,6 @@ function FilesPaneContent({ pane, paneId }: PaneContentProps) {
   );
 }
 
-// ─── Browser pane (only in the shown project) ───────────────────────────────
-
-/** A webview's partition is its project's (persist:project-<id>) and cannot change once attached:
- *  a browser pane mounts only in the active project's layer and unmounts while it is kept hidden */
-function ScopedBrowserPane({ pane, paneId }: PaneContentProps) {
-  const { shown } = usePaneProject();
-  if (!shown) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <Globe className="h-6 w-6 text-text-muted" />
-      </div>
-    );
-  }
-  return <BrowserPane pane={pane} paneId={paneId} />;
-}
-
 // ─── Pane body by type ──────────────────────────────────────────────────────
 
 type PaneContentProps = { pane: Pane; paneId: string };
@@ -400,7 +384,9 @@ const PANE_CONTENT: Record<Pane["type"], (props: PaneContentProps) => React.Reac
     ) : (
       <EmptyPane paneId={paneId} folder={pane.launcherFolder} />
     ),
-  browser: ({ pane, paneId }) => <ScopedBrowserPane pane={pane} paneId={paneId} />,
+  // Stays mounted in a kept hidden project: its page, form and scroll survive a switch. The
+  // partition comes from the layer's ProjectScope, never from the active project
+  browser: ({ pane, paneId }) => <BrowserPane pane={pane} paneId={paneId} />,
   files: ({ pane, paneId }) => (
     <FilesPaneContent key={pane.filePath ?? "default"} pane={pane} paneId={paneId} />
   ),
