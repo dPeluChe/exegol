@@ -1,6 +1,7 @@
 import type { SpeakResult, SpeechAudioEvent, SpeechEndEvent } from "@exegol/shared";
 import { useSyncExternalStore } from "react";
 import { useToastStore } from "../../stores/toasts";
+import { addWaiting, type WaitingReply } from "./waiting";
 
 /** What plays: `key` names the reply (a chat turn id), `id` the main process utterance */
 interface Playing {
@@ -15,6 +16,7 @@ let nextAt = 0;
 let mainDone = false;
 let early: SpeechAudioEvent[] = [];
 let listening = false;
+let waiting: WaitingReply[] = [];
 const subscribers = new Set<() => void>();
 
 function emit(): void {
@@ -34,10 +36,14 @@ function silence(): void {
   mainDone = false;
 }
 
-function finish(): void {
+/** `next`: the reading ended by itself, so the reply that waited behind it starts; a stop drops them */
+function finish(next = false): void {
   silence();
   playing = null;
+  const up = next ? waiting.shift() : undefined;
+  if (!next) waiting = [];
   emit();
+  if (up) void start(up);
 }
 
 function enqueue(event: SpeechAudioEvent): void {
@@ -55,7 +61,7 @@ function enqueue(event: SpeechAudioEvent): void {
   sources.push(source);
   source.onended = () => {
     sources = sources.filter((s) => s !== source);
-    if (mainDone && sources.length === 0) finish();
+    if (mainDone && sources.length === 0) finish(true);
   };
 }
 
@@ -69,11 +75,11 @@ function onEnd(event: SpeechEndEvent): void {
   if (!playing || playing.id !== event.id) return;
   if (event.error || event.stopped) {
     if (event.error) useToastStore.getState().addToast({ type: "warning", title: event.error });
-    finish();
+    finish(!event.stopped);
     return;
   }
   mainDone = true;
-  if (sources.length === 0) finish();
+  if (sources.length === 0) finish(true);
 }
 
 function listen(): void {
@@ -84,34 +90,43 @@ function listen(): void {
   window.addEventListener("pagehide", () => stopSpeaking());
 }
 
-/** Reads a reply aloud; whatever plays stops first. Resolves once main took it or skipped it */
-export async function speakReply(
-  key: string,
-  text: string,
-  agentId: string,
-  auto = false,
-): Promise<SpeakResult> {
-  listen();
-  stopSpeaking();
-  const mine: Playing = { key, id: null };
+async function start(reply: WaitingReply, auto = true): Promise<void> {
+  const mine: Playing = { key: reply.key, id: null };
   playing = mine;
   emit();
   const result: SpeakResult = await window.api.speech
-    .speak({ text, agentId, auto })
+    .speak({ text: reply.text, agentId: reply.agentId, auto })
     .catch(() => ({ skipped: "empty" as const }));
   if (playing !== mine) {
     if ("id" in result) void window.api.speech.stop(result.id);
-    return result;
+    return;
   }
   if ("skipped" in result) {
-    finish();
-    return result;
+    finish(true);
+    return;
   }
   mine.id = result.id;
   const held = early.filter((e) => e.id === result.id);
   early = [];
   for (const event of held) enqueue(event);
-  return result;
+}
+
+/** Reads a reply aloud. One the person asked for stops whatever plays; one read by itself (`auto`)
+ *  waits for the reading in course to end */
+export async function speakReply(
+  key: string,
+  text: string,
+  agentId: string,
+  auto = false,
+): Promise<void> {
+  listen();
+  const reply = { key, text, agentId };
+  if (auto && playing) {
+    if (playing.key !== key) waiting = addWaiting(waiting, reply);
+    return;
+  }
+  stopSpeaking();
+  await start(reply, auto);
 }
 
 export function stopSpeaking(): void {
