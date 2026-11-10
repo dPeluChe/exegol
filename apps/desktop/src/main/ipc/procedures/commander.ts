@@ -10,6 +10,7 @@ import {
   setCommanderFeed,
   setCommanderVoice,
 } from "../../commander/home";
+import { commanderUnread, markCommanderRead } from "../../commander/unread";
 import { listAgents } from "../../db/queries/agents";
 import { listCommanderLog } from "../../db/queries/commander-log";
 import {
@@ -59,6 +60,10 @@ export const commanderRouter = router({
   }),
 
   /** How its replies are read aloud, the voices offered and whether a voice model is installed */
+  unread: publicProcedure.query(({ ctx }) => commanderUnread(ctx.db)),
+
+  markRead: publicProcedure.mutation(({ ctx }) => markCommanderRead(ctx.db)),
+
   voice: publicProcedure.query(async ({ ctx }) => {
     const model = (await listVoiceModels())[0];
     return {

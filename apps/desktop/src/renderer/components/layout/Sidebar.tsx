@@ -1,5 +1,6 @@
 import { cn, Separator } from "@exegol/ui";
 import { ArrowDownAZ, GripVertical, LayoutDashboard, Plus } from "lucide-react";
+import { useCommanderUnread } from "../../hooks/use-commander-unread";
 import { useProjects } from "../../hooks/use-trpc";
 import { chordBadge } from "../../lib/keymap";
 import { SIDEBAR_VIEW_META, useSidebarCounts } from "../../lib/sidebar-views";
@@ -19,6 +20,7 @@ export function Sidebar() {
   const { data: projects } = useProjects();
   const projectCount = projects?.length ?? 0;
   const { live: liveCount, attention: attentionCount, unread: unreadCount } = useSidebarCounts();
+  const fromCommander = useCommanderUnread().unread.count;
   const onDashboard = useAppStore((s) => s.activeView === "dashboard");
   const openDashboard = useAppStore((s) => s.openDashboard);
   const view = useAppStore((s) => s.sidebarView);
@@ -42,9 +44,17 @@ export function Sidebar() {
         )}
       >
         <LayoutDashboard className="h-3.5 w-3.5 shrink-0 text-accent" />
-        <span className="min-w-0 truncate">Dashboard</span>
+        <span className="min-w-0 flex-1 truncate text-left">Dashboard</span>
+        {fromCommander > 0 && (
+          <span
+            title="Commander replies you have not read"
+            className="shrink-0 rounded-full bg-accent/20 px-1.5 py-0.5 text-[10px] font-medium text-accent"
+          >
+            {fromCommander}
+          </span>
+        )}
         {unreadCount > 0 && (
-          <span className="ml-auto shrink-0 rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-medium text-amber-300">
+          <span className="shrink-0 rounded-full bg-amber-500/20 px-1.5 py-0.5 text-[10px] font-medium text-amber-300">
             {unreadCount}
           </span>
         )}

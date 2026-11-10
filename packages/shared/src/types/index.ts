@@ -4,6 +4,7 @@ export * from "./agent-browser";
 export * from "./agent-signals";
 export * from "./budget";
 export * from "./colab";
+export * from "./commander";
 export * from "./dashboard";
 export * from "./dev-servers";
 export * from "./diagnostics";

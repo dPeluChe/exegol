@@ -120,6 +120,9 @@ interface Window {
       callback: (event: { message: string; sound: boolean }) => void,
     ) => () => void;
     onCommanderOpen: (callback: () => void) => () => void;
+    onCommanderUnread: (
+      callback: (event: import("@exegol/shared").CommanderUnread) => void,
+    ) => () => void;
     onCommanderRestart: (callback: (event: { agentId: string }) => void) => () => void;
     onStuckTurn: (
       callback: (event: { agentId: string; projectId: string; reason: string }) => void,

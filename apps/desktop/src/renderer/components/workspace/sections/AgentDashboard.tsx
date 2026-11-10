@@ -3,6 +3,7 @@ import { ScrollArea } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import { Cpu, Plus } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
+import { useCommanderUnread } from "../../../hooks/use-commander-unread";
 import { useFleetSync } from "../../../hooks/use-fleet-sync";
 import { useInboxThreads } from "../../../hooks/use-inbox";
 import { useMountEffect } from "../../../hooks/use-mount-effect";
@@ -87,6 +88,7 @@ export function AgentDashboard() {
   const mode: DashboardMode = picked ?? (watchingCount > 0 ? "watching" : "company");
   const setMode = useAppStore((s) => s.setDashboardMode);
   const inbox = useInboxThreads("active");
+  const commanderUnread = useCommanderUnread().unread.count;
 
   // Closing the dashboard is what "left" means; Company reads the last stamp as it mounts
   useMountEffect(() => {
@@ -145,10 +147,11 @@ export function AgentDashboard() {
   }, []);
 
   const companyLike = mode === "company" || mode === "combined";
+  const fromCommander = commanderUnread > 0 ? { count: commanderUnread, alert: true } : {};
   const modeTabs: SegmentedTab<DashboardMode>[] = [
-    { id: "commander", label: "Commander" },
+    { id: "commander", label: "Commander", ...fromCommander },
     { id: "company", label: "Company" },
-    { id: "combined", label: "Combined" },
+    { id: "combined", label: "Combined", ...fromCommander },
     {
       id: "colabs",
       label: "Colabs",

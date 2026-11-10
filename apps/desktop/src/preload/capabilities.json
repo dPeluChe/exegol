@@ -397,6 +397,7 @@
     ],
     "commander": [
       "history",
+      "markRead",
       "prepare",
       "rateVoice",
       "removeVoiceFeedback",
@@ -404,6 +405,7 @@
       "setFeed",
       "setVoice",
       "state",
+      "unread",
       "voice",
       "voiceFeedback",
       "voiceFeedbackList"
@@ -455,6 +457,7 @@
     "commander:restart-session",
     "commander:alert",
     "commander:open",
+    "commander:unread",
     "agent:chat-updated",
     "agent:resume-missed",
     "agent:cli-self-updated",

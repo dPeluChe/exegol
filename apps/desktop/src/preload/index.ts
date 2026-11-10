@@ -236,6 +236,7 @@ contextBridge.exposeInMainWorld("api", {
   onProjectsChanged: (callback: (event: unknown) => void) => listen("projects:changed", callback),
   onCommanderAlert: (callback: (event: unknown) => void) => listen("commander:alert", callback),
   onCommanderOpen: (callback: (event: unknown) => void) => listen("commander:open", callback),
+  onCommanderUnread: (callback: (event: unknown) => void) => listen("commander:unread", callback),
   onCommanderRestart: (callback: (event: unknown) => void) =>
     listen("commander:restart-session", callback),
   /** A session's CLI updated itself and exited: the pane offers Restart session */

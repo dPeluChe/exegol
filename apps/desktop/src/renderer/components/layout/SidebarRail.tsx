@@ -1,6 +1,7 @@
 import { cn } from "@exegol/ui";
 import { LayoutDashboard, PanelLeftOpen, Pause, Plus, Settings } from "lucide-react";
 import { useMemo } from "react";
+import { useCommanderUnread } from "../../hooks/use-commander-unread";
 import { useProjects } from "../../hooks/use-trpc";
 import { isLiveSession, SIDEBAR_VIEW_META, useSidebarCounts } from "../../lib/sidebar-views";
 import { isLiveAgent, useAgentStore } from "../../stores/agents";
@@ -18,6 +19,7 @@ export function SidebarRail() {
   const attentionItems = useAgentStore((s) => s.attentionItems);
   const { live: liveCount, attention: attentionCount, unread } = useSidebarCounts();
   const activeProjectId = useAppStore((s) => s.activeProjectId);
+  const fromCommander = useCommanderUnread().unread.count;
   const onDashboard = useAppStore((s) => s.activeView === "dashboard");
   const sidebarView = useAppStore((s) => s.sidebarView);
   const openSidebarView = useAppStore((s) => s.openSidebarView);
@@ -60,9 +62,14 @@ export function SidebarRail() {
           railButton,
           onDashboard ? "bg-accent/20 text-accent" : "text-text-muted hover:bg-white/5",
         )}
-        title="Dashboard"
+        title={
+          fromCommander > 0 ? `Dashboard, ${fromCommander} unread from the Commander` : "Dashboard"
+        }
       >
         <LayoutDashboard className="h-4 w-4" />
+        {fromCommander > 0 && (
+          <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full bg-accent" />
+        )}
         {unread > 0 && (
           <span className="absolute -right-0.5 -top-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-amber-500 px-0.5 text-[8px] font-bold text-black">
             {unread}
