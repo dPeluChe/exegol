@@ -43,8 +43,9 @@ Then: T166 MCP recall via Ollama, T181 retention, T173, T175.4 claims TTL and UI
 ### Agent browser leftovers (2026-10-05, `feat/agent-browser`)
 - Verify live: register, snapshot/click/type on a local app, login hand-back, Take over, Ask
   agent, screenshot image in Claude Code, cookie copy on first start, MCP plug and widget.
-- Panes of a project not on screen are unmounted, so an agent there gets a floating window
-  (opened without focus). Better model: main owns a WebContentsView per agent browser pane in the
+- Browser panes stay mounted only for the 3 kept projects (an agent in a kept hidden project
+  drives its pane unseen; verify live that a page focused at the switch gets no more keys).
+  Beyond those an agent gets a floating window (opened without focus). Better model: main owns a WebContentsView per agent browser pane in the
   project partition, and the renderer attaches it when the pane is visible, so switching project
   never tears the page down.
 - The network guard applies only while the agent is acting (15s after its last action): a
