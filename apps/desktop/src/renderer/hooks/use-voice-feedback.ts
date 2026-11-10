@@ -1,23 +1,20 @@
 import type { SpeechFeedback, SpeechFeedbackEntry, SpeechRating } from "@exegol/shared";
-import { keepPreviousData, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useMemo } from "react";
 import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
 import { toastError } from "../stores/toasts";
 
 const FEEDBACK_KEY = ["commander", "voiceFeedback"];
-const MAX_TURNS = 200;
+const NONE: SpeechFeedback[] = [];
 
-/** The marks on these turns, one query for a whole chat (`commander.voiceFeedback`) */
-export function useVoiceFeedback(turnIds: string[], enabled: boolean) {
-  const ids = turnIds.slice(-MAX_TURNS);
-  const query = useQuery({
-    queryKey: [...FEEDBACK_KEY, ids],
-    queryFn: () => trpcInvoke<SpeechFeedback[]>("commander.voiceFeedback", { turnIds: ids }),
-    enabled: enabled && ids.length > 0,
-    placeholderData: keepPreviousData,
+/** A session's marks by turn, one query for its whole chat (`commander.voiceFeedback`) */
+export function useVoiceFeedback(agentId: string, enabled: boolean) {
+  const { data = NONE } = useQuery({
+    queryKey: [...FEEDBACK_KEY, agentId],
+    queryFn: () => trpcInvoke<SpeechFeedback[]>("commander.voiceFeedback", { agentId }),
+    enabled,
   });
-  const byTurn = new Map<string, SpeechFeedback>();
-  for (const row of query.data ?? []) byTurn.set(row.turnId, row);
-  return byTurn;
+  return useMemo(() => new Map(data.map((row) => [row.turnId, row])), [data]);
 }
 
 export interface RateInput {
@@ -49,6 +46,7 @@ export function useVoiceFeedbackList() {
   return useQuery({
     queryKey: [...FEEDBACK_KEY, "list"],
     queryFn: () => trpcInvoke<SpeechFeedbackEntry[]>("commander.voiceFeedbackList"),
-    refetchOnWindowFocus: true,
+    // Marks are saved from other windows, and this one gets no focus refetch
+    refetchInterval: 5_000,
   });
 }

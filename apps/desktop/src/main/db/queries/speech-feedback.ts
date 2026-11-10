@@ -29,14 +29,13 @@ export function saveSpeechFeedback(db: Database.Database, entry: NewSpeechFeedba
   );
 }
 
-export function speechFeedbackFor(db: Database.Database, turnIds: string[]): SpeechFeedback[] {
-  if (turnIds.length === 0) return [];
+/** A session's marks, newest first: one read serves its whole chat */
+export function speechFeedbackFor(db: Database.Database, agentId: string): SpeechFeedback[] {
   return db
     .prepare(
-      `SELECT ${COLUMNS} FROM speech_feedback
-       WHERE turn_id IN (${turnIds.map(() => "?").join(", ")})`,
+      `SELECT ${COLUMNS} FROM speech_feedback WHERE agent_id = ? ORDER BY at DESC, id DESC LIMIT 500`,
     )
-    .all(...turnIds) as SpeechFeedback[];
+    .all(agentId) as SpeechFeedback[];
 }
 
 export function deleteSpeechFeedback(db: Database.Database, turnId: string): boolean {

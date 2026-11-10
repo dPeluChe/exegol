@@ -355,10 +355,7 @@ export function CompanyChat({
   const { data: messages = NO_MESSAGES } = useAgentMessages(agent.id);
   const bubbles = useMemo(() => mergeChat(turns, messages, agent.id), [turns, messages, agent.id]);
   const visible = bubbles.slice(-shown);
-  const feedback = useVoiceFeedback(
-    visible.flatMap((b) => (b.kind === "turn" && b.role === "assistant" ? [b.id] : [])),
-    voiceReady === true,
-  );
+  const feedback = useVoiceFeedback(agent.id, voiceReady === true);
   const showEarlier = () => {
     setShown(shown + SHOWN_STEP);
     if (chat?.older && bubbles.length < shown + SHOWN_STEP) older.mutate(chat.older);

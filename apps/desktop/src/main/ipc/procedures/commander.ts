@@ -20,6 +20,7 @@ import {
 } from "../../db/queries/speech-feedback";
 import { listVoiceModels } from "../../models/manager";
 import { VOICE_CATALOG } from "../../models/voice-catalog";
+import { spokenWith } from "../../speech/spoken-with";
 import { publicProcedure, router } from "../trpc";
 
 const turnId = z.string().min(1).max(200);
@@ -85,8 +86,8 @@ export const commanderRouter = router({
 
   /** The person's marks on how these replies were read aloud */
   voiceFeedback: publicProcedure
-    .input(z.object({ turnIds: z.array(turnId).max(200) }))
-    .query(({ ctx, input }) => speechFeedbackFor(ctx.db, input.turnIds)),
+    .input(z.object({ agentId: z.string().min(1).max(200) }))
+    .query(({ ctx, input }) => speechFeedbackFor(ctx.db, input.agentId)),
 
   /** The spoken text is rebuilt here from the reply, as the engine gets it */
   rateVoice: publicProcedure
@@ -100,17 +101,21 @@ export const commanderRouter = router({
       }),
     )
     .mutation(({ ctx, input }) => {
+      const sentences = speechSentences(input.text);
       const settings = commanderVoice(ctx.db);
+      const how = spokenWith(sentences) ?? {
+        voice: settings.voice,
+        speed: settings.speed,
+        model: VOICE_CATALOG[0]?.id ?? "unknown",
+      };
       const note = input.note?.trim();
       saveSpeechFeedback(ctx.db, {
         agentId: input.agentId,
         turnId: input.turnId,
         rating: input.rating,
         note: note ? note : null,
-        voice: settings.voice,
-        speed: settings.speed,
-        model: VOICE_CATALOG[0]?.id ?? "unknown",
-        spoken: speechSentences(input.text).join("\n"),
+        ...how,
+        spoken: sentences.join("\n"),
       });
       return { saved: true };
     }),

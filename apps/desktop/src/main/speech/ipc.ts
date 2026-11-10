@@ -6,6 +6,7 @@ import { getDb } from "../db/client";
 import { modelStatus } from "../models/manager";
 import { VOICE_CATALOG } from "../models/voice-catalog";
 import { floatingChatOf } from "../windows/floating";
+import { noteSpokenWith } from "./spoken-with";
 import { startUtterance, stopUtterance } from "./tts-engine";
 
 const speakInput = z.object({
@@ -34,7 +35,9 @@ async function speak(sender: WebContents, raw: unknown): Promise<SpeakResult> {
     sentences,
     sender,
   });
-  return id ? { id } : { skipped: "no-model" };
+  if (!id) return { skipped: "no-model" };
+  noteSpokenWith(sentences, { voice: settings.voice, speed: settings.speed, model: entry.id });
+  return { id };
 }
 
 /** IPC, not tRPC: the audio goes back only to the window that asked */

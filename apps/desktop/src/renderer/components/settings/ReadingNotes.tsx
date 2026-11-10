@@ -7,7 +7,7 @@ import { feedbackDate, feedbackMarkdown, ratingLabel } from "../../lib/speech-fe
 /** Settings > Models > Voice: the person's marks on how replies were read, newest first */
 export function ReadingNotes() {
   const { data = [], isLoading } = useVoiceFeedbackList();
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<unknown>(null);
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2">
@@ -16,12 +16,15 @@ export function ReadingNotes() {
           <button
             type="button"
             onClick={() =>
-              void navigator.clipboard.writeText(feedbackMarkdown(data)).then(() => setCopied(true))
+              void navigator.clipboard
+                .writeText(feedbackMarkdown(data))
+                .then(() => setCopied(data))
+                .catch(() => {})
             }
             className="flex items-center gap-1 text-[11px] text-text-muted hover:text-text-primary"
           >
             <Copy className="h-3 w-3" aria-hidden="true" />
-            {copied ? "Copied" : "Copy as Markdown"}
+            {copied === data ? "Copied" : "Copy as Markdown"}
           </button>
         )}
       </div>

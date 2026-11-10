@@ -31,7 +31,8 @@ describe("speech feedback", () => {
   it("keeps one record per turn, the last save wins", () => {
     saveSpeechFeedback(db, entry("t1"));
     saveSpeechFeedback(db, entry("t1", { rating: "good", note: null, speed: 1.2 }));
-    const rows = speechFeedbackFor(db, ["t1", "t2"]);
+    saveSpeechFeedback(db, entry("t9", { agentId: "a2" }));
+    const rows = speechFeedbackFor(db, "a1");
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ turnId: "t1", rating: "good", note: null, speed: 1.2 });
     expect(rows[0]).not.toHaveProperty("spoken");
@@ -49,6 +50,6 @@ describe("speech feedback", () => {
     saveSpeechFeedback(db, entry("t1"));
     expect(deleteSpeechFeedback(db, "t1")).toBe(true);
     expect(deleteSpeechFeedback(db, "t1")).toBe(false);
-    expect(speechFeedbackFor(db, ["t1"])).toEqual([]);
+    expect(speechFeedbackFor(db, "a1")).toEqual([]);
   });
 });
