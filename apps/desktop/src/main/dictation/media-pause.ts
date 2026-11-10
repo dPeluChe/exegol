@@ -309,8 +309,10 @@ export function macBackend(runner: Runner, direct: boolean): MediaBackend {
         if (paused) return paused;
       } catch (err) {
         // perl, its bridge or MediaRemote is gone: the direct path may still work
-        const code = (err as { code?: unknown }).code;
-        logger.warn(`[Dictation] Now Playing query failed (exit ${String(code ?? "?")})`);
+        const { code, killed } = err as { code?: unknown; killed?: boolean };
+        logger.warn(
+          `[Dictation] Now Playing query failed (${killed ? "timeout" : `exit ${String(code ?? "?")}`})`,
+        );
       }
       if (!direct) return null;
       try {

@@ -104,6 +104,14 @@ describe("linuxBackend", () => {
   });
 });
 
+describe.skipIf(process.platform !== "darwin")("macOS Now Playing script", () => {
+  it("compiles (perl -c runs none of it, so nothing is paused or played)", () => {
+    const script = parseMrPause("paused\ta\tb\t1")?.resume.args[1] ?? "";
+    expect(script).toContain("utf8::encode");
+    execFileSync("/usr/bin/perl", ["-c", "-e", script], { stdio: "pipe" });
+  });
+});
+
 describe.skipIf(process.platform === "win32")("linux resume script", () => {
   let dir: string;
   beforeEach(() => {
