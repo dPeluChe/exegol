@@ -7,6 +7,7 @@ import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { MODELS_DIR, modelDir } from "../models/manager";
 import { type AudioChunk, CACHE_MAX_BYTES, clipKey, getClip, putClip } from "./audio-cache";
+import { releaseReadingMedia } from "./reading-media";
 import { ttsSpec, voiceOf } from "./tts-config";
 import type { TtsReply, TtsRequest } from "./tts-protocol";
 
@@ -196,6 +197,7 @@ export function stopUtterance(id?: string): void {
 
 /** Synthesis stops and every window drops the audio it still holds: a finished clip keeps playing otherwise */
 export function hushSpeech(): void {
+  releaseReadingMedia();
   stopUtterance();
   broadcast("speech:end", { id: "", stopped: true, all: true });
 }
