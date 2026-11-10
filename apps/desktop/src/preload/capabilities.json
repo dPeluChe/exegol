@@ -62,6 +62,7 @@
       "removeFollowUp",
       "resetProviderArgs",
       "screenDialog",
+      "screenGate",
       "sessionFolder",
       "sessionNames",
       "setActiveView",

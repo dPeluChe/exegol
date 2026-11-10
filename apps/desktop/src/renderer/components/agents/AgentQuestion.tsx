@@ -15,6 +15,18 @@ export function useScreenDialog(agentId: string, enabled: boolean) {
   }).data;
 }
 
+/** A prompt with no numbered options (a CLI's trust gate): only its terminal answers it */
+export function useScreenGate(agentId: string, enabled: boolean) {
+  return (
+    useQuery({
+      queryKey: ["screenGate", agentId],
+      queryFn: () => trpcInvoke<boolean>("agents.screenGate", { id: agentId }),
+      enabled,
+      refetchInterval: 2_000,
+    }).data === true
+  );
+}
+
 /** The question an agent waits on, read from its screen, answered without opening the pane */
 export function AgentQuestion({ agentId, enabled }: { agentId: string; enabled: boolean }) {
   const queryClient = useQueryClient();

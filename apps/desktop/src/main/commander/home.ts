@@ -1,6 +1,5 @@
 import { existsSync } from "node:fs";
 import { mkdir, writeFile } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import {
   COMMANDER_VOICE_KEY,
@@ -15,9 +14,9 @@ import { createProject, getProject } from "../db/queries/projects";
 import { getJsonSetting, setJsonSetting } from "../db/queries/settings";
 import { initGitRepo } from "../ipc/procedures/project-folder";
 import { COMMANDER_BRIEF } from "./brief";
+import { COMMANDER_DIR } from "./dir";
 
 export const COMMANDER_NAME = "Commander";
-const COMMANDER_DIR = join(homedir(), ".exegol", "commander");
 const PROJECT_KEY = "commander_project_id";
 const AUTONOMY_KEY = "commander_autonomy";
 const FEED_KEY = "commander_feed";

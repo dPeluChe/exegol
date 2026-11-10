@@ -32,7 +32,7 @@ import { type AgentState, useAgentStore } from "../../../stores/agents";
 import { DEFAULT_CHAT_FONT, useAppStore } from "../../../stores/app";
 import { setChatDraft, useChatDraftStore } from "../../../stores/chat-drafts";
 import { toastError } from "../../../stores/toasts";
-import { AgentQuestion, useScreenDialog } from "../../agents/AgentQuestion";
+import { AgentQuestion, useScreenDialog, useScreenGate } from "../../agents/AgentQuestion";
 import { AgentIcon } from "../../common/AgentIcon";
 import { DictationWidget } from "../../layout/StatusBarDictation";
 import { FollowUpList, useFollowUps } from "../../terminal/FollowUpControl";
@@ -180,9 +180,10 @@ function ChatInput({ agent, onTerminal, dictation }: InputProps) {
   const dialog = useScreenDialog(agent.id, accepts);
   const attention = useAgentStore((s) => s.attentionItems[agent.id]);
   const claudeAsks = isClaudeQuestion(attention, agent);
+  const gate = useScreenGate(agent.id, accepts && !dialog);
   const asks = answersPrompt({
     status: agent.status,
-    dialogOnScreen: !!dialog,
+    dialogOnScreen: !!dialog || gate,
     awaitingAnswer: claudeAsks,
   });
   const atPrompt = agent.status === "waiting_input" || agent.status === "idle";
@@ -244,7 +245,7 @@ function ChatInput({ agent, onTerminal, dictation }: InputProps) {
       {dialog ? (
         <AgentQuestion agentId={agent.id} enabled={accepts} />
       ) : (
-        claudeAsks &&
+        (claudeAsks || gate) &&
         (onTerminal ? (
           <button
             type="button"

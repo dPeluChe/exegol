@@ -45,7 +45,7 @@ export function CommanderFleet({
   const projects = new Set(sessions.map((a) => a.projectId)).size;
   const quiet = groups.idle.length;
   return (
-    <aside className="hidden min-h-0 w-80 shrink-0 flex-col rounded-lg border border-border bg-bg-secondary lg:flex">
+    <aside className="hidden min-h-0 w-80 shrink-0 flex-col rounded-lg border border-border bg-bg-secondary lg:flex xl:w-2/5 2xl:w-1/2">
       <div className="border-b border-border px-3 py-2">
         <div className="text-xs font-medium text-text-primary">Fleet</div>
         <div className="text-[10px] text-text-muted">
@@ -53,7 +53,7 @@ export function CommanderFleet({
         </div>
       </div>
       <ScrollArea className="min-h-0 flex-1">
-        <div className="flex flex-col gap-3 p-2">
+        <div className="grid grid-cols-1 content-start gap-3 p-2 xl:grid-cols-2 2xl:grid-cols-3">
           {LISTED.map(([state, label]) => {
             const list = groups[state];
             if (list.length === 0) return null;
@@ -86,10 +86,14 @@ export function CommanderFleet({
             );
           })}
           {sessions.length === quiet && (
-            <p className="px-1 text-[11px] text-text-muted">Nothing needs you right now.</p>
+            <p className="col-span-full px-1 text-[11px] text-text-muted">
+              Nothing needs you right now.
+            </p>
           )}
           {quiet > 0 && (
-            <p className="px-1 text-[10px] text-text-muted">{quiet} waiting at their prompt</p>
+            <p className="col-span-full px-1 text-[10px] text-text-muted">
+              {quiet} waiting at their prompt
+            </p>
           )}
         </div>
       </ScrollArea>

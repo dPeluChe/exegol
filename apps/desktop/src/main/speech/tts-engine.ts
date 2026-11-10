@@ -56,7 +56,7 @@ function onReply(msg: TtsReply): void {
       end(u);
       return;
     case "failed":
-      if (msg.error !== "cancelled") logger.warn("[Speech] synthesis failed");
+      if (msg.error !== "cancelled") logger.warn(`[Speech] synthesis failed: ${msg.error}`);
       end(u, { error: "The voice could not read this reply" });
       return;
   }
