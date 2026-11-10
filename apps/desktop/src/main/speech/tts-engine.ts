@@ -5,6 +5,7 @@ import type { SpeechAudioEvent, SpeechEndEvent, VoiceModelEntry } from "@exegol/
 import { type UtilityProcess, utilityProcess, type WebContents } from "electron";
 import { logger } from "../lib/logger";
 import { MODELS_DIR, modelDir } from "../models/manager";
+import { type AudioChunk, CACHE_MAX_BYTES, clipKey, getClip, putClip } from "./audio-cache";
 import { ttsSpec, voiceOf } from "./tts-config";
 import type { TtsReply, TtsRequest } from "./tts-protocol";
 
@@ -14,7 +15,12 @@ const RESPAWN_LIMIT = 3;
 
 interface Utterance {
   id: string;
-  sender: WebContents;
+  /** null: made ahead of time, for the cache only */
+  sender: WebContents | null;
+  key: string;
+  wanted: number;
+  chunks: AudioChunk[];
+  bytes: number;
   startedAt: number;
   firstAudioMs: number | null;
   onGone: () => void;
@@ -30,12 +36,12 @@ function send(message: TtsRequest): void {
 }
 
 function toSender(u: Utterance, channel: string, payload: SpeechAudioEvent | SpeechEndEvent) {
-  if (!u.sender.isDestroyed()) u.sender.send(channel, payload);
+  if (u.sender && !u.sender.isDestroyed()) u.sender.send(channel, payload);
 }
 
 function end(u: Utterance, outcome: { error?: string; stopped?: boolean } = {}): void {
   if (current === u) current = null;
-  u.sender.off("destroyed", u.onGone);
+  u.sender?.off("destroyed", u.onGone);
   toSender(u, "speech:end", { id: u.id, ...outcome });
   touch();
 }
@@ -46,12 +52,18 @@ function onReply(msg: TtsReply): void {
   switch (msg.type) {
     case "audio":
       u.firstAudioMs ??= Date.now() - u.startedAt;
+      // A read too long to keep stops collecting: putClip would refuse it anyway
+      if (u.bytes <= CACHE_MAX_BYTES) {
+        u.chunks.push({ samples: msg.samples, sampleRate: msg.sampleRate });
+        u.bytes += msg.samples.byteLength;
+      }
       toSender(u, "speech:audio", { id: u.id, samples: msg.samples, sampleRate: msg.sampleRate });
       return;
     case "done":
       crashes = 0;
+      if (msg.sentences === u.wanted) putClip(u.key, u.chunks);
       logger.info(
-        `[Speech] read ${msg.sentences} sentence(s): first audio ${u.firstAudioMs ?? "-"}ms, load ${msg.loadMs}ms, synth ${msg.synthMs}ms`,
+        `[Speech] ${u.sender ? "read" : "prepared"} ${msg.sentences} sentence(s): first audio ${u.firstAudioMs ?? "-"}ms, load ${msg.loadMs}ms, synth ${msg.synthMs}ms`,
       );
       end(u);
       return;
@@ -89,35 +101,74 @@ function touch(): void {
   idleTimer.unref?.();
 }
 
-/** Starts reading `sentences` for `sender`; any utterance playing stops first */
-export function startUtterance(opts: {
+interface UtteranceInput {
   entry: VoiceModelEntry;
   voiceId: string;
   speed: number;
   sentences: string[];
-  sender: WebContents;
-}): string | null {
-  if (crashes >= RESPAWN_LIMIT) return null;
+}
+
+/** Kept audio to a window, then its end */
+function replay(sender: WebContents, id: string, chunks: AudioChunk[]): void {
+  if (sender.isDestroyed()) return;
+  for (const chunk of chunks) sender.send("speech:audio", { id, ...chunk });
+  sender.send("speech:end", { id });
+  logger.info(`[Speech] played ${chunks.length} prepared sentence(s)`);
+}
+
+/** The reply being prepared is the one asked for: the window gets what is made so far and
+ *  the rest as it comes, instead of starting over */
+function adopt(u: Utterance, sender: WebContents): string {
+  // After the id reached the window: it tells its audio by that id
+  setImmediate(() => {
+    if (current !== u) {
+      const clip = getClip(u.key);
+      if (clip) replay(sender, u.id, clip);
+      else if (!sender.isDestroyed()) sender.send("speech:end", { id: u.id, stopped: true });
+      return;
+    }
+    for (const chunk of u.chunks) sender.send("speech:audio", { id: u.id, ...chunk });
+    u.sender = sender;
+    sender.once("destroyed", u.onGone);
+  });
+  return u.id;
+}
+
+function begin(opts: UtteranceInput, sender: WebContents | null): string | null {
   const voice = voiceOf(opts.entry, opts.voiceId);
-  const threads = Math.max(1, Math.min(4, Math.floor(availableParallelism() / 2)));
   if (!voice) return null;
-  const spec = ttsSpec(opts.entry, modelDir(opts.entry.id), voice, threads);
+  const key = clipKey(opts.sentences, voice.id, opts.speed);
+  const ready = getClip(key);
+  if (!sender && (ready || current)) return null;
+  if (sender && !ready && current && !current.sender && current.key === key) {
+    return adopt(current, sender);
+  }
   stopUtterance();
-  child ??= spawn();
   const id = randomUUID();
+  if (ready && sender) {
+    setImmediate(() => replay(sender, id, ready));
+    return id;
+  }
+  if (crashes >= RESPAWN_LIMIT) return null;
   const u: Utterance = {
     id,
-    sender: opts.sender,
+    sender,
+    key,
+    wanted: opts.sentences.length,
+    chunks: [],
+    bytes: 0,
     startedAt: Date.now(),
     firstAudioMs: null,
     onGone: () => stopUtterance(id),
   };
   current = u;
-  opts.sender.once("destroyed", u.onGone);
+  sender?.once("destroyed", u.onGone);
+  const threads = Math.max(1, Math.min(4, Math.floor(availableParallelism() / 2)));
+  child ??= spawn();
   send({
     type: "speak",
     id,
-    spec,
+    spec: ttsSpec(opts.entry, modelDir(opts.entry.id), voice, threads),
     sid: voice.speakerId,
     speed: opts.speed,
     sentences: opts.sentences,
@@ -125,6 +176,14 @@ export function startUtterance(opts: {
   touch();
   return id;
 }
+
+/** Starts reading `sentences` for `sender`; any utterance playing stops first. Audio made
+ *  before plays at once */
+export const startUtterance = (opts: UtteranceInput & { sender: WebContents }): string | null =>
+  begin(opts, opts.sender);
+
+/** Makes the audio ahead of time, only while nothing else is being read */
+export const prepareUtterance = (opts: UtteranceInput): boolean => begin(opts, null) !== null;
 
 /** Stops the given utterance, or whichever plays */
 export function stopUtterance(id?: string): void {
