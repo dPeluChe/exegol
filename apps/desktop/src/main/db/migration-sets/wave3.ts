@@ -458,4 +458,9 @@ export const wave3Migrations: Migration[] = [
       );
     `,
   },
+  {
+    // T224. Who writes to whom is read per pair of sessions, for the whole fleet
+    id: "w3_041_messages_pair_index",
+    sql: "CREATE INDEX IF NOT EXISTS idx_messages_pair ON messages(from_agent_id, to_agent_id);",
+  },
 ];

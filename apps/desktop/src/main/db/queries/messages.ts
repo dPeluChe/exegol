@@ -2,6 +2,8 @@ import type { AgentMessage, AgentMessageType, MessageDeliveryState } from "@exeg
 import type Database from "libsql";
 import { nanoid } from "./helpers";
 
+const marks = (ids: string[]) => ids.map(() => "?").join(",");
+
 // ─── Row Mapper ──────────────────────────────────────────────────────────────
 
 function mapMessageRow(row: Record<string, unknown>): AgentMessage {
@@ -157,7 +159,7 @@ export function markMessagesUndeliverable(db: Database.Database, ids: string[]):
   if (ids.length === 0) return;
   db.prepare(
     `UPDATE messages SET delivery_state = 'undeliverable'
-     WHERE id IN (${ids.map(() => "?").join(",")})
+     WHERE id IN (${marks(ids)})
        AND (delivery_state IS NULL
             OR delivery_state NOT IN ('consumed', 'cancelled', 'undeliverable'))`,
   ).run(...ids);
@@ -183,4 +185,112 @@ export function markStaleQueuedUndeliverable(db: Database.Database): number {
     .prepare("UPDATE messages SET delivery_state = 'undeliverable' WHERE delivery_state = 'queued'")
     .run();
   return Number(res.changes ?? 0);
+}
+
+// ─── Talk between sessions (T224) ────────────────────────────────────────────
+
+export interface TalkPair {
+  fromId: string;
+  toId: string;
+  /** Seconds, of the pair's newest message in this direction */
+  at: number;
+  seq: number;
+}
+
+/** The newest message per ordered pair among `ids`, since `sinceSec` */
+export function listTalkPairs(db: Database.Database, ids: string[], sinceSec: number): TalkPair[] {
+  if (ids.length < 2) return [];
+  return db
+    .prepare(
+      `SELECT from_agent_id AS fromId, to_agent_id AS toId,
+              MAX(created_at) AS at, MAX(rowid) AS seq
+       FROM messages
+       WHERE created_at >= ?
+         AND from_agent_id IN (${marks(ids)}) AND to_agent_id IN (${marks(ids)})
+       GROUP BY from_agent_id, to_agent_id`,
+    )
+    .all(sinceSec, ...ids, ...ids) as TalkPair[];
+}
+
+export interface NewTalk {
+  fromId: string;
+  toId: string;
+  chars: number;
+  /** The pair's message before this one went the other way, in the 24 hours before it */
+  answered: boolean;
+}
+
+export function messageCursor(db: Database.Database): number {
+  const row = db.prepare("SELECT COALESCE(MAX(rowid), 0) AS top FROM messages").get() as {
+    top: number;
+  };
+  return row.top;
+}
+
+/** Messages among `ids` written after `afterRow`, oldest first; never their text */
+export function listTalkSince(db: Database.Database, ids: string[], afterRow: number): NewTalk[] {
+  if (ids.length < 2) return [];
+  const rows = db
+    .prepare(
+      `SELECT m.from_agent_id AS fromId, m.to_agent_id AS toId, LENGTH(m.content) AS chars,
+              COALESCE((SELECT MAX(p.rowid) FROM messages p
+                        WHERE p.from_agent_id = m.to_agent_id AND p.to_agent_id = m.from_agent_id
+                          AND p.rowid < m.rowid AND p.created_at >= m.created_at - 86400), 0)
+              > COALESCE((SELECT MAX(p.rowid) FROM messages p
+                          WHERE p.from_agent_id = m.from_agent_id AND p.to_agent_id = m.to_agent_id
+                            AND p.rowid < m.rowid), 0) AS answered
+       FROM messages m
+       WHERE m.rowid > ?
+         AND m.from_agent_id IN (${marks(ids)}) AND m.to_agent_id IN (${marks(ids)})
+       ORDER BY m.rowid ASC`,
+    )
+    .all(afterRow, ...ids, ...ids) as (Omit<NewTalk, "answered"> & { answered: number })[];
+  return rows.map((r) => ({ ...r, answered: r.answered === 1 }));
+}
+
+/** Between two sessions whose rows exist: both ids and their names are known */
+export type SessionMessage = Omit<AgentMessage, "fromAgentId" | "toAgentId"> & {
+  fromAgentId: string;
+  toAgentId: string;
+  fromAlias: string | null;
+  toAlias: string | null;
+};
+
+// Inner joins: a message with no sender (a system notice) is not talk between sessions
+const SESSION_MESSAGE = `SELECT m.*, fa.alias AS from_alias, ta.alias AS to_alias
+  FROM messages m
+  JOIN agents fa ON fa.id = m.from_agent_id
+  JOIN agents ta ON ta.id = m.to_agent_id`;
+
+const mapSessionMessage = (row: Record<string, unknown>): SessionMessage => ({
+  ...mapMessageRow(row),
+  fromAgentId: row.from_agent_id as string,
+  toAgentId: row.to_agent_id as string,
+  fromAlias: (row.from_alias as string) ?? null,
+  toAlias: (row.to_alias as string) ?? null,
+});
+
+/** The newest messages `agentId` sent or received (with `withId` only, when given), oldest first */
+export function listSessionMessages(
+  db: Database.Database,
+  agentId: string,
+  withId: string | null,
+  limit: number,
+): SessionMessage[] {
+  const rows = db
+    .prepare(
+      `${SESSION_MESSAGE}
+       WHERE (m.from_agent_id = ?1 AND (?2 IS NULL OR m.to_agent_id = ?2))
+          OR (m.to_agent_id = ?1 AND (?2 IS NULL OR m.from_agent_id = ?2))
+       ORDER BY m.rowid DESC LIMIT ?3`,
+    )
+    .all(agentId, withId, limit);
+  return (rows as Record<string, unknown>[]).map(mapSessionMessage).reverse();
+}
+
+export function getSessionMessage(db: Database.Database, id: string): SessionMessage | null {
+  const row = db.prepare(`${SESSION_MESSAGE} WHERE m.id = ?`).get(id) as
+    | Record<string, unknown>
+    | undefined;
+  return row ? mapSessionMessage(row) : null;
 }

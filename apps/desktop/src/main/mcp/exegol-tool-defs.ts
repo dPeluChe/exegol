@@ -238,6 +238,7 @@ const READ_ONLY = new Set<ExegolToolName>([
   "note_list",
   "note_read",
   "note_search",
+  "session_messages",
 ]);
 
 export const EXEGOL_TOOL_DEFS: ExegolToolDef<ExegolToolName>[] = [
