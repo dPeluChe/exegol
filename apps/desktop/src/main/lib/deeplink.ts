@@ -41,8 +41,11 @@ export function parseCaptureLink(link: string): CaptureLink | null {
   const field = (name: string, max: number) =>
     parsed.searchParams.get(name)?.trim().slice(0, max) || null;
   const raw = field("url", 2_000);
-  const url = raw && /^https?:\/\//i.test(raw) ? raw : null;
-  const capture = { title: field("title", 120), url, text: field("text", CAPTURE_TEXT_MAX) };
+  const text = field("text", CAPTURE_TEXT_MAX);
+  // A share sheet sends a link as plain text: one bare link is the url
+  const bare = !raw && text && text.length <= 2_000 && /^https?:\/\/\S+$/i.test(text);
+  const url = bare ? text : raw && /^https?:\/\//i.test(raw) ? raw : null;
+  const capture = { title: field("title", 120), url, text: bare ? null : text };
   return capture.url || capture.text ? capture : null;
 }
 
