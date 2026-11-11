@@ -1,3 +1,4 @@
+import type { SessionMove } from "../db/queries/agent-lineage";
 import type { NewTalk } from "../db/queries/messages";
 import { type FleetProject, type SessionState, sessionName } from "./fleet";
 
@@ -56,12 +57,25 @@ export function feedSnapshot(fleet: FleetProject[], personalWaiting: number): Fe
 }
 
 /** What changed between two looks at the fleet, as the Commander should hear it */
-export function feedEvents(prev: FeedSnapshot, next: FeedSnapshot): FeedEvent[] {
+export function feedEvents(
+  prev: FeedSnapshot,
+  next: FeedSnapshot,
+  moves: Map<string, SessionMove> = new Map(),
+): FeedEvent[] {
   const events: FeedEvent[] = [];
+  const continued = new Set<string>();
   for (const [id, now] of next.sessions) {
     const before = prev.sessions.get(id);
-    if (!before) continue;
     const who = `${now.name} (${now.project})`;
+    if (!before) {
+      const source = moves.get(id)?.resumedFrom;
+      if (!source) continue;
+      continued.add(source);
+      // Same key as its "suspended" line: one not sent yet becomes this one
+      const verb = prev.sessions.has(source) ? "restarted" : "resumed";
+      events.push({ key: source, line: `${who} ${verb}: the same session, still open` });
+      continue;
+    }
     if (before.unanswered < UNANSWERED_MINUTES && now.unanswered >= UNANSWERED_MINUTES) {
       events.push({
         key: id,
@@ -85,9 +99,11 @@ export function feedEvents(prev: FeedSnapshot, next: FeedSnapshot): FeedEvent[] 
     }
   }
   for (const [id, before] of prev.sessions) {
-    if (!next.sessions.has(id)) {
-      events.push({ key: id, line: `${before.name} (${before.project}) closed` });
-    }
+    if (next.sessions.has(id) || continued.has(id)) continue;
+    const end = moves.get(id)?.suspended
+      ? "suspended: its work is kept, it can be resumed"
+      : "closed";
+    events.push({ key: id, line: `${before.name} (${before.project}) ${end}` });
   }
   for (const [project, count] of next.inbox) {
     if (count > (prev.inbox.get(project) ?? 0)) {
