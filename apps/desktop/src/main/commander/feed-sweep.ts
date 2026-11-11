@@ -1,6 +1,7 @@
 import type Database from "libsql";
 import { needsUser } from "../agents/agent-message-queue";
 import { sendSystemMessage } from "../agents/agent-messaging";
+import { sessionMoves } from "../db/queries/agent-lineage";
 import { listActiveAgents } from "../db/queries/agents";
 import { countPersonalThreads } from "../db/queries/inbox";
 import { listTalkSince, messageCursor } from "../db/queries/messages";
@@ -54,7 +55,13 @@ async function checkFeed(db: Database.Database, now = Date.now()): Promise<void>
     return;
   }
   const next = feedSnapshot(fleetOf(db, commander.id, agents), countPersonalThreads(db));
-  const events = last ? feedEvents(last, next) : [];
+  const before = last;
+  const moved = before
+    ? [...before.sessions.keys(), ...next.sessions.keys()].filter(
+        (id) => !(before.sessions.has(id) && next.sessions.has(id)),
+      )
+    : [];
+  const events = before ? feedEvents(before, next, sessionMoves(db, moved)) : [];
   last = next;
   for (const event of events) {
     const turnEnded = event.holds?.state === "at_prompt" && event.line.endsWith(ENDED);

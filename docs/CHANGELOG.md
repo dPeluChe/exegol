@@ -15,6 +15,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - `Cmd+.` no longer stops the focused session: one stray key ended it with no warning. Stop Agent stays in the Command Palette
 
 ### Added
+- Chat: a Copy button under each reply of a session (Company, the Commander and its floating chat) copies it as written
 - Main session: a Main control in a session's toolbar marks it as the project's main one, or clears the mark so the first session opened is main again; the mark survives a resume or CLI restart, the Commander sees the same one, and Company desks and the Commander's fleet show a Main badge where a project has two or more sessions (T224)
 - Commander: it sees which session is a project's main one (the first opened; a resume or restart keeps it) and which sessions write to each other, reads their messages as short previews with the length before asking for one in full (`session_messages`), and its feed says when one session wrote to or answered another (T224)
 - **Commander**: replies it ended while you were not looking at its chat are counted on the Commander and Combined tabs and on the sidebar's Dashboard button, and the chat marks where they begin; they are read once its chat (the panel, its terminal view or the floating window) is in view (T224)
@@ -79,6 +80,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Browser panes search from the address bar: `?telnyx`, or words that are not an address, open a Google search; `localhost:3000`, `example.com` and full URLs still go straight there
 
 ### Fixed
+- Commander feed: a session that was suspended or restarted (a CLI update) is no longer reported as closed; it says suspended, restarted or resumed
 - Dictation: stopping right as you finish speaking no longer drops the last word; the microphone stays open until you go quiet (0.6 s at most) for every stop, not only hold-to-talk
 - Inbox capture: a link sent as plain text (a share sheet, `exegol://capture?text=`) is captured as a link, not as text
 - A browser pane no longer reloads when you switch to another project and come back: the page, a half-filled form and its scroll stay as they were, for the last 3 projects shown (it used to unmount while its project was hidden)

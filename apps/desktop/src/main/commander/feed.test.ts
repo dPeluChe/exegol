@@ -47,6 +47,22 @@ describe("the Commander's feed", () => {
     expect(feedEvents(after, after)).toEqual([]);
   });
 
+  it("tells a suspended or restarted session from a closed one", () => {
+    const before = feedSnapshot(fleet({ a: "working", b: "working", c: "working" }), 0);
+    const after = feedSnapshot(fleet({ a2: "working", z: "working", y: "working" }), 0);
+    const moves = new Map([
+      ["a2", { resumedFrom: "a", suspended: false }],
+      ["b", { resumedFrom: null, suspended: true }],
+      ["y", { resumedFrom: "gone", suspended: false }],
+    ]);
+    expect(feedEvents(before, after, moves).map((e) => [e.key, e.line])).toEqual([
+      ["a", "a2 (Landing) restarted: the same session, still open"],
+      ["gone", "y (Landing) resumed: the same session, still open"],
+      ["b", "b (Landing) suspended: its work is kept, it can be resumed"],
+      ["c", "c (Landing) closed"],
+    ]);
+  });
+
   it("drops what no longer holds when it is sent, and caps the lines", () => {
     const before = feedSnapshot(fleet({ a: "working", b: "working" }), 0);
     const ended = feedSnapshot(fleet({ a: "at_prompt", b: "at_prompt" }), 0);

@@ -43,6 +43,7 @@ import { FollowUpList, useFollowUps } from "../../terminal/FollowUpControl";
 import { DELIVERY, peerName, useAgentMessages } from "./AgentMessages";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { ChatWorking } from "./ChatWorking";
+import { CopyReply } from "./CopyReply";
 import { RateReading } from "./RateReading";
 import { SpeakButton } from "./SpeakButton";
 
@@ -142,27 +143,21 @@ function BubbleBody({ bubble, agentId, cliType, formatted, voiceReady, feedback 
             <p className="whitespace-pre-wrap break-words font-mono text-[11px]">{bubble.text}</p>
           )}
         </div>
-        {(time || voiceReady !== undefined) && (
-          <div className="flex items-center gap-1 pl-1">
-            {time && <span className="text-[9px] text-text-muted">{time}</span>}
-            {voiceReady !== undefined && (
-              <SpeakButton
-                turnId={bubble.id}
-                text={bubble.text}
-                agentId={agentId}
-                ready={voiceReady}
-              />
-            )}
-            {voiceReady && (
-              <RateReading
-                turnId={bubble.id}
-                text={bubble.text}
-                agentId={agentId}
-                saved={feedback}
-              />
-            )}
-          </div>
-        )}
+        <div className="flex items-center gap-1 pl-1">
+          {time && <span className="text-[9px] text-text-muted">{time}</span>}
+          <CopyReply text={bubble.text} />
+          {voiceReady !== undefined && (
+            <SpeakButton
+              turnId={bubble.id}
+              text={bubble.text}
+              agentId={agentId}
+              ready={voiceReady}
+            />
+          )}
+          {voiceReady && (
+            <RateReading turnId={bubble.id} text={bubble.text} agentId={agentId} saved={feedback} />
+          )}
+        </div>
       </div>
     </div>
   );
