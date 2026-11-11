@@ -24,6 +24,7 @@
 | [../CONTRIBUTING.md](../CONTRIBUTING.md) / [../AGENTS.md](../AGENTS.md) | How to contribute, for people and for AI agents |
 | [RESEARCH/COLABS_INBOX_NOTES_DESIGN_2026_11.md](./RESEARCH/COLABS_INBOX_NOTES_DESIGN_2026_11.md) | Design for T217: colabs, inbox and notes, with usage numbers and outside evidence |
 | [RESEARCH/HIDE_COMPARISON_2026_11.md](./RESEARCH/HIDE_COMPARISON_2026_11.md) | Hide compared with Exegol and what came of it |
+| [RESEARCH/ROMA_ANALYSIS_2026_11.md](./RESEARCH/ROMA_ANALYSIS_2026_11.md) | Roma (a to-do list for agents over MCP) compared with Exegol: elements to weigh for the Commander |
 | [RESEARCH/WEBGPU_RENDERER_2026_10.md](./RESEARCH/WEBGPU_RENDERER_2026_10.md) | WebGPU vs WebGL terminal rendering (wraithterm), benchmark and the atlas churn guard |
 | [RESEARCH/PERF_AUDIT_2026_10.md](./RESEARCH/PERF_AUDIT_2026_10.md) | Performance audit: renders, bundle, requests, DB, assets and packaging, with ids to pick from |
 | [RESEARCH/KEEP_MOUNTED_PROJECTS_2026_10.md](./RESEARCH/KEEP_MOUNTED_PROJECTS_2026_10.md) | Keep the last projects mounted on a switch: what breaks, cost, phased design |
