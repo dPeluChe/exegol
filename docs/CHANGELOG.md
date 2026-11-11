@@ -15,6 +15,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - `Cmd+.` no longer stops the focused session: one stray key ended it with no warning. Stop Agent stays in the Command Palette
 
 ### Added
+- Commander chat: typing `@` offers the names of projects and live sessions (arrows, Enter or Tab to pick, Esc to close), so a request names exactly which one
 - Chat: a Copy button under each reply of a session (Company, the Commander and its floating chat) copies it as written
 - Main session: a Main control in a session's toolbar marks it as the project's main one, or clears the mark so the first session opened is main again; the mark survives a resume or CLI restart, the Commander sees the same one, and Company desks and the Commander's fleet show a Main badge where a project has two or more sessions (T224)
 - Commander: it sees which session is a project's main one (the first opened; a resume or restart keeps it) and which sessions write to each other, reads their messages as short previews with the length before asking for one in full (`session_messages`), and its feed says when one session wrote to or answered another (T224)
@@ -121,6 +122,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - The "What's new" dialog shows the update's download progress (a bar and the percent), as the title-bar button does, instead of only "Downloading"
 
 ### Changed
+- Chat input: the message box grows upward with a long message (up to about ten lines, then it scrolls) instead of staying two lines tall
 - Inbox: a thread's messages show as formatted text (Markdown, with links that open in the browser on a click), a long one in its own box that scrolls and can be dragged taller, and the top bar panel opens a little shorter
 - MCP and agent browser code split into smaller modules, no behavior change
 - Log files write your home folder as `~`, and reconnecting sessions at startup logs half as many lines

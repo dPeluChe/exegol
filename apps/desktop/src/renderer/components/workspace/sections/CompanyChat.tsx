@@ -42,6 +42,7 @@ import { DictationWidget } from "../../layout/StatusBarDictation";
 import { FollowUpList, useFollowUps } from "../../terminal/FollowUpControl";
 import { DELIVERY, peerName, useAgentMessages } from "./AgentMessages";
 import { ChatMarkdown } from "./ChatMarkdown";
+import { MentionMenu, useMentions } from "./ChatMentions";
 import { ChatWorking } from "./ChatWorking";
 import { CopyReply } from "./CopyReply";
 import { RateReading } from "./RateReading";
@@ -181,9 +182,11 @@ interface InputProps {
   /** Absent in a floating window: no terminal to switch to there */
   onTerminal?: () => void;
   dictation: boolean;
+  /** The Commander's chat: `@` offers project and session names */
+  mentions: boolean;
 }
 
-function ChatInput({ agent, onTerminal, dictation }: InputProps) {
+function ChatInput({ agent, onTerminal, dictation, mentions }: InputProps) {
   const draft = useChatDraftStore((s) => s.drafts[agent.id] ?? "");
   const setDraft = (text: string) => setChatDraft(agent.id, text);
   const accepts = acceptsFollowUps(agent);
@@ -198,6 +201,12 @@ function ChatInput({ agent, onTerminal, dictation }: InputProps) {
   });
   const atPrompt = agent.status === "waiting_input" || agent.status === "idle";
   const queued = useFollowUps(agent.id, accepts);
+  const mention = useMentions({
+    enabled: mentions,
+    ownProjectId: agent.projectId,
+    draft,
+    setDraft,
+  });
 
   // From the store: a saved image lands after renders that may have changed the draft
   const attach = (text: string) => {
@@ -272,16 +281,19 @@ function ChatInput({ agent, onTerminal, dictation }: InputProps) {
       {typed && (
         <p className="truncate text-[10px] text-text-muted">Typed in the terminal: {typed}</p>
       )}
-      <div className="flex items-end gap-1.5">
+      <div className="relative flex items-end gap-1.5">
+        <MentionMenu options={mention.options} active={mention.active} onPick={mention.pick} />
         <textarea
+          ref={mention.inputRef}
           data-chat-input
           value={draft}
-          rows={2}
           disabled={asks}
           onChange={(e) => {
             setDraft(e.target.value);
             setTyped(null);
+            mention.track();
           }}
+          onSelect={mention.track}
           onPaste={(e) => {
             const files = finderFilesToPaste(e.clipboardData);
             if (!files && !hasClipboardImage(e.clipboardData)) return;
@@ -293,7 +305,8 @@ function ChatInput({ agent, onTerminal, dictation }: InputProps) {
               });
           }}
           onKeyDown={(e) => {
-            if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
+            if (e.nativeEvent.isComposing || mention.onKeyDown(e)) return;
+            if (e.key !== "Enter" || e.shiftKey) return;
             e.preventDefault();
             submit();
           }}
@@ -305,7 +318,7 @@ function ChatInput({ agent, onTerminal, dictation }: InputProps) {
                 : "Sends when this turn ends"
           }
           aria-label="Message this session"
-          className="min-w-0 flex-1 resize-none rounded border border-border bg-bg-primary px-2 py-1.5 text-xs text-text-primary outline-none placeholder:text-text-muted focus:border-accent disabled:opacity-60"
+          className="field-sizing-content max-h-40 min-h-11 min-w-0 flex-1 resize-none rounded border border-border bg-bg-primary px-2 py-1.5 text-xs text-text-primary outline-none placeholder:text-text-muted focus:border-accent disabled:opacity-60"
         />
         {dictation && <DictationWidget />}
         <button
@@ -418,7 +431,7 @@ export function CompanyChat({
           <ChatWorking agent={agent} />
         </div>
       </div>
-      <ChatInput agent={agent} onTerminal={onTerminal} dictation={dictation} />
+      <ChatInput agent={agent} onTerminal={onTerminal} dictation={dictation} mentions={speak} />
     </div>
   );
 }
