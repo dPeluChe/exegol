@@ -79,6 +79,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Browser panes search from the address bar: `?telnyx`, or words that are not an address, open a Google search; `localhost:3000`, `example.com` and full URLs still go straight there
 
 ### Fixed
+- Dictation: stopping right as you finish speaking no longer drops the last word; the microphone stays open until you go quiet (0.6 s at most) for every stop, not only hold-to-talk
 - Inbox capture: a link sent as plain text (a share sheet, `exegol://capture?text=`) is captured as a link, not as text
 - A browser pane no longer reloads when you switch to another project and come back: the page, a half-filled form and its scroll stay as they were, for the last 3 projects shown (it used to unmount while its project was hidden)
 - Dictation and readings pause what plays again when the track's title has characters outside Latin-1 (Japanese, emoji, curly punctuation): the Now Playing query failed on them and nothing was paused, in any browser or app. A failed query now leaves a warning in the log
