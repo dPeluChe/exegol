@@ -37,6 +37,12 @@ const settle = () => new Promise((r) => setTimeout(r, 0));
 /** One second of speech-level audio at 16 kHz */
 const speech = () => new Float32Array(16_000).fill(0.3);
 
+/** A phrase and the quiet after it: a stop then has no tail to wait for */
+function say(): void {
+  feed(speech());
+  feed(new Float32Array(16_000));
+}
+
 async function startRecording(): Promise<void> {
   chordDown();
   await settle();
@@ -86,17 +92,17 @@ describe("recording while Exegol is in the background", () => {
     expect(phase()).toBe("listening");
   });
 
-  it("a hold released mid-word keeps listening for the tail, then stops", async () => {
-    vi.useFakeTimers({ toFake: ["Date"] });
+  it("a stop mid-word keeps the mic open for the tail, then closes it", async () => {
     await startRecording();
-    for (let i = 0; i < 16; i++) feed(speech());
-    vi.setSystemTime(Date.now() + 2_000);
-    chordUp();
-    expect(phase()).toBe("listening");
+    feed(speech());
+    chordDown();
+    await settle();
+    expect(phase()).toBe("transcribing");
+    expect(stopCapture).not.toHaveBeenCalled();
     feed(new Float32Array(16_000));
     await new Promise((done) => setTimeout(done, 60));
     await settle();
-    expect(phase()).not.toBe("listening");
+    expect(stopCapture).toHaveBeenCalled();
   });
 
   it("a hold cut by a blur: the lost keyup does not stop, the next press does", async () => {
@@ -149,7 +155,7 @@ describe("diagnostics: what ended a dictation reaches main's log (never the text
   it("a stop says what stopped it: the shortcut here", async () => {
     trpcMutate.mockClear();
     await startRecording();
-    feed(speech());
+    say();
     chordDown();
     await settle();
     expect(callOf("dictation.stop")).toMatchObject({ sessionId: "s1", by: "chord" });
@@ -185,7 +191,7 @@ describe("heard nothing: says which input and links to Settings", () => {
 
   it("speech the model found no words in says the same", async () => {
     await startRecording();
-    feed(speech());
+    say();
     trpcMutate.mockImplementationOnce(async () => ({ text: "" }));
     chordDown();
     await settle();
@@ -209,7 +215,7 @@ describe("a stop waits for the whole transcript", () => {
     });
     trpcMutate.mockClear();
     await startRecording();
-    feed(speech());
+    say();
     drain.mockImplementationOnce(async () => {
       feed(speech());
     });
@@ -219,13 +225,14 @@ describe("a stop waits for the whole transcript", () => {
     });
     chordDown();
     await settle();
-    expect(order).toEqual(["audio", "audio", "dictation.stop"]);
+    expect(order.at(-1)).toBe("dictation.stop");
+    expect(order.filter((o) => o === "audio").length).toBeGreaterThan(2);
   });
 
   it("Enter or the chord again while transcribing: one stop, one insert of the full text", async () => {
     trpcMutate.mockClear();
     await startRecording();
-    feed(speech());
+    say();
     const flushed = deferred<void>();
     drain.mockImplementationOnce(() => flushed.promise);
     const stopped = deferred<{ text: string }>();
@@ -251,7 +258,7 @@ describe("a stop waits for the whole transcript", () => {
 
   it("Esc while transcribing inserts nothing", async () => {
     await startRecording();
-    feed(speech());
+    say();
     const stopped = deferred<{ text: string }>();
     trpcMutate.mockImplementationOnce(() => stopped.promise);
     chordDown();
@@ -267,7 +274,7 @@ describe("a stop waits for the whole transcript", () => {
   it("Esc during the flush stops before main is asked", async () => {
     trpcMutate.mockClear();
     await startRecording();
-    feed(speech());
+    say();
     const flushed = deferred<void>();
     drain.mockImplementationOnce(() => flushed.promise);
     chordDown();
