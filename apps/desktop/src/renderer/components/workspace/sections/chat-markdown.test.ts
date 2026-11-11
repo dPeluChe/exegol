@@ -36,4 +36,14 @@ describe("ChatMarkdown", () => {
     expect(clicks("`/Users/x/app/src/main.ts`")).toBe(1);
     expect(clicks("`const x = 1`")).toBe(0);
   });
+
+  it("with no session: links are text, or only web ones open when asked", () => {
+    const clicks = (text: string, webLinks: boolean) =>
+      renderToStaticMarkup(createElement(ChatMarkdown, { text, webLinks })).match(/<button/g)
+        ?.length ?? 0;
+    expect(clicks("https://example.com/a", false)).toBe(0);
+    expect(clicks("https://example.com/a", true)).toBe(1);
+    expect(clicks("`/Users/x/app/src/main.ts`", true)).toBe(0);
+    expect(clicks("[j](javascript:alert(1))", true)).toBe(0);
+  });
 });

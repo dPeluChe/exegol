@@ -118,6 +118,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - The "What's new" dialog shows the update's download progress (a bar and the percent), as the title-bar button does, instead of only "Downloading"
 
 ### Changed
+- Inbox: a thread's messages show as formatted text (Markdown, with links that open in the browser on a click), a long one in its own box that scrolls and can be dragged taller, and the top bar panel opens a little shorter
 - MCP and agent browser code split into smaller modules, no behavior change
 - Log files write your home folder as `~`, and reconnecting sessions at startup logs half as many lines
 

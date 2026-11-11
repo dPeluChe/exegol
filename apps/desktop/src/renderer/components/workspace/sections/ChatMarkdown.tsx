@@ -4,9 +4,11 @@ import {
   createElement,
   type ReactNode,
   useContext,
+  useMemo,
 } from "react";
 import { type Components, defaultRemarkPlugins, Streamdown } from "streamdown";
 import { isHttpUrl } from "../../../lib/browser-viewports";
+import { openInBrowser } from "../../../lib/open-in-browser";
 import { openTerminalUrl, openUnresolvedFile } from "../../terminal/terminal-link-actions";
 import { findFileMatches, type LinkMatch } from "../../terminal/terminal-links";
 
@@ -30,7 +32,11 @@ interface ElementProps {
   src?: string;
 }
 
-const ChatAgent = createContext<string | null>(null);
+/** Who opens a link: the session (its preview pane, its files), or only the browser for web links */
+const ChatLinks = createContext<{ agentId: string | null; web: boolean }>({
+  agentId: null,
+  web: false,
+});
 
 /** A whole path, as a CLI prints it. Main resolves and confines it, as for a terminal click */
 function fileMatch(text: string): LinkMatch | undefined {
@@ -52,10 +58,11 @@ function ChatLink({
   /** The label already is the address */
   shown?: boolean;
 }) {
-  const agentId = useContext(ChatAgent);
+  const { agentId, web } = useContext(ChatLinks);
   const url = isHttpUrl(target);
-  const file = url ? undefined : fileMatch(target);
-  if (!agentId || (!url && !file)) {
+  const file = url || !agentId ? undefined : fileMatch(target);
+  const clickable = url ? !!agentId || web : !!file;
+  if (!clickable) {
     return (
       <span className="underline decoration-text-muted" title={target}>
         {children}
@@ -66,9 +73,11 @@ function ChatLink({
     <button
       type="button"
       title={target}
-      onClick={() =>
-        file ? openUnresolvedFile(agentId, file, "plain") : openTerminalUrl(agentId, target, "mod")
-      }
+      onClick={() => {
+        if (!agentId) openInBrowser(target);
+        else if (file) openUnresolvedFile(agentId, file, "plain");
+        else openTerminalUrl(agentId, target, "mod");
+      }}
       className="break-all text-left text-accent underline decoration-accent/40 hover:decoration-accent"
     >
       {children}
@@ -136,10 +145,20 @@ const COMPONENTS: Record<string, ComponentType<ElementProps>> = {
 };
 
 /** Agent text is untrusted: formatted, but its HTML is text and nothing loads or runs by itself */
-/** No `agentId` (a note): links show as text, since there is no session to open them in */
-export function ChatMarkdown({ text, agentId }: { text: string; agentId?: string }) {
+/** No `agentId` (a note): links show as text, since there is no session to open them in, unless
+ *  `webLinks` sends http(s) ones to the browser on a click */
+export function ChatMarkdown({
+  text,
+  agentId,
+  webLinks = false,
+}: {
+  text: string;
+  agentId?: string;
+  webLinks?: boolean;
+}) {
+  const links = useMemo(() => ({ agentId: agentId ?? null, web: webLinks }), [agentId, webLinks]);
   return (
-    <ChatAgent.Provider value={agentId ?? null}>
+    <ChatLinks.Provider value={links}>
       <Streamdown
         mode="static"
         parseIncompleteMarkdown={false}
@@ -151,6 +170,6 @@ export function ChatMarkdown({ text, agentId }: { text: string; agentId?: string
       >
         {text}
       </Streamdown>
-    </ChatAgent.Provider>
+    </ChatLinks.Provider>
   );
 }

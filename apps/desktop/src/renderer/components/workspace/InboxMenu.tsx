@@ -252,7 +252,7 @@ function Panel({
   );
   const thread = (id: string) => setView({ kind: "thread", id });
   return (
-    <div className="absolute top-full left-0 z-50 mt-1 flex max-h-[70vh] w-[28rem] flex-col overflow-hidden rounded-lg border border-border bg-bg-secondary text-xs shadow-lg">
+    <div className="absolute top-full left-0 z-50 mt-1 flex max-h-[60vh] w-[28rem] flex-col overflow-hidden rounded-lg border border-border bg-bg-secondary text-xs shadow-lg">
       {view.kind !== "list" && (
         <button
           type="button"
