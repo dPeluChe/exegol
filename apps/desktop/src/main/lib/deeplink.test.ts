@@ -82,4 +82,13 @@ describe("parseCaptureLink", () => {
     expect(parseCaptureLink("exegol://capture?url=javascript%3Ax")).toBeNull();
     expect(parseCaptureLink("exegol://open?path=/tmp")).toBeNull();
   });
+
+  it("takes one bare link sent as text as the url, and leaves a sentence as text", () => {
+    expect(parseCaptureLink("exegol://capture?text=https%3A%2F%2Fa.dev%2Fx%3Fq%3D1")).toEqual({
+      url: "https://a.dev/x?q=1",
+      title: null,
+      text: null,
+    });
+    expect(parseCaptureLink("exegol://capture?text=see%20https%3A%2F%2Fa.dev")?.url).toBeNull();
+  });
 });
