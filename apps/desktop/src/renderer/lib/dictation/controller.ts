@@ -36,10 +36,10 @@ import { rms, updateVad, VAD_START, type VadState } from "./vad";
 
 /** A press held at least this long is hold-to-talk (release stops); shorter toggles */
 const HOLD_MS = 350;
-/** Keys come up before the last word ends: hold-to-talk listens until quiet, up to the cap */
-const RELEASE_TICK_MS = 50;
-const RELEASE_QUIET_MS = 150;
-const RELEASE_MAX_MS = 600;
+/** A stop comes before the last word ends: it listens until quiet, up to the cap */
+const TAIL_TICK_MS = 50;
+const TAIL_QUIET_MS = 150;
+const TAIL_MAX_MS = 600;
 
 interface Run {
   settings: DictationSettings;
@@ -356,6 +356,14 @@ export async function startDictation(): Promise<void> {
   }
 }
 
+/** Listens for the end of the last word. A cancel meanwhile leaves `run` changed */
+async function tailQuiet(r: Run): Promise<void> {
+  for (let waited = 0; waited < TAIL_MAX_MS && run === r; waited += TAIL_TICK_MS) {
+    if (r.paused || !r.vad.heard || r.vad.silenceMs >= TAIL_QUIET_MS) return;
+    await new Promise((done) => setTimeout(done, TAIL_TICK_MS));
+  }
+}
+
 /** Stops listening, transcribes, and inserts where the focus was when it started */
 export async function stopDictation(by: DictationStopReason): Promise<void> {
   const r = run;
@@ -366,9 +374,11 @@ export async function stopDictation(by: DictationStopReason): Promise<void> {
     return;
   }
   const sessionId = r.sessionId;
-  const durationMs = recordedMs(store());
   // Transcribing from here: a second Enter or chord meanwhile is swallowed, one insert only
   store().set({ phase: "transcribing", autoInsertCountdown: null });
+  await tailQuiet(r);
+  if (run !== r) return;
+  const durationMs = recordedMs(store());
   // The last words are still in the worklet or in flight: they reach main before the stop does
   await r.capture?.drain();
   if (run !== r) return;
@@ -527,22 +537,11 @@ export function chordDown(): void {
   void startDictation();
 }
 
-/** Waits for the end of the last word; a press or a cancel meanwhile leaves `run` changed */
-function stopAfterTail(r: Run, waitedMs = 0): void {
-  if (run !== r) return;
-  const quiet = r.paused || !r.vad.heard || r.vad.silenceMs >= RELEASE_QUIET_MS;
-  if (quiet || waitedMs >= RELEASE_MAX_MS) {
-    void stopDictation("chord");
-    return;
-  }
-  setTimeout(() => stopAfterTail(r, waitedMs + RELEASE_TICK_MS), RELEASE_TICK_MS);
-}
-
 /** The shortcut came up: after a long press that was hold-to-talk, so stop */
 export function chordUp(): void {
   if (!holdCandidate) return;
   holdCandidate = false;
-  if (Date.now() - pressedAt >= HOLD_MS && run) stopAfterTail(run);
+  if (Date.now() - pressedAt >= HOLD_MS && run) void stopDictation("chord");
 }
 
 /** Pause or resume a listening dictation: same session, target and text. The mic stays open so
