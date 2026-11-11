@@ -21,6 +21,7 @@ import { useGitHubOverview } from "../../../hooks/use-trpc-github";
 import { sessionName } from "../../../lib/agent-label";
 import { startInNewTab, takesPrompt } from "../../../lib/github-handoff";
 import { sessionsInRepoFirst, sessionsOfNamedRepo } from "../../../lib/github-repos";
+import { isLongMessage, keepLineBreaks } from "../../../lib/inbox-text";
 import { openInBrowser } from "../../../lib/open-in-browser";
 import { isOpenSession } from "../../../lib/sidebar-views";
 import { trpcInvoke } from "../../../lib/trpc-client";
@@ -31,6 +32,7 @@ import { AgentIcon } from "../../common/AgentIcon";
 import { FilterChip } from "../../common/FilterChip";
 import type { ProjectMeta } from "../../common/ProjectChip";
 import { inboxPlace } from "../inbox-place";
+import { ChatMarkdown } from "./ChatMarkdown";
 import { InboxMoreActions, useThreadAct } from "./InboxMoreActions";
 
 interface ThreadData {
@@ -57,7 +59,14 @@ function Message({ message }: { message: InboxMessage }) {
         <span className="truncate">{authorLabel(message, name)}</span>
         <time className="shrink-0">{new Date(message.createdAt * 1000).toLocaleString()}</time>
       </header>
-      <p className="whitespace-pre-wrap break-words text-xs text-text-primary">{message.body}</p>
+      <div
+        className={cn(
+          "text-xs text-text-primary",
+          isLongMessage(message.body) && "h-56 min-h-16 resize-y overflow-y-auto pr-1",
+        )}
+      >
+        <ChatMarkdown text={keepLineBreaks(message.body)} webLinks />
+      </div>
     </article>
   );
 }
