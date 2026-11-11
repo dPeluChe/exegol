@@ -463,4 +463,9 @@ export const wave3Migrations: Migration[] = [
     id: "w3_041_messages_pair_index",
     sql: "CREATE INDEX IF NOT EXISTS idx_messages_pair ON messages(from_agent_id, to_agent_id);",
   },
+  {
+    // T224. The session the person marked as the project's main one; null = the oldest lineage
+    id: "w3_042_project_main_agent",
+    sql: "ALTER TABLE projects ADD COLUMN main_agent_id TEXT;",
+  },
 ];

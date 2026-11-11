@@ -37,8 +37,8 @@ export const COMMANDER_TOOL_DEFS: ToolBody<CommanderToolName>[] = [
       "something), waits_on_person (a permission or dialog only the person answers), starting. " +
       "minutes_in_state and quiet_minutes say how long. person_minutes_ago: when the person last " +
       "wrote to it themselves; a recent one means they are on it, so leave it to them. cli_update: see session_restart. " +
-      "main: true marks the project's main session, the one opened first (a resume or restart " +
-      "keeps it). talks_with: the sessions it exchanged messages with in the last 24 hours, " +
+      "main: true marks the project's main session: the one the person marked as Main in its " +
+      "toolbar, else the one opened first (a resume or restart keeps it). talks_with: the sessions it exchanged messages with in the last 24 hours, " +
       "most recent first, and whether it sent or received the last one; read them with " +
       "session_messages. " +
       "personal_inbox_waiting counts the " +

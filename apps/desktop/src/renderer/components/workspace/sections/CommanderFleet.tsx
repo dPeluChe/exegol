@@ -1,11 +1,13 @@
 import { ScrollArea } from "@exegol/ui";
 import { useMemo } from "react";
 import { useShallow } from "zustand/react/shallow";
+import { mainAmongSeveral, useMainSessions } from "../../../hooks/use-main-sessions";
 import { sessionName } from "../../../lib/agent-label";
 import { type DeskState, deskState } from "../../../lib/company";
 import { isLiveSession } from "../../../lib/sidebar-views";
 import { type AgentState, jumpToAgent, useAgentStore } from "../../../stores/agents";
 import { AgentIcon } from "../../common/AgentIcon";
+import { MainBadge } from "../../common/MainBadge";
 import type { ProjectMeta } from "../../common/ProjectChip";
 import { DESK_STATE, StateLine } from "./DeskState";
 
@@ -35,6 +37,7 @@ export function CommanderFleet({
   );
   const attention = useAgentStore((s) => s.attentionItems);
   const unseen = useAgentStore((s) => s.unseenTurns);
+  const mains = useMainSessions();
   const groups = useMemo(() => {
     const out: Groups = { needs: [], stuck: [], unread: [], working: [], idle: [], suspended: [] };
     for (const a of sessions) out[deskState(a, attention[a.id], a.id in unseen)].push(a);
@@ -72,8 +75,11 @@ export function CommanderFleet({
                   >
                     <AgentIcon provider={a.cliType} size={16} />
                     <span className="flex min-w-0 flex-1 flex-col">
-                      <span className="truncate text-[11px] text-text-primary">
-                        {projectMeta.get(a.projectId)?.name ?? "Project"}
+                      <span className="flex min-w-0 items-center gap-1">
+                        <span className="truncate text-[11px] text-text-primary">
+                          {projectMeta.get(a.projectId)?.name ?? "Project"}
+                        </span>
+                        {mainAmongSeveral(mains, a.projectId) === a.id && <MainBadge />}
                       </span>
                       <span className="truncate text-[10px] text-text-muted">
                         {sessionName(a)} ·{" "}

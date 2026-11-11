@@ -15,6 +15,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - `Cmd+.` no longer stops the focused session: one stray key ended it with no warning. Stop Agent stays in the Command Palette
 
 ### Added
+- Main session: a Main control in a session's toolbar marks it as the project's main one, or clears the mark so the first session opened is main again; the mark survives a resume or CLI restart, the Commander sees the same one, and Company desks and the Commander's fleet show a Main badge where a project has two or more sessions (T224)
 - Commander: it sees which session is a project's main one (the first opened; a resume or restart keeps it) and which sessions write to each other, reads their messages as short previews with the length before asking for one in full (`session_messages`), and its feed says when one session wrote to or answered another (T224)
 - **Commander**: replies it ended while you were not looking at its chat are counted on the Commander and Combined tabs and on the sidebar's Dashboard button, and the chat marks where they begin; they are read once its chat (the panel, its terminal view or the floating window) is in view (T224)
 - Commander voice: music or video playing on the machine pauses while a reply is read aloud and resumes when the reading ends, as it does for a dictation (same setting, Settings > Dictation > Pause media)

@@ -18,6 +18,7 @@ import { useDeskActivityStore } from "../../../stores/desk-activity";
 import { useWorkspaceStore } from "../../../stores/workspace";
 import { AgentIcon } from "../../common/AgentIcon";
 import { GitHubCounts } from "../../common/GitHubCounts";
+import { MainBadge } from "../../common/MainBadge";
 import type { ProjectMeta } from "../../common/ProjectChip";
 import { DESK_STATE, StateLine } from "./DeskState";
 
@@ -48,6 +49,7 @@ const Desk = memo(function Desk({
   prNumber,
   browser,
   cliOutdated,
+  main,
   selected,
   onSelect,
 }: {
@@ -56,6 +58,8 @@ const Desk = memo(function Desk({
   prNumber: number | undefined;
   browser: boolean;
   cliOutdated: boolean;
+  /** The project's main session, shown only among several */
+  main: boolean;
   selected: boolean;
   onSelect: (id: string) => void;
 }) {
@@ -88,6 +92,7 @@ const Desk = memo(function Desk({
           <span className="min-w-0 flex-1 truncate text-[11px] text-text-primary">
             {sessionName(agent)}
           </span>
+          {main && <MainBadge />}
           {cliOutdated && <Tag>update</Tag>}
           {!!changed && <Tag tone="warn">±{changed}</Tag>}
           {facts?.port && <Tag>:{facts.port}</Tag>}
@@ -118,6 +123,7 @@ export function RoomCard({
   meta,
   waiting,
   deskFacts,
+  mainId,
   outdated,
   selectedId,
   onSelect,
@@ -127,6 +133,8 @@ export function RoomCard({
   /** Inbox threads waiting on this project */
   waiting: number;
   deskFacts: Record<string, DeskFacts> | undefined;
+  /** The room's main session, only when it has several */
+  mainId: string | undefined;
   outdated: ReadonlySet<string>;
   selectedId: string | null;
   onSelect: (id: string) => void;
@@ -195,6 +203,7 @@ export function RoomCard({
                 prNumber={prs.find((p) => p.branch === agent.branchName)?.number}
                 browser={group.browser}
                 cliOutdated={outdated.has(agent.cliType)}
+                main={agent.id === mainId}
                 selected={agent.id === selectedId}
                 onSelect={onSelect}
               />

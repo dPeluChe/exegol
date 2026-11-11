@@ -7,6 +7,7 @@ import { useCliUpdates } from "../../../hooks/use-cli-updates";
 import { useCompanyKeys } from "../../../hooks/use-company-keys";
 import { useInboxThreads } from "../../../hooks/use-inbox";
 import { useLatest } from "../../../hooks/use-latest";
+import { mainAmongSeveral, useMainSessions } from "../../../hooks/use-main-sessions";
 import { useMountEffect } from "../../../hooks/use-mount-effect";
 import { useWindowWide } from "../../../hooks/use-window-wide";
 import { buildRooms, todayStrip } from "../../../lib/company";
@@ -75,6 +76,7 @@ export function CompanySection({
     refetchInterval: 30_000,
   });
 
+  const mains = useMainSessions();
   const { data: deskFacts } = useQuery({
     queryKey: ["agents", "deskFacts"],
     queryFn: () => trpcInvoke<Record<string, DeskFacts>>("agents.deskFacts"),
@@ -243,6 +245,7 @@ export function CompanySection({
                       meta={projectMeta.get(room.projectId)}
                       waiting={inbox.filter((t) => inboxProjectOf(t) === room.projectId).length}
                       deskFacts={deskFacts}
+                      mainId={mainAmongSeveral(mains, room.projectId)}
                       outdated={outdated}
                       selectedId={selected?.id ?? null}
                       onSelect={pickHere}

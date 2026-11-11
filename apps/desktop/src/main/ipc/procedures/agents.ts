@@ -15,6 +15,7 @@ import {
 } from "../../agents/follow-up-queue";
 import { hookCwdOf } from "../../agents/hook-cwd";
 import { setIdleExempt } from "../../agents/idle-exempt";
+import { mainSessions } from "../../agents/main-session";
 import { notePersonInput } from "../../agents/session-activity";
 import { chatTurns, olderChatTurns } from "../../agents/session-chat";
 import { broadcastShellClosed } from "../../agents/spawn-env";
@@ -38,7 +39,9 @@ import {
   setAgentAlias,
   setAgentPrWatch,
 } from "../../db/queries/agents";
+import { clearMainMark, setProjectMainMark } from "../../db/queries/main-session";
 import { getPrWatchStatus, onPrWatchToggled } from "../../integrations/github/pr-watch";
+import { broadcast } from "../../lib/event-bus";
 import { getMcpAgentStates } from "../../mcp/exegol-server";
 import { getPtyHost } from "../../terminal/pty-host";
 import { getRecoveryState } from "../../terminal/reattach-gate";
@@ -124,6 +127,20 @@ export const agentRouter = router({
       setAgentPrWatch(ctx.db, input.id, input.on ? Date.now() : null);
       onPrWatchToggled(input.id, input.on);
       return getAgent(ctx.db, input.id);
+    }),
+  /** The main session of each project with live sessions: the person's mark, else the first opened */
+  mainSessions: publicProcedure.query(({ ctx }) => mainSessions(ctx.db)),
+  /** Mark a session as its project's main one, or clear its mark (back to the first opened) */
+  setMain: publicProcedure
+    .input(z.object({ id: z.string().max(128), main: z.boolean() }))
+    .mutation(({ ctx, input }) => {
+      const agent = getAgent(ctx.db, input.id);
+      if (!agent || agent.cliType === "shell") {
+        throw new TRPCError({ code: "NOT_FOUND", message: "No such agent session" });
+      }
+      if (input.main) setProjectMainMark(ctx.db, agent.projectId, agent.id);
+      else if (!clearMainMark(ctx.db, agent.id)) return;
+      broadcast("projects:changed");
     }),
   /** What the PR watch last saw (in memory, never calls gh) */
   prWatchStatus: publicProcedure

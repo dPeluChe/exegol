@@ -25,6 +25,7 @@ import { WatchToggle } from "../common/WatchToggle";
 import { PaneDragHandle } from "../workspace/PaneDragHandle";
 import { CliUpdateControl } from "./CliUpdateControl";
 import { FollowUpControl } from "./FollowUpControl";
+import { MainSessionControl } from "./MainSessionControl";
 import { PrWatchControl } from "./PrWatchControl";
 import { TurnChangesChip } from "./TurnChanges";
 
@@ -339,7 +340,7 @@ export function LiveStartOverlay({
   );
 }
 
-/** The session's own controls: its name, Watch, Mute/Suspend while live, and Continue once a
+/** The session's own controls: its name, Watch, Mute/Suspend/Main while live, and Continue once a
  *  CLI typed in the terminal exited back to the shell prompt */
 function SessionControls({ agent }: { agent: QuietAgent }) {
   return (
@@ -350,6 +351,7 @@ function SessionControls({ agent }: { agent: QuietAgent }) {
       {LIVE_STATUSES.has(agent.status) && (
         <>
           <QuietControls agent={agent} className="py-0 text-[9px]" />
+          <MainSessionControl agentId={agent.id} />
           <PrWatchControl agent={agent} />
           <CliUpdateControl agentId={agent.id} />
           <TurnChangesChip agentId={agent.id} />

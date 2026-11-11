@@ -37,7 +37,7 @@ export interface FleetSession {
   person_minutes_ago: number | null;
   task: string;
   cli_update?: "restart" | "release";
-  /** The project's main session: the one whose lineage started first */
+  /** The project's main session: the person's mark, else the one whose lineage started first */
   main?: true;
   talks_with?: FleetTalk[];
 }
