@@ -76,6 +76,8 @@ Keys are written for macOS; on Linux and Windows `Cmd` is `Ctrl+Shift` (see
   and a desktop notification with the pending question. `Cmd+J` goes to the next one.
 - **Shell to agent**: type a CLI in a plain terminal and that terminal becomes the agent (name,
   status, Dashboard); when the CLI exits, Continue resumes it.
+- **Main session**: each project has a main session, the first one opened; Main in a session's
+  toolbar marks another, and clicking it again clears the mark. A resume or CLI restart keeps it.
 - **Watch PR**: opt in from a session's toolbar and Exegol checks its branch's PR every 3 minutes
   (needs `gh`). Failing checks, new review comments and merge conflicts are sent to the agent at
   its next turn (never over a permission prompt) and land in Needs attention. At most 3 messages

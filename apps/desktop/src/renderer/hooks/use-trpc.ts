@@ -15,6 +15,7 @@ import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
 import { useNotificationPrefsStore } from "../stores/notification-prefs";
 import { useShortcutStore } from "../stores/shortcuts";
 import { useWorkspaceStore } from "../stores/workspace";
+import { MAIN_SESSIONS_KEY } from "./use-main-sessions";
 import { useMountEffect } from "./use-mount-effect";
 
 // ─── Domain re-exports (barrel) ─────────────────────────────────────────────
@@ -45,6 +46,7 @@ export function useProjectsSync() {
   useMountEffect(() =>
     window.api.onProjectsChanged(() => {
       void queryClient.invalidateQueries({ queryKey: ["projects"] });
+      void queryClient.invalidateQueries({ queryKey: MAIN_SESSIONS_KEY });
     }),
   );
 }

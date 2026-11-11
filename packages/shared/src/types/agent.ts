@@ -430,6 +430,15 @@ export interface PlanUsage {
   stale: boolean;
 }
 
+/** A project's main session, among its live agent sessions */
+export interface MainSession {
+  id: string;
+  /** The person marked it; false when it is main by the default rule (opened first) */
+  marked: boolean;
+  /** Live agent sessions in the project */
+  live: number;
+}
+
 /** What a Company desk shows that the agent row does not hold */
 export interface DeskFacts {
   /** Changed files in its folder; null when that is not a git repo */

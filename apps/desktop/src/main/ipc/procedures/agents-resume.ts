@@ -33,7 +33,9 @@ import {
   setAgentResumedFrom,
   watchedInfo,
 } from "../../db/queries/agents";
+import { moveMainMark } from "../../db/queries/main-session";
 import { cliSessionNames, lastLocalSession } from "../../history";
+import { broadcast } from "../../lib/event-bus";
 import { logger } from "../../lib/logger";
 import { isPathAllowed } from "../../security/path-guard";
 import { redact } from "../../system/diagnostics";
@@ -334,6 +336,7 @@ export const agentSpawnProcedures = {
       if (resumedFrom) {
         logger.info(`[Resume] ${resumedFrom} -> ${agent.id} ok${fresh}`);
         setAgentResumedFrom(ctx.db, agent.id, resumedFrom);
+        if (moveMainMark(ctx.db, resumedFrom, agent.id)) broadcast("projects:changed");
         retireResumedSource(ctx.db, resumedFrom);
       }
     } catch (err) {

@@ -12,6 +12,7 @@ import { lineageStarts } from "../db/queries/agent-lineage";
 import { type ActiveAgent, listActiveAgents } from "../db/queries/agents";
 import { listCommanderLog } from "../db/queries/commander-log";
 import { countActiveThreads, countPersonalThreads } from "../db/queries/inbox";
+import { projectMainMarks } from "../db/queries/main-session";
 import {
   getSessionMessage,
   listSessionMessages,
@@ -81,6 +82,7 @@ export function fleetOf(
   const others = agents.filter((a) => a.id !== selfId);
   const byId = cliUpdate && new Map(others.map((a) => [a.id, a]));
   const now = Date.now();
+  const marks = more.relations ? projectMainMarks(db) : undefined;
   const seen = more.relations
     ? others.filter((a) => a.projectId !== own && a.cliType !== "shell")
     : [];
@@ -108,6 +110,7 @@ export function fleetOf(
     },
     (projectId) => countActiveThreads(db, projectId),
     now,
+    marks && ((projectId) => marks.get(projectId)),
   );
 }
 
