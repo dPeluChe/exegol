@@ -15,6 +15,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - `Cmd+.` no longer stops the focused session: one stray key ended it with no warning. Stop Agent stays in the Command Palette
 
 ### Added
+- Commander: it sees which session is a project's main one (the first opened; a resume or restart keeps it) and which sessions write to each other, reads their messages as short previews with the length before asking for one in full (`session_messages`), and its feed says when one session wrote to or answered another (T224)
 - **Commander**: replies it ended while you were not looking at its chat are counted on the Commander and Combined tabs and on the sidebar's Dashboard button, and the chat marks where they begin; they are read once its chat (the panel, its terminal view or the floating window) is in view (T224)
 - Commander voice: music or video playing on the machine pauses while a reply is read aloud and resumes when the reading ends, as it does for a dictation (same setting, Settings > Dictation > Pause media)
 - Commander: rate how a reply was read aloud. A thumb beside the speaker button marks it Good or Bad with an optional note on what it said wrong; Settings > Models > Voice lists the notes with the text as it was spoken and copies them as Markdown. Stored on this machine only.

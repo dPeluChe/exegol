@@ -1,4 +1,5 @@
-import type { FleetProject, SessionState } from "./fleet";
+import type { NewTalk } from "../db/queries/messages";
+import { type FleetProject, type SessionState, sessionName } from "./fleet";
 
 export interface FeedSnapshot {
   sessions: Map<
@@ -43,7 +44,7 @@ export function feedSnapshot(fleet: FleetProject[], personalWaiting: number): Fe
     inbox.set(p.project, p.inbox_waiting);
     for (const s of p.sessions) {
       sessions.set(s.id, {
-        name: s.name ?? s.id.slice(0, 8),
+        name: sessionName({ id: s.id, alias: s.name }),
         project: p.project,
         state: s.state,
         attended: s.person_minutes_ago !== null && s.person_minutes_ago < ATTENDED_MINUTES,
@@ -99,6 +100,39 @@ export function feedEvents(prev: FeedSnapshot, next: FeedSnapshot): FeedEvent[] 
   return events;
 }
 
+const count = (n: number, unit: string) =>
+  `${n.toLocaleString("en-US")} ${unit}${n === 1 ? "" : "s"}`;
+
+/** Sessions that wrote to each other: one line per ordered pair, names and length only */
+export function talkEvents(rows: NewTalk[], sessions: FeedSnapshot["sessions"]): FeedEvent[] {
+  const pairs = new Map<string, { who: string; messages: number; chars: number }>();
+  for (const row of rows) {
+    const from = sessions.get(row.fromId);
+    const to = sessions.get(row.toId);
+    if (!from || !to || row.fromId === row.toId) continue;
+    const key = `talk:${row.fromId}>${row.toId}`;
+    const verb = row.answered ? "answered" : "wrote to";
+    const pair = pairs.get(key) ?? {
+      who:
+        from.project === to.project
+          ? `${from.name} ${verb} ${to.name} in ${from.project}`
+          : `${from.name} (${from.project}) ${verb} ${to.name} (${to.project})`,
+      messages: 0,
+      chars: 0,
+    };
+    pair.messages += 1;
+    pair.chars += row.chars;
+    pairs.set(key, pair);
+  }
+  return [...pairs].map(([key, { who, messages, chars }]) => {
+    const size = count(chars, "character");
+    return {
+      key,
+      line: `${who} (${messages > 1 ? `${count(messages, "message")}, ${size}` : size})`,
+    };
+  });
+}
+
 /** The message, or null when nothing in it still holds */
 export function feedMessage(
   pending: Iterable<FeedEvent>,
@@ -116,7 +150,8 @@ export function feedMessage(
     "Feed from Exegol, not from the person. Since your last look:",
     ...shown,
     "",
-    "Read a session with session_read before you act on it. Tell the person only what they need.",
+    "Read a session with session_read before you act on it, and what two sessions wrote to each " +
+      "other with session_messages. Tell the person only what they need.",
   ].join("\n");
 }
 

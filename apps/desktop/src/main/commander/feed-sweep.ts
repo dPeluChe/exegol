@@ -3,6 +3,7 @@ import { needsUser } from "../agents/agent-message-queue";
 import { sendSystemMessage } from "../agents/agent-messaging";
 import { listActiveAgents } from "../db/queries/agents";
 import { countPersonalThreads } from "../db/queries/inbox";
+import { listTalkSince, messageCursor } from "../db/queries/messages";
 import { logger } from "../lib/logger";
 import { getNotificationBus } from "../notifications/bus";
 import { isReadingAloud } from "../speech/reading";
@@ -14,6 +15,7 @@ import {
   feedMessage,
   feedSnapshot,
   stoppedLine,
+  talkEvents,
 } from "./feed";
 import { sessionState } from "./fleet";
 import { commanderFeed, commanderProjectId } from "./home";
@@ -30,12 +32,14 @@ const MAX_NOTICES = 10;
 
 let timer: ReturnType<typeof setInterval> | null = null;
 let last: FeedSnapshot | null = null;
+let lastMessageRow: number | null = null;
 let sent: number[] = [];
 const pending = new Map<string, FeedEvent>();
 const notices = new Map<string, string>();
 
 function reset(): void {
   last = null;
+  lastMessageRow = null;
   pending.clear();
   notices.clear();
 }
@@ -59,6 +63,12 @@ async function checkFeed(db: Database.Database, now = Date.now()): Promise<void>
     const line = stopped ? stoppedLine(`${ended.name} (${ended.project})`) : event.line;
     pending.set(event.key, { ...event, line });
   }
+  const top = messageCursor(db);
+  if (lastMessageRow !== null && top > lastMessageRow) {
+    const talk = listTalkSince(db, [...next.sessions.keys()], lastMessageRow);
+    for (const event of talkEvents(talk, next.sessions)) pending.set(event.key, event);
+  }
+  lastMessageRow = top;
 
   sent = sent.filter((at) => now - at < HOUR_MS);
   if (sent.length >= FEED_PER_HOUR || now - (sent.at(-1) ?? 0) < FEED_GAP_MS) return;
