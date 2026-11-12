@@ -12,6 +12,7 @@ import {
   getSidecarMemoryMetrics,
   getSystemMetrics,
 } from "../../system/resources";
+import { readSessionProcesses } from "../../system/session-processes-read";
 import { publicProcedure, router } from "../trpc";
 
 // ─── Preferred Ports (per-project, stored in settings table) ──────────────
@@ -128,5 +129,7 @@ export const resourcesRouter = router({
     }),
 
   /** T143: per-session PTY ring buffer memory usage + PTY count */
+  sessionProcesses: publicProcedure.query(({ ctx }) => readSessionProcesses(ctx.db)),
+
   sidecarMemory: publicProcedure.query(async () => getSidecarMemoryMetrics()),
 });

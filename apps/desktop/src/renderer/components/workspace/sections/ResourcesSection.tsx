@@ -8,6 +8,7 @@ import { AgentProcessTable } from "./AgentProcessTable";
 import { DevServersCard } from "./DevServersCard";
 import { PtyMemoryCard } from "./PtyMemoryCard";
 import { formatBytes, formatUptime, thresholdBarColor, thresholdColor } from "./resource-format";
+import { SessionProcessesCard } from "./SessionProcessesCard";
 import { useAgentResourceMaps, useLiveSystemMetrics } from "./use-resource-metrics";
 
 // ─── Sparkline (inline SVG) ─────────────────────────────────────────────────
@@ -157,6 +158,8 @@ export function ResourcesSection() {
         <DevServersCard />
 
         <ProjectStats project={project} projectMetrics={projectMetrics} loading={projectLoading} />
+
+        <SessionProcessesCard projectId={project.id} />
 
         {/* Per-agent process table */}
         <div>

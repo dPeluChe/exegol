@@ -1,4 +1,4 @@
-import type { DevServer, MetricsSnapshot } from "@exegol/shared";
+import type { DevServer, MetricsSnapshot, SessionProcesses } from "@exegol/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { trpcInvoke, trpcMutate } from "../lib/trpc-client";
 
@@ -82,6 +82,14 @@ export function useSidecarMemory() {
     queryFn: () => trpcInvoke<SidecarMemoryReport | null>("resources.sidecarMemory"),
     refetchInterval: 15_000,
     staleTime: 10_000,
+  });
+}
+
+export function useSessionProcesses() {
+  return useQuery({
+    queryKey: ["resources", "sessionProcesses"],
+    queryFn: () => trpcInvoke<SessionProcesses[]>("resources.sessionProcesses"),
+    refetchInterval: 10_000,
   });
 }
 
