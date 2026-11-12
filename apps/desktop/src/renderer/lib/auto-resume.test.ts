@@ -1,6 +1,6 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { ProjectWorkspace } from "../stores/workspace/types";
-import { orderAutoResume, screenRank, staggered } from "./auto-resume";
+import { orderAutoResume, screenRank, sessionUp, staggered, waitUntilUp } from "./auto-resume";
 
 const leaf = (paneId: string) => ({ type: "pane", paneId }) as never;
 const pane = (agentId: string) => ({ id: agentId, type: "terminal", agentId }) as never;
@@ -61,5 +61,76 @@ describe("staggered", () => {
     });
     expect(peak).toBe(3);
     expect(started).toEqual([1, 2, 3, 4, 5, 6, 7]);
+  });
+});
+
+describe("sessionUp", () => {
+  it("needs the prompt and, when a bridge was wired, its connection", () => {
+    expect(sessionUp("running", "connected")).toBe(false);
+    expect(sessionUp("spawning", undefined)).toBe(false);
+    expect(sessionUp("waiting_input", "not_connected")).toBe(false);
+    expect(sessionUp("waiting_input", "connected")).toBe(true);
+    expect(sessionUp("idle", "not_wired")).toBe(true);
+    expect(sessionUp("idle", undefined)).toBe(true);
+  });
+
+  it("does not wait for a session that ended or is gone", () => {
+    expect(sessionUp("failed", "not_connected")).toBe(true);
+    expect(sessionUp("crashed", undefined)).toBe(true);
+    expect(sessionUp(undefined, undefined)).toBe(true);
+  });
+});
+
+describe("waitUntilUp", () => {
+  beforeEach(() => vi.useFakeTimers());
+  afterEach(() => vi.useRealTimers());
+
+  const watch = (isUp: () => boolean, holdMs: number, maxMs: number) => {
+    const listeners = new Set<() => void>();
+    let resolved = false;
+    void waitUntilUp(
+      isUp,
+      (fn) => {
+        listeners.add(fn);
+        return () => listeners.delete(fn);
+      },
+      holdMs,
+      maxMs,
+    ).then(() => {
+      resolved = true;
+    });
+    return {
+      emit: () => {
+        for (const fn of listeners) fn();
+      },
+      resolved: () => resolved,
+      listeners: () => listeners.size,
+    };
+  };
+
+  it("waits for the hold, and starts it again after a drop", async () => {
+    let up = true;
+    const w = watch(() => up, 40, 1000);
+    await vi.advanceTimersByTimeAsync(39);
+    up = false;
+    w.emit();
+    await vi.advanceTimersByTimeAsync(100);
+    expect(w.resolved()).toBe(false);
+    up = true;
+    w.emit();
+    await vi.advanceTimersByTimeAsync(39);
+    expect(w.resolved()).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(w.resolved()).toBe(true);
+    expect(w.listeners()).toBe(0);
+  });
+
+  it("gives up at the cap when the session never comes up", async () => {
+    const w = watch(() => false, 40, 60);
+    await vi.advanceTimersByTimeAsync(59);
+    expect(w.resolved()).toBe(false);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(w.resolved()).toBe(true);
+    expect(w.listeners()).toBe(0);
   });
 });

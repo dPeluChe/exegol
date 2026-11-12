@@ -21,7 +21,8 @@ After a reboot Exegol resumed every session. One of them reported "195 zsh, 37 C
 2. **The 38 bun processes and the 26 MCP servers are not Exegol's.** They come from the
    person's own Claude Code configuration (two stdio servers registered at user scope,
    so every Claude session in every project starts a copy of each).
-3. **Exegol's bridges are 0.8 GB of about 25 GB** under the PTY sidecar. The CLIs themselves are
+3. **Exegol's bridges are 0.8 GB of about 16 GB** of own memory under the PTY sidecar
+   (23 to 25 GB by RSS, which counts shared pages more than once). The CLIs themselves are
    the bulk, then the third-party MCP servers (4.9 GB).
 4. **The restart was heavy because 65 sessions came back in two minutes**, each Claude session
    starting three to five processes of its own. The stagger limits how many CLIs start at once,
@@ -76,6 +77,11 @@ process that maps them.
 | **Exegol MCP bridge** | **49** | **816 MB** | **16.7 MB** | **2,467 MB** |
 | Exegol sidecar | 1 | 71 MB | | 82 MB |
 | Exegol main process | 1 | 149 MB | | 277 MB |
+
+Everything under the sidecar, measured again the same way a few minutes later: 275 processes,
+16.0 GB of own memory, 22.9 GB by RSS. That is about 330 MB per agent session (49 of them),
+server processes included. An earlier version of this document compared the bridges' own
+memory with the RSS total (25 GB), which are not the same measure.
 
 Reading it:
 
@@ -194,7 +200,7 @@ What it would cost:
 - A second server implementation to keep in step with the socket one, which the remaining CLIs
   and the claim guard still need.
 
-Verdict: 650 MB of about 25 GB (2.6%), paid with a security review and two regressions.
+Verdict: 650 MB of about 16 GB (4%), paid with a security review and two regressions.
 
 ### B. A native bridge
 
