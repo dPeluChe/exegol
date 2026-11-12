@@ -40,8 +40,8 @@ import { ConfirmDialog } from "../common/ConfirmDialog";
 import { ProjectAvatar } from "../common/ProjectAvatar";
 import { AgentMiniCard, VISIBLE_STATUSES } from "./AgentMiniCard";
 import { BranchGroup } from "./BranchGroup";
-import { ProjectAppearanceDialog } from "./ProjectAppearanceDialog";
 import { ProjectLayoutsDialog } from "./ProjectLayoutsDialog";
+import { ProjectSettingsDialog } from "./ProjectSettingsDialog";
 import { ProjectSignals } from "./ProjectSignals";
 import { TabsOverview } from "./TabsOverview";
 
@@ -392,7 +392,7 @@ export function ProjectItem({
       )}
       {/* Mounted only while open: one per project row kept a dialog and its hooks alive for nothing */}
       {appearanceOpen && (
-        <ProjectAppearanceDialog
+        <ProjectSettingsDialog
           project={project}
           open
           onOpenChange={setAppearanceOpen}

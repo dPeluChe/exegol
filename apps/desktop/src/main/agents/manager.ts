@@ -11,6 +11,7 @@ import {
   activateAgent,
   agentPtySize,
   getAgent,
+  getProject,
   insertActivity,
   setAgentCliVersion,
   setAgentModel,
@@ -23,6 +24,7 @@ import { getScrollbackPath } from "../ipc/procedures/scrollback";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { runSetupIfNeeded } from "../lifecycle/loader";
+import { chosenClaudeServers } from "../mcp/claude-servers";
 import { installedCliVersion } from "../system/cli-versions";
 import { getPtyHost } from "../terminal/pty-host";
 import { noteDraftInput } from "./agent-message-queue";
@@ -160,9 +162,7 @@ export class AgentManager {
     const applied = appliedModelRoles(agent.cliType, modelRoles, model ?? "");
     if (Object.keys(applied).length > 0) setAgentModelRoles(db, agent.id, applied);
 
-    const project = db
-      .prepare("SELECT path, name FROM projects WHERE id = ?")
-      .get(agent.projectId) as { path: string; name: string } | undefined;
+    const project = getProject(db, agent.projectId);
     if (!project) {
       throw new Error(`Project ${agent.projectId} not found`);
     }
@@ -214,8 +214,22 @@ export class AgentManager {
             liveSessionIds(db, agent.projectId, agent.cliType),
           )
         : undefined;
+    const strictServers =
+      agent.cliType === "claude-code"
+        ? await chosenClaudeServers(agent.id, project.mcpServers, [cwd, project.path])
+        : null;
     const { shell, args, env, stdinCommand, submit, enableMarker, isPlainShell, blindResume } =
-      buildPtyInvocation(db, agent, config, cwd, registry, cliConfig, project.path, last);
+      buildPtyInvocation(
+        db,
+        agent,
+        config,
+        cwd,
+        registry,
+        cliConfig,
+        project.path,
+        last,
+        strictServers,
+      );
 
     if (!isPlainShell) attachOutputPipeline(this.getSessionMaps(), agent);
 

@@ -22,6 +22,8 @@ export type Project = {
   browserEval?: boolean;
   /** Local files copied into its new agent worktrees (gitignore patterns); null = the default */
   worktreeCopy?: string[] | null;
+  /** Its Claude Code sessions load only Exegol and these of the person's MCP servers; null = all */
+  mcpServers?: string[] | null;
 };
 
 export type ProjectCreate = Omit<
