@@ -180,9 +180,39 @@ describe("buildPtyInvocation", () => {
       "/shim/exegol-mcp-shim.js",
       "test-mcp-token",
       "write",
+      {},
     );
     expect(mocks.writeAgentMcpConfigFor).not.toHaveBeenCalled();
     expect(inv.args.join(" ")).toContain("--mcp-config /tmp/exegol-mcp/agent.json");
+    expect(inv.args.join(" ")).not.toContain("--strict-mcp-config");
+  });
+
+  it("a project's chosen servers go into the session's config, and Claude starts strict", () => {
+    const [agent, config] = makeAgent("claude-code");
+    const spawn = (servers: Record<string, unknown>) =>
+      buildPtyInvocation(
+        db,
+        agent,
+        config,
+        "/tmp/p1",
+        registry,
+        cliConfig,
+        "/tmp/p1",
+        undefined,
+        servers,
+      ).args.join(" ");
+
+    expect(spawn({ db: { command: "db-server" } })).toContain(
+      "--mcp-config /tmp/exegol-mcp/agent.json --strict-mcp-config",
+    );
+    expect(mocks.writePerAgentMcpConfig).toHaveBeenLastCalledWith(
+      expect.any(String),
+      "/shim/exegol-mcp-shim.js",
+      "test-mcp-token",
+      "write",
+      { db: { command: "db-server" } },
+    );
+    expect(spawn({})).toContain("--strict-mcp-config");
   });
 
   it("defaults EXEGOL_ACCESS_MODE to write and honors an explicit read mode", () => {

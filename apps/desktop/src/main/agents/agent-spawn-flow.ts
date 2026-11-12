@@ -298,6 +298,8 @@ export function buildPtyInvocation(
   /** The newest session in the CLI's own store (`lastLocalSession`): null = nothing to continue
    *  here, undefined = unknown */
   last: LocalSession | null | undefined = undefined,
+  /** The project's chosen MCP servers (`chosenClaudeServers`); null loads all the person's */
+  strictServers: Record<string, unknown> | null = null,
 ): PtyInvocation {
   const isPlainShell = agent.cliType === "shell";
   const userShell = loginShell();
@@ -450,10 +452,17 @@ export function buildPtyInvocation(
       // Exegol's own record of which token belongs to which agent, so reattach
       // after a restart re-arms each session with its own credential instead of
       // reading whichever token a sibling last left in the shared cwd file.
-      const perAgentConfig = writePerAgentMcpConfig(agent.id, shimPath, mcpToken, accessMode);
+      const perAgentConfig = writePerAgentMcpConfig(
+        agent.id,
+        shimPath,
+        mcpToken,
+        accessMode,
+        strictServers ?? {},
+      );
       if (perAgentConfig && agent.cliType === "claude-code") {
-        // No --strict-mcp-config: the user's own servers still load.
         fullCommand = `${fullCommand} --mcp-config ${quotePath(kind, perAgentConfig)}`;
+        // Without a list the flag stays off: the person's own servers still load
+        if (strictServers) fullCommand += " --strict-mcp-config";
       } else {
         writeAgentMcpConfigFor(agent.cliType, cwd, shimPath, mcpToken, accessMode);
         if (agent.cliType === "codex") {

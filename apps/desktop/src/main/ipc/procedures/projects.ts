@@ -35,12 +35,14 @@ import { countLiveAgentsInWorktree, listLiveAgentIds } from "../../db/queries/ag
 import {
   setProjectBrowserEval,
   setProjectBrowserHosts,
+  setProjectMcpServers,
   setProjectWorktreeCopy,
 } from "../../db/queries/projects";
 import { runArchiveHook } from "../../hooks/project-hooks";
 import { openInIde, resolveIde } from "../../ide/opener";
 import { runNative } from "../../lib/concurrency";
 import { logger } from "../../lib/logger";
+import { listClaudeServers } from "../../mcp/claude-servers";
 import { isPathAllowed } from "../../security/path-guard";
 import {
   adoptDetectedIcon,
@@ -170,6 +172,16 @@ export const projectRouter = router({
       setProjectWorktreeCopy(ctx.db, input.id, isDefault ? null : patterns);
       return getProject(ctx.db, input.id);
     }),
+
+  mcpServers: publicProcedure.input(z.object({ id: z.string() })).query(({ ctx, input }) => {
+    const project = getProject(ctx.db, input.id);
+    if (!project) throw new TRPCError({ code: "NOT_FOUND", message: "Project not found" });
+    return listClaudeServers(project.path);
+  }),
+
+  setMcpServers: publicProcedure
+    .input(z.object({ id: z.string(), servers: z.array(z.string().max(200)).max(200).nullable() }))
+    .mutation(({ ctx, input }) => setProjectMcpServers(ctx.db, input.id, input.servers)),
 
   /** Site permissions saved from a browser pane's bar (Always allow / Block) */
   browserPermissions: publicProcedure
