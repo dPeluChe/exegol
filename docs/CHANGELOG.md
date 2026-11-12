@@ -15,6 +15,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - `Cmd+.` no longer stops the focused session: one stray key ended it with no warning. Stop Agent stays in the Command Palette
 
 ### Added
+- Commander chat: the names of live sessions and of projects in its replies and feed are links that open that session or project; Copy still copies the plain text
 - Commander chat: typing `@` offers the names of projects and live sessions (arrows, Enter or Tab to pick, Esc to close), so a request names exactly which one
 - Chat: a Copy button under each reply of a session (Company, the Commander and its floating chat) copies it as written
 - Main session: a Main control in a session's toolbar marks it as the project's main one, or clears the mark so the first session opened is main again; the mark survives a resume or CLI restart, the Commander sees the same one, and Company desks and the Commander's fleet show a Main badge where a project has two or more sessions (T224)
