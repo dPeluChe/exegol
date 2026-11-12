@@ -7,6 +7,7 @@ import {
   claudeServersFrom,
   listClaudeServers,
   mcpSlice,
+  serverHint,
 } from "./claude-servers";
 
 const stdio = (command: string) => ({ command, env: { KEY: "secret" } });
@@ -95,5 +96,13 @@ describe("reading Claude Code's files", () => {
     expect(await chosenClaudeServers("a1", ["db", "gone"], [repo])).toEqual({ db: stdio("db") });
     expect(await chosenClaudeServers("a1", [], [repo])).toEqual({});
     expect(await chosenClaudeServers("a1", null, [repo])).toBeNull();
+  });
+});
+
+describe("serverHint", () => {
+  it("takes the last argument that is no flag or assignment, else the command", () => {
+    expect(serverHint("npx", ["-y", "@acme/db-server"])).toBe("@acme/db-server");
+    expect(serverHint("npx", ["@acme/db-server", "--port=1", "MODE=x"])).toBe("@acme/db-server");
+    expect(serverHint("db-server", ["--stdio"])).toBe("db-server");
   });
 });

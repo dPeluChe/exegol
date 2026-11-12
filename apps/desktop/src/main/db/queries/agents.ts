@@ -813,20 +813,25 @@ export function listLiveAgentSessions(db: Database.Database): LiveAgentSession[]
     .all(...LIVE_STATUSES) as LiveAgentSession[];
 }
 
-export interface LiveAgentPid {
+export interface LiveSessionProcess {
   id: string;
-  project_id: string;
-  cli_type: string;
-  alias: string | null;
   pid: number;
+  alias: string | null;
+  taskDescription: string | null;
+  cliType: string;
+  projectId: string;
+  projectName: string;
+  projectPath: string | null;
 }
 
-/** Every live session with a process, across projects (dev server owners, locale check) */
-export function listLiveAgentPids(db: Database.Database): LiveAgentPid[] {
+/** Every live session with a process, shells too, across projects, with what names it */
+export function listLiveSessionProcesses(db: Database.Database): LiveSessionProcess[] {
   return db
     .prepare(
-      `SELECT id, project_id, cli_type, alias, pid FROM agents
-       WHERE pid IS NOT NULL AND status IN (${liveIn()})`,
+      `SELECT a.id, a.pid, a.alias, a.task_description AS taskDescription, a.cli_type AS cliType,
+              a.project_id AS projectId, COALESCE(p.name, '') AS projectName, p.path AS projectPath
+       FROM agents a LEFT JOIN projects p ON p.id = a.project_id
+       WHERE a.pid IS NOT NULL AND a.status IN (${liveIn()})`,
     )
-    .all(...LIVE_STATUSES) as LiveAgentPid[];
+    .all(...LIVE_STATUSES) as LiveSessionProcess[];
 }

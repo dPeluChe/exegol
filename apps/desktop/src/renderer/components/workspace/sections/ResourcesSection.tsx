@@ -2,13 +2,12 @@ import { cn } from "@exegol/ui";
 import { Cpu, FolderGit2, GitBranch, HardDrive, MemoryStick, Server } from "lucide-react";
 import { useProjectContext } from "../../../contexts/ProjectContext";
 import { type ProjectMetrics, useProjectMetrics } from "../../../hooks/use-trpc";
-import { isWorking, useProjectAgents } from "../../../stores/agents";
 import { EmptyState } from "../../common";
-import { AgentProcessTable } from "./AgentProcessTable";
 import { DevServersCard } from "./DevServersCard";
 import { PtyMemoryCard } from "./PtyMemoryCard";
 import { formatBytes, formatUptime, thresholdBarColor, thresholdColor } from "./resource-format";
-import { useAgentResourceMaps, useLiveSystemMetrics } from "./use-resource-metrics";
+import { SessionProcessesCard } from "./SessionProcessesCard";
+import { useLiveSystemMetrics } from "./use-resource-metrics";
 
 // ─── Sparkline (inline SVG) ─────────────────────────────────────────────────
 
@@ -123,7 +122,7 @@ function MetricCard({
 // ─── Main Section ───────────────────────────────────────────────────────────
 
 export function ResourcesSection() {
-  const { project, projectId } = useProjectContext();
+  const { project } = useProjectContext();
   const { metrics, cpuHistory, memHistory } = useLiveSystemMetrics();
 
   const { data: projectMetrics, isLoading: projectLoading } = useProjectMetrics(
@@ -131,12 +130,6 @@ export function ResourcesSection() {
     project?.path ?? null,
     project?.name ?? null,
   );
-  const { agentProcessMap, ptyMemoryMap } = useAgentResourceMaps(
-    project?.id ?? null,
-    projectMetrics?.agentProcesses,
-  );
-
-  const runningAgents = useProjectAgents(projectId, isWorking);
 
   if (!project) {
     return (
@@ -158,17 +151,7 @@ export function ResourcesSection() {
 
         <ProjectStats project={project} projectMetrics={projectMetrics} loading={projectLoading} />
 
-        {/* Per-agent process table */}
-        <div>
-          <h4 className="mb-3 text-xs font-semibold uppercase tracking-wider text-text-muted">
-            Active Agents ({runningAgents.length})
-          </h4>
-          <AgentProcessTable
-            agents={runningAgents}
-            agentProcessMap={agentProcessMap}
-            ptyMemoryMap={ptyMemoryMap}
-          />
-        </div>
+        <SessionProcessesCard projectId={project.id} />
       </div>
     </div>
   );

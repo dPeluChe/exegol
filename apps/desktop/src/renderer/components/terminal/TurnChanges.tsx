@@ -3,16 +3,13 @@ import * as Dialog from "@radix-ui/react-dialog";
 import { FileDiff, Undo2, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useLatestTurn, useTurnDiff, useUndoTurn } from "../../hooks/use-trpc-scoring";
+import { plural } from "../../lib/plural";
 import { ConfirmDialog } from "../common/ConfirmDialog";
 import { DiffFileView } from "../workspace/sections/diff/DiffFileView";
 import { parseUnifiedDiff } from "../workspace/sections/diff/diff-parser";
 import { useExpandedDiffFiles } from "../workspace/sections/diff/use-expanded-diff-files";
 
 const SHOWN_NAMES = 5;
-
-function plural(n: number, word: string): string {
-  return `${n} ${word}${n === 1 ? "" : "s"}`;
-}
 
 function undoDescription(turn: TurnChanges): string {
   const names = turn.files.slice(0, SHOWN_NAMES).map((f) => f.path);

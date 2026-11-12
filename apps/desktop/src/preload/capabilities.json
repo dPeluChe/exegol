@@ -115,6 +115,7 @@
       "refreshProjectDetect",
       "runPins",
       "setPreferredPort",
+      "sessionProcesses",
       "sidecarMemory",
       "system",
       "toggleRunPin"

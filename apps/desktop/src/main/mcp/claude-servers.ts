@@ -97,6 +97,28 @@ export async function listClaudeServers(projectPath: string): Promise<ClaudeMcpS
   return servers.map(({ name, scope, transport }) => ({ name, scope, transport }));
 }
 
+export interface KnownServer {
+  name: string;
+  /** A word of its command line that tells its process apart; stays in main */
+  hint: string;
+}
+
+/** Its last argument that is no flag (the package or script it runs), else its command */
+export function serverHint(command: string, args: string[]): string {
+  const named = args.filter((a) => !a.startsWith("-") && !a.includes("="));
+  return named[named.length - 1] ?? command;
+}
+
+/** Local servers only: a remote one starts no process */
+export async function knownClaudeServers(projectPath: string): Promise<KnownServer[]> {
+  const servers = await readClaudeServers([projectPath]);
+  return servers.flatMap(({ name, definition: { command, args } }) =>
+    typeof command === "string"
+      ? [{ name, hint: serverHint(command, Array.isArray(args) ? args.map(String) : []) }]
+      : [],
+  );
+}
+
 /** The definitions a Claude session of a project with a chosen list loads besides Exegol; null
  *  when the project has no list. `folders`: the session's cwd, then the project root */
 export async function chosenClaudeServers(

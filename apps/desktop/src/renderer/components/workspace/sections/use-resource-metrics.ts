@@ -1,14 +1,7 @@
 import type { MetricsSnapshot } from "@exegol/shared";
 import { useMemo, useState } from "react";
 import { useMountEffect } from "../../../hooks/use-mount-effect";
-import {
-  type ProjectMetrics,
-  type SidecarSessionMemory,
-  useAgents,
-  useMetricsHistory,
-  useSidecarMemory,
-  useSystemMetrics,
-} from "../../../hooks/use-trpc";
+import { useMetricsHistory, useSystemMetrics } from "../../../hooks/use-trpc";
 
 /** System metrics: pushed live values first, the tRPC query as fallback, plus sparkline series. */
 export function useLiveSystemMetrics() {
@@ -48,38 +41,4 @@ export function useLiveSystemMetrics() {
   const memHistory = useMemo(() => history.map((h) => h.memoryPercent), [history]);
 
   return { metrics, cpuHistory, memHistory };
-}
-
-/** Per-agent process metrics (matched by PID) and PTY ring-buffer memory, keyed by agent id. */
-export function useAgentResourceMaps(
-  projectId: string | null,
-  agentProcesses: ProjectMetrics["agentProcesses"] | undefined,
-) {
-  const { data: dbAgents } = useAgents(projectId);
-  const { data: sidecarMemory } = useSidecarMemory();
-
-  // Map agent IDs to their process metrics via PID
-  const agentProcessMap = useMemo(() => {
-    const map = new Map<string, { cpu: number; memory: number }>();
-    if (!dbAgents || !agentProcesses) return map;
-    const byPid = new Map(agentProcesses.map((p) => [p.pid, p]));
-    for (const dbAgent of dbAgents) {
-      if (!dbAgent.pid) continue;
-      const proc = byPid.get(dbAgent.pid);
-      if (proc) {
-        map.set(dbAgent.id, { cpu: proc.cpu, memory: proc.memory });
-      }
-    }
-    return map;
-  }, [dbAgents, agentProcesses]);
-
-  // T143: sidecar ring buffer memory per session, keyed by agent id (PTY
-  // sessions are keyed by agent.id — see AgentManager.createSession call site)
-  const ptyMemoryMap = useMemo(() => {
-    const map = new Map<string, SidecarSessionMemory>();
-    for (const s of sidecarMemory?.sessions ?? []) map.set(s.id, s);
-    return map;
-  }, [sidecarMemory]);
-
-  return { agentProcessMap, ptyMemoryMap };
 }

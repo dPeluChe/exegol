@@ -116,7 +116,8 @@ function resolveBundledBin(fileName: string): string | null {
   return existsSync(nested) ? nested : null;
 }
 
-const SHIM_BIN = "exegol-mcp-shim-bin.js";
+export const SHIM_BIN = "exegol-mcp-shim-bin.js";
+export const CLAIM_GUARD_BIN = "exegol-claim-guard-bin.js";
 
 export function resolveMcpShimPath(): string {
   return resolveBundledBin(SHIM_BIN) ?? join(__dirname, "mcp", SHIM_BIN);
@@ -125,7 +126,7 @@ export function resolveMcpShimPath(): string {
 /** T175: the PreToolUse claim guard. Null when the bundle is missing, which
  *  means no enforcement rather than a broken hook command in the settings file. */
 export function resolveClaimGuardPath(): string | null {
-  return resolveBundledBin("exegol-claim-guard-bin.js");
+  return resolveBundledBin(CLAIM_GUARD_BIN);
 }
 
 interface McpJsonFile {
