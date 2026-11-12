@@ -6,12 +6,12 @@
 
 import { chmodSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { connect, createServer, type Server, type Socket } from "node:net";
-import type { McpAgentState } from "@exegol/shared";
+import type { McpAgentState, McpSessionInfo } from "@exegol/shared";
 import type Database from "libsql";
 import { forgetBrowserAgent } from "../browser/agent-browser-tools";
 import { COMMANDER_LINE } from "../commander/brief";
 import { isCommander } from "../commander/home";
-import { listLiveAgentClis } from "../db/queries/agents";
+import { listLiveAgentClis, listLiveAgentSessions } from "../db/queries/agents";
 import { findBlockingClaim } from "../db/queries/path-claims";
 import { getProject } from "../db/queries/projects";
 import { sessionLine } from "../inbox/session-line";
@@ -32,6 +32,7 @@ import {
 } from "./exegol-protocol";
 import {
   activeTokenCount,
+  boundAgents,
   clearTokens,
   connectedAgentIds,
   hasToken,
@@ -62,17 +63,25 @@ export function revokeAgentMcpToken(agentId: string): void {
 
 /** Per live agent: a shim is connected with its token, it has a token but no shim yet, or Exegol
  *  never wired MCP for it (shells, or a spawn without a config) */
+function bridgeState(id: string, cliType: string, connected: Set<string>): McpAgentState {
+  if (connected.has(id)) return "connected";
+  return hasToken(id) && readsExegolMcpConfig(cliType) ? "not_connected" : "not_wired";
+}
+
 export function getMcpAgentStates(db: Database.Database): Record<string, McpAgentState> {
   const connected = connectedAgentIds();
   const out: Record<string, McpAgentState> = {};
-  for (const a of listLiveAgentClis(db)) {
-    out[a.id] = connected.has(a.id)
-      ? "connected"
-      : hasToken(a.id) && readsExegolMcpConfig(a.cliType)
-        ? "not_connected"
-        : "not_wired";
-  }
+  for (const a of listLiveAgentClis(db)) out[a.id] = bridgeState(a.id, a.cliType, connected);
   return out;
+}
+
+/** Settings > MCP Server: every live agent session with its bridge state */
+export function getMcpSessions(db: Database.Database): McpSessionInfo[] {
+  const connected = connectedAgentIds();
+  return listLiveAgentSessions(db).map((a) => ({
+    ...a,
+    state: bridgeState(a.id, a.cliType, connected),
+  }));
 }
 
 export async function handleRequest(
@@ -82,6 +91,20 @@ export async function handleRequest(
   conn?: McpConnectionState,
 ): Promise<void> {
   const caller = req.params as { token?: string; ppid?: number } | undefined;
+  // A bridge says who it is as soon as it connects. No process walk: every bridge does this at
+  // once when the app starts; a token shared by several sessions waits for its first call.
+  if (req.method === "hello") {
+    const bound = caller?.token ? boundAgents(caller.token) : undefined;
+    const agentId = bound?.length === 1 ? bound[0]?.agentId : undefined;
+    if (agentId) markConnected(conn, agentId);
+    record({ kind: "connect", agentId, detail: `shim #${conn?.id ?? "?"}` });
+    if (!agentId) {
+      const why = bound?.length ? "token shared by several sessions" : "no valid token";
+      record({ kind: "error", tool: "hello", detail: `${why}: known on its first call` });
+    }
+    socket.write(encodeResponse(req.id, {}));
+    return;
+  }
   await primeAncestors(conn, caller?.token, caller?.ppid);
   // Shims proxy tools/list so a shim spawned weeks ago lists what the running app has
   if (req.method === "list_tools") {
@@ -228,7 +251,8 @@ function startListening(db: Database.Database): void {
       (msg) => {
         if (!announced && msg.method !== "check_path") {
           announced = true;
-          record({ kind: "connect", detail: `shim #${connId}` });
+          // A bridge from before `hello`: its first request is all that announces it
+          if (msg.method !== "hello") record({ kind: "connect", detail: `shim #${connId}` });
         }
         handleRequest(db, socket, msg, conn).catch((err) => {
           record({
@@ -319,8 +343,14 @@ export function getExegolMcpServerInfo(): {
   running: boolean;
   sockPath: string;
   activeTokens: number;
+  connected: number;
 } {
-  return { running: server !== null, sockPath: MCP_SOCK_PATH, activeTokens: activeTokenCount() };
+  return {
+    running: server !== null,
+    sockPath: MCP_SOCK_PATH,
+    activeTokens: activeTokenCount(),
+    connected: connectedAgentIds().size,
+  };
 }
 
 export function stopExegolMcpServer(): void {

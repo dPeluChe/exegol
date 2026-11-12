@@ -11,7 +11,11 @@ export function sessionWhere(
 
 /** A session's name: its alias, else the task or folder it was opened with (a quick launch's
  *  task is only the CLI's name, so that one falls back to the CLI) */
-export function sessionName(agent: Pick<AgentState, "alias" | "taskDescription" | "cliType">) {
+export function sessionName(agent: {
+  alias?: string | null;
+  taskDescription?: string | null;
+  cliType: string;
+}) {
   return (
     agent.alias ??
     (agent.taskDescription && agent.taskDescription !== agent.cliType
