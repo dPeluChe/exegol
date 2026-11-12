@@ -63,6 +63,16 @@ function parseWorktreeCopyColumn(raw: string | null): string[] | null {
   }
 }
 
+function parseNamesColumn(raw: string | null | undefined): string[] | null {
+  if (raw === null || raw === undefined) return null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.filter((n): n is string => typeof n === "string") : null;
+  } catch {
+    return null;
+  }
+}
+
 export function parseHostsColumn(raw: string | null | undefined): string[] {
   if (!raw) return [];
   try {
@@ -92,6 +102,7 @@ export function mapProjectRow(row: Record<string, unknown>): Project {
     browserEval: r.browser_eval === 1,
     ide: r.ide ?? null,
     worktreeCopy: parseWorktreeCopyColumn(r.worktree_copy),
+    mcpServers: parseNamesColumn(r.mcp_servers),
   };
 }
 

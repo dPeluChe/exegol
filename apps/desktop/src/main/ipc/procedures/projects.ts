@@ -35,12 +35,14 @@ import { countLiveAgentsInWorktree, listLiveAgentIds } from "../../db/queries/ag
 import {
   setProjectBrowserEval,
   setProjectBrowserHosts,
+  setProjectMcpServers,
   setProjectWorktreeCopy,
 } from "../../db/queries/projects";
 import { runArchiveHook } from "../../hooks/project-hooks";
 import { openInIde, resolveIde } from "../../ide/opener";
 import { runNative } from "../../lib/concurrency";
 import { logger } from "../../lib/logger";
+import { listClaudeServers } from "../../mcp/claude-servers";
 import { isPathAllowed } from "../../security/path-guard";
 import {
   adoptDetectedIcon,
@@ -168,6 +170,21 @@ export const projectRouter = router({
       const patterns = input.patterns === null ? null : parseWorktreeCopy(input.patterns);
       const isDefault = patterns?.join("\n") === DEFAULT_WORKTREE_COPY.join("\n");
       setProjectWorktreeCopy(ctx.db, input.id, isDefault ? null : patterns);
+      return getProject(ctx.db, input.id);
+    }),
+
+  /** The person's MCP servers a Claude Code session of this project would load, and its choice */
+  mcpServers: publicProcedure.input(z.object({ id: z.string() })).query(({ ctx, input }) => {
+    const project = getProject(ctx.db, input.id);
+    if (!project) throw new TRPCError({ code: "NOT_FOUND", message: "Project not found" });
+    return { servers: listClaudeServers(project.path), selected: project.mcpServers ?? null };
+  }),
+
+  /** null: sessions load everything again. A list: only Exegol and these (new sessions) */
+  setMcpServers: publicProcedure
+    .input(z.object({ id: z.string(), servers: z.array(z.string().max(200)).max(200).nullable() }))
+    .mutation(({ ctx, input }) => {
+      setProjectMcpServers(ctx.db, input.id, input.servers);
       return getProject(ctx.db, input.id);
     }),
 

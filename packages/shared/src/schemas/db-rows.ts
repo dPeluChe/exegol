@@ -48,6 +48,7 @@ export const projectRowSchema = z.object({
   browser_eval: optNum,
   ide: optStr,
   worktree_copy: optStr,
+  mcp_servers: optStr,
 });
 
 export const projectGroupRowSchema = z.object({

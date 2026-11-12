@@ -24,6 +24,7 @@ import { toastError } from "../../stores/toasts";
 import { SegmentedTabs } from "../common/SegmentedTabs";
 import { IdePicker } from "../settings/IdePicker";
 import { type FoundIcon, type ProjectAppearance, ProjectIconPicker } from "./ProjectIconPicker";
+import { ProjectMcpTab } from "./ProjectMcpTab";
 
 const INTERRUPTION_TABS: { id: InterruptionLevel; label: string }[] = [
   { id: "all", label: "All" },
@@ -62,6 +63,15 @@ function InterruptionField({ projectId }: { projectId: string }) {
   );
 }
 
+type ProjectTab = "general" | "browser" | "worktrees" | "mcp";
+
+const PROJECT_TABS: { id: ProjectTab; label: string }[] = [
+  { id: "general", label: "General" },
+  { id: "browser", label: "Browser" },
+  { id: "worktrees", label: "Worktrees" },
+  { id: "mcp", label: "MCP" },
+];
+
 /**
  * Edit a project in one place: its name, and its icon (an image found in the repo,
  * the app's own favicon or icon, root or any subrepo, or a built-in one) and color.
@@ -91,6 +101,7 @@ export function ProjectAppearanceDialog({
       trpcMutate("projects.setAppearance", { id: project.id, ...next }),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
   });
+  const [tab, setTab] = useState<ProjectTab>("general");
   const [name, setName] = useState(project.name);
   const savedHosts = (project.browserHosts ?? []).join("\n");
   const [hosts, setHosts] = useState(savedHosts);
@@ -126,7 +137,7 @@ export function ProjectAppearanceDialog({
       <Dialog.Portal>
         <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60" />
         <Dialog.Content
-          className="fixed left-1/2 top-[10vh] z-50 max-h-[80vh] w-[calc(100%-2rem)] max-w-sm -translate-x-1/2 overflow-y-auto rounded-lg border p-4 shadow-2xl"
+          className="fixed left-1/2 top-[10vh] z-50 max-h-[80vh] w-[calc(100%-2rem)] max-w-md -translate-x-1/2 overflow-y-auto rounded-lg border p-4 shadow-2xl"
           style={{ background: "var(--bg-secondary)", borderColor: "var(--border)" }}
         >
           <div className="mb-3 flex items-center justify-between gap-3">
@@ -138,96 +149,119 @@ export function ProjectAppearanceDialog({
             </Dialog.Close>
           </div>
 
-          <label className="mb-3 block">
-            <span className="mb-1 block text-[10px] uppercase tracking-wider text-text-muted">
-              Name
-            </span>
-            <input
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter") saveAndClose();
-              }}
-              className="w-full min-w-0 rounded border border-border bg-bg-tertiary px-2 py-1 text-xs text-text-primary outline-none focus:border-accent/50"
-            />
-          </label>
+          <div className="mb-3">
+            <SegmentedTabs tabs={PROJECT_TABS} active={tab} onChange={setTab} compact />
+          </div>
 
-          <ShortcutPicker projectId={project.id} />
+          {tab === "general" && (
+            <>
+              <label className="mb-3 block">
+                <span className="mb-1 block text-[10px] uppercase tracking-wider text-text-muted">
+                  Name
+                </span>
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") saveAndClose();
+                  }}
+                  className="w-full min-w-0 rounded border border-border bg-bg-tertiary px-2 py-1 text-xs text-text-primary outline-none focus:border-accent/50"
+                />
+              </label>
 
-          <ProjectIdePicker projectId={project.id} />
+              <ShortcutPicker projectId={project.id} />
 
-          <label className="mb-3 block">
-            <span className="mb-1 block text-[10px] uppercase tracking-wider text-text-muted">
-              Agent browser hosts
-            </span>
-            <textarea
-              value={hosts}
-              onChange={(e) => setHosts(e.target.value)}
-              rows={3}
-              placeholder={"staging.myapp.com\n*.myapp.dev"}
-              className="w-full min-w-0 resize-y rounded border border-border bg-bg-tertiary px-2 py-1 font-mono text-[11px] text-text-primary outline-none focus:border-accent/50"
-            />
-            <span className="mt-1 block text-[10px] text-text-muted">
-              Besides local hosts (localhost, 127.0.0.1, *.localhost), the sites this project's
-              agents may open in its browser pane. One per line; *.domain covers its subdomains;
-              .local names go here too. Your logins for a host you add are copied in.
-            </span>
-          </label>
+              <ProjectIdePicker projectId={project.id} />
 
-          <label className="mb-3 flex items-start gap-2 text-[11px] text-text-secondary">
-            <input
-              type="checkbox"
-              checked={allowEval}
-              onChange={(e) => setAllowEval(e.target.checked)}
-              className="mt-0.5"
-            />
-            <span>
-              Let agents run JavaScript in the page (browser_eval). It runs with this project's
-              logins; while an agent acts, requests outside the hosts above are blocked.
-            </span>
-          </label>
+              <InterruptionField projectId={project.id} />
 
-          <SitePermissions projectId={project.id} enabled={open} />
+              <ProjectIconPicker
+                found={found}
+                isLoading={isLoading}
+                value={{
+                  color: project.color ?? null,
+                  icon: project.icon ?? null,
+                  iconImage: project.iconImage ?? null,
+                }}
+                onChange={(next) => save.mutate(next)}
+              />
+              {save.isError && (
+                <p className="mt-2 text-[11px] text-red-400">{String(save.error)}</p>
+              )}
+            </>
+          )}
 
-          <InterruptionField projectId={project.id} />
+          {tab === "browser" && (
+            <>
+              <label className="mb-3 block">
+                <span className="mb-1 block text-[10px] uppercase tracking-wider text-text-muted">
+                  Agent browser hosts
+                </span>
+                <textarea
+                  value={hosts}
+                  onChange={(e) => setHosts(e.target.value)}
+                  rows={3}
+                  placeholder={"staging.myapp.com\n*.myapp.dev"}
+                  className="w-full min-w-0 resize-y rounded border border-border bg-bg-tertiary px-2 py-1 font-mono text-[11px] text-text-primary outline-none focus:border-accent/50"
+                />
+                <span className="mt-1 block text-[10px] text-text-muted">
+                  Besides local hosts (localhost, 127.0.0.1, *.localhost), the sites this project's
+                  agents may open in its browser pane. One per line; *.domain covers its subdomains;
+                  .local names go here too. Your logins for a host you add are copied in.
+                </span>
+              </label>
 
-          <label className="mb-3 block">
-            <span className="mb-1 block text-[10px] uppercase tracking-wider text-text-muted">
-              Copy into new worktrees
-            </span>
-            <textarea
-              value={copy}
-              onChange={(e) => setCopy(e.target.value)}
-              rows={3}
-              placeholder={DEFAULT_WORKTREE_COPY.join("\n")}
-              className="w-full min-w-0 resize-y rounded border border-border bg-bg-tertiary px-2 py-1 font-mono text-[11px] text-text-primary outline-none focus:border-accent/50"
-            />
-            <span className="mt-1 block text-[10px] text-text-muted">
-              Gitignored files of the checkout copied into each new agent or pipeline worktree
-              before it starts, never over a file already there. Gitignore syntax, one per line;
-              !pattern leaves a file out. Empty copies nothing.
-            </span>
-          </label>
+              <label className="mb-3 flex items-start gap-2 text-[11px] text-text-secondary">
+                <input
+                  type="checkbox"
+                  checked={allowEval}
+                  onChange={(e) => setAllowEval(e.target.checked)}
+                  className="mt-0.5"
+                />
+                <span>
+                  Let agents run JavaScript in the page (browser_eval). It runs with this project's
+                  logins; while an agent acts, requests outside the hosts above are blocked.
+                </span>
+              </label>
 
-          <ProjectIconPicker
-            found={found}
-            isLoading={isLoading}
-            value={{
-              color: project.color ?? null,
-              icon: project.icon ?? null,
-              iconImage: project.iconImage ?? null,
-            }}
-            onChange={(next) => save.mutate(next)}
-          />
-          {save.isError && <p className="mt-2 text-[11px] text-red-400">{String(save.error)}</p>}
+              <SitePermissions projectId={project.id} enabled={open} />
+            </>
+          )}
+
+          {tab === "worktrees" && (
+            <label className="mb-3 block">
+              <span className="mb-1 block text-[10px] uppercase tracking-wider text-text-muted">
+                Copy into new worktrees
+              </span>
+              <textarea
+                value={copy}
+                onChange={(e) => setCopy(e.target.value)}
+                rows={3}
+                placeholder={DEFAULT_WORKTREE_COPY.join("\n")}
+                className="w-full min-w-0 resize-y rounded border border-border bg-bg-tertiary px-2 py-1 font-mono text-[11px] text-text-primary outline-none focus:border-accent/50"
+              />
+              <span className="mt-1 block text-[10px] text-text-muted">
+                Gitignored files of the checkout copied into each new agent or pipeline worktree
+                before it starts, never over a file already there. Gitignore syntax, one per line;
+                !pattern leaves a file out. Empty copies nothing.
+              </span>
+            </label>
+          )}
+
+          {tab === "mcp" && <ProjectMcpTab projectId={project.id} />}
+
           <div className="mt-4 flex items-center justify-between">
-            <button
-              type="button"
-              onClick={() => save.mutate({ color: null, icon: null, iconImage: null })}
-              className="text-[11px] text-text-muted hover:text-text-primary"
-            >
-              Reset to default
-            </button>
+            {tab === "general" ? (
+              <button
+                type="button"
+                onClick={() => save.mutate({ color: null, icon: null, iconImage: null })}
+                className="text-[11px] text-text-muted hover:text-text-primary"
+              >
+                Reset icon and color
+              </button>
+            ) : (
+              <span />
+            )}
             <button
               type="button"
               onClick={saveAndClose}

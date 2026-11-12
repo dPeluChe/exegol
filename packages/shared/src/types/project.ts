@@ -22,7 +22,18 @@ export type Project = {
   browserEval?: boolean;
   /** Local files copied into its new agent worktrees (gitignore patterns); null = the default */
   worktreeCopy?: string[] | null;
+  /** Its Claude Code sessions load only Exegol and these of the person's MCP servers; null = all */
+  mcpServers?: string[] | null;
 };
+
+/** One of the person's MCP servers in Claude Code's config: never its command, env or headers */
+export interface ClaudeMcpServerInfo {
+  name: string;
+  /** user: every project; local: this folder, private; project: the repo's .mcp.json */
+  scope: "user" | "local" | "project";
+  /** stdio starts a process per session */
+  transport: "stdio" | "http" | "sse" | "ws";
+}
 
 export type ProjectCreate = Omit<
   Project,

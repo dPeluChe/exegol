@@ -65,6 +65,18 @@ export function setProjectWorktreeCopy(
   );
 }
 
+/** null loads every server the person configured */
+export function setProjectMcpServers(
+  db: Database.Database,
+  id: string,
+  servers: string[] | null,
+): void {
+  db.prepare("UPDATE projects SET mcp_servers = ? WHERE id = ?").run(
+    servers === null ? null : JSON.stringify(servers),
+    id,
+  );
+}
+
 export function setProjectBrowserEval(db: Database.Database, id: string, on: boolean): void {
   db.prepare("UPDATE projects SET browser_eval = ? WHERE id = ?").run(on ? 1 : 0, id);
 }

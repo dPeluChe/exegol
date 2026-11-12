@@ -15,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   writeAgentMcpConfigFor: vi.fn(),
   writePerAgentMcpConfig: vi.fn(() => "/tmp/exegol-mcp/agent.json"),
   ensureExegolMcpServerStarted: vi.fn(),
+  pickClaudeServers: vi.fn((_folders: string[], _names: string[]) => ({})),
   buildClaudeCodeHooksFile: vi.fn((_agentId: string) => mocks.hooksPath),
 }));
 
@@ -51,6 +52,7 @@ vi.mock("../mcp/exegol-mcp-config", () => ({
   writeAgentMcpConfigFor: mocks.writeAgentMcpConfigFor,
   writePerAgentMcpConfig: mocks.writePerAgentMcpConfig,
 }));
+vi.mock("../mcp/claude-servers", () => ({ pickClaudeServers: mocks.pickClaudeServers }));
 vi.mock("../terminal/shell-wrappers", () => ({
   shellSupportsMarker: () => mocks.marker,
   getShellIntegrationZdotdir: () => "/integration/zdotdir",
@@ -129,6 +131,7 @@ describe("buildPtyInvocation", () => {
     mocks.marker = false;
     mocks.writeAgentMcpConfigFor.mockClear();
     mocks.writePerAgentMcpConfig.mockClear();
+    mocks.pickClaudeServers.mockClear();
     mocks.buildClaudeCodeHooksFile.mockClear();
   });
 
@@ -180,9 +183,37 @@ describe("buildPtyInvocation", () => {
       "/shim/exegol-mcp-shim.js",
       "test-mcp-token",
       "write",
+      {},
     );
     expect(mocks.writeAgentMcpConfigFor).not.toHaveBeenCalled();
     expect(inv.args.join(" ")).toContain("--mcp-config /tmp/exegol-mcp/agent.json");
+    expect(inv.args.join(" ")).not.toContain("--strict-mcp-config");
+  });
+
+  it("a project with a chosen list starts Claude with only Exegol and those servers", () => {
+    db.prepare("UPDATE projects SET mcp_servers = ? WHERE id = 'p1'").run('["db","gone"]');
+    mocks.pickClaudeServers.mockReturnValueOnce({ db: { command: "db-server" } });
+    const [agent, config] = makeAgent("claude-code");
+    const inv = buildPtyInvocation(db, agent, config, "/tmp/p1/wt", registry, cliConfig, "/tmp/p1");
+
+    expect(mocks.pickClaudeServers).toHaveBeenCalledWith(["/tmp/p1/wt", "/tmp/p1"], ["db", "gone"]);
+    expect(mocks.writePerAgentMcpConfig).toHaveBeenCalledWith(
+      expect.any(String),
+      "/shim/exegol-mcp-shim.js",
+      "test-mcp-token",
+      "write",
+      { db: { command: "db-server" } },
+    );
+    expect(inv.args.join(" ")).toContain(
+      "--mcp-config /tmp/exegol-mcp/agent.json --strict-mcp-config",
+    );
+  });
+
+  it("an empty list is still a list: Exegol alone, strict", () => {
+    db.prepare("UPDATE projects SET mcp_servers = '[]' WHERE id = 'p1'").run();
+    const [agent, config] = makeAgent("claude-code");
+    const inv = buildPtyInvocation(db, agent, config, "/tmp/p1", registry, cliConfig, "/tmp/p1");
+    expect(inv.args.join(" ")).toContain("--strict-mcp-config");
   });
 
   it("defaults EXEGOL_ACCESS_MODE to write and honors an explicit read mode", () => {

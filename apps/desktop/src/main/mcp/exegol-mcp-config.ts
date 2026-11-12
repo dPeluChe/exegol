@@ -43,12 +43,15 @@ export function writePerAgentMcpConfig(
   shimPath: string,
   token: string,
   accessMode: ExegolAccessMode,
+  /** The person's own servers a strict session keeps (their definitions, as configured) */
+  others: Record<string, unknown> = {},
 ): string | null {
   try {
     mkdirSync(MCP_CONFIG_DIR, { recursive: true, mode: 0o700 });
     const path = join(MCP_CONFIG_DIR, `${agentId}.json`);
     const body: McpJsonFile = {
       mcpServers: {
+        ...others,
         [EXEGOL_SERVER_KEY]: {
           ...nodeLaunch(shimPath),
           env: {

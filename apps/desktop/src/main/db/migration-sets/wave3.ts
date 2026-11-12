@@ -468,4 +468,9 @@ export const wave3Migrations: Migration[] = [
     id: "w3_042_project_main_agent",
     sql: "ALTER TABLE projects ADD COLUMN main_agent_id TEXT;",
   },
+  {
+    // T227. JSON array of MCP server names its Claude Code sessions load besides Exegol; null = all
+    id: "w3_043_project_mcp_servers",
+    sql: "ALTER TABLE projects ADD COLUMN mcp_servers TEXT;",
+  },
 ];
