@@ -38,7 +38,7 @@ From `exegol.log` and `sidecar.log` (times in UTC):
 | 18:09:44 | App starts: `dbInit` 10 ms, `firstPaint` 667 ms |
 | 18:09:47 | Sidecar connected empty; 75 sessions marked crashed and offered for auto-resume |
 | 18:09:47 to 18:11:53 | Auto-resume: 65 resumed, 0 failed, 2 skipped (no pane), 8 kept suspended (shells idle 5 to 6 days) |
-| 18:11:45 | Sidecar trims 8 rings from 8 MB to 2 MB (its own 256 MB ring budget, logged as "memory pressure") |
+| 18:11:45 | Sidecar trims 8 rings from 8 MB to 2 MB (its own 256 MB ring budget: more busy rings than fit, not low system memory) |
 
 Resumed: 38 Claude Code, 7 Devin, 2 OpenCode, 1 Codex, 1 Antigravity, 16 shells.
 
@@ -85,8 +85,9 @@ Reading it:
 - Third-party MCP servers hold 4.9 GB in 102 processes. The bun server alone is 2.3 GB.
 - The two npm servers run under the Devin sessions (two processes each per
   session), not under Claude.
-- 47 CLIs own the 49 bridges: one per session, plus a second one under one Claude session and
-  under the shared `opencode serve` process (one per OpenCode session).
+- 47 processes own the 49 bridges, for 49 resumed CLIs: the two OpenCode sessions share one
+  `opencode serve` process (two bridges under it), one Claude session has a second bridge, and
+  the Antigravity session had none.
 
 Where the third-party servers come from (the Claude Code user config, scope and transport only):
 
@@ -107,15 +108,15 @@ project uses it or not. The HTTP ones start nothing.
   with four methods: `list_tools`, `session_context`, `check_path`, `call_tool`.
 - **Identity**: a token minted per agent at spawn. Access mode is read from the database on
   every call. Claude Code gets the token in its own config file
-  (`~/.exegol/mcp/<agentId>.json`, passed with `--mcp-config`); Codex gets it in the session's
-  environment. The other CLIs read a project file, so two sessions in one folder share a token,
+  (`~/.exegol/mcp/<agentId>.json`, passed with `--mcp-config`); Codex gets it per
+  session as a `-c` override on its command line, with the folder's `.mcp.json` as a fallback. The other CLIs read a project file, so two sessions in one folder share a token,
   and the server tells them apart by the bridge's parent process chain (`exegol-identity.ts`).
 - **Bridge** (`mcp/exegol-mcp-shim-bin.ts`, 385 lines): the process the CLI starts. Besides
   forwarding, it:
   - answers `initialize`, `server/discover` and `ping` itself, for both protocol eras
   - answers `tools/list` from its bundle when the app is not running, so the CLI's startup never
     waits on Exegol
-  - reconnects to the socket forever with backoff, so it survives an app restart or update, and
+  - reconnects to the socket forever with backoff (5 s at most), so it survives an app restart or update, and
     tells the agent whether a call that failed had reached the app or not
   - reads a new token from disk when the app re-armed it
   - sends its parent pid, the disambiguator above
@@ -216,7 +217,8 @@ shows up, not urgent on memory alone.
 
 - **C1. Free a slot when the session is really up.** Wait for the bridge to connect
   (`mcp:status`) and a short quiet period, not only for the prompt. Shells take a slot for a
-  moment too. Small change in `settled`.
+  moment too. Small change in `settled`. It shows that Exegol's bridge is up, not the person's
+  other servers, and a CLI with no bridge wired still needs the 10 s cap.
 - **C2. Follow the machine.** Before each resume, read the load (`os.loadavg()` against the core
   count) and hold while it is above a limit, with a cap on the wait. Slower on a loaded
   machine, same as today on a free one.
@@ -290,7 +292,8 @@ the example: 38 copies, 61 MB each, all started within two minutes):
 - Local: `~/.exegol/logs/exegol.log`, `sidecar.log`; `ps`, `footprint`, `/usr/bin/time` on
   2026-11-12; the Claude Code user config (scope and transport only).
 - Code: `mcp/exegol-server.ts`, `mcp/exegol-mcp-shim-bin.ts`, `mcp/exegol-mcp-config.ts`,
-  `mcp/exegol-identity.ts`, `agents/spawn-env.ts`, `agents/agent-spawn-flow.ts`,
+  `mcp/exegol-identity.ts`, `mcp/exegol-tokens.ts`, `mcp/exegol-claim-guard-bin.ts`,
+  `terminal/pty-sidecar-eviction.ts`, `agents/spawn-env.ts`, `agents/agent-spawn-flow.ts`,
   `system/node-launch.ts`, `renderer/lib/auto-resume.ts`, `renderer/hooks/use-resume-agent.ts`.
 - MCP specification 2025-11-25, Transports: <https://modelcontextprotocol.io/specification/2025-11-25/basic/transports>
 - Claude Code, MCP: <https://code.claude.com/docs/en/mcp>
