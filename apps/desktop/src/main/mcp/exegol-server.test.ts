@@ -8,6 +8,7 @@ import { runMigrations } from "../db/migrations";
 import { ancestorChain } from "./exegol-identity";
 import type { JsonRpcResponse } from "./exegol-protocol";
 import {
+  getMcpSessions,
   handleRequest,
   type McpConnectionState,
   registerAgentMcpToken,
@@ -238,6 +239,36 @@ describe("identity is stable and never guessed", () => {
 
 // T175: claims were advisory AND unobservable — in a shared tree git cannot say
 // which agent dirtied a file. The write is the last moment attribution exists.
+describe("a bridge says who it is on connect", () => {
+  it("marks the session connected before any tool call, and lists it by name", async () => {
+    const db = setupDb();
+    revokeAgentMcpToken("writer");
+    revokeAgentMcpToken("reader");
+    db.prepare("UPDATE agents SET alias = 'Vega' WHERE id = 'writer'").run();
+    const token = registerAgentMcpToken("writer", "p1");
+    const state = () => Object.fromEntries(getMcpSessions(db).map((s) => [s.id, s.state]));
+    expect(state()).toEqual({ writer: "not_connected", reader: "not_wired" });
+
+    const res = await call(db, { tool: "", args: {}, token }, "hello", { id: 9001 });
+    expect(res.error).toBeUndefined();
+    expect(state().writer).toBe("connected");
+    expect(getMcpSessions(db).find((s) => s.id === "writer")).toMatchObject({
+      alias: "Vega",
+      projectName: "proj",
+      cliType: "claude-code",
+    });
+  });
+
+  it("answers a hello with no valid token and connects nobody", async () => {
+    const db = setupDb();
+    const connected = () => getMcpSessions(db).filter((s) => s.state === "connected").length;
+    const before = connected();
+    const res = await call(db, { tool: "", args: {}, token: "nope" }, "hello", { id: 9002 });
+    expect(res.error).toBeUndefined();
+    expect(connected()).toBe(before);
+  });
+});
+
 describe("check_path guard", () => {
   let db: Database.Database;
 

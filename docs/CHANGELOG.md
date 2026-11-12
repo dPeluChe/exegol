@@ -123,6 +123,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - The "What's new" dialog shows the update's download progress (a bar and the percent), as the title-bar button does, instead of only "Downloading"
 
 ### Changed
+- Settings > MCP Server > Activity lists every live agent session with its project, CLI and whether its bridge is connected, and events name the session; the Server tab counts connected bridges. A session's bridge now reports in as soon as it connects, so its plug is right after an app restart without waiting for a tool call (sessions started before this version catch up on their next call)
 - After a restart, sessions come back more gently: the next one starts once the previous CLI is at its prompt with its Exegol tools connected and has stayed so for 2 seconds (10 at most), and shells take their turn too
 - Chat input: the message box grows upward with a long message (up to about ten lines, then it scrolls) instead of staying two lines tall
 - Inbox: a thread's messages show as formatted text (Markdown, with links that open in the browser on a click), a long one in its own box that scrolls and can be dragged taller, and the top bar panel opens a little shorter

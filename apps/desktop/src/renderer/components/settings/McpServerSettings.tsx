@@ -1,3 +1,4 @@
+import type { McpSessionInfo } from "@exegol/shared";
 import { useQuery } from "@tanstack/react-query";
 import { BookOpen, CheckCircle2, Circle, ExternalLink, Network } from "lucide-react";
 import { useState } from "react";
@@ -5,6 +6,7 @@ import { useSettings, useUpdateSettings } from "../../hooks/use-trpc";
 import { openInBrowser } from "../../lib/open-in-browser";
 import { trpcInvoke } from "../../lib/trpc-client";
 import { SegmentedTabs } from "../common/SegmentedTabs";
+import { type McpActivityEntry, McpActivityTab } from "./McpActivityTab";
 
 interface ProviderWiring {
   provider: string;
@@ -20,6 +22,7 @@ interface ExegolMcpStatus {
   running: boolean;
   sockPath: string;
   activeTokens: number;
+  connected: number;
   tools: Array<{ name: string; description: string }>;
   providers: ProviderWiring[];
   specUrl: string;
@@ -29,22 +32,6 @@ const STATUS_TONE: Record<string, string> = {
   wired: "bg-green-500/15 text-green-300",
   "receive-only": "bg-amber-500/15 text-amber-300",
   "best-effort": "bg-blue-500/15 text-blue-300",
-};
-
-interface McpActivityEntry {
-  at: number;
-  kind: "connect" | "disconnect" | "call" | "error";
-  tool?: string;
-  agentId?: string;
-  ms?: number;
-  detail?: string;
-}
-
-const ACTIVITY_TONE: Record<string, string> = {
-  connect: "text-green-300",
-  disconnect: "text-text-muted",
-  call: "text-accent",
-  error: "text-red-300",
 };
 
 type McpTab = "server" | "activity" | "tools" | "providers";
@@ -61,6 +48,12 @@ export function McpServerSettings() {
   const { data: activity } = useQuery({
     queryKey: ["mcp", "exegolActivity"],
     queryFn: () => trpcInvoke<McpActivityEntry[]>("mcp.exegolActivity"),
+    refetchInterval: tab === "activity" ? 2_000 : false,
+    enabled: tab === "activity",
+  });
+  const { data: sessions } = useQuery({
+    queryKey: ["mcp", "exegolSessions"],
+    queryFn: () => trpcInvoke<McpSessionInfo[]>("mcp.exegolSessions"),
     refetchInterval: tab === "activity" ? 2_000 : false,
     enabled: tab === "activity",
   });
@@ -93,7 +86,7 @@ export function McpServerSettings() {
           onVerboseChange={(mcpVerboseLogging) => updateSettings.mutate({ mcpVerboseLogging })}
         />
       )}
-      {tab === "activity" && <ActivityTab activity={activity ?? []} />}
+      {tab === "activity" && <McpActivityTab activity={activity ?? []} sessions={sessions ?? []} />}
       {tab === "tools" && <ToolsTab tools={data?.tools ?? []} />}
       {tab === "providers" && (
         <ProvidersTab
@@ -146,6 +139,10 @@ function ServerTab({
                 (one per live non-shell agent; revoked on exit)
               </span>
             </div>
+            <div>
+              Bridges connected: <span className="text-text-primary">{data.connected}</span>{" "}
+              <span className="text-text-muted/70">(by session in the Activity tab)</span>
+            </div>
           </div>
         )}
       </div>
@@ -170,48 +167,6 @@ function ServerTab({
         href={data?.specUrl ?? "https://modelcontextprotocol.io"}
         label="What is MCP? — official protocol documentation"
       />
-    </div>
-  );
-}
-
-function ActivityTab({ activity }: { activity: McpActivityEntry[] }) {
-  return (
-    <div className="space-y-1.5">
-      <p className="text-xs text-text-muted">
-        Last 100 socket events (newest first, live while this tab is open). A shim that stops
-        reconnecting after an app restart shows up here as silence — no new `connect`.
-      </p>
-      {activity.length === 0 && (
-        <p className="rounded-md border border-border bg-bg-tertiary px-3 py-3 text-[11px] text-text-muted">
-          No activity yet. Agents talk to the server when they call a tool (inbox_post, note_write,
-          agents_list, agent_send…).
-        </p>
-      )}
-      {activity.map((entry) => (
-        <ActivityRow
-          key={`${entry.at}-${entry.kind}-${entry.tool ?? ""}-${entry.agentId ?? ""}`}
-          entry={entry}
-        />
-      ))}
-    </div>
-  );
-}
-
-function ActivityRow({ entry }: { entry: McpActivityEntry }) {
-  return (
-    <div className="flex items-start gap-2 rounded-md border border-border bg-bg-tertiary px-3 py-1.5 font-mono text-[10px]">
-      <span className="shrink-0 text-text-muted">{new Date(entry.at).toLocaleTimeString()}</span>
-      <span className={`shrink-0 font-medium ${ACTIVITY_TONE[entry.kind] ?? ""}`}>
-        {entry.kind}
-      </span>
-      {entry.tool && <span className="shrink-0 text-text-secondary">{entry.tool}</span>}
-      {entry.agentId && (
-        <span className="shrink-0 text-text-muted/70">{entry.agentId.slice(0, 8)}</span>
-      )}
-      {entry.ms !== undefined && <span className="shrink-0 text-text-muted/70">{entry.ms}ms</span>}
-      {entry.detail && (
-        <span className="min-w-0 flex-1 break-words text-text-muted">{entry.detail}</span>
-      )}
     </div>
   );
 }

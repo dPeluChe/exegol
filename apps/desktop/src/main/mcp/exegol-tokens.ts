@@ -93,6 +93,8 @@ export function markDisconnected(connId: number): void {
 
 export const connectedAgentIds = (): Set<string> => new Set(connectedBy.values());
 
+export const agentOnConnection = (connId: number): string | undefined => connectedBy.get(connId);
+
 export const hasToken = (agentId: string): boolean => tokensByAgent.has(agentId);
 
 /** The live bindings of a secret; several when sessions share a per-directory config */

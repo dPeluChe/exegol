@@ -6,12 +6,12 @@
 
 import { chmodSync, existsSync, mkdirSync, unlinkSync } from "node:fs";
 import { connect, createServer, type Server, type Socket } from "node:net";
-import type { McpAgentState } from "@exegol/shared";
+import type { McpAgentState, McpSessionInfo } from "@exegol/shared";
 import type Database from "libsql";
 import { forgetBrowserAgent } from "../browser/agent-browser-tools";
 import { COMMANDER_LINE } from "../commander/brief";
 import { isCommander } from "../commander/home";
-import { listLiveAgentClis } from "../db/queries/agents";
+import { listLiveAgentClis, listLiveAgentSessions } from "../db/queries/agents";
 import { findBlockingClaim } from "../db/queries/path-claims";
 import { getProject } from "../db/queries/projects";
 import { sessionLine } from "../inbox/session-line";
@@ -32,6 +32,7 @@ import {
 } from "./exegol-protocol";
 import {
   activeTokenCount,
+  agentOnConnection,
   clearTokens,
   connectedAgentIds,
   hasToken,
@@ -75,6 +76,12 @@ export function getMcpAgentStates(db: Database.Database): Record<string, McpAgen
   return out;
 }
 
+/** Settings > MCP Server: every live agent session with its bridge state */
+export function getMcpSessions(db: Database.Database): McpSessionInfo[] {
+  const states = getMcpAgentStates(db);
+  return listLiveAgentSessions(db).map((a) => ({ ...a, state: states[a.id] ?? "not_wired" }));
+}
+
 export async function handleRequest(
   db: Database.Database,
   socket: Socket,
@@ -102,6 +109,13 @@ export async function handleRequest(
         ),
       }),
     );
+    return;
+  }
+  // A bridge says who it is as soon as it connects, so the state is right before any tool call
+  if (req.method === "hello") {
+    const resolved = resolveContext(db, caller?.token, caller?.ppid, conn);
+    if (resolved.ok) markConnected(conn, resolved.context.agentId);
+    socket.write(encodeResponse(req.id, {}));
     return;
   }
   if (req.method === "session_context") {
@@ -226,11 +240,19 @@ function startListening(db: Database.Database): void {
     let announced = false;
     const feed = createFrameReader<JsonRpcRequest>(
       (msg) => {
-        if (!announced && msg.method !== "check_path") {
-          announced = true;
-          record({ kind: "connect", detail: `shim #${connId}` });
-        }
-        handleRequest(db, socket, msg, conn).catch((err) => {
+        const first = !announced && msg.method !== "check_path";
+        if (first) announced = true;
+        const announce = () => {
+          if (first) {
+            record({
+              kind: "connect",
+              agentId: agentOnConnection(connId),
+              detail: `shim #${connId}`,
+            });
+          }
+        };
+        handleRequest(db, socket, msg, conn).then(announce, (err) => {
+          announce();
           record({
             kind: "error",
             detail: `unhandled: ${err instanceof Error ? err.message : err}`,
@@ -319,8 +341,14 @@ export function getExegolMcpServerInfo(): {
   running: boolean;
   sockPath: string;
   activeTokens: number;
+  connected: number;
 } {
-  return { running: server !== null, sockPath: MCP_SOCK_PATH, activeTokens: activeTokenCount() };
+  return {
+    running: server !== null,
+    sockPath: MCP_SOCK_PATH,
+    activeTokens: activeTokenCount(),
+    connected: connectedAgentIds().size,
+  };
 }
 
 export function stopExegolMcpServer(): void {

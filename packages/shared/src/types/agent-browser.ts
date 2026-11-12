@@ -161,6 +161,15 @@ export function needsUserReason(
 
 export type McpAgentState = "connected" | "not_connected" | "not_wired";
 
+/** A live agent session and its Exegol bridge (Settings > MCP Server) */
+export interface McpSessionInfo {
+  id: string;
+  alias: string | null;
+  cliType: string;
+  projectName: string | null;
+  state: McpAgentState;
+}
+
 export interface McpStatusEvent {
   /** Live agents only; shells are not listed */
   agents: Record<string, McpAgentState>;

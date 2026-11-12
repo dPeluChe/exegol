@@ -183,6 +183,8 @@ function connectSocket(): void {
     socket = sock;
     reconnectDelay = RECONNECT_BASE_MS;
     loggedThisOutage = false;
+    // No waiter: the app only needs to know this session's bridge is up (again)
+    if (token) sock.write(encodeRequest(nextSocketId++, "hello", { token, ppid: process.ppid }));
     for (const { id, payload } of outbox.splice(0)) {
       const waiter = pending.get(id);
       if (!waiter) continue; // dropped: the caller already timed out

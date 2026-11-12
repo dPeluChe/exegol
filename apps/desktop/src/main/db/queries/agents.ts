@@ -792,6 +792,25 @@ export function listLiveAgentClis(db: Database.Database): { id: string; cliType:
     .all(...LIVE_STATUSES) as { id: string; cliType: string }[];
 }
 
+export interface LiveAgentSession {
+  id: string;
+  alias: string | null;
+  cliType: string;
+  projectName: string | null;
+}
+
+/** Live agent sessions with what names them, newest first (Settings > MCP Server) */
+export function listLiveAgentSessions(db: Database.Database): LiveAgentSession[] {
+  return db
+    .prepare(
+      `SELECT a.id, a.alias, a.cli_type AS cliType, p.name AS projectName
+       FROM agents a LEFT JOIN projects p ON p.id = a.project_id
+       WHERE a.cli_type != 'shell' AND a.status IN (${liveIn()})
+       ORDER BY a.started_at DESC, a.rowid DESC`,
+    )
+    .all(...LIVE_STATUSES) as LiveAgentSession[];
+}
+
 export interface LiveAgentPid {
   id: string;
   project_id: string;
