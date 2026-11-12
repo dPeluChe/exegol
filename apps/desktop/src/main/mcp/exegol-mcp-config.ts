@@ -27,7 +27,7 @@ import {
 } from "./exegol-mcp-token-file";
 import type { ExegolAccessMode } from "./exegol-protocol";
 
-const EXEGOL_SERVER_KEY = "exegol";
+export const EXEGOL_SERVER_KEY = "exegol";
 
 export const MCP_CONFIG_DIR = join(homedir(), ".exegol", "mcp");
 

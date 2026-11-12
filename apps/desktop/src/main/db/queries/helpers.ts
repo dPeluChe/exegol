@@ -53,34 +53,17 @@ export function mapPromptRow(row: Record<string, unknown>): Prompt {
   };
 }
 
-function parseWorktreeCopyColumn(raw: string | null): string[] | null {
-  if (raw === null) return null;
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? parseWorktreeCopy(parsed.map(String)) : null;
-  } catch {
-    return null;
-  }
+function parseStringArrayColumn(raw: string | null | undefined): string[] | null {
+  return raw == null ? null : parseJson(raw, z.array(z.string()));
 }
 
-function parseNamesColumn(raw: string | null | undefined): string[] | null {
-  if (raw === null || raw === undefined) return null;
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? parsed.filter((n): n is string => typeof n === "string") : null;
-  } catch {
-    return null;
-  }
+function parseWorktreeCopyColumn(raw: string | null): string[] | null {
+  const list = parseStringArrayColumn(raw);
+  return list && parseWorktreeCopy(list);
 }
 
 export function parseHostsColumn(raw: string | null | undefined): string[] {
-  if (!raw) return [];
-  try {
-    const parsed: unknown = JSON.parse(raw);
-    return Array.isArray(parsed) ? parseBrowserHosts(parsed.map(String)) : [];
-  } catch {
-    return [];
-  }
+  return parseBrowserHosts(parseStringArrayColumn(raw) ?? []);
 }
 
 export function mapProjectRow(row: Record<string, unknown>): Project {
@@ -102,7 +85,7 @@ export function mapProjectRow(row: Record<string, unknown>): Project {
     browserEval: r.browser_eval === 1,
     ide: r.ide ?? null,
     worktreeCopy: parseWorktreeCopyColumn(r.worktree_copy),
-    mcpServers: parseNamesColumn(r.mcp_servers),
+    mcpServers: parseStringArrayColumn(r.mcp_servers),
   };
 }
 

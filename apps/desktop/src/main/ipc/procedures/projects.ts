@@ -173,20 +173,15 @@ export const projectRouter = router({
       return getProject(ctx.db, input.id);
     }),
 
-  /** The person's MCP servers a Claude Code session of this project would load, and its choice */
   mcpServers: publicProcedure.input(z.object({ id: z.string() })).query(({ ctx, input }) => {
     const project = getProject(ctx.db, input.id);
     if (!project) throw new TRPCError({ code: "NOT_FOUND", message: "Project not found" });
-    return { servers: listClaudeServers(project.path), selected: project.mcpServers ?? null };
+    return listClaudeServers(project.path);
   }),
 
-  /** null: sessions load everything again. A list: only Exegol and these (new sessions) */
   setMcpServers: publicProcedure
     .input(z.object({ id: z.string(), servers: z.array(z.string().max(200)).max(200).nullable() }))
-    .mutation(({ ctx, input }) => {
-      setProjectMcpServers(ctx.db, input.id, input.servers);
-      return getProject(ctx.db, input.id);
-    }),
+    .mutation(({ ctx, input }) => setProjectMcpServers(ctx.db, input.id, input.servers)),
 
   /** Site permissions saved from a browser pane's bar (Always allow / Block) */
   browserPermissions: publicProcedure

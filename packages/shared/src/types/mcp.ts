@@ -1,5 +1,14 @@
 export type McpTransport = "stdio" | "http";
 
+/** One of the person's MCP servers in Claude Code's config: never its command, env or headers */
+export interface ClaudeMcpServerInfo {
+  name: string;
+  /** user: every project; local: this folder, private; project: the repo's .mcp.json */
+  scope: "user" | "local" | "project";
+  /** stdio starts a process per session */
+  transport: McpTransport | "sse" | "ws";
+}
+
 export type McpServerConfig = {
   id: string;
   name: string;

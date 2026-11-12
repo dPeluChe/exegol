@@ -1,12 +1,9 @@
-import type { ClaudeMcpServerInfo } from "@exegol/shared";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import type { ClaudeMcpServerInfo, Project } from "@exegol/shared";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useState } from "react";
+import { mcpLoadSummary, toggleServer } from "../../lib/project-mcp";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { toastError } from "../../stores/toasts";
-
-interface ProjectMcp {
-  servers: ClaudeMcpServerInfo[];
-  selected: string[] | null;
-}
 
 const SCOPE_LABEL: Record<ClaudeMcpServerInfo["scope"], string> = {
   user: "All projects",
@@ -14,38 +11,34 @@ const SCOPE_LABEL: Record<ClaudeMcpServerInfo["scope"], string> = {
   project: ".mcp.json",
 };
 
-/** Pure: the list after a click, kept in the servers' own order */
-export function toggleServer(selected: string[], name: string, on: boolean): string[] {
-  return on ? [...new Set([...selected, name])] : selected.filter((n) => n !== name);
-}
-
-/** Pure: "3 of 5 load, 2 start a process in every session" for the choice shown */
-export function mcpLoadSummary(servers: ClaudeMcpServerInfo[], selected: string[] | null): string {
-  const loaded = selected === null ? servers : servers.filter((s) => selected.includes(s.name));
-  const processes = loaded.filter((s) => s.transport === "stdio").length;
-  const each = processes === 1 ? "1 starts" : `${processes} start`;
-  return `${loaded.length} of ${servers.length} load, ${each} a process in every session`;
-}
-
-/** Which of the person's MCP servers this project's Claude Code sessions load besides Exegol */
-export function ProjectMcpTab({ projectId }: { projectId: string }) {
-  const queryClient = useQueryClient();
-  const key = ["projects", "mcpServers", projectId];
-  const { data, isLoading } = useQuery({
-    queryKey: key,
-    queryFn: () => trpcInvoke<ProjectMcp>("projects.mcpServers", { id: projectId }),
+/** Which of the person's MCP servers this project's Claude Code sessions load besides Exegol.
+ *  A change is saved as it is made */
+export function ProjectMcpTab({ project, onSaved }: { project: Project; onSaved: () => void }) {
+  const [selected, setSelected] = useState(project.mcpServers ?? null);
+  const { data: servers, isError } = useQuery({
+    queryKey: ["projects", "mcpServers", project.id],
+    queryFn: () => trpcInvoke<ClaudeMcpServerInfo[]>("projects.mcpServers", { id: project.id }),
   });
   const save = useMutation({
-    mutationFn: (servers: string[] | null) =>
-      trpcMutate("projects.setMcpServers", { id: projectId, servers }),
-    onMutate: (servers) => {
-      queryClient.setQueryData<ProjectMcp>(key, (old) => old && { ...old, selected: servers });
+    mutationFn: (next: string[] | null) =>
+      trpcMutate("projects.setMcpServers", { id: project.id, servers: next }),
+    onMutate: (next) => {
+      const before = selected;
+      setSelected(next);
+      return before;
     },
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
-    onError: toastError("Could not save the project's MCP servers"),
+    onSuccess: onSaved,
+    onError: (err, _next, before) => {
+      setSelected(before ?? null);
+      toastError("Could not save the project's MCP servers")(err);
+    },
   });
-  if (isLoading || !data) return <p className="text-[11px] text-text-muted">Reading…</p>;
-  const { servers, selected } = data;
+  if (isError) {
+    return (
+      <p className="text-[11px] text-red-400">Could not read Claude Code's MCP configuration.</p>
+    );
+  }
+  if (!servers) return <p className="text-[11px] text-text-muted">Reading…</p>;
   const limited = selected !== null;
 
   return (
@@ -111,9 +104,10 @@ export function ProjectMcpTab({ projectId }: { projectId: string }) {
         <p className="text-[11px] text-text-secondary">{mcpLoadSummary(servers, selected)}</p>
       )}
       <p className="text-[10px] leading-relaxed text-text-muted">
-        Applies to Claude Code sessions started or resumed from now on; open ones keep what they
-        loaded. With a list, a server you add later stays off here until you check it, and servers
-        from plugins or claude.ai connectors may not load. Other CLIs are not affected.
+        Saved as you change it. Applies to Claude Code sessions started or resumed from now on; open
+        ones keep what they loaded. With a list, a server you add later stays off here until you
+        check it, and servers from plugins or claude.ai connectors may not load. Other CLIs are not
+        affected.
       </p>
     </div>
   );

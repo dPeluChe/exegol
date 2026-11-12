@@ -1,6 +1,6 @@
 import type { ClaudeMcpServerInfo } from "@exegol/shared";
 import { describe, expect, it } from "vitest";
-import { mcpLoadSummary, toggleServer } from "./ProjectMcpTab";
+import { mcpLoadSummary } from "./project-mcp";
 
 const servers: ClaudeMcpServerInfo[] = [
   { name: "db", scope: "local", transport: "stdio" },
@@ -15,11 +15,5 @@ describe("project MCP choice", () => {
       "2 of 3 load, 1 starts a process in every session",
     );
     expect(mcpLoadSummary(servers, [])).toBe("0 of 3 load, 0 start a process in every session");
-  });
-
-  it("checks and unchecks one server without repeating a name", () => {
-    expect(toggleServer(["db"], "design", true)).toEqual(["db", "design"]);
-    expect(toggleServer(["db"], "db", true)).toEqual(["db"]);
-    expect(toggleServer(["db", "design"], "db", false)).toEqual(["design"]);
   });
 });

@@ -53,16 +53,15 @@ export function setProjectBrowserHosts(db: Database.Database, id: string, hosts:
   db.prepare("UPDATE projects SET browser_hosts = ? WHERE id = ?").run(JSON.stringify(hosts), id);
 }
 
+const jsonOrNull = (list: string[] | null) => (list === null ? null : JSON.stringify(list));
+
 /** null goes back to the default patterns */
 export function setProjectWorktreeCopy(
   db: Database.Database,
   id: string,
   patterns: string[] | null,
 ): void {
-  db.prepare("UPDATE projects SET worktree_copy = ? WHERE id = ?").run(
-    patterns === null ? null : JSON.stringify(patterns),
-    id,
-  );
+  db.prepare("UPDATE projects SET worktree_copy = ? WHERE id = ?").run(jsonOrNull(patterns), id);
 }
 
 /** null loads every server the person configured */
@@ -71,10 +70,7 @@ export function setProjectMcpServers(
   id: string,
   servers: string[] | null,
 ): void {
-  db.prepare("UPDATE projects SET mcp_servers = ? WHERE id = ?").run(
-    servers === null ? null : JSON.stringify(servers),
-    id,
-  );
+  db.prepare("UPDATE projects SET mcp_servers = ? WHERE id = ?").run(jsonOrNull(servers), id);
 }
 
 export function setProjectBrowserEval(db: Database.Database, id: string, on: boolean): void {

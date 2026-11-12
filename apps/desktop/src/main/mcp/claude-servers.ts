@@ -1,10 +1,11 @@
-import { readFileSync, statSync } from "node:fs";
-import { homedir } from "node:os";
+import { readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { ClaudeMcpServerInfo } from "@exegol/shared";
+import { claudeConfigFile, trustKey } from "../agents/claude-trust";
+import { logger } from "../lib/logger";
+import { EXEGOL_SERVER_KEY } from "./exegol-mcp-config";
 
-/** The person's own MCP servers as Claude Code would load them in a folder, read from its config
- *  files. Definitions hold secrets (env, headers): only names, scope and transport leave here. */
+// Definitions hold secrets (env, headers): only names, scope and transport leave this module
 interface ClaudeServer extends ClaudeMcpServerInfo {
   definition: Record<string, unknown>;
 }
@@ -19,25 +20,49 @@ function transportOf(def: Record<string, unknown>): ClaudeMcpServerInfo["transpo
 function serversIn(raw: unknown, scope: ClaudeMcpServerInfo["scope"]): ClaudeServer[] {
   if (!isRecord(raw)) return [];
   return Object.entries(raw)
-    .filter((e): e is [string, Record<string, unknown>] => isRecord(e[1]) && e[0] !== "exegol")
+    .filter(
+      (e): e is [string, Record<string, unknown>] => isRecord(e[1]) && e[0] !== EXEGOL_SERVER_KEY,
+    )
     .map(([name, definition]) => ({ name, scope, transport: transportOf(definition), definition }));
 }
 
-/** Pure. `folders` are tried in order for the local scope and the first with servers wins;
- *  a name set in several scopes keeps Claude Code's order: local, then project, then user */
+const firstWithServers = (lists: ClaudeServer[][]): ClaudeServer[] =>
+  lists.find((list) => list.length > 0) ?? [];
+
+/** Only the parts read here: the config also holds every project's history */
+export function mcpSlice(config: unknown): unknown {
+  if (!isRecord(config)) return null;
+  const projects: Record<string, unknown> = {};
+  if (isRecord(config.projects)) {
+    for (const [key, value] of Object.entries(config.projects)) {
+      if (isRecord(value) && isRecord(value.mcpServers)) {
+        projects[key] = { mcpServers: value.mcpServers };
+      }
+    }
+  }
+  return { mcpServers: config.mcpServers, projects };
+}
+
+/** `repoFiles` are the `.mcp.json` of `folders`, in the same order: the first folder with servers
+ *  wins in each scope, and a name set in several keeps Claude Code's order: local, project, user */
 export function claudeServersFrom(
   userConfig: unknown,
-  projectFile: unknown,
+  repoFiles: unknown[],
   folders: string[],
 ): ClaudeServer[] {
   const user = isRecord(userConfig) ? userConfig : {};
   const projects = isRecord(user.projects) ? user.projects : {};
-  const local = folders
-    .map((f) => (isRecord(projects[f]) ? serversIn(projects[f].mcpServers, "local") : []))
-    .find((list) => list.length > 0);
-  const project = serversIn(isRecord(projectFile) ? projectFile.mcpServers : null, "project");
+  const local = firstWithServers(
+    folders.map((f) => {
+      const entry = projects[trustKey(f)];
+      return isRecord(entry) ? serversIn(entry.mcpServers, "local") : [];
+    }),
+  );
+  const project = firstWithServers(
+    repoFiles.map((file) => serversIn(isRecord(file) ? file.mcpServers : null, "project")),
+  );
   const byName = new Map<string, ClaudeServer>();
-  for (const s of [...serversIn(user.mcpServers, "user"), ...project, ...(local ?? [])]) {
+  for (const s of [...serversIn(user.mcpServers, "user"), ...project, ...local]) {
     byName.set(s.name, s);
   }
   return [...byName.values()].sort((a, b) => a.name.localeCompare(b.name));
@@ -45,13 +70,13 @@ export function claudeServersFrom(
 
 const cache = new Map<string, { mtimeMs: number; value: unknown }>();
 
-/** The user config runs to megabytes: parsed again only when the file changed */
-function readJson(path: string): unknown {
+// Claude Code's config runs to megabytes and is rewritten often: parsed only when it changed
+async function readJson(path: string, keep: (v: unknown) => unknown = (v) => v): Promise<unknown> {
   try {
-    const { mtimeMs } = statSync(path);
+    const { mtimeMs } = await stat(path);
     const held = cache.get(path);
     if (held?.mtimeMs === mtimeMs) return held.value;
-    const value: unknown = JSON.parse(readFileSync(path, "utf-8"));
+    const value = keep(JSON.parse(await readFile(path, "utf-8")));
     cache.set(path, { mtimeMs, value });
     return value;
   } catch {
@@ -59,28 +84,34 @@ function readJson(path: string): unknown {
   }
 }
 
-function readClaudeServers(folders: string[]): ClaudeServer[] {
-  // The repo file of the session's own folder (a worktree has its copy), else the project's
-  const repoFile = folders.map((f) => readJson(join(f, ".mcp.json"))).find((v) => v !== null);
-  return claudeServersFrom(readJson(join(homedir(), ".claude.json")), repoFile ?? null, folders);
+async function readClaudeServers(folders: string[]): Promise<ClaudeServer[]> {
+  const [user, ...repoFiles] = await Promise.all([
+    readJson(claudeConfigFile(), mcpSlice),
+    ...folders.map((f) => readJson(join(f, ".mcp.json"))),
+  ]);
+  return claudeServersFrom(user, repoFiles, folders);
 }
 
-/** For the project's settings: what a session there would load, without its definitions */
-export function listClaudeServers(projectPath: string): ClaudeMcpServerInfo[] {
-  return readClaudeServers([projectPath]).map(({ name, scope, transport }) => ({
-    name,
-    scope,
-    transport,
-  }));
+export async function listClaudeServers(projectPath: string): Promise<ClaudeMcpServerInfo[]> {
+  const servers = await readClaudeServers([projectPath]);
+  return servers.map(({ name, scope, transport }) => ({ name, scope, transport }));
 }
 
-/** The chosen servers' definitions for a session's own config file; `folders` is its cwd, then
- *  the project root. A name no longer configured is left out */
-export function pickClaudeServers(folders: string[], names: string[]): Record<string, unknown> {
-  const wanted = new Set(names);
+/** The definitions a Claude session of a project with a chosen list loads besides Exegol; null
+ *  when the project has no list. `folders`: the session's cwd, then the project root */
+export async function chosenClaudeServers(
+  agentId: string,
+  chosen: string[] | null | undefined,
+  folders: string[],
+): Promise<Record<string, unknown> | null> {
+  if (!chosen) return null;
+  const wanted = new Set(chosen);
   const out: Record<string, unknown> = {};
-  for (const s of readClaudeServers(folders)) {
+  for (const s of await readClaudeServers(folders)) {
     if (wanted.has(s.name)) out[s.name] = s.definition;
   }
+  logger.info(
+    `[ExegolMcp] ${agentId} strict: ${Object.keys(out).length} of ${chosen.length} chosen server(s) found`,
+  );
   return out;
 }

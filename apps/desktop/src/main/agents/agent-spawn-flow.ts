@@ -6,14 +6,12 @@ import {
   createWorktree as dbCreateWorktree,
   setAgentWorktree,
 } from "../db/queries";
-import { getProject } from "../db/queries/projects";
 import type { LocalSession } from "../history/types";
 import { childEnv } from "../lib/child-env";
 import { commandShape } from "../lib/command-shape";
 import { PermanentError } from "../lib/errors";
 import { logger } from "../lib/logger";
 import { loadLifecycleConfig } from "../lifecycle/loader";
-import { pickClaudeServers } from "../mcp/claude-servers";
 import {
   resolveMcpShimPath,
   writeAgentMcpConfigFor,
@@ -300,6 +298,8 @@ export function buildPtyInvocation(
   /** The newest session in the CLI's own store (`lastLocalSession`): null = nothing to continue
    *  here, undefined = unknown */
   last: LocalSession | null | undefined = undefined,
+  /** The project's chosen MCP servers (`chosenClaudeServers`); null loads all the person's */
+  strictServers: Record<string, unknown> | null = null,
 ): PtyInvocation {
   const isPlainShell = agent.cliType === "shell";
   const userShell = loginShell();
@@ -452,26 +452,17 @@ export function buildPtyInvocation(
       // Exegol's own record of which token belongs to which agent, so reattach
       // after a restart re-arms each session with its own credential instead of
       // reading whichever token a sibling last left in the shared cwd file.
-      // A project with a chosen list: its Claude sessions load Exegol and those servers only
-      const chosen =
-        agent.cliType === "claude-code" ? getProject(db, agent.projectId)?.mcpServers : null;
-      const others = chosen ? pickClaudeServers([cwd, projectPath], chosen) : {};
       const perAgentConfig = writePerAgentMcpConfig(
         agent.id,
         shimPath,
         mcpToken,
         accessMode,
-        others,
+        strictServers ?? {},
       );
       if (perAgentConfig && agent.cliType === "claude-code") {
+        fullCommand = `${fullCommand} --mcp-config ${quotePath(kind, perAgentConfig)}`;
         // Without a list the flag stays off: the person's own servers still load
-        const strict = chosen ? " --strict-mcp-config" : "";
-        if (chosen) {
-          logger.info(
-            `[ExegolMcp] ${agent.id} strict: ${Object.keys(others).length} of ${chosen.length} chosen server(s) found`,
-          );
-        }
-        fullCommand = `${fullCommand} --mcp-config ${quotePath(kind, perAgentConfig)}${strict}`;
+        if (strictServers) fullCommand += " --strict-mcp-config";
       } else {
         writeAgentMcpConfigFor(agent.cliType, cwd, shimPath, mcpToken, accessMode);
         if (agent.cliType === "codex") {
