@@ -1,8 +1,9 @@
 import { cn } from "@exegol/ui";
 import { Plug } from "lucide-react";
+import { useMcpStatus } from "../../hooks/use-mcp-status";
 import { sessionName } from "../../lib/agent-label";
 import { useAgentStore } from "../../stores/agents";
-import { mcpStateTitle, useMcpStatus } from "../common/McpStatusIndicator";
+import { mcpStateTitle } from "../common/McpStatusIndicator";
 
 /** "MCP: 3/4": live agents with the Exegol tools connected; the tooltip says who is not, and what
  *  each one may do with the browser */
