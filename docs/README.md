@@ -22,6 +22,7 @@
 |----------|------------|
 | [TASK_TODO.md](./TASK_TODO.md) | The single source of truth for pending work |
 | [../CONTRIBUTING.md](../CONTRIBUTING.md) / [../AGENTS.md](../AGENTS.md) | How to contribute, for people and for AI agents |
+| [RESEARCH/MCP_FOOTPRINT_AND_RESTART_LOAD_2026_11.md](./RESEARCH/MCP_FOOTPRINT_AND_RESTART_LOAD_2026_11.md) | What each session starts for MCP, measured after a 65 session restart, and the options (T227) |
 | [RESEARCH/COLABS_INBOX_NOTES_DESIGN_2026_11.md](./RESEARCH/COLABS_INBOX_NOTES_DESIGN_2026_11.md) | Design for T217: colabs, inbox and notes, with usage numbers and outside evidence |
 | [RESEARCH/HIDE_COMPARISON_2026_11.md](./RESEARCH/HIDE_COMPARISON_2026_11.md) | Hide compared with Exegol and what came of it |
 | [RESEARCH/ROMA_ANALYSIS_2026_11.md](./RESEARCH/ROMA_ANALYSIS_2026_11.md) | Roma (a to-do list for agents over MCP) compared with Exegol: elements to weigh for the Commander |

@@ -619,6 +619,18 @@ exchange-bus MVP only, no headless council executions. Absorbs:
 
 ---
 
+### T227 — MCP processes per session and the load of a full restart `added: 2026-11-12`
+**Priority**: P2 | **Effort**: S to M per option | **Source**: `RESEARCH/MCP_FOOTPRINT_AND_RESTART_LOAD_2026_11.md`
+
+A reboot brought back 65 sessions in two minutes: no errors, but the main process blocked twice and 13 shells timed out on their ready marker. Exegol's MCP is one server with a 17 MB bridge per session (0.8 GB of about 25 GB under the sidecar); the third-party stdio servers each session starts hold 4.9 GB. Nothing is built; the options wait for Antonio's decisions.
+- C1: the stagger frees a slot when the session's bridge is connected and it has been quiet for a moment, and shells take a slot (small, proposed first)
+- C2: hold resumes while the machine's load is above a limit
+- C3 (decision): a restart resumes only what is on screen, the pinned sessions and the Commander; the rest on demand
+- D3 (decision): a per-project switch that limits a session's MCP servers (`--strict-mcp-config` with a list)
+- D4 (decision): per-session process and memory view, MCP servers named
+- B (parked): a native bridge, shared with the claim guard
+- A (not recommended): Streamable HTTP on loopback in place of the bridge
+
 ### T226 — Ollama and project search have no caller left `added: 2026-11-07`
 **Priority**: P3 | **Effort**: S | **Source**: simplify pass on the Memory retirement (T217 step 4, part 3)
 
