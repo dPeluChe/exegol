@@ -8,12 +8,14 @@ import { runMigrations } from "../db/migrations";
 import { ancestorChain } from "./exegol-identity";
 import type { JsonRpcResponse } from "./exegol-protocol";
 import {
+  getMcpSessions,
   handleRequest,
   type McpConnectionState,
   registerAgentMcpToken,
   restoreAgentMcpToken,
   revokeAgentMcpToken,
 } from "./exegol-server";
+import { clearTokens } from "./exegol-tokens";
 
 function fakeSocket(): { socket: Socket; responses: JsonRpcResponse[] } {
   const responses: JsonRpcResponse[] = [];
@@ -233,6 +235,38 @@ describe("identity is stable and never guessed", () => {
     const res = await call(db, { tool: "agents_list", args: {}, token });
     expect(res.error).toBeUndefined();
     expect((res.result as { self: { id: string } }).self.id).toBe("writer");
+  });
+});
+
+describe("a bridge says who it is on connect", () => {
+  it("marks the session connected before any tool call, and lists it by name", async () => {
+    const db = setupDb();
+    clearTokens();
+    db.prepare("UPDATE agents SET alias = 'Vega' WHERE id = 'writer'").run();
+    const token = registerAgentMcpToken("writer", "p1");
+    const state = () => Object.fromEntries(getMcpSessions(db).map((s) => [s.id, s.state]));
+    expect(state()).toEqual({ writer: "not_connected", reader: "not_wired" });
+
+    await call(db, { tool: "", args: {}, token: "nope" }, "hello", { id: 9002 });
+    expect(state().writer).toBe("not_connected");
+
+    const res = await call(db, { tool: "", args: {}, token }, "hello", { id: 9001 });
+    expect(res.error).toBeUndefined();
+    expect(state().writer).toBe("connected");
+    expect(getMcpSessions(db).find((s) => s.id === "writer")).toMatchObject({
+      alias: "Vega",
+      projectName: "proj",
+      cliType: "claude-code",
+    });
+  });
+
+  it("leaves a token shared by two sessions unknown until a call tells them apart", async () => {
+    const db = setupDb();
+    clearTokens();
+    const token = registerAgentMcpToken("writer", "p1");
+    restoreAgentMcpToken("reader", "p1", token);
+    await call(db, { tool: "", args: {}, token }, "hello", { id: 9003 });
+    expect(getMcpSessions(db).every((s) => s.state === "not_connected")).toBe(true);
   });
 });
 

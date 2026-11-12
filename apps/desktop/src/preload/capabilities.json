@@ -243,6 +243,7 @@
       "connect",
       "disconnect",
       "exegolActivity",
+      "exegolSessions",
       "exegolStatus",
       "getConfigs",
       "listServers",

@@ -1,6 +1,10 @@
 import { mcpServerConfigSchema } from "@exegol/shared";
 import { z } from "zod";
-import { getExegolMcpServerInfo, getRecentMcpActivity } from "../../mcp/exegol-server";
+import {
+  getExegolMcpServerInfo,
+  getMcpSessions,
+  getRecentMcpActivity,
+} from "../../mcp/exegol-server";
 import { EXEGOL_TOOL_DEFS } from "../../mcp/exegol-tool-defs";
 import type { McpServerConfig, McpServerState, McpTool } from "../../mcp/registry";
 import { publicProcedure, router } from "../trpc";
@@ -92,6 +96,7 @@ export const mcpRouter = router({
    */
   /** T163: recent Exegol MCP socket activity (in-memory ring, always on). */
   exegolActivity: publicProcedure.query(() => getRecentMcpActivity()),
+  exegolSessions: publicProcedure.query(({ ctx }) => getMcpSessions(ctx.db)),
 
   listServers: publicProcedure.query(({ ctx }): McpServerState[] => {
     return ctx.mcpHost.listServers();
