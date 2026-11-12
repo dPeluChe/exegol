@@ -15,7 +15,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - `Cmd+.` no longer stops the focused session: one stray key ended it with no warning. Stop Agent stays in the Command Palette
 
 ### Added
-- Monitor > Resources: Processes by session. Every live session with how many processes it runs and their memory, for this project or all of them; open one to see its CLI, the Exegol bridge, each of your MCP servers by name and the rest
+- Monitor > Resources: Processes by session. Every live session with how many processes it runs and their memory, for this project or all of them; open one to see its CLI, the Exegol bridge, each of your MCP servers by name and the rest. It replaces the Active Agents table, whose memory counted only part of a session
 - Edit project (right-click a project in the sidebar) has tabs: General, Browser, Worktrees and MCP. MCP lists your MCP servers from Claude Code's configuration, says which start a process in every session, and lets a project load only the ones you check; Exegol's own tools always load
 - Commander chat: the names of live sessions and of projects in its replies and feed are links that open that session or project; Copy still copies the plain text
 - Commander chat: typing `@` offers the names of projects and live sessions (arrows, Enter or Tab to pick, Esc to close), so a request names exactly which one

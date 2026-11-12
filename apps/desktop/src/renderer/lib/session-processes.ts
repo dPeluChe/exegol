@@ -8,14 +8,15 @@ export interface ProcessTotals {
   mcpRssKb: number;
 }
 
-const isMcp = (g: SessionProcessGroup) => g.kind === "mcp" || g.kind === "bridge";
-
+/** A session's MCP side: its servers and Exegol's own bridge */
 export function mcpOf(session: SessionProcesses): { count: number; rssKb: number } {
-  const groups = session.groups.filter(isMcp);
-  return {
-    count: groups.reduce((n, g) => n + g.count, 0),
-    rssKb: groups.reduce((n, g) => n + g.rssKb, 0),
-  };
+  const out = { count: 0, rssKb: 0 };
+  for (const g of session.groups) {
+    if (g.kind !== "mcp" && g.kind !== "bridge") continue;
+    out.count += g.count;
+    out.rssKb += g.rssKb;
+  }
+  return out;
 }
 
 export function processTotals(list: SessionProcesses[]): ProcessTotals {
@@ -31,8 +32,8 @@ export function processTotals(list: SessionProcesses[]): ProcessTotals {
 }
 
 export const GROUP_LABEL: Record<SessionProcessGroup["kind"], string> = {
-  shell: "Shell",
+  shell: "shell",
   bridge: "Exegol",
   mcp: "MCP server",
-  other: "Process",
+  other: "process",
 };

@@ -1,7 +1,7 @@
 import { PREFERRED_PORTS_KEY, type ProjectDetect } from "@exegol/shared";
 import type Database from "libsql";
 import { z } from "zod";
-import { getProject, listAgents } from "../../db/queries";
+import { getProject } from "../../db/queries";
 import { getAppSettings, getJsonSetting, setJsonSetting } from "../../db/queries/settings";
 import { killDevServer, listDevServers } from "../../system/dev-servers";
 import { getProjectPorts } from "../../system/ports";
@@ -54,21 +54,7 @@ export const resourcesRouter = router({
         projectName: z.string(),
       }),
     )
-    .query(async ({ ctx, input }) => {
-      // Collect PIDs of running agents for this project
-      const manager = ctx.agentManager;
-      const runningIds = new Set(manager.listRunning());
-      const agents = listAgents(ctx.db, input.projectId);
-      const pids: number[] = [];
-
-      for (const agent of agents) {
-        if (agent.pid && runningIds.has(agent.id)) {
-          pids.push(agent.pid);
-        }
-      }
-
-      return getProjectMetrics(input.projectPath, input.projectId, input.projectName, pids);
-    }),
+    .query(({ input }) => getProjectMetrics(input.projectPath, input.projectId, input.projectName)),
 
   ports: publicProcedure.input(z.object({ projectPath: z.string() })).query(async ({ input }) => {
     return getProjectPorts(input.projectPath);
@@ -128,8 +114,8 @@ export const resourcesRouter = router({
       return all[input.projectId];
     }),
 
-  /** T143: per-session PTY ring buffer memory usage + PTY count */
   sessionProcesses: publicProcedure.query(({ ctx }) => readSessionProcesses(ctx.db)),
 
+  /** T143: per-session PTY ring buffer memory usage + PTY count */
   sidecarMemory: publicProcedure.query(async () => getSidecarMemoryMetrics()),
 });

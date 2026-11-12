@@ -1,8 +1,30 @@
 import { childrenByParent, type ProcRow, readProcessTable } from "./shell-clis";
 
+export interface ProcIndex {
+  byPid: Map<number, ProcRow>;
+  children: Map<number, ProcRow[]>;
+  byTty: Map<string, ProcRow[]>;
+}
+
+/** Built once when several terminals are read from the same table */
+export function indexProcesses(rows: ProcRow[]): ProcIndex {
+  const byTty = new Map<string, ProcRow[]>();
+  for (const r of rows) {
+    // macOS `ttys003`, Linux `pts/3`; no terminal is "??" / "?"
+    if (!r.tty || /^[?-]+$/.test(r.tty)) continue;
+    const list = byTty.get(r.tty);
+    if (list) list.push(r);
+    else byTty.set(r.tty, [r]);
+  }
+  return { byPid: new Map(rows.map((r) => [r.pid, r])), children: childrenByParent(rows), byTty };
+}
+
 /** Every process below `rootPid` (children, their children...), root excluded */
-export function descendantsOf(rootPid: number, rows: ProcRow[]): ProcRow[] {
-  const children = childrenByParent(rows);
+export function descendantsOf(
+  rootPid: number,
+  rows: ProcRow[],
+  children = childrenByParent(rows),
+): ProcRow[] {
   const out: ProcRow[] = [];
   let level = children.get(rootPid) ?? [];
   while (level.length > 0) {
@@ -17,11 +39,15 @@ export function descendantsOf(rootPid: number, rows: ProcRow[]): ProcRow[] {
  * background jobs, prompt workers reparented to launchd) and everything below the shell that
  * left the tty. A real daemon (double fork + setsid) asked to outlive it and is not here.
  */
-export function terminalProcesses(shellPid: number, rows: ProcRow[]): ProcRow[] {
-  const tty = rows.find((r) => r.pid === shellPid)?.tty;
-  // macOS `ttys003`, Linux `pts/3`; no terminal is "??" / "?"
-  const onTty = tty && !/^[?-]+$/.test(tty) ? rows.filter((r) => r.tty === tty) : [];
-  const byPid = new Map([...onTty, ...descendantsOf(shellPid, rows)].map((r) => [r.pid, r]));
+export function terminalProcesses(
+  shellPid: number,
+  rows: ProcRow[],
+  index: ProcIndex = indexProcesses(rows),
+): ProcRow[] {
+  const tty = index.byPid.get(shellPid)?.tty;
+  const onTty = (tty && index.byTty.get(tty)) || [];
+  const below = descendantsOf(shellPid, rows, index.children);
+  const byPid = new Map([...onTty, ...below].map((r) => [r.pid, r]));
   byPid.delete(shellPid);
   return [...byPid.values()];
 }

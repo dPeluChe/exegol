@@ -824,7 +824,7 @@ export interface LiveSessionProcess {
   projectPath: string | null;
 }
 
-/** Every live session with a process, shells too, with what names it (Monitor > Resources) */
+/** Every live session with a process, shells too, across projects, with what names it */
 export function listLiveSessionProcesses(db: Database.Database): LiveSessionProcess[] {
   return db
     .prepare(
@@ -834,22 +834,4 @@ export function listLiveSessionProcesses(db: Database.Database): LiveSessionProc
        WHERE a.pid IS NOT NULL AND a.status IN (${liveIn()})`,
     )
     .all(...LIVE_STATUSES) as LiveSessionProcess[];
-}
-
-export interface LiveAgentPid {
-  id: string;
-  project_id: string;
-  cli_type: string;
-  alias: string | null;
-  pid: number;
-}
-
-/** Every live session with a process, across projects (dev server owners, locale check) */
-export function listLiveAgentPids(db: Database.Database): LiveAgentPid[] {
-  return db
-    .prepare(
-      `SELECT id, project_id, cli_type, alias, pid FROM agents
-       WHERE pid IS NOT NULL AND status IN (${liveIn()})`,
-    )
-    .all(...LIVE_STATUSES) as LiveAgentPid[];
 }

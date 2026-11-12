@@ -25,7 +25,6 @@ export interface ProjectMetrics {
   projectPath: string;
   diskUsage: number;
   worktreeCount: number;
-  agentProcesses: { pid: number; cpu: number; memory: number }[];
 }
 
 export function useSystemMetrics() {
@@ -55,7 +54,7 @@ export function useProjectMetrics(
     queryKey: ["resources", "project", projectId],
     queryFn: () =>
       trpcInvoke<ProjectMetrics>("resources.project", { projectId, projectPath, projectName }),
-    refetchInterval: 60_000, // Heavy: du, git worktree, pgrep, ps
+    refetchInterval: 60_000, // Heavy: du, git worktree
     staleTime: 30_000,
     enabled: !!projectId && !!projectPath,
   });
@@ -89,7 +88,7 @@ export function useSessionProcesses() {
   return useQuery({
     queryKey: ["resources", "sessionProcesses"],
     queryFn: () => trpcInvoke<SessionProcesses[]>("resources.sessionProcesses"),
-    refetchInterval: 10_000,
+    refetchInterval: 15_000,
   });
 }
 

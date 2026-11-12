@@ -11,7 +11,7 @@ const RUNTIMES = new Set(["node", "bun", "deno", "python", "python3"]);
 const base = pathBase;
 
 /** The command line from the program on: `node /x/codex --y` → [`codex`, `--y`] */
-function programTokens(args: string): string[] {
+export function programTokens(args: string): string[] {
   const tokens = args.trim().split(/\s+/);
   const rest = RUNTIMES.has(base(tokens[0] ?? "")) ? tokens.slice(1) : tokens;
   return [base(rest[0] ?? ""), ...rest.slice(1)];

@@ -1,7 +1,7 @@
 import { userInfo } from "node:os";
 import type { DevServer } from "@exegol/shared";
 import type Database from "libsql";
-import { listLiveAgentPids } from "../db/queries/agents";
+import { listLiveSessionProcesses } from "../db/queries/agents";
 import { execFileAsync } from "../lib/exec-file";
 import { logger } from "../lib/logger";
 import { isProcessAlive } from "../terminal/pty-sidecar-discovery";
@@ -106,7 +106,7 @@ export async function listDevServers(db: Database.Database): Promise<DevServer[]
     name: string;
     path: string;
   }[];
-  const agents = listLiveAgentPids(db);
+  const agents = listLiveSessionProcesses(db);
   const agentByPid = new Map(agents.map((a) => [a.pid, a]));
   const cwds = await getProcessCwds(pids);
 
@@ -129,8 +129,8 @@ export async function listDevServers(db: Database.Database): Promise<DevServer[]
         agent: agent
           ? {
               id: agent.id,
-              projectId: agent.project_id,
-              cliType: agent.cli_type,
+              projectId: agent.projectId,
+              cliType: agent.cliType,
               alias: agent.alias,
             }
           : null,
@@ -148,7 +148,7 @@ export async function listAgentPorts(db: Database.Database): Promise<Map<string,
   const ports = new Map<string, number>();
   const listeners = await listTcpListeners(String(userInfo().uid));
   if (listeners.length === 0) return ports;
-  const agentOf = new Map(listLiveAgentPids(db).map((a) => [a.pid, a.id]));
+  const agentOf = new Map(listLiveSessionProcesses(db).map((a) => [a.pid, a.id]));
   const pids = new Set(agentOf.keys());
   const { parentOf } = await readProcTable();
   for (const { pid, port } of [...listeners].sort((a, b) => a.port - b.port)) {
@@ -189,7 +189,7 @@ export async function killDevServer(
   const ownChain = new Set<number>();
   for (let p: number | undefined = process.pid; p && p > 1; p = parentOf.get(p)) ownChain.add(p);
   if (ownChain.has(pid)) throw new Error("That process runs Exegol itself");
-  if (listLiveAgentPids(db).some((a) => a.pid === pid)) {
+  if (listLiveSessionProcesses(db).some((a) => a.pid === pid)) {
     throw new Error("That is an agent's own process: stop the agent instead");
   }
 

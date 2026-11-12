@@ -5,9 +5,9 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   chosenClaudeServers,
   claudeServersFrom,
-  knownClaudeServers,
   listClaudeServers,
   mcpSlice,
+  serverHint,
 } from "./claude-servers";
 
 const stdio = (command: string) => ({ command, env: { KEY: "secret" } });
@@ -92,13 +92,17 @@ describe("reading Claude Code's files", () => {
     expect(JSON.stringify(listed)).not.toContain("secret");
   });
 
-  it("gives the process view a hint per local server, not its definition", async () => {
-    expect(await knownClaudeServers(repo)).toContainEqual({ name: "db", hints: ["db"] });
-  });
-
   it("gives a session the chosen definitions that still exist, and null without a list", async () => {
     expect(await chosenClaudeServers("a1", ["db", "gone"], [repo])).toEqual({ db: stdio("db") });
     expect(await chosenClaudeServers("a1", [], [repo])).toEqual({});
     expect(await chosenClaudeServers("a1", null, [repo])).toBeNull();
+  });
+});
+
+describe("serverHint", () => {
+  it("takes the last argument that is no flag or assignment, else the command", () => {
+    expect(serverHint("npx", ["-y", "@acme/db-server"])).toBe("@acme/db-server");
+    expect(serverHint("npx", ["@acme/db-server", "--port=1", "MODE=x"])).toBe("@acme/db-server");
+    expect(serverHint("db-server", ["--stdio"])).toBe("db-server");
   });
 });

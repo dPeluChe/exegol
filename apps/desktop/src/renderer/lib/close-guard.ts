@@ -6,13 +6,12 @@ import type { ProjectWorkspace } from "../stores/workspace/types";
 import { sessionName } from "./agent-label";
 import { pageLabel } from "./browser-viewports";
 import { appKeys } from "./keymap";
+import { plural } from "./plural";
 
 export interface CloseSummary {
   title: string;
   lines: string[];
 }
-
-const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? "" : "s"}`;
 
 /** The session's name, "Terminal" for a shell with none of its own */
 function terminalName(agent: AgentState): string {

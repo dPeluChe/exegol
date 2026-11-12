@@ -1,9 +1,10 @@
 import type { SessionProcesses } from "@exegol/shared";
 import type Database from "libsql";
 import { listLiveSessionProcesses } from "../db/queries/agents";
-import { knownClaudeServers } from "../mcp/claude-servers";
+import { type KnownServer, knownClaudeServers } from "../mcp/claude-servers";
 import { readProcessTable } from "./process-table";
-import { type KnownServer, sessionProcesses } from "./session-processes";
+import { indexProcesses } from "./process-tree";
+import { sessionProcesses } from "./session-processes";
 
 const TABLE_MAX_AGE_MS = 5_000;
 
@@ -16,8 +17,9 @@ export async function readSessionProcesses(db: Database.Database): Promise<Sessi
     ...paths.map(knownClaudeServers),
   ]);
   const knownIn = new Map<string, KnownServer[]>(paths.map((p, i) => [p, known[i] ?? []]));
+  const index = indexProcesses(rows);
   return sessions
-    .map((s) => sessionProcesses(s, rows, knownIn.get(s.projectPath ?? "") ?? []))
+    .map((s) => sessionProcesses(s, rows, knownIn.get(s.projectPath ?? "") ?? [], index))
     .filter((s) => s.count > 0)
     .sort((a, b) => b.rssKb - a.rssKb);
 }

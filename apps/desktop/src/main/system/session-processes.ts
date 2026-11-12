@@ -1,84 +1,49 @@
 import type { SessionProcesses, SessionProcessGroup } from "@exegol/shared";
-import { pathBase } from "@exegol/shared";
+import type { LiveSessionProcess } from "../db/queries/agents";
+import type { KnownServer } from "../mcp/claude-servers";
+import { CLAIM_GUARD_BIN, SHIM_BIN } from "../mcp/exegol-mcp-config";
 import type { ProcRow } from "./process-table";
-import { terminalProcesses } from "./process-tree";
+import { indexProcesses, type ProcIndex, terminalProcesses } from "./process-tree";
+import { programTokens } from "./shell-clis";
 
-export interface KnownServer {
-  name: string;
-  /** Words of its command line that tell it apart: the package or script it runs */
-  hints: string[];
+type Kind = Pick<SessionProcessGroup, "kind" | "name">;
+
+/** Only a program's or a server's name ever leaves main: a command line can carry a token */
+function classify(row: ProcRow, shellPid: number, known: KnownServer[]): Kind {
+  const [program = "", ...rest] = programTokens(row.args);
+  const name = program.replace(/^-/, "") || "process";
+  if (row.pid === shellPid) return { kind: "shell", name };
+  if (row.args.includes(SHIM_BIN)) return { kind: "bridge", name: "MCP bridge" };
+  if (row.args.includes(CLAIM_GUARD_BIN)) return { kind: "bridge", name: "Claim guard" };
+  const parts = new Set([program, ...rest, ...row.args.split(/\s+/)]);
+  const server = known.find((s) => parts.has(s.hint));
+  return server ? { kind: "mcp", name: server.name } : { kind: "other", name };
 }
 
-export interface LiveSession {
-  id: string;
-  pid: number;
-  alias: string | null;
-  taskDescription: string | null;
-  cliType: string;
-  projectId: string;
-  projectName: string;
-}
-
-const BRIDGE = "exegol-mcp-shim";
-
-function words(args: string): string[] {
-  return args.split(/\s+/).filter(Boolean);
-}
-
-/** What tells a server's process apart: its last argument that is no flag, else its command */
-export function serverHints(command: string, args: string[]): string[] {
-  const named = args.filter((a) => !a.startsWith("-") && !a.includes("="));
-  const last = named[named.length - 1];
-  return last ? [last] : [command];
-}
-
-function serverOf(row: ProcRow, known: KnownServer[]): string | null {
-  const parts = words(row.args);
-  for (const s of known) {
-    if (s.hints.length > 0 && s.hints.every((h) => parts.includes(h))) return s.name;
-  }
-  return null;
-}
-
-/** Only the program's name ever leaves main: a command line can carry a token */
-function programOf(row: ProcRow): string {
-  return pathBase(words(row.args)[0] ?? "").replace(/^-/, "") || "process";
-}
-
-function classify(
-  row: ProcRow,
-  session: LiveSession,
-  known: KnownServer[],
-): Pick<SessionProcessGroup, "kind" | "name"> {
-  if (row.pid === session.pid) return { kind: "shell", name: programOf(row) };
-  if (row.args.includes(BRIDGE)) return { kind: "bridge", name: "Exegol bridge" };
-  const server = serverOf(row, known);
-  if (server) return { kind: "mcp", name: server };
-  return { kind: "other", name: programOf(row) };
-}
-
-/** The processes of one session grouped by what they are; a server's own children count with it */
 export function sessionProcesses(
-  session: LiveSession,
+  session: Omit<LiveSessionProcess, "projectPath">,
   rows: ProcRow[],
   known: KnownServer[],
+  index: ProcIndex = indexProcesses(rows),
 ): SessionProcesses {
-  const self = rows.find((r) => r.pid === session.pid);
-  const all = self ? [self, ...terminalProcesses(session.pid, rows)] : [];
-  const byPid = new Map(all.map((r) => [r.pid, r]));
-  const kinds = new Map<number, Pick<SessionProcessGroup, "kind" | "name">>();
-  const kindOf = (row: ProcRow): Pick<SessionProcessGroup, "kind" | "name"> => {
+  const self = index.byPid.get(session.pid);
+  const all = self ? [self, ...terminalProcesses(session.pid, rows, index)] : [];
+  const own = new Map(all.map((r) => [r.pid, r]));
+  const kinds = new Map<number, Kind>();
+  // `npx pkg` runs the server as its child: what a server or the bridge starts counts with it
+  const kindOf = (row: ProcRow): Kind => {
     const seen = kinds.get(row.pid);
     if (seen) return seen;
-    const own = classify(row, session, known);
-    const parent = own.kind === "other" ? byPid.get(row.ppid) : undefined;
-    const inherited = parent && parent.pid !== row.pid ? kindOf(parent) : undefined;
-    const kind =
-      inherited && inherited.kind !== "shell" && inherited.kind !== "other" ? inherited : own;
+    let kind = classify(row, session.pid, known);
+    const parent = kind.kind === "other" && row.ppid !== row.pid ? own.get(row.ppid) : undefined;
+    const above = parent && kindOf(parent);
+    if (above && (above.kind === "mcp" || above.kind === "bridge")) kind = above;
     kinds.set(row.pid, kind);
     return kind;
   };
   const groups = new Map<string, SessionProcessGroup>();
+  let rssKb = 0;
+  let cpu = 0;
   for (const row of all) {
     const { kind, name } = kindOf(row);
     const key = `${kind}:${name}`;
@@ -86,8 +51,9 @@ export function sessionProcesses(
     g.count += 1;
     g.rssKb += row.rss ?? 0;
     groups.set(key, g);
+    rssKb += row.rss ?? 0;
+    cpu += row.cpu ?? 0;
   }
-  const list = [...groups.values()].sort((a, b) => b.rssKb - a.rssKb);
   return {
     agentId: session.id,
     alias: session.alias,
@@ -96,8 +62,8 @@ export function sessionProcesses(
     projectId: session.projectId,
     projectName: session.projectName,
     count: all.length,
-    rssKb: list.reduce((n, g) => n + g.rssKb, 0),
-    cpu: Math.round(all.reduce((n, r) => n + (r.cpu ?? 0), 0) * 10) / 10,
-    groups: list,
+    rssKb,
+    cpu: Math.round(cpu * 10) / 10,
+    groups: [...groups.values()].sort((a, b) => b.rssKb - a.rssKb),
   };
 }

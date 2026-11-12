@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ProcRow } from "./process-table";
-import { serverHints, sessionProcesses } from "./session-processes";
+import { sessionProcesses } from "./session-processes";
 
 const session = {
   id: "a1",
@@ -18,8 +18,8 @@ function row(pid: number, ppid: number, args: string, rss = 1000): ProcRow {
 
 const rows: ProcRow[] = [
   row(100, 1, "-zsh"),
-  row(101, 100, "claude --mcp-config /x.json", 300_000),
-  row(102, 101, "/App/Electron /App/exegol-mcp-shim.js", 50_000),
+  row(101, 100, "node /opt/bin/claude --mcp-config /x.json", 300_000),
+  row(102, 101, "/App/Electron /App/exegol-mcp-shim-bin.js", 50_000),
   row(103, 101, "npm exec @acme/db-server --token=secret", 40_000),
   row(104, 103, "node /cache/@acme/db-server/index.js", 60_000),
   row(105, 101, "/bin/bash -c ls", 2_000),
@@ -27,7 +27,7 @@ const rows: ProcRow[] = [
 ];
 
 describe("sessionProcesses", () => {
-  const known = [{ name: "db", hints: ["@acme/db-server"] }];
+  const known = [{ name: "db", hint: "@acme/db-server" }];
   const out = sessionProcesses(session, rows, known);
   const group = (kind: string, name: string) =>
     out.groups.find((g) => g.kind === kind && g.name === name);
@@ -42,7 +42,7 @@ describe("sessionProcesses", () => {
   });
 
   it("tells the bridge, the shell and the rest apart by program name only", () => {
-    expect(group("bridge", "Exegol bridge")?.count).toBe(1);
+    expect(group("bridge", "MCP bridge")?.count).toBe(1);
     expect(group("shell", "zsh")?.count).toBe(1);
     expect(group("other", "claude")?.rssKb).toBe(300_000);
     expect(group("other", "bash")?.count).toBe(1);
@@ -51,12 +51,5 @@ describe("sessionProcesses", () => {
 
   it("is empty when the session's process is gone", () => {
     expect(sessionProcesses({ ...session, pid: 555 }, rows, known).count).toBe(0);
-  });
-});
-
-describe("serverHints", () => {
-  it("takes the last argument that is no flag, else the command", () => {
-    expect(serverHints("npx", ["-y", "@acme/db-server"])).toEqual(["@acme/db-server"]);
-    expect(serverHints("db-server", ["--stdio"])).toEqual(["db-server"]);
   });
 });

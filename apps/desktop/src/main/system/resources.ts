@@ -9,8 +9,8 @@ import { getNotificationBus } from "../notifications/bus";
 import { getPtyHost } from "../terminal/pty-host";
 import { readPidFile } from "../terminal/pty-sidecar-discovery";
 import type { SessionMemoryResult } from "../terminal/pty-sidecar-protocol";
-import { readProcessMetrics } from "./process-metrics";
-import { type ProcRow, readProcessTable, readProcessUsage } from "./process-table";
+import { readProcessTable, readProcessUsage } from "./process-table";
+import { childrenByParent } from "./shell-clis";
 import { duBytes } from "./storage";
 
 // ─── Types ──────────────────────────────────────────────────────────────────────
@@ -53,11 +53,6 @@ interface ProjectMetrics {
   projectPath: string;
   diskUsage: number;
   worktreeCount: number;
-  agentProcesses: {
-    pid: number;
-    cpu: number;
-    memory: number;
-  }[];
 }
 
 // ─── Background Metrics Collector ───────────────────────────────────────────────
@@ -345,8 +340,7 @@ async function getProcessUsage(cores: number): Promise<ProcessUsage> {
     process.platform === "win32"
       ? await readProcessTable({ maxAgeMs: WIN_TABLE_AGE_MS }).catch(() => [])
       : (readProcessTable.recent(SHARED_PS_AGE_MS) ?? (await readProcessUsage()));
-  const children = new Map<number, ProcRow[]>();
-  for (const r of rows) children.set(r.ppid, [...(children.get(r.ppid) ?? []), r]);
+  const children = childrenByParent(rows);
 
   let agentsCpu = 0;
   let agentsMemory = 0;
@@ -448,76 +442,6 @@ async function getWorktreeCount(dirPath: string): Promise<number> {
   }
 }
 
-/**
- * Find direct child PIDs for a single parent PID.
- * node-pty spawns `$SHELL -ilc "claude ..."` — the stored PID is the shell,
- * not the real CLI tool.
- */
-async function getChildPids(parentPid: number): Promise<number[]> {
-  try {
-    const { stdout } = await execFileAsync("pgrep", ["-P", String(parentPid)], {
-      timeout: 2_000,
-    });
-    return stdout
-      .trim()
-      .split("\n")
-      .map((s) => parseInt(s.trim(), 10))
-      .filter((n) => n > 0);
-  } catch {
-    // pgrep exits non-zero if no children found
-    return [];
-  }
-}
-
-async function getAgentProcessMetrics(
-  pids: number[],
-): Promise<{ pid: number; cpu: number; memory: number }[]> {
-  // No pgrep or ps on Windows (readProcessMetrics is empty there)
-  if (pids.length === 0 || process.platform === "win32") return [];
-
-  try {
-    // For each agent shell PID, find its child processes (the real CLI tool)
-    const pidToChildren = new Map<number, number[]>();
-    const allPids = new Set(pids);
-
-    await Promise.all(
-      pids.map(async (parentPid) => {
-        const children = await getChildPids(parentPid);
-        pidToChildren.set(parentPid, children);
-        for (const c of children) allPids.add(c);
-      }),
-    );
-
-    const metricsMap = await readProcessMetrics(Array.from(allPids));
-
-    // Aggregate: for each agent PID, sum shell + its specific children
-    const results: { pid: number; cpu: number; memory: number }[] = [];
-    for (const parentPid of pids) {
-      let totalCpu = 0;
-      let totalMem = 0;
-
-      const self = metricsMap.get(parentPid);
-      if (self) {
-        totalCpu += self.cpu;
-        totalMem += self.memory;
-      }
-
-      for (const childPid of pidToChildren.get(parentPid) ?? []) {
-        const child = metricsMap.get(childPid);
-        if (child) {
-          totalCpu += child.cpu;
-          totalMem += child.memory;
-        }
-      }
-
-      results.push({ pid: parentPid, cpu: totalCpu, memory: totalMem });
-    }
-    return results;
-  } catch {
-    return [];
-  }
-}
-
 // ─── Sidecar Ring Buffer Memory (T143) ─────────────────────────────────────
 
 /** Resource-warning thresholds — fraction of the global ring buffer cap. */
@@ -557,12 +481,10 @@ export async function getProjectMetrics(
   projectPath: string,
   projectId: string,
   projectName: string,
-  agentPids: number[] = [],
 ): Promise<ProjectMetrics> {
-  const [diskUsage, worktreeCount, agentProcesses] = await Promise.all([
+  const [diskUsage, worktreeCount] = await Promise.all([
     getDirectorySize(projectPath),
     getWorktreeCount(projectPath),
-    getAgentProcessMetrics(agentPids),
   ]);
 
   return {
@@ -571,6 +493,5 @@ export async function getProjectMetrics(
     projectPath,
     diskUsage,
     worktreeCount,
-    agentProcesses,
   };
 }

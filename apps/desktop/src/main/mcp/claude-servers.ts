@@ -3,7 +3,6 @@ import { join } from "node:path";
 import type { ClaudeMcpServerInfo } from "@exegol/shared";
 import { claudeConfigFile, trustKey } from "../agents/claude-trust";
 import { logger } from "../lib/logger";
-import { type KnownServer, serverHints } from "../system/session-processes";
 import { EXEGOL_SERVER_KEY } from "./exegol-mcp-config";
 
 // Definitions hold secrets (env, headers): only names, scope and transport leave this module
@@ -98,12 +97,24 @@ export async function listClaudeServers(projectPath: string): Promise<ClaudeMcpS
   return servers.map(({ name, scope, transport }) => ({ name, scope, transport }));
 }
 
-/** What tells each local server's processes apart in the process table; stays in main */
+export interface KnownServer {
+  name: string;
+  /** A word of its command line that tells its process apart; stays in main */
+  hint: string;
+}
+
+/** Its last argument that is no flag (the package or script it runs), else its command */
+export function serverHint(command: string, args: string[]): string {
+  const named = args.filter((a) => !a.startsWith("-") && !a.includes("="));
+  return named[named.length - 1] ?? command;
+}
+
+/** Local servers only: a remote one starts no process */
 export async function knownClaudeServers(projectPath: string): Promise<KnownServer[]> {
   const servers = await readClaudeServers([projectPath]);
   return servers.flatMap(({ name, definition: { command, args } }) =>
     typeof command === "string"
-      ? [{ name, hints: serverHints(command, Array.isArray(args) ? args.map(String) : []) }]
+      ? [{ name, hint: serverHint(command, Array.isArray(args) ? args.map(String) : []) }]
       : [],
   );
 }
