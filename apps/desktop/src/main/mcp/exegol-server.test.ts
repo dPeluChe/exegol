@@ -15,6 +15,7 @@ import {
   restoreAgentMcpToken,
   revokeAgentMcpToken,
 } from "./exegol-server";
+import { clearTokens } from "./exegol-tokens";
 
 function fakeSocket(): { socket: Socket; responses: JsonRpcResponse[] } {
   const responses: JsonRpcResponse[] = [];
@@ -237,17 +238,17 @@ describe("identity is stable and never guessed", () => {
   });
 });
 
-// T175: claims were advisory AND unobservable — in a shared tree git cannot say
-// which agent dirtied a file. The write is the last moment attribution exists.
 describe("a bridge says who it is on connect", () => {
   it("marks the session connected before any tool call, and lists it by name", async () => {
     const db = setupDb();
-    revokeAgentMcpToken("writer");
-    revokeAgentMcpToken("reader");
+    clearTokens();
     db.prepare("UPDATE agents SET alias = 'Vega' WHERE id = 'writer'").run();
     const token = registerAgentMcpToken("writer", "p1");
     const state = () => Object.fromEntries(getMcpSessions(db).map((s) => [s.id, s.state]));
     expect(state()).toEqual({ writer: "not_connected", reader: "not_wired" });
+
+    await call(db, { tool: "", args: {}, token: "nope" }, "hello", { id: 9002 });
+    expect(state().writer).toBe("not_connected");
 
     const res = await call(db, { tool: "", args: {}, token }, "hello", { id: 9001 });
     expect(res.error).toBeUndefined();
@@ -259,16 +260,18 @@ describe("a bridge says who it is on connect", () => {
     });
   });
 
-  it("answers a hello with no valid token and connects nobody", async () => {
+  it("leaves a token shared by two sessions unknown until a call tells them apart", async () => {
     const db = setupDb();
-    const connected = () => getMcpSessions(db).filter((s) => s.state === "connected").length;
-    const before = connected();
-    const res = await call(db, { tool: "", args: {}, token: "nope" }, "hello", { id: 9002 });
-    expect(res.error).toBeUndefined();
-    expect(connected()).toBe(before);
+    clearTokens();
+    const token = registerAgentMcpToken("writer", "p1");
+    restoreAgentMcpToken("reader", "p1", token);
+    await call(db, { tool: "", args: {}, token }, "hello", { id: 9003 });
+    expect(getMcpSessions(db).every((s) => s.state === "not_connected")).toBe(true);
   });
 });
 
+// T175: claims were advisory AND unobservable — in a shared tree git cannot say
+// which agent dirtied a file. The write is the last moment attribution exists.
 describe("check_path guard", () => {
   let db: Database.Database;
 

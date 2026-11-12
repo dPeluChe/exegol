@@ -166,6 +166,7 @@ export interface McpSessionInfo {
   id: string;
   alias: string | null;
   cliType: string;
+  taskDescription: string;
   projectName: string | null;
   state: McpAgentState;
 }

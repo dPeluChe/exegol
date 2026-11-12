@@ -32,7 +32,7 @@ import {
 } from "./exegol-protocol";
 import {
   activeTokenCount,
-  agentOnConnection,
+  boundAgents,
   clearTokens,
   connectedAgentIds,
   hasToken,
@@ -63,23 +63,25 @@ export function revokeAgentMcpToken(agentId: string): void {
 
 /** Per live agent: a shim is connected with its token, it has a token but no shim yet, or Exegol
  *  never wired MCP for it (shells, or a spawn without a config) */
+function bridgeState(id: string, cliType: string, connected: Set<string>): McpAgentState {
+  if (connected.has(id)) return "connected";
+  return hasToken(id) && readsExegolMcpConfig(cliType) ? "not_connected" : "not_wired";
+}
+
 export function getMcpAgentStates(db: Database.Database): Record<string, McpAgentState> {
   const connected = connectedAgentIds();
   const out: Record<string, McpAgentState> = {};
-  for (const a of listLiveAgentClis(db)) {
-    out[a.id] = connected.has(a.id)
-      ? "connected"
-      : hasToken(a.id) && readsExegolMcpConfig(a.cliType)
-        ? "not_connected"
-        : "not_wired";
-  }
+  for (const a of listLiveAgentClis(db)) out[a.id] = bridgeState(a.id, a.cliType, connected);
   return out;
 }
 
 /** Settings > MCP Server: every live agent session with its bridge state */
 export function getMcpSessions(db: Database.Database): McpSessionInfo[] {
-  const states = getMcpAgentStates(db);
-  return listLiveAgentSessions(db).map((a) => ({ ...a, state: states[a.id] ?? "not_wired" }));
+  const connected = connectedAgentIds();
+  return listLiveAgentSessions(db).map((a) => ({
+    ...a,
+    state: bridgeState(a.id, a.cliType, connected),
+  }));
 }
 
 export async function handleRequest(
@@ -89,6 +91,20 @@ export async function handleRequest(
   conn?: McpConnectionState,
 ): Promise<void> {
   const caller = req.params as { token?: string; ppid?: number } | undefined;
+  // A bridge says who it is as soon as it connects. No process walk: every bridge does this at
+  // once when the app starts; a token shared by several sessions waits for its first call.
+  if (req.method === "hello") {
+    const bound = caller?.token ? boundAgents(caller.token) : undefined;
+    const agentId = bound?.length === 1 ? bound[0]?.agentId : undefined;
+    if (agentId) markConnected(conn, agentId);
+    record({ kind: "connect", agentId, detail: `shim #${conn?.id ?? "?"}` });
+    if (!agentId) {
+      const why = bound?.length ? "token shared by several sessions" : "no valid token";
+      record({ kind: "error", tool: "hello", detail: `${why}: known on its first call` });
+    }
+    socket.write(encodeResponse(req.id, {}));
+    return;
+  }
   await primeAncestors(conn, caller?.token, caller?.ppid);
   // Shims proxy tools/list so a shim spawned weeks ago lists what the running app has
   if (req.method === "list_tools") {
@@ -109,13 +125,6 @@ export async function handleRequest(
         ),
       }),
     );
-    return;
-  }
-  // A bridge says who it is as soon as it connects, so the state is right before any tool call
-  if (req.method === "hello") {
-    const resolved = resolveContext(db, caller?.token, caller?.ppid, conn);
-    if (resolved.ok) markConnected(conn, resolved.context.agentId);
-    socket.write(encodeResponse(req.id, {}));
     return;
   }
   if (req.method === "session_context") {
@@ -240,19 +249,12 @@ function startListening(db: Database.Database): void {
     let announced = false;
     const feed = createFrameReader<JsonRpcRequest>(
       (msg) => {
-        const first = !announced && msg.method !== "check_path";
-        if (first) announced = true;
-        const announce = () => {
-          if (first) {
-            record({
-              kind: "connect",
-              agentId: agentOnConnection(connId),
-              detail: `shim #${connId}`,
-            });
-          }
-        };
-        handleRequest(db, socket, msg, conn).then(announce, (err) => {
-          announce();
+        if (!announced && msg.method !== "check_path") {
+          announced = true;
+          // A bridge from before `hello`: its first request is all that announces it
+          if (msg.method !== "hello") record({ kind: "connect", detail: `shim #${connId}` });
+        }
+        handleRequest(db, socket, msg, conn).catch((err) => {
           record({
             kind: "error",
             detail: `unhandled: ${err instanceof Error ? err.message : err}`,

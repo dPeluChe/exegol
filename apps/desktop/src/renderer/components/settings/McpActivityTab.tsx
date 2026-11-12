@@ -1,5 +1,6 @@
 import type { McpAgentState, McpSessionInfo } from "@exegol/shared";
 import { useMemo } from "react";
+import { sessionName } from "../../lib/agent-label";
 
 export interface McpActivityEntry {
   at: number;
@@ -10,7 +11,7 @@ export interface McpActivityEntry {
   detail?: string;
 }
 
-const ACTIVITY_TONE: Record<string, string> = {
+const ACTIVITY_TONE: Record<McpActivityEntry["kind"], string> = {
   connect: "text-green-300",
   disconnect: "text-text-muted",
   call: "text-accent",
@@ -30,8 +31,6 @@ const STATE_TONE: Record<McpAgentState, string> = {
 };
 
 const STATE_ORDER: McpAgentState[] = ["not_connected", "connected", "not_wired"];
-
-export const sessionName = (s: McpSessionInfo) => s.alias ?? s.id.slice(0, 8);
 
 /** Pure: "38 connected, 9 not connected, 2 not wired", states with none left out */
 export function sessionsSummary(sessions: McpSessionInfo[]): string {
@@ -102,9 +101,10 @@ export function McpActivityTab({
             a tool (inbox_post, note_write, agents_list, agent_send…).
           </p>
         )}
-        {activity.map((entry) => (
+        {activity.map((entry, i) => (
           <ActivityRow
-            key={`${entry.at}-${entry.kind}-${entry.tool ?? ""}-${entry.agentId ?? ""}-${entry.detail ?? ""}`}
+            // biome-ignore lint/suspicious/noArrayIndexKey: stateless rows of a list replaced whole
+            key={i}
             entry={entry}
             name={entry.agentId ? (names.get(entry.agentId) ?? entry.agentId.slice(0, 8)) : null}
           />
@@ -118,9 +118,7 @@ function ActivityRow({ entry, name }: { entry: McpActivityEntry; name: string | 
   return (
     <div className="flex items-start gap-2 rounded-md border border-border bg-bg-tertiary px-3 py-1.5 font-mono text-[10px]">
       <span className="shrink-0 text-text-muted">{new Date(entry.at).toLocaleTimeString()}</span>
-      <span className={`shrink-0 font-medium ${ACTIVITY_TONE[entry.kind] ?? ""}`}>
-        {entry.kind}
-      </span>
+      <span className={`shrink-0 font-medium ${ACTIVITY_TONE[entry.kind]}`}>{entry.kind}</span>
       {entry.tool && <span className="shrink-0 text-text-secondary">{entry.tool}</span>}
       {name && <span className="shrink-0 text-text-muted/70">{name}</span>}
       {entry.ms !== undefined && <span className="shrink-0 text-text-muted/70">{entry.ms}ms</span>}

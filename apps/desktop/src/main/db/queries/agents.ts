@@ -796,6 +796,7 @@ export interface LiveAgentSession {
   id: string;
   alias: string | null;
   cliType: string;
+  taskDescription: string;
   projectName: string | null;
 }
 
@@ -803,7 +804,8 @@ export interface LiveAgentSession {
 export function listLiveAgentSessions(db: Database.Database): LiveAgentSession[] {
   return db
     .prepare(
-      `SELECT a.id, a.alias, a.cli_type AS cliType, p.name AS projectName
+      `SELECT a.id, a.alias, a.cli_type AS cliType, a.task_description AS taskDescription,
+              p.name AS projectName
        FROM agents a LEFT JOIN projects p ON p.id = a.project_id
        WHERE a.cli_type != 'shell' AND a.status IN (${liveIn()})
        ORDER BY a.started_at DESC, a.rowid DESC`,

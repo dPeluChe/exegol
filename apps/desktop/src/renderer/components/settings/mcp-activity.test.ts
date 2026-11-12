@@ -1,11 +1,12 @@
 import type { McpSessionInfo } from "@exegol/shared";
 import { describe, expect, it } from "vitest";
-import { sessionName, sessionsSummary } from "./McpActivityTab";
+import { sessionsSummary } from "./McpActivityTab";
 
-const session = (id: string, state: McpSessionInfo["state"], alias: string | null = null) => ({
+const session = (id: string, state: McpSessionInfo["state"]): McpSessionInfo => ({
   id,
-  alias,
+  alias: null,
   cliType: "claude-code",
+  taskDescription: "t",
   projectName: "proj",
   state,
 });
@@ -18,10 +19,5 @@ describe("sessionsSummary", () => {
       session("c", "not_connected"),
     ];
     expect(sessionsSummary(sessions)).toBe("1 not connected, 2 connected");
-  });
-
-  it("names a session by its alias, else a short id", () => {
-    expect(sessionName(session("abcdefghijkl", "connected", "Vega"))).toBe("Vega");
-    expect(sessionName(session("abcdefghijkl", "connected"))).toBe("abcdefgh");
   });
 });

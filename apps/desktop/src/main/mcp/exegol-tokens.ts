@@ -62,7 +62,7 @@ export function revokeToken(agentId: string): void {
   notifyMcpStatus();
 }
 
-/** connection id → the agent it authenticated as (list_tools or call_tool, never check_path) */
+/** connection id → the agent it authenticated as (hello, list_tools or call_tool, never check_path) */
 const connectedBy = new Map<number, string>();
 let statusListener: (() => void) | null = null;
 let statusQueued = false;
@@ -92,8 +92,6 @@ export function markDisconnected(connId: number): void {
 }
 
 export const connectedAgentIds = (): Set<string> => new Set(connectedBy.values());
-
-export const agentOnConnection = (connId: number): string | undefined => connectedBy.get(connId);
 
 export const hasToken = (agentId: string): boolean => tokensByAgent.has(agentId);
 
