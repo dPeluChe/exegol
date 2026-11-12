@@ -8,12 +8,16 @@ import {
 } from "react";
 import { type Components, defaultRemarkPlugins, Streamdown } from "streamdown";
 import { isHttpUrl } from "../../../lib/browser-viewports";
+import { type NameLink, nameSplitter, parseJump } from "../../../lib/name-links";
 import { openInBrowser } from "../../../lib/open-in-browser";
+import { jumpToAgent, showProject } from "../../../stores/agents";
 import { openTerminalUrl, openUnresolvedFile } from "../../terminal/terminal-link-actions";
 import { findFileMatches, type LinkMatch } from "../../terminal/terminal-links";
 
 interface MarkdownNode {
   type: string;
+  value?: string;
+  url?: string;
   children?: MarkdownNode[];
 }
 
@@ -21,6 +25,33 @@ function htmlToText(node: MarkdownNode) {
   if (node.type === "html") node.type = "text";
   node.children?.forEach(htmlToText);
 }
+
+type Split = ReturnType<typeof nameSplitter>;
+
+function linkNames(node: MarkdownNode, split: Split) {
+  if (!node.children || node.type === "link" || node.type === "code") return;
+  node.children = node.children.flatMap((child): MarkdownNode[] => {
+    if (child.type !== "text" || !child.value) {
+      linkNames(child, split);
+      return [child];
+    }
+    return split(child.value).map((part) =>
+      typeof part === "string"
+        ? { type: "text", value: part }
+        : { type: "link", url: part.href, children: [{ type: "text", value: part.name }] },
+    );
+  });
+}
+
+/** Known session and project names in prose become links to them; code and links stay as
+ *  written. Named, with the names as its options: Streamdown caches a processor by both */
+function remarkNameLinks(links: NameLink[]) {
+  const split = nameSplitter(links);
+  return (tree: MarkdownNode) => linkNames(tree, split);
+}
+
+/** The sessions and projects a chat can jump to by name; empty where there is nowhere to jump */
+export const ChatNames = createContext<NameLink[]>([]);
 
 const REMARK_PLUGINS = [...Object.values(defaultRemarkPlugins), () => htmlToText];
 const NO_REHYPE_PLUGINS: [] = [];
@@ -59,6 +90,22 @@ function ChatLink({
   shown?: boolean;
 }) {
   const { agentId, web } = useContext(ChatLinks);
+  const jump = parseJump(target);
+  if (jump) {
+    return (
+      <button
+        type="button"
+        title={jump.kind === "session" ? "Open this session" : "Open this project"}
+        onClick={() => {
+          if (jump.kind === "session") jumpToAgent(jump.agentId, jump.projectId);
+          else showProject(jump.projectId);
+        }}
+        className="text-left text-accent underline decoration-accent/40 hover:decoration-accent"
+      >
+        {children}
+      </button>
+    );
+  }
   const url = isHttpUrl(target);
   const file = url || !agentId ? undefined : fileMatch(target);
   const clickable = url ? !!agentId || web : !!file;
@@ -157,6 +204,14 @@ export function ChatMarkdown({
   webLinks?: boolean;
 }) {
   const links = useMemo(() => ({ agentId: agentId ?? null, web: webLinks }), [agentId, webLinks]);
+  const names = useContext(ChatNames);
+  const remarkPlugins = useMemo(
+    () =>
+      names.length > 0
+        ? [...REMARK_PLUGINS, [remarkNameLinks, names] as [typeof remarkNameLinks, NameLink[]]]
+        : REMARK_PLUGINS,
+    [names],
+  );
   return (
     <ChatLinks.Provider value={links}>
       <Streamdown
@@ -164,7 +219,7 @@ export function ChatMarkdown({
         parseIncompleteMarkdown={false}
         controls={false}
         components={COMPONENTS as Components}
-        remarkPlugins={REMARK_PLUGINS}
+        remarkPlugins={remarkPlugins}
         rehypePlugins={NO_REHYPE_PLUGINS}
         className="min-w-0 break-words leading-relaxed"
       >

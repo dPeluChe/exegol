@@ -12,6 +12,7 @@ import { Fragment, memo, useMemo, useState } from "react";
 import { useSeesCommander } from "../../../hooks/use-commander-unread";
 import { useCommanderVoice } from "../../../hooks/use-commander-voice";
 import { useMountEffect } from "../../../hooks/use-mount-effect";
+import { useNameLinks } from "../../../hooks/use-name-links";
 import { useVoiceFeedback } from "../../../hooks/use-voice-feedback";
 import { isClaudeQuestion } from "../../../lib/claude-question";
 import { hasClipboardImage } from "../../../lib/clipboard-image";
@@ -41,7 +42,7 @@ import { AgentIcon } from "../../common/AgentIcon";
 import { DictationWidget } from "../../layout/StatusBarDictation";
 import { FollowUpList, useFollowUps } from "../../terminal/FollowUpControl";
 import { DELIVERY, peerName, useAgentMessages } from "./AgentMessages";
-import { ChatMarkdown } from "./ChatMarkdown";
+import { ChatMarkdown, ChatNames } from "./ChatMarkdown";
 import { MentionMenu, useMentions } from "./ChatMentions";
 import { ChatWorking } from "./ChatWorking";
 import { CopyReply } from "./CopyReply";
@@ -383,6 +384,7 @@ export function CompanyChat({
   };
 
   const zoom = useAppStore((s) => s.companyChatFont) / DEFAULT_CHAT_FONT;
+  const names = useNameLinks(speak, agent.projectId);
 
   return (
     <div className="flex h-full min-h-0 flex-col" style={{ zoom }}>
@@ -401,35 +403,37 @@ export function CompanyChat({
       </div>
       {/* column-reverse keeps the newest turn in view without tracking scroll */}
       <div className="flex min-h-0 flex-1 flex-col-reverse overflow-y-auto px-2.5 py-2">
-        <div className="flex flex-col gap-3">
-          {(bubbles.length > shown || chat?.older) && (
-            <button
-              type="button"
-              onClick={showEarlier}
-              disabled={older.isPending}
-              className="self-center rounded-full border border-border px-3 py-1 text-[10px] text-text-muted hover:text-text-primary disabled:opacity-60"
-            >
-              {older.isPending ? "Loading" : "Earlier messages"}
-            </button>
-          )}
-          {bubbles.length === 0 && chat && (
-            <p className="text-xs text-text-muted">Nothing to show yet.</p>
-          )}
-          {visible.map((bubble) => (
-            <Fragment key={bubble.id}>
-              {bubble.id === unreadFrom && <UnreadMark />}
-              <Bubble
-                bubble={bubble}
-                agentId={agent.id}
-                cliType={agent.cliType}
-                formatted={!!chat?.markdown}
-                voiceReady={voiceReady}
-                feedback={feedback.get(bubble.id)}
-              />
-            </Fragment>
-          ))}
-          <ChatWorking agent={agent} />
-        </div>
+        <ChatNames.Provider value={names}>
+          <div className="flex flex-col gap-3">
+            {(bubbles.length > shown || chat?.older) && (
+              <button
+                type="button"
+                onClick={showEarlier}
+                disabled={older.isPending}
+                className="self-center rounded-full border border-border px-3 py-1 text-[10px] text-text-muted hover:text-text-primary disabled:opacity-60"
+              >
+                {older.isPending ? "Loading" : "Earlier messages"}
+              </button>
+            )}
+            {bubbles.length === 0 && chat && (
+              <p className="text-xs text-text-muted">Nothing to show yet.</p>
+            )}
+            {visible.map((bubble) => (
+              <Fragment key={bubble.id}>
+                {bubble.id === unreadFrom && <UnreadMark />}
+                <Bubble
+                  bubble={bubble}
+                  agentId={agent.id}
+                  cliType={agent.cliType}
+                  formatted={!!chat?.markdown}
+                  voiceReady={voiceReady}
+                  feedback={feedback.get(bubble.id)}
+                />
+              </Fragment>
+            ))}
+            <ChatWorking agent={agent} />
+          </div>
+        </ChatNames.Provider>
       </div>
       <ChatInput agent={agent} onTerminal={onTerminal} dictation={dictation} mentions={speak} />
     </div>

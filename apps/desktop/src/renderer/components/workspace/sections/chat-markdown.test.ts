@@ -1,7 +1,8 @@
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
-import { ChatMarkdown } from "./ChatMarkdown";
+import { projectHref, sessionHref } from "../../../lib/name-links";
+import { ChatMarkdown, ChatNames } from "./ChatMarkdown";
 
 const render = (text: string) =>
   renderToStaticMarkup(createElement(ChatMarkdown, { text, agentId: "a1" }));
@@ -45,5 +46,34 @@ describe("ChatMarkdown", () => {
     expect(clicks("https://example.com/a", true)).toBe(1);
     expect(clicks("`/Users/x/app/src/main.ts`", true)).toBe(0);
     expect(clicks("[j](javascript:alert(1))", true)).toBe(0);
+  });
+
+  it("links known session and project names in prose, not in code", () => {
+    const names = [
+      { name: "amber", href: sessionHref("a1", "p1") },
+      { name: "Blueprints", href: projectHref("p1") },
+    ];
+    const html = renderToStaticMarkup(
+      createElement(
+        ChatNames.Provider,
+        { value: names },
+        createElement(ChatMarkdown, {
+          text: "amber (Blueprints) waits, see `amber`",
+          agentId: "a0",
+        }),
+      ),
+    );
+    expect(html.match(/<button/g)?.length).toBe(2);
+    expect(html).toContain("Open this session");
+    expect(html).not.toContain("exegol:");
+    // Another list of names is not served from the first one's processor
+    const later = renderToStaticMarkup(
+      createElement(
+        ChatNames.Provider,
+        { value: [{ name: "waits", href: projectHref("p2") }] },
+        createElement(ChatMarkdown, { text: "amber (Blueprints) waits", agentId: "a0" }),
+      ),
+    );
+    expect(later.match(/<button/g)?.length).toBe(1);
   });
 });
