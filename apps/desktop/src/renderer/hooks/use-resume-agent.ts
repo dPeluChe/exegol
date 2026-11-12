@@ -1,12 +1,17 @@
-import type { Agent, AgentCreate, AgentProvider } from "@exegol/shared";
+import type { Agent, AgentCreate, AgentProvider, McpStatusEvent } from "@exegol/shared";
 import { useCallback, useMemo } from "react";
 import { create } from "zustand";
+import { MCP_STATUS_KEY } from "../components/common/McpStatusIndicator";
 import {
   AUTO_RESUME_CONCURRENCY,
+  AUTO_RESUME_QUIET_MS,
   AUTO_RESUME_SETTLE_MS,
   orderAutoResume,
+  SHELL_SETTLE_MS,
   screenRank,
+  sessionUp,
   staggered,
+  waitUntilUp,
 } from "../lib/auto-resume";
 import { queryClient } from "../lib/query-client";
 import { markSuspended } from "../lib/session-quiet";
@@ -201,28 +206,23 @@ interface KeptSession {
 
 const KEPT_LINKS = 5;
 
-/** The next resume waits for this CLI to be up (at its prompt), at most AUTO_RESUME_SETTLE_MS */
+/** The next resume waits for this session to be up and quiet, at most AUTO_RESUME_SETTLE_MS */
 function settled(agentId: string, cliType: string): Promise<void> {
-  if (cliType === "shell") return Promise.resolve();
-  return new Promise((resolve) => {
-    const isUp = () => {
-      const a = useAgentStore.getState().agents[agentId];
-      return !a || a.status === "waiting_input" || a.status === "idle";
+  if (cliType === "shell") return new Promise((done) => setTimeout(done, SHELL_SETTLE_MS));
+  const isUp = () =>
+    sessionUp(
+      useAgentStore.getState().agents[agentId]?.status,
+      queryClient.getQueryData<McpStatusEvent>(MCP_STATUS_KEY)?.agents[agentId],
+    );
+  const subscribe = (onChange: () => void) => {
+    const stopAgents = useAgentStore.subscribe(onChange);
+    const stopMcp = queryClient.getQueryCache().subscribe(onChange);
+    return () => {
+      stopAgents();
+      stopMcp();
     };
-    if (isUp()) {
-      resolve();
-      return;
-    }
-    const done = () => {
-      clearTimeout(timer);
-      unsub();
-      resolve();
-    };
-    const timer = setTimeout(done, AUTO_RESUME_SETTLE_MS);
-    const unsub = useAgentStore.subscribe(() => {
-      if (isUp()) done();
-    });
-  });
+  };
+  return waitUntilUp(isUp, subscribe, AUTO_RESUME_QUIET_MS, AUTO_RESUME_SETTLE_MS);
 }
 
 function showKept(kept: KeptSession[]): void {

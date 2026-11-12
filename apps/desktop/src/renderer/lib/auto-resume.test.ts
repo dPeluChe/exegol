@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { ProjectWorkspace } from "../stores/workspace/types";
-import { orderAutoResume, screenRank, staggered } from "./auto-resume";
+import { orderAutoResume, screenRank, sessionUp, staggered, waitUntilUp } from "./auto-resume";
 
 const leaf = (paneId: string) => ({ type: "pane", paneId }) as never;
 const pane = (agentId: string) => ({ id: agentId, type: "terminal", agentId }) as never;
@@ -61,5 +61,58 @@ describe("staggered", () => {
     });
     expect(peak).toBe(3);
     expect(started).toEqual([1, 2, 3, 4, 5, 6, 7]);
+  });
+});
+
+describe("sessionUp", () => {
+  it("needs the prompt and, when a bridge was wired, its connection", () => {
+    expect(sessionUp("running", "connected")).toBe(false);
+    expect(sessionUp("waiting_input", "not_connected")).toBe(false);
+    expect(sessionUp("waiting_input", "connected")).toBe(true);
+    expect(sessionUp("idle", "not_wired")).toBe(true);
+    expect(sessionUp("idle", undefined)).toBe(true);
+    expect(sessionUp(undefined, undefined)).toBe(true);
+  });
+});
+
+describe("waitUntilUp", () => {
+  const source = () => {
+    const listeners = new Set<() => void>();
+    return {
+      subscribe: (fn: () => void) => {
+        listeners.add(fn);
+        return () => listeners.delete(fn);
+      },
+      emit: () => {
+        for (const fn of listeners) fn();
+      },
+      count: () => listeners.size,
+    };
+  };
+
+  it("waits for the quiet period, and starts it again after a drop", async () => {
+    const s = source();
+    let up = true;
+    const started = Date.now();
+    const waiting = waitUntilUp(() => up, s.subscribe, 40, 1000);
+    setTimeout(() => {
+      up = false;
+      s.emit();
+    }, 20);
+    setTimeout(() => {
+      up = true;
+      s.emit();
+    }, 60);
+    await waiting;
+    expect(Date.now() - started).toBeGreaterThanOrEqual(95);
+    expect(s.count()).toBe(0);
+  });
+
+  it("gives up at the cap when the session never comes up", async () => {
+    const s = source();
+    const started = Date.now();
+    await waitUntilUp(() => false, s.subscribe, 40, 60);
+    expect(Date.now() - started).toBeLessThan(500);
+    expect(s.count()).toBe(0);
   });
 });
