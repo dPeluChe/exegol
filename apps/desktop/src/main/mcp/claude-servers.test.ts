@@ -5,6 +5,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   chosenClaudeServers,
   claudeServersFrom,
+  knownClaudeServers,
   listClaudeServers,
   mcpSlice,
 } from "./claude-servers";
@@ -89,6 +90,10 @@ describe("reading Claude Code's files", () => {
       { name: "tracker", scope: "user", transport: "stdio" },
     ]);
     expect(JSON.stringify(listed)).not.toContain("secret");
+  });
+
+  it("gives the process view a hint per local server, not its definition", async () => {
+    expect(await knownClaudeServers(repo)).toContainEqual({ name: "db", hints: ["db"] });
   });
 
   it("gives a session the chosen definitions that still exist, and null without a list", async () => {

@@ -1,17 +1,23 @@
 import type { SessionProcesses } from "@exegol/shared";
 import type Database from "libsql";
 import { listLiveSessionProcesses } from "../db/queries/agents";
+import { knownClaudeServers } from "../mcp/claude-servers";
 import { readProcessTable } from "./process-table";
-import { sessionProcesses } from "./session-processes";
+import { type KnownServer, sessionProcesses } from "./session-processes";
 
 const TABLE_MAX_AGE_MS = 5_000;
 
 export async function readSessionProcesses(db: Database.Database): Promise<SessionProcesses[]> {
   const sessions = listLiveSessionProcesses(db);
   if (sessions.length === 0) return [];
-  const rows = await readProcessTable({ maxAgeMs: TABLE_MAX_AGE_MS });
+  const paths = [...new Set(sessions.flatMap((s) => (s.projectPath ? [s.projectPath] : [])))];
+  const [rows, ...known] = await Promise.all([
+    readProcessTable({ maxAgeMs: TABLE_MAX_AGE_MS }),
+    ...paths.map(knownClaudeServers),
+  ]);
+  const knownIn = new Map<string, KnownServer[]>(paths.map((p, i) => [p, known[i] ?? []]));
   return sessions
-    .map((s) => sessionProcesses(s, rows, []))
+    .map((s) => sessionProcesses(s, rows, knownIn.get(s.projectPath ?? "") ?? []))
     .filter((s) => s.count > 0)
     .sort((a, b) => b.rssKb - a.rssKb);
 }

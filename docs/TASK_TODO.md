@@ -626,7 +626,7 @@ A reboot brought back 65 sessions in two minutes: no errors, but the main proces
 - C2: hold resumes while the machine's load is above a limit
 - C3 (decision): a restart resumes only what is on screen, the pinned sessions and the Commander; the rest on demand
 - D3 done (2026-11-12): Edit project > MCP. Left: verify live that a strict session leaves out plugin servers and claude.ai connectors, and whether other CLIs can take a list
-- D4 (decision): per-session process and memory view, MCP servers named
+- D4 done (2026-11-12): Processes by session in Monitor > Resources. Left: see it live with real MCP servers named
 - B (parked): a native bridge, shared with the claim guard
 - A (not recommended): Streamable HTTP on loopback in place of the bridge
 
