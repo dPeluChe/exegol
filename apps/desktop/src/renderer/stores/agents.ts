@@ -15,7 +15,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { useShallow } from "zustand/react/shallow";
 import { shallow } from "zustand/shallow";
-import { MCP_STATUS_KEY } from "../components/common/McpStatusIndicator";
+import { MCP_STATUS_KEY } from "../hooks/use-mcp-status";
 import { nextActivitySince } from "../lib/busy-time";
 import { isClaudeQuestion } from "../lib/claude-question";
 import { applyRecoveredCrashes, RECOVERY_KEY } from "../lib/session-recovery";

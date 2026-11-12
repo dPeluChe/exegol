@@ -1,10 +1,9 @@
-import type { Agent, AgentCreate, AgentProvider, McpStatusEvent } from "@exegol/shared";
+import type { Agent, AgentCreate, AgentProvider } from "@exegol/shared";
 import { useCallback, useMemo } from "react";
 import { create } from "zustand";
-import { MCP_STATUS_KEY } from "../components/common/McpStatusIndicator";
 import {
   AUTO_RESUME_CONCURRENCY,
-  AUTO_RESUME_QUIET_MS,
+  AUTO_RESUME_HOLD_MS,
   AUTO_RESUME_SETTLE_MS,
   orderAutoResume,
   SHELL_SETTLE_MS,
@@ -23,6 +22,7 @@ import { useWatchStore } from "../stores/watch";
 import { type Pane, useWorkspaceStore } from "../stores/workspace";
 import { pendingStop } from "./use-delete-agent";
 import { useLatest } from "./use-latest";
+import { mcpStateOf, onMcpStatusChange } from "./use-mcp-status";
 import { useMountEffect } from "./use-mount-effect";
 import { enabledProvidersQuery, isLaunchable, useEnabledProviders } from "./use-providers";
 import { useSpawnAgent } from "./use-trpc";
@@ -206,23 +206,20 @@ interface KeptSession {
 
 const KEPT_LINKS = 5;
 
-/** The next resume waits for this session to be up and quiet, at most AUTO_RESUME_SETTLE_MS */
+/** The next resume waits for this session to be up and stay so, at most AUTO_RESUME_SETTLE_MS */
 function settled(agentId: string, cliType: string): Promise<void> {
   if (cliType === "shell") return new Promise((done) => setTimeout(done, SHELL_SETTLE_MS));
   const isUp = () =>
-    sessionUp(
-      useAgentStore.getState().agents[agentId]?.status,
-      queryClient.getQueryData<McpStatusEvent>(MCP_STATUS_KEY)?.agents[agentId],
-    );
+    sessionUp(useAgentStore.getState().agents[agentId]?.status, mcpStateOf(agentId));
   const subscribe = (onChange: () => void) => {
     const stopAgents = useAgentStore.subscribe(onChange);
-    const stopMcp = queryClient.getQueryCache().subscribe(onChange);
+    const stopMcp = onMcpStatusChange(onChange);
     return () => {
       stopAgents();
       stopMcp();
     };
   };
-  return waitUntilUp(isUp, subscribe, AUTO_RESUME_QUIET_MS, AUTO_RESUME_SETTLE_MS);
+  return waitUntilUp(isUp, subscribe, AUTO_RESUME_HOLD_MS, AUTO_RESUME_SETTLE_MS);
 }
 
 function showKept(kept: KeptSession[]): void {
