@@ -12,10 +12,19 @@ export const AUTO_RESUME_QUIET_MS = 2_000;
 /** A shell holds its slot this long: 16 at once timed out on their ready marker */
 export const SHELL_SETTLE_MS = 1_000;
 
-/** Pure: at its prompt (or gone) and its Exegol bridge connected, when one was wired */
+const SETTLED_STATUSES = new Set([
+  "waiting_input",
+  "idle",
+  "completed",
+  "failed",
+  "stopped",
+  "crashed",
+]);
+
+/** Pure: at its prompt, ended or gone, and its Exegol bridge connected when one was wired */
 export function sessionUp(status: string | undefined, mcp: McpAgentState | undefined): boolean {
-  const atPrompt = status === undefined || status === "waiting_input" || status === "idle";
-  return atPrompt && mcp !== "not_connected";
+  if (status !== undefined && !SETTLED_STATUSES.has(status)) return false;
+  return status === "waiting_input" || status === "idle" ? mcp !== "not_connected" : true;
 }
 
 /** Resolves once `isUp` has held for `quietMs`, or after `maxMs`; `subscribe` reports changes */
