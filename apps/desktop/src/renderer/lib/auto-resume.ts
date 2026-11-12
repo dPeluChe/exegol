@@ -8,7 +8,7 @@ export const AUTO_RESUME_CONCURRENCY = 3;
 /** The next resume starts once the previous CLI is up, or after this */
 export const AUTO_RESUME_SETTLE_MS = 10_000;
 /** A CLI at its prompt is still starting its MCP servers: it must stay up this long */
-export const AUTO_RESUME_QUIET_MS = 2_000;
+export const AUTO_RESUME_HOLD_MS = 2_000;
 /** A shell holds its slot this long: 16 at once timed out on their ready marker */
 export const SHELL_SETTLE_MS = 1_000;
 
@@ -27,26 +27,26 @@ export function sessionUp(status: string | undefined, mcp: McpAgentState | undef
   return status === "waiting_input" || status === "idle" ? mcp !== "not_connected" : true;
 }
 
-/** Resolves once `isUp` has held for `quietMs`, or after `maxMs`; `subscribe` reports changes */
+/** Resolves once `isUp` has held for `holdMs`, or after `maxMs`; `subscribe` reports changes */
 export function waitUntilUp(
   isUp: () => boolean,
   subscribe: (onChange: () => void) => () => void,
-  quietMs: number,
+  holdMs: number,
   maxMs: number,
 ): Promise<void> {
   return new Promise((resolve) => {
-    let quiet: ReturnType<typeof setTimeout> | null = null;
+    let hold: ReturnType<typeof setTimeout> | null = null;
     const done = () => {
       clearTimeout(cap);
-      if (quiet) clearTimeout(quiet);
+      if (hold) clearTimeout(hold);
       unsub();
       resolve();
     };
     const check = () => {
       if (!isUp()) {
-        if (quiet) clearTimeout(quiet);
-        quiet = null;
-      } else if (!quiet) quiet = setTimeout(done, quietMs);
+        if (hold) clearTimeout(hold);
+        hold = null;
+      } else if (!hold) hold = setTimeout(done, holdMs);
     };
     const cap = setTimeout(done, maxMs);
     const unsub = subscribe(check);
