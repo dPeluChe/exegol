@@ -1,5 +1,6 @@
 import { type AgentStatus, LIVE_STATUSES, pathBase } from "@exegol/shared";
 import { isPasteTarget } from "../../lib/agent-input";
+import { byProject, OTHER_PROJECT, sessionName } from "../../lib/agent-label";
 
 /** A live session that can receive a selection, with the project it belongs to */
 export interface SendTarget {
@@ -64,6 +65,23 @@ export function sendLabel(target: SendTarget, cliSessionName?: string): string {
   );
   return [...new Set(parts)].join(" · ") || target.cliType;
 }
+
+/** Sessions as one group per project (first seen first): a flat row that still names projects */
+export function groupTargets(
+  sessions: (Parameters<typeof sessionName>[0] & { id: string; projectId: string })[],
+  projectNames: Map<string, string>,
+): SendGroup[] {
+  return [...byProject(sessions)].map(([projectId, list]) => ({
+    projectId,
+    projectName: projectNames.get(projectId) ?? OTHER_PROJECT,
+    targets: list.map((s) => ({ id: s.id, name: sessionName(s), cliType: s.cliType, projectId })),
+  }));
+}
+
+export const sectionGroups = (sections: SendSections): SendGroup[] => [
+  ...(sections.own ? [sections.own] : []),
+  ...sections.others,
+];
 
 /** Live agents and terminals other than `selfId`. Other projects follow the sidebar's drag order
  *  (`projectOrder`), then name. `folders`: a shell's working folder by session id */

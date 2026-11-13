@@ -130,6 +130,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - The "What's new" dialog shows the update's download progress (a bar and the percent), as the title-bar button does, instead of only "Downloading"
 
 ### Changed
+
+- Inbox: Send to under a thread names each session by its alias and the name it has inside its CLI (Claude Code's `/rename`), and says the project when the sessions belong to several
 - Inbox menu: one tab per inbox (the project, each colab it is in, Personal) with its count, and status as a filter under them; New thread opens in the tab shown
 - Settings > MCP Server > Activity lists every live agent session with its project, CLI and whether its bridge is connected, and events name the session; the Server tab counts connected bridges. A session's bridge now reports in as soon as it connects, so its plug is right after an app restart without waiting for a tool call (sessions started before this version catch up on their next call)
 - After a restart, sessions come back more gently: the next one starts once the previous CLI is at its prompt with its Exegol tools connected and has stayed so for 2 seconds (10 at most), and shells take their turn too

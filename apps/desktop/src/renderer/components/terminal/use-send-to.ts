@@ -13,8 +13,10 @@ import type { ProjectWorkspace } from "../../stores/workspace/types";
 import {
   buildSendSections,
   type SendEnterPrefs,
+  type SendGroup,
   type SendSections,
   type SendTarget,
+  sectionGroups,
   sendAction,
   type TargetGroup,
   tabTargetGroups,
@@ -73,19 +75,19 @@ export function useTabTargets(
     const ids = (tab ? collectPaneIds(tab.layout) : []).map((id) => pw?.panes[id]?.agentId);
     return tabTargetGroups(sections, new Set(ids.filter((id): id is string => !!id)));
   }, [sections, pw, paneId]);
-  return { groups, names: useCliSessionNames(sections) };
+  return { groups, names: useCliSessionNames(sectionGroups(sections)) };
 }
 
 /** Each agent's session name inside its CLI, by agent id (the launcher chips' source), one query
  *  per project; names fill in once the CLI's store is read */
-export function useCliSessionNames(sections: SendSections): Record<string, string> {
-  const groups = [...(sections.own ? [sections.own] : []), ...sections.others];
+export function useCliSessionNames(groups: SendGroup[]): Record<string, string> {
   const results = useQueries({
     queries: groups.map((g) => {
       const agentIds = g.targets
         .filter((t) => t.cliType !== "shell")
         .slice(0, 20)
-        .map((t) => t.id);
+        .map((t) => t.id)
+        .sort();
       return {
         queryKey: ["sendToSessionNames", g.projectId, agentIds],
         queryFn: () =>

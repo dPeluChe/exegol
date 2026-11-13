@@ -1,6 +1,7 @@
 import { type IdeType, type InterruptionLevel, ideLabel, type Project } from "@exegol/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useProjectIde, useProjects, useSettings } from "../../hooks/use-trpc";
+import { OTHER_PROJECT } from "../../lib/agent-label";
 import { chordBadge } from "../../lib/keymap";
 import { useProjectShortcuts } from "../../lib/live-tabs";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
@@ -131,10 +132,9 @@ function ShortcutPicker({ projectId }: { projectId: string }) {
   const ownAuto = assigned[projectId] ? undefined : live.get(projectId);
   const ownerLabel = (d: ShortcutDigit) => {
     const keeper = kept.get(d);
-    if (keeper && keeper !== projectId) return ` · ${nameOf.get(keeper) ?? "another project"}`;
+    if (keeper && keeper !== projectId) return ` · ${nameOf.get(keeper) ?? OTHER_PROJECT}`;
     const auto = given.get(d);
-    if (auto && auto !== projectId)
-      return ` · ${nameOf.get(auto) ?? "another project"} (while live)`;
+    if (auto && auto !== projectId) return ` · ${nameOf.get(auto) ?? OTHER_PROJECT} (while live)`;
     return keeper === projectId || auto === projectId ? " · this project" : " · free";
   };
 
