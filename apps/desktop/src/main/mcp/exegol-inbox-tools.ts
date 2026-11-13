@@ -1,10 +1,4 @@
-import {
-  type Colab,
-  type InboxAuthor,
-  type InboxThread,
-  pathBase,
-  pathParent,
-} from "@exegol/shared";
+import { type InboxAuthor, type InboxThread, pathBase, pathParent } from "@exegol/shared";
 import type Database from "libsql";
 import { getAgent, getAgentCwd } from "../db/queries/agents";
 import { listColabs } from "../db/queries/colabs";
@@ -20,6 +14,7 @@ import {
 } from "../inbox/threads";
 import { runGit } from "../lib/worktree-safety";
 import { type ExegolToolContext, ExegolToolError } from "./exegol-protocol";
+import { colabNamed, colabTarget, colabView, placeOf, seenBy, text } from "./inbox-colabs";
 import type { InboxToolName } from "./inbox-tool-defs";
 
 const GIT_TIMEOUT_MS = 1_500;
@@ -60,8 +55,6 @@ const actorOf = (context: ExegolToolContext) => ({
   agentId: context.agentId,
 });
 
-export const text = (value: unknown): string => (typeof value === "string" ? value : "");
-
 const summary = (t: InboxThread) => ({
   thread: t.id,
   scope: t.scope,
@@ -70,34 +63,18 @@ const summary = (t: InboxThread) => ({
   resolution: t.resolution,
 });
 
-const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
-
-/** By name, as an agent knows it from its instructions; only colabs this project is in */
-export function colabNamed(db: Database.Database, projectId: string, name: unknown): Colab {
-  const colabs = listColabs(db, projectId);
-  const colab = colabs.find((c) => same(c.name, text(name)));
-  if (colab) return colab;
-  const names = colabs.map((c) => c.name).join(", ") || "none";
-  throw new InboxError(`No colab named ${JSON.stringify(text(name))} here. Yours: ${names}`);
-}
-
 function targetOf(
   db: Database.Database,
   args: Record<string, unknown>,
   projectId: string,
 ): InboxTarget {
   if (args.target === "personal") return { scope: "personal" };
-  if (args.target !== "colab") return { scope: "project", projectId };
-  const colab = colabNamed(db, projectId, args.colab);
-  const wanted = text(args.to_project);
-  if (!wanted) return { scope: "colab", colabId: colab.id, toProject: null };
-  const to = colab.members.find((m) => same(m.projectName, wanted));
-  if (!to) {
-    const names = [...new Set(colab.members.map((m) => m.projectName))].join(", ");
-    throw new InboxError(`${JSON.stringify(wanted)} is not in ${colab.name}. Members: ${names}`);
-  }
-  return { scope: "colab", colabId: colab.id, toProject: to.projectId };
+  if (args.target === "colab") return colabTarget(db, args, projectId);
+  return { scope: "project", projectId };
 }
+
+const POSTED =
+  "It waits and wakes nobody. To tell a live session now, agent_send it the thread id.";
 
 type Handler = (
   db: Database.Database,
@@ -118,7 +95,16 @@ const HANDLERS: Record<InboxToolName, Handler> = {
         refs: Array.isArray(args.refs) ? args.refs.map(String) : [],
       },
     );
-    return { thread: opened.thread.id, similar_closed: opened.similarClosed.map(summary) };
+    const colabs = listColabs(db, context.projectId);
+    return {
+      thread: opened.thread.id,
+      scope: opened.thread.scope,
+      ...placeOf(opened.thread, colabs),
+      seen_by: seenBy(opened.thread, colabs, context.projectId),
+      next: POSTED,
+      similar_open: opened.similarOpen.map(summary),
+      similar_closed: opened.similarClosed.map(summary),
+    };
   },
 
   inbox_reply: async (db, args, context) => {
@@ -131,15 +117,24 @@ const HANDLERS: Record<InboxToolName, Handler> = {
     const state = args.state === "closed" || args.state === "all" ? args.state : "active";
     const limit = Math.min(Math.max(Number(args.limit) || 20, 1), 50);
     const query = text(args.query) || undefined;
+    const colabId = text(args.colab) ? colabNamed(db, context.projectId, args.colab).id : undefined;
+    const colabs = listColabs(db, context.projectId);
+    const projectId = context.projectId;
     return {
-      threads: listThreads(db, { projectId: context.projectId, state, query, limit }).map((t) => ({
+      threads: listThreads(db, { projectId, state, query, limit, colabId }).map((t) => ({
         ...summary(t),
+        ...placeOf(t, colabs),
         kind: t.kind,
         last_activity_at: t.lastActivityAt,
         unread: t.lastSeq - (t.lastReadSeq ?? 0),
       })),
     };
   },
+
+  colabs_list: (db, _args, context) => ({
+    colabs: listColabs(db, context.projectId).map((c) => colabView(c, context.projectId)),
+    note: "Only a person creates a colab or changes its members.",
+  }),
 
   inbox_get: (db, args, context) => {
     const since = Math.max(Number(args.since_seq) || 0, 0);

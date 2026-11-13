@@ -189,6 +189,8 @@ interface ThreadFilter {
   projectId: string | null;
   state: "active" | "closed" | "all";
   query?: string;
+  /** Only this colab's threads */
+  colabId?: string;
   limit: number;
   oldestFirst?: boolean;
 }
@@ -205,6 +207,7 @@ export function listThreads(db: Database.Database, filter: ThreadFilter): InboxT
       `${THREAD_SELECT}
        WHERE ${REACH_SQL} ${STATE_SQL[filter.state]}
        AND (@like IS NULL OR t.title LIKE @like OR t.resolution LIKE @like)
+       AND (@colabId IS NULL OR (t.scope = 'colab' AND t.scope_id = @colabId))
        ORDER BY ${filter.oldestFirst ? "t.last_activity_at, t.id" : "t.last_activity_at DESC, t.id DESC"}
        LIMIT @limit`,
     )
@@ -212,6 +215,7 @@ export function listThreads(db: Database.Database, filter: ThreadFilter): InboxT
       projectId: filter.projectId,
       limit: filter.limit,
       like: filter.query ? `%${filter.query}%` : null,
+      colabId: filter.colabId ?? null,
     }) as Record<string, unknown>[];
   return rows.map(toThread);
 }

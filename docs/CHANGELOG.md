@@ -15,6 +15,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - `Cmd+.` no longer stops the focused session: one stray key ended it with no warning. Stop Agent stays in the Command Palette
 
 ### Added
+- Agents: `colabs_list` shows a session its colabs with each member as main dev or user dev; `inbox_post` takes the only colab or another member's name, and answers where the thread landed, who finds it and similar open threads; `inbox_list` filters by `colab`; `agents_list` by `project`
 - Colabs: a colab's members are a room of project cards (icon, a note, remove) with a searchable picker of projects by name. Each has a role: one Main dev, who makes the changes, and User devs, who use it and report; sessions are told theirs. The first project added is the main dev until you pick another
 - Colabs: the Inbox menu has New colab, which opens the Colabs tab on a new one with that project as its first member. The Colabs tab explains how colabs work in five steps (Hide this, and How they work to bring it back)
 - Monitor > Resources: Processes by session. Every live session with how many processes it runs and their memory, for this project or all of them; open one to see its CLI, the Exegol bridge, each of your MCP servers by name and the rest. It replaces the Active Agents table, whose memory counted only part of a session

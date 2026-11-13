@@ -52,6 +52,22 @@ function requireWriteAccess(tool: ExegolToolName, context: ExegolToolContext): v
 /** T157: other live agents the caller can message, plus the caller's OWN
  *  identity (agents didn't know their own session name — "me llamó Juanito y
  *  no sé de dónde salió", 2026-08-12). */
+type Listed = ReturnType<typeof listActiveAgents>;
+
+function agentsAsked(others: Listed, args: Record<string, unknown>, projectId: string): Listed {
+  const wanted = typeof args.project === "string" ? args.project.trim().toLowerCase() : "";
+  if (!wanted) {
+    return args.all_projects === true ? others : others.filter((a) => a.projectId === projectId);
+  }
+  const listed = others.filter((a) => a.projectName.toLowerCase() === wanted);
+  if (listed.length > 0) return listed;
+  const names = [...new Set(others.map((a) => a.projectName))].join(", ") || "none";
+  throw new ExegolToolError(
+    `No live agent in a project named ${JSON.stringify(args.project)}. With live agents: ${names}`,
+    -32602,
+  );
+}
+
 function handleAgentsList(
   db: Database.Database,
   args: Record<string, unknown>,
@@ -60,8 +76,7 @@ function handleAgentsList(
   const all = listActiveAgents(db);
   const me = all.find((a) => a.id === context.agentId);
   const others = all.filter((a) => a.id !== context.agentId && acceptsFollowUps(a));
-  const listed =
-    args.all_projects === true ? others : others.filter((a) => a.projectId === context.projectId);
+  const listed = agentsAsked(others, args, context.projectId);
   // Shape is a CONTRACT: `self` and `agents` are always present, so a client
   // can destructure without guarding (a caller crashed when an early response
   // omitted `self` — Juanito, 2026-08-13).

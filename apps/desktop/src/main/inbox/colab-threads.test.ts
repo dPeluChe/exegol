@@ -98,6 +98,46 @@ describe("colab threads", () => {
     ).rejects.toThrow("Members: Blueprints, Irma Projects");
   });
 
+  it("list a session its colabs with each member's role", async () => {
+    const listed = await callInboxTool(db, "colabs_list", {}, context("a-irma", "irma"));
+    expect(listed).toMatchObject({
+      colabs: [
+        {
+          colab: "Landings",
+          members: [
+            { project: "Blueprints", role: "main dev", note: "blueprint" },
+            { project: "Irma Projects", role: "user dev", you: true },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("take the only colab, or the other member's name, and say where the thread landed", async () => {
+    const irma = context("a-irma", "irma");
+    const first = await callInboxTool(db, "inbox_post", { target: "colab", ...fields }, irma);
+    expect(first).toMatchObject({ scope: "colab", colab: "Landings", similar_open: [] });
+    expect((first as { seen_by: string }).seen_by).toContain("Blueprints");
+
+    const again = (await callInboxTool(
+      db,
+      "inbox_post",
+      { target: "colab", colab: "blueprints", ...fields },
+      irma,
+    )) as { thread: string; similar_open: { thread: string }[] };
+    expect(again).toMatchObject({ colab: "Landings", to_project: "Blueprints" });
+    expect(again.similar_open.map((t) => t.thread)).toEqual([(first as { thread: string }).thread]);
+
+    await callInboxTool(db, "inbox_post", { title: "Own", body: "x" }, irma);
+    const listed = (await callInboxTool(db, "inbox_list", { colab: "Landings" }, irma)) as {
+      threads: { thread: string; colab: string }[];
+    };
+    expect(listed.threads.map((t) => [t.thread, t.colab])).toEqual([
+      [again.thread, "Landings"],
+      [(first as { thread: string }).thread, "Landings"],
+    ]);
+  });
+
   it("tell a starting session its colab, purpose, the other members and who is the main one", async () => {
     const line = await sessionLine(db, "irma");
     expect(line).toContain(

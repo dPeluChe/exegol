@@ -15,8 +15,9 @@ import {
   writeNote,
 } from "../notes/files";
 import { type NotesFolder, notesFolder, notifyNotesChanged } from "../notes/folders";
-import { authorOf, colabNamed, text } from "./exegol-inbox-tools";
+import { authorOf } from "./exegol-inbox-tools";
 import { type ExegolToolContext, ExegolToolError } from "./exegol-protocol";
+import { colabNamed, text } from "./inbox-colabs";
 import type { NotesToolName } from "./notes-tool-defs";
 
 function placeOf(

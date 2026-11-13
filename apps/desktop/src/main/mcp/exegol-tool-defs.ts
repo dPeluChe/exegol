@@ -64,8 +64,8 @@ const OWN_TOOLS: ToolBody<ExegolToolName>[] = [
     name: "agents_list",
     title: "List agents",
     description:
-      "List the live agents you can message: those of your project, or every project with " +
-      "all_projects. The response ALWAYS has both keys: `self` (YOUR session id + name — sign " +
+      "List the live agents you can message: those of your project, of one other project by " +
+      "name with project, or every project with all_projects. The response ALWAYS has both keys: `self` (YOUR session id + name — sign " +
       "with it; `name` may be null) and `agents` (the others: id, name, provider, project, " +
       "status, task; may be an empty array); `inOtherProjects` counts the ones left out. Plain " +
       "terminals are not listed: they cannot read messages. Ids and names are stable for the " +
@@ -74,6 +74,7 @@ const OWN_TOOLS: ToolBody<ExegolToolName>[] = [
       type: "object",
       properties: {
         all_projects: { type: "boolean", description: "Default false: only your project" },
+        project: { type: "string", description: "Only this project's agents, by its name" },
       },
     },
   },
@@ -235,6 +236,7 @@ const READ_ONLY = new Set<ExegolToolName>([
   "message_status",
   "list_claims",
   "inbox_list",
+  "colabs_list",
   "note_list",
   "note_read",
   "note_search",
