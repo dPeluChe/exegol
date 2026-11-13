@@ -86,6 +86,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Browser panes search from the address bar: `?telnyx`, or words that are not an address, open a Google search; `localhost:3000`, `example.com` and full URLs still go straight there
 
 ### Fixed
+- A thread for a whole colab now counts on each member project: the Inbox button, Company room badges and the Colabs project filter missed it
 - A colab just created opened with an empty name and purpose
 - Commander feed: a session that was suspended or restarted (a CLI update) is no longer reported as closed; it says suspended, restarted or resumed
 - Dictation: stopping right as you finish speaking no longer drops the last word; the microphone stays open until you go quiet (0.6 s at most) for every stop, not only hold-to-talk
@@ -128,6 +129,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - The "What's new" dialog shows the update's download progress (a bar and the percent), as the title-bar button does, instead of only "Downloading"
 
 ### Changed
+- Inbox menu: one tab per inbox (the project, each colab it is in, Personal) with its count, and status as a filter under them; New thread opens in the tab shown
 - Settings > MCP Server > Activity lists every live agent session with its project, CLI and whether its bridge is connected, and events name the session; the Server tab counts connected bridges. A session's bridge now reports in as soon as it connects, so its plug is right after an app restart without waiting for a tool call (sessions started before this version catch up on their next call)
 - After a restart, sessions come back more gently: the next one starts once the previous CLI is at its prompt with its Exegol tools connected and has stayed so for 2 seconds (10 at most), and shells take their turn too
 - Chat input: the message box grows upward with a long message (up to about ten lines, then it scrolls) instead of staying two lines tall

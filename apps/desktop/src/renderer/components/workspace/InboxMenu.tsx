@@ -1,145 +1,29 @@
 import {
   type Colab,
   INBOX_BODY_MAX,
-  INBOX_PENDING_LABEL,
   INBOX_TITLE_MAX,
-  type InboxPendingState,
   type InboxThread,
+  inboxCountsOn,
   inboxPendingState,
-  inboxProjectOf,
 } from "@exegol/shared";
 import { Button, cn } from "@exegol/ui";
-import { ChevronLeft, Inbox, Plus } from "lucide-react";
+import { ChevronLeft, Inbox } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
 import { useAct } from "../../hooks/use-act";
 import { useDismiss } from "../../hooks/use-dismiss";
 import { useColabs, useInboxThreads } from "../../hooks/use-inbox";
 import { useProjects } from "../../hooks/use-trpc";
+import { colabIdsOf, colabsOf, type InboxTarget as Target } from "../../lib/inbox-menu";
 import { appKeys } from "../../lib/keymap";
 import { useAppStore } from "../../stores/app";
 import { INPUT_CLASS } from "../agents/SpawnOptions";
 import { FilterChip } from "../common/FilterChip";
 import type { ProjectMeta } from "../common/ProjectChip";
-import { InboxThreadRow } from "./InboxThreadRow";
-import { inboxPlace } from "./inbox-place";
+import { InboxMenuList } from "./InboxMenuList";
 import { InboxThreadView } from "./sections/InboxThreadView";
 
-/** `to`: the member project a colab thread is for, null for the whole colab */
-type Target =
-  | { kind: "project" }
-  | { kind: "personal" }
-  | { kind: "colab"; id: string; to: string | null };
 type View = { kind: "list" } | { kind: "new"; target: Target } | { kind: "thread"; id: string };
-
-function ThreadList({
-  active,
-  projectId,
-  projectName,
-  meta,
-  colabs,
-  onPick,
-  onNew,
-}: {
-  active: InboxThread[];
-  projectId: string;
-  projectName: string;
-  meta: ReadonlyMap<string, ProjectMeta>;
-  /** The colabs this project is in */
-  colabs: Colab[];
-  onPick: (id: string) => void;
-  onNew: (target: Target) => void;
-}) {
-  const [archived, setArchived] = useState(false);
-  const [filter, setFilter] = useState<InboxPendingState | null>(null);
-  const closed = useInboxThreads("closed", archived);
-  const all = archived ? closed : active;
-  const here = all.filter((t) => inboxProjectOf(t) === projectId);
-  const personal = all.filter((t) => t.scope === "personal");
-  const colabNames = new Map(colabs.map((c) => [c.id, c.name]));
-  const inColab = (id: string) =>
-    all.filter((t) => t.scope === "colab" && t.scopeId === id && inboxProjectOf(t) !== projectId);
-  const states = archived ? [] : [...new Set(here.map(inboxPendingState))];
-  const shown = here.filter((t) => !filter || inboxPendingState(t) === filter);
-  const rows = (list: InboxThread[]) =>
-    list.map((thread) => (
-      <InboxThreadRow
-        key={thread.id}
-        thread={thread}
-        place={inboxPlace(thread, meta, colabNames)}
-        selected={false}
-        onSelect={() => onPick(thread.id)}
-      />
-    ));
-  const heading = (label: string, action: { text: string; title?: string; run: () => void }) => (
-    <div className="flex items-center pt-1 text-[10px] uppercase tracking-wide text-text-muted">
-      {label}
-      {!archived && (
-        <button
-          type="button"
-          onClick={action.run}
-          title={action.title}
-          className="ml-auto flex items-center gap-0.5 rounded px-1 normal-case tracking-normal hover:bg-white/5 hover:text-text-primary"
-        >
-          <Plus className="h-3 w-3" />
-          {action.text}
-        </button>
-      )}
-    </div>
-  );
-  const threads = (label: string, target: Target) =>
-    heading(label, { text: "New thread", run: () => onNew(target) });
-
-  return (
-    <div className="flex min-h-0 flex-col gap-1.5 overflow-y-auto p-2">
-      <div className="flex flex-wrap items-center gap-1">
-        <FilterChip active={!archived} onClick={() => setArchived(false)}>
-          Active
-        </FilterChip>
-        <FilterChip active={archived} onClick={() => setArchived(true)}>
-          Archived
-        </FilterChip>
-        {states.length > 1 && <span className="mx-1 h-3 w-px bg-border" />}
-        {states.length > 1 &&
-          states.map((state) => (
-            <FilterChip
-              key={state}
-              active={filter === state}
-              onClick={() => setFilter(filter === state ? null : state)}
-            >
-              {INBOX_PENDING_LABEL[state]}
-            </FilterChip>
-          ))}
-      </div>
-      {threads(projectName, { kind: "project" })}
-      {rows(shown)}
-      {here.length === 0 && (
-        <p className="py-1 text-center text-text-muted">
-          {archived ? "Nothing archived here" : "Nothing pending in this project"}
-        </p>
-      )}
-      {colabs.map((c) => (
-        <div key={c.id} className="flex flex-col gap-1.5">
-          {threads(c.name, { kind: "colab", id: c.id, to: null })}
-          {rows(inColab(c.id))}
-        </div>
-      ))}
-      {!archived &&
-        heading(colabs.length === 0 ? "No colab with another project yet" : "Another colab", {
-          text: "New colab",
-          title: "Join this project with others so their sessions share threads",
-          run: () => useAppStore.getState().openNewColab(projectId),
-        })}
-      {threads("Personal", { kind: "personal" })}
-      {rows(personal)}
-      {personal.length === 0 && (
-        <p className="py-1 text-center text-text-muted">
-          {archived ? "Nothing archived" : "For anything that belongs to no project"}
-        </p>
-      )}
-    </div>
-  );
-}
 
 function NewThread({
   projectId,
@@ -251,10 +135,7 @@ function Panel({
   const [view, setView] = useState<View>({ kind: "list" });
   const { data: projects } = useProjects();
   const allColabs = useColabs();
-  const colabs = useMemo(
-    () => allColabs.filter((c) => c.members.some((m) => m.projectId === projectId)),
-    [allColabs, projectId],
-  );
+  const colabs = useMemo(() => colabsOf(allColabs, projectId), [allColabs, projectId]);
   const meta = useMemo(
     () => new Map((projects ?? []).map((p) => [p.id, { name: p.name, color: p.color ?? null }])),
     [projects],
@@ -273,7 +154,7 @@ function Panel({
         </button>
       )}
       {view.kind === "list" && (
-        <ThreadList
+        <InboxMenuList
           active={active}
           projectId={projectId}
           projectName={projectName}
@@ -310,6 +191,7 @@ function Panel({
 export function InboxMenu() {
   const { projectId, project } = useProjectContext();
   const active = useInboxThreads("active");
+  const colabs = useColabs();
   const open = useAppStore((s) => s.inboxMenuOpen);
   const setOpen = useAppStore((s) => s.setInboxMenuOpen);
   const rootRef = useRef<HTMLDivElement>(null);
@@ -317,7 +199,8 @@ export function InboxMenu() {
   useDismiss(rootRef, open, close);
   if (!projectId) return null;
 
-  const threads = active.filter((t) => inboxProjectOf(t) === projectId);
+  const colabIds = colabIdsOf(colabs, projectId);
+  const threads = active.filter((t) => inboxCountsOn(t, projectId, colabIds));
   const needsYou = threads.some((t) => inboxPendingState(t) === "needs_you");
 
   return (

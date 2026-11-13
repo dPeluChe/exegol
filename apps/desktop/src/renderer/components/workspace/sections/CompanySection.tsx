@@ -1,16 +1,17 @@
-import { type DeskFacts, type DoneSession, inboxProjectOf } from "@exegol/shared";
+import type { DeskFacts, DoneSession } from "@exegol/shared";
 import { ScrollArea } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useRef, useState } from "react";
 import { type ImperativePanelHandle, Panel, PanelGroup } from "react-resizable-panels";
 import { useCliUpdates } from "../../../hooks/use-cli-updates";
 import { useCompanyKeys } from "../../../hooks/use-company-keys";
-import { useInboxThreads } from "../../../hooks/use-inbox";
+import { useColabs, useInboxThreads } from "../../../hooks/use-inbox";
 import { useLatest } from "../../../hooks/use-latest";
 import { mainAmongSeveral, useMainSessions } from "../../../hooks/use-main-sessions";
 import { useMountEffect } from "../../../hooks/use-mount-effect";
 import { useWindowWide } from "../../../hooks/use-window-wide";
 import { buildRooms, todayStrip } from "../../../lib/company";
+import { waitingOn } from "../../../lib/inbox-menu";
 import { adjacentId } from "../../../lib/pane-focus";
 import { trpcInvoke } from "../../../lib/trpc-client";
 import { type AgentState, useAgentStore } from "../../../stores/agents";
@@ -85,6 +86,7 @@ export function CompanySection({
 
   const unseen = useAgentStore((s) => s.unseenTurns);
   const inbox = useInboxThreads("active");
+  const colabs = useColabs();
   const rooms = useMemo(() => buildRooms(agents, attention, unseen), [agents, attention, unseen]);
   const today = useMemo(() => {
     const levelOf = (projectId: string) => interruption[projectId] ?? "all";
@@ -243,7 +245,7 @@ export function CompanySection({
                       key={room.projectId}
                       room={room}
                       meta={projectMeta.get(room.projectId)}
-                      waiting={inbox.filter((t) => inboxProjectOf(t) === room.projectId).length}
+                      waiting={waitingOn(inbox, colabs, room.projectId)}
                       deskFacts={deskFacts}
                       mainId={mainAmongSeveral(mains, room.projectId)}
                       outdated={outdated}
