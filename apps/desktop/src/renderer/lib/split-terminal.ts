@@ -1,5 +1,6 @@
 import { pathParent } from "@exegol/shared";
 import { nanoid } from "nanoid";
+import { deleteAgent } from "../hooks/use-delete-agent";
 import { useAgentStore } from "../stores/agents";
 import { toastError } from "../stores/toasts";
 import {
@@ -32,13 +33,17 @@ export function terminalCwdFor(
   return undefined;
 }
 
+/** A plain terminal, or one a CLI was typed into: its process is the shell */
+export const isShellish = (a: { cliType: string; launchedInShell?: boolean }) =>
+  a.cliType === "shell" || !!a.launchedInShell;
+
 /** OSC 7 only counts for a shell (an agent CLI's output could print one); else where the CLI's
  *  hooks last said it works, its start folder or its worktree */
 async function paneFolder(paneId: string): Promise<string | undefined> {
   const pane = getProjectState().panes[paneId];
   const agent = pane?.agentId ? useAgentStore.getState().agents[pane.agentId] : undefined;
-  const shellish = agent && (agent.cliType === "shell" || agent.launchedInShell);
-  const shellCwd = shellish ? useWorkspaceStore.getState().paneCwd[paneId] : undefined;
+  const shellCwd =
+    agent && isShellish(agent) ? useWorkspaceStore.getState().paneCwd[paneId] : undefined;
   const sessionDir =
     pane?.agentId && !shellCwd
       ? await trpcInvoke<string | null>("agents.sessionFolder", {
@@ -129,6 +134,19 @@ export async function splitWithTerminal(
   useWorkspaceStore.getState().splitPane(tabId, paneId, direction, "empty", { id });
   dispatchRefitTerminals();
   await shellInPane(projectId, id, cwd).catch(toastError("Could not open a terminal"));
+}
+
+/** A terminal that does not answer: a new shell takes its pane, in the folder it worked in, and
+ *  only then the old one stops (stopping first raced the pane cleanup) */
+export async function restartTerminal(paneId: string): Promise<void> {
+  const projectId = useWorkspaceStore.getState()._activeProjectId;
+  if (!projectId) return;
+  const old = getProjectState().panes[paneId]?.agentId;
+  const cwd = await paneFolder(paneId);
+  await shellInPane(projectId, paneId, cwd).then(
+    () => old && deleteAgent(old),
+    toastError("Could not restart the terminal"),
+  );
 }
 
 /** The active pane when it is an empty launcher */

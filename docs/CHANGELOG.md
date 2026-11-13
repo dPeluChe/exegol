@@ -15,6 +15,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - `Cmd+.` no longer stops the focused session: one stray key ended it with no warning. Stop Agent stays in the Command Palette
 
 ### Added
+
+- Terminal pane menu: Send Interrupt (Ctrl+C) for any terminal, and Restart Terminal for a plain one: a new shell takes the pane in the same folder and the old one stops
 - Agents: `colabs_list` shows a session its colabs with each member as main dev or user dev; `inbox_post` takes the only colab or another member's name, and answers where the thread landed, who finds it and similar open threads; `inbox_list` filters by `colab`; `agents_list` by `project`
 - Colabs: a colab's members are a room of project cards (icon, a note, remove) with a searchable picker of projects by name. Each has a role: one Main dev, who makes the changes, and User devs, who use it and report; sessions are told theirs. The first project added is the main dev until you pick another
 - Colabs: the Inbox menu has New colab, which opens the Colabs tab on a new one with that project as its first member. The Colabs tab explains how colabs work in five steps (Hide this, and How they work to bring it back)
@@ -87,6 +89,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Browser panes search from the address bar: `?telnyx`, or words that are not an address, open a Google search; `localhost:3000`, `example.com` and full URLs still go straight there
 
 ### Fixed
+
+- A terminal that had ended with no output and no saved history (a plain shell keeps none) stayed on "Starting shell..." with no way out; it now shows as ended
 - A thread for a whole colab now counts on each member project: the Inbox button, Company room badges and the Colabs project filter missed it
 - A colab just created opened with an empty name and purpose
 - Commander feed: a session that was suspended or restarted (a CLI update) is no longer reported as closed; it says suspended, restarted or resumed
