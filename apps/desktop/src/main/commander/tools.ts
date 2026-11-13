@@ -35,6 +35,7 @@ import {
   TALK_HOURS,
   talksWith,
 } from "./fleet";
+import { type FleetRepos, fleetRepos } from "./fleet-repos";
 import { commanderProjectId } from "./home";
 import { RETRY_TEXT, stoppedOnError, takeRetry } from "./retry";
 
@@ -75,6 +76,7 @@ export function fleetOf(
     cliUpdate?: (agent: ActiveAgent) => SessionFacts["cliUpdate"];
     /** The main session and who writes to whom: two queries only fleet_status pays for */
     relations?: boolean;
+    repos?: FleetRepos;
   } = {},
 ) {
   const { cliUpdate } = more;
@@ -106,11 +108,15 @@ export function fleetOf(
         cliUpdate: agent && cliUpdate?.(agent),
         lineageStart: starts.get(id),
         talksWith: talks.get(id),
+        repo: more.repos?.ofSession.get(id),
       };
     },
-    (projectId) => countActiveThreads(db, projectId),
+    (projectId) => ({
+      inboxWaiting: countActiveThreads(db, projectId),
+      main: marks?.get(projectId),
+      repos: more.repos?.ofProject.get(projectId),
+    }),
     now,
-    marks && ((projectId) => marks.get(projectId)),
   );
 }
 
@@ -126,10 +132,17 @@ async function fleetStatus(db: Database.Database, context: ExegolToolContext) {
     agents.filter((a) => a.cliType !== "shell").map((a) => a.cliType),
   );
   const byCli = new Map(statuses.map((s) => [s.cliType, s]));
+  const own = commanderProjectId(db);
+  const repos = await fleetRepos(
+    db,
+    listProjects(db).filter((p) => p.id !== own),
+    new Set(agents.map((a) => a.projectId)),
+  );
   return {
     projects: fleetOf(db, context.agentId, agents, {
       cliUpdate: (a) => cliUpdateOf(a, byCli.get(a.cliType)),
       relations: true,
+      repos,
     }),
     personal_inbox_waiting: countPersonalThreads(db),
   };

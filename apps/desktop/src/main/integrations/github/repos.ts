@@ -131,16 +131,30 @@ export interface SessionFolder {
   worktreeRepo: string | null;
 }
 
-/** Live session ids per repo folder, for paths compared as given */
-export function sessionsByRepo(
+type RepoFolders = readonly Pick<ProjectRepo, "folder" | "path">[];
+
+/** The repo folder each session works in, for paths compared as given */
+export function repoOfSessions(
   sessions: readonly SessionFolder[],
-  repos: readonly Pick<ProjectRepo, "folder" | "path">[],
-): Map<string, string[]> {
-  const out = new Map<string, string[]>();
+  repos: RepoFolders,
+): Map<string, string> {
+  const out = new Map<string, string>();
   for (const session of sessions) {
     const where = session.worktreeRepo ?? session.cwd;
     const repo = repos.find((r) => isPathInside(r.path, where));
-    if (repo) out.set(repo.folder, [...(out.get(repo.folder) ?? []), session.id]);
+    if (repo) out.set(session.id, repo.folder);
+  }
+  return out;
+}
+
+/** Live session ids per repo folder, for paths compared as given */
+export function sessionsByRepo(
+  sessions: readonly SessionFolder[],
+  repos: RepoFolders,
+): Map<string, string[]> {
+  const out = new Map<string, string[]>();
+  for (const [id, folder] of repoOfSessions(sessions, repos)) {
+    out.set(folder, [...(out.get(folder) ?? []), id]);
   }
   return out;
 }

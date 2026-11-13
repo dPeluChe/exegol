@@ -76,13 +76,38 @@ describe("fleetView", () => {
       [{ id: "p1", name: "Landing" }],
       [agent("busy", "running"), agent("asks", "running"), agent("sh", "idle", "shell")],
       (id) => ({ needsUser: id === "asks", quietMs: 120_000, personMs: null }),
-      () => 3,
+      () => ({ inboxWaiting: 3 }),
     );
     expect(project).toMatchObject({ project: "Landing", inbox_waiting: 3 });
+    expect(project).not.toHaveProperty("repos");
     expect(project?.sessions.map((s) => [s.name, s.state, s.quiet_minutes])).toEqual([
       ["asks", "waits_on_person", 2],
       ["busy", "working", 2],
     ]);
+  });
+
+  it("names a workspace's repos and the one a session works in", () => {
+    const agent = (id: string) =>
+      ({
+        id,
+        projectId: "p1",
+        status: "running",
+        cliType: "codex",
+        taskDescription: "t",
+      }) as ActiveAgent;
+    const [workspace] = fleetView(
+      [{ id: "p1", name: "Sites" }],
+      [agent("a"), agent("b")],
+      (id) => ({
+        needsUser: false,
+        quietMs: null,
+        personMs: null,
+        repo: id === "a" ? "docs" : undefined,
+      }),
+      () => ({ inboxWaiting: 0, repos: ["landing", "docs"] }),
+    );
+    expect(workspace?.repos).toEqual(["landing", "docs"]);
+    expect(workspace?.sessions.map((s) => s.repo)).toEqual(["docs", undefined]);
   });
 });
 
