@@ -81,6 +81,15 @@ export const INBOX_PENDING_LABEL: Record<InboxPendingState, string> = {
 export const inboxProjectOf = (t: Pick<InboxThread, "scope" | "scopeId" | "toProject">) =>
   t.scope === "project" ? t.scopeId : t.scope === "colab" ? t.toProject : null;
 
+/** What a project counts as its own: also a thread for the whole of a colab it is in */
+export const inboxCountsOn = (
+  t: Pick<InboxThread, "scope" | "scopeId" | "toProject">,
+  projectId: string,
+  colabIds: ReadonlySet<string>,
+) =>
+  inboxProjectOf(t) === projectId ||
+  (t.scope === "colab" && !t.toProject && colabIds.has(t.scopeId ?? ""));
+
 /** Who an active thread waits on. Derived, never stored: it waits on whoever did not write last */
 export function inboxPendingState(t: InboxThread): InboxPendingState {
   if (t.kind === "capture") return "to_review";

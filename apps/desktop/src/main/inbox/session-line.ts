@@ -1,4 +1,4 @@
-import type { Colab } from "@exegol/shared";
+import { type Colab, memberRole } from "@exegol/shared";
 import type Database from "libsql";
 import { listColabs } from "../db/queries/colabs";
 import { countActiveThreads } from "../db/queries/inbox";
@@ -13,15 +13,27 @@ async function colabLine(db: Database.Database, colab: Colab, projectId: string)
   const others = colab.members
     .filter((m) => m.projectId !== projectId)
     .map((m) =>
-      [m.repo ? `${m.projectName} (${m.repo})` : m.projectName, m.role].filter(Boolean).join(", "),
+      [
+        m.repo ? `${m.projectName} (${m.repo})` : m.projectName,
+        m.role,
+        `${memberRole(m).label}, ${memberRole(m).does}`,
+      ]
+        .filter(Boolean)
+        .join(", "),
     );
+  const mine = colab.members.filter((m) => m.projectId === projectId);
+  const own = mine.some((m) => m.main)
+    ? " This project is its main dev: the changes its threads ask for are made here."
+    : mine.length > 0
+      ? " This project is a user dev: report what the main dev should change in a colab thread."
+      : "";
   const purpose = colab.purpose ? ` Purpose: ${colab.purpose}` : "";
   const folder = notesFolder(db, { scope: "colab", colabId: colab.id });
   const count = folder ? (await noteIds(folder.dir)).length : 0;
   const notes = count > 0 ? ` Its notes: ${count}, see note_list scope colab.` : "";
   return (
     `You are in colab ${JSON.stringify(colab.name)} with ${others.join("; ") || "no one yet"}.` +
-    `${purpose} Tell them what they should know with inbox_post target colab.${notes}`
+    `${own}${purpose} Tell them what they should know with inbox_post target colab.${notes}`
   );
 }
 

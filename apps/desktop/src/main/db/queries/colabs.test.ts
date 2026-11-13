@@ -1,7 +1,15 @@
 import Database from "libsql";
 import { beforeEach, describe, expect, it } from "vitest";
 import { runMigrations } from "../migrations";
-import { addColabMember, createColab, deleteColab, listColabs, removeColabMember } from "./colabs";
+import {
+  addColabMember,
+  createColab,
+  deleteColab,
+  listColabs,
+  removeColabMember,
+  setColabMain,
+  setColabMemberRole,
+} from "./colabs";
 
 describe("colabs", () => {
   let db: Database.Database;
@@ -20,7 +28,7 @@ describe("colabs", () => {
     addColabMember(db, id, { projectId: "irma", repo: "lizaceves-landing", role: "clone" });
     addColabMember(db, id, { projectId: "irma", repo: "lizaceves-landing", role: "clone of it" });
 
-    expect(listColabs(db)[0]?.members).toEqual([
+    expect(listColabs(db)[0]?.members).toMatchObject([
       { projectId: "blue", projectName: "blue", repo: "labs-landings-base", role: "blueprint" },
       { projectId: "irma", projectName: "irma", repo: "lizaceves-landing", role: "clone of it" },
     ]);
@@ -31,6 +39,27 @@ describe("colabs", () => {
 
     deleteColab(db, id);
     expect(listColabs(db)).toEqual([]);
+  });
+
+  it("always has one main member: the first to join, the person's pick, the next when it leaves", () => {
+    const id = createColab(db, "Landings", "", "irma");
+    addColabMember(db, id, { projectId: "blue", repo: "", role: "" });
+    const members = () => listColabs(db)[0]?.members.map((m) => [m.projectId, m.main]);
+    expect(members()).toEqual([
+      ["blue", false],
+      ["irma", true],
+    ]);
+    setColabMain(db, id, "blue", "");
+    setColabMain(db, id, "gone", "");
+    expect(members()).toEqual([
+      ["blue", true],
+      ["irma", false],
+    ]);
+    setColabMemberRole(db, id, { projectId: "irma", repo: "", role: "clone" });
+    removeColabMember(db, id, "blue", "");
+    expect(listColabs(db)[0]?.members).toMatchObject([
+      { projectId: "irma", role: "clone", main: true },
+    ]);
   });
 
   it("refuses a second colab with the same name in any case", () => {

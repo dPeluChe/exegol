@@ -42,6 +42,13 @@ interface AppStore {
   /** Colabs tab narrowed to one project, from a Company badge. In memory */
   inboxProject: string | null;
   openInbox: (projectId: string | null) => void;
+  /** What the Colabs tab shows beside its lists. In memory */
+  colabsPanel: ColabsPanel;
+  setColabsPanel: (panel: ColabsPanel) => void;
+  /** The Colabs tab on a new colab that starts with this project (the Inbox menu) */
+  openNewColab: (projectId: string) => void;
+  colabsHelpHidden: boolean;
+  setColabsHelpHidden: (hidden: boolean) => void;
   /** The session Company shows, a pick or the default on screen when it was left, and how; held
    *  here, off persist, so leaving the view keeps them */
   companyPickedId: string | null;
@@ -124,6 +131,13 @@ const MAX_CHAT_FONT = 20;
 export type CompanyView = "chat" | "terminal";
 export type CompanySide = "left" | "right";
 
+export type ColabsPanel =
+  | { kind: "thread"; id: string }
+  | { kind: "colab"; id: string | null; firstMember?: string }
+  | null;
+
+const DASHBOARD = { activeView: "dashboard", projectsFrom: null } as const;
+
 export function migrateAppStore(persisted: unknown, fromVersion: number): AppStore {
   if (!persisted || typeof persisted !== "object") return persisted as AppStore;
   const state = persisted as {
@@ -168,7 +182,7 @@ export const useAppStore = create<AppStore>()(
     (set) => ({
       activeView: "projects",
       setActiveView: (view) => set((s) => ({ activeView: view, ...leaving(s, view) })),
-      openDashboard: () => set({ activeView: "dashboard", projectsFrom: null }),
+      openDashboard: () => set(DASHBOARD),
 
       workspaceSection: "agents",
       setWorkspaceSection: (section) => set({ workspaceSection: section }),
@@ -237,6 +251,18 @@ export const useAppStore = create<AppStore>()(
       setDashboardMode: (mode) => set({ dashboardMode: mode }),
       inboxProject: null,
       openInbox: (projectId) => set({ dashboardMode: "colabs", inboxProject: projectId }),
+      colabsPanel: null,
+      setColabsPanel: (panel) => set({ colabsPanel: panel }),
+      openNewColab: (projectId) =>
+        set({
+          ...DASHBOARD,
+          dashboardMode: "colabs",
+          inboxProject: null,
+          inboxMenuOpen: false,
+          colabsPanel: { kind: "colab", id: null, firstMember: projectId },
+        }),
+      colabsHelpHidden: false,
+      setColabsHelpHidden: (hidden) => set({ colabsHelpHidden: hidden }),
       companyPickedId: null,
       setCompanyPickedId: (id) =>
         set((s) => (s.companyPickedId === id ? s : { companyPickedId: id })),
@@ -276,6 +302,7 @@ export const useAppStore = create<AppStore>()(
         claudePlanUsage: state.claudePlanUsage,
         companySeenAt: state.companySeenAt,
         dashboardMode: state.dashboardMode,
+        colabsHelpHidden: state.colabsHelpHidden,
         companySessionSide: state.companySessionSide,
         companySessionSizes: state.companySessionSizes,
         companyChatFont: state.companyChatFont,

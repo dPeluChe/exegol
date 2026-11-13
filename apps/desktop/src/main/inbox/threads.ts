@@ -70,15 +70,22 @@ function checkRefs(db: Database.Database, actor: InboxActor, refs: string[]): vo
 const significantWords = (title: string) =>
   new Set(title.toLowerCase().match(/[\p{L}\p{N}]{4,}/gu) ?? []);
 
-/** Closed threads sharing at least two words of the title, or all of a short one */
-function similarClosed(db: Database.Database, actor: InboxActor, thread: InboxThread) {
+/** Other threads sharing at least two words of the title, or all of a short one: 3 open, 3 closed */
+function similar(db: Database.Database, actor: InboxActor, thread: InboxThread) {
   const words = significantWords(thread.title);
-  if (words.size === 0) return [];
   const needed = Math.min(2, words.size);
-  return listThreads(db, { projectId: actor.projectId, state: "closed", limit: 200 })
-    .filter((t) => !thread.refs.includes(t.id))
-    .filter((t) => [...significantWords(t.title)].filter((w) => words.has(w)).length >= needed)
-    .slice(0, 3);
+  const alike =
+    words.size === 0
+      ? []
+      : listThreads(db, { projectId: actor.projectId, state: "all", limit: 400 })
+          .filter((t) => t.id !== thread.id && !thread.refs.includes(t.id))
+          .filter(
+            (t) => [...significantWords(t.title)].filter((w) => words.has(w)).length >= needed,
+          );
+  return {
+    similarOpen: alike.filter((t) => !isInboxClosed(t.status)).slice(0, 3),
+    similarClosed: alike.filter((t) => isInboxClosed(t.status)).slice(0, 3),
+  };
 }
 
 export type InboxTarget =
@@ -114,7 +121,7 @@ export function openThread(
   author: InboxAuthor,
   target: InboxTarget,
   fields: ThreadFields,
-): { thread: InboxThread; similarClosed: InboxThread[] } {
+): { thread: InboxThread; similarClosed: InboxThread[]; similarOpen: InboxThread[] } {
   if (author.agentId) {
     const hourAgo = Math.floor(Date.now() / 1000) - 3600;
     if (threadsOpenedBySince(db, author.agentId, hourAgo) >= MAX_THREADS_PER_HOUR) {
@@ -139,7 +146,7 @@ export function openThread(
   );
   const thread = getThread(db, key, null) as InboxThread;
   notifyInboxChanged();
-  return { thread, similarClosed: similarClosed(db, author, thread) };
+  return { thread, ...similar(db, author, thread) };
 }
 
 export function openThreadOrThrow(db: Database.Database, key: string): InboxThread {

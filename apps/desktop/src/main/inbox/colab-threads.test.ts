@@ -2,7 +2,7 @@ import Database from "libsql";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { runMigrations } from "../db/migrations";
 import { addColabMember, createColab, removeColabMember } from "../db/queries/colabs";
-import { getThread, listThreads } from "../db/queries/inbox";
+import { countActiveThreads, getThread, listThreads } from "../db/queries/inbox";
 import { callInboxTool } from "../mcp/exegol-inbox-tools";
 import { sendToSession } from "./send-to-session";
 import { sessionLine } from "./session-line";
@@ -98,10 +98,63 @@ describe("colab threads", () => {
     ).rejects.toThrow("Members: Blueprints, Irma Projects");
   });
 
-  it("tell a starting session its colab, purpose and the other members", async () => {
+  it("list a session its colabs with each member's role", async () => {
+    const listed = await callInboxTool(db, "colabs_list", {}, context("a-irma", "irma"));
+    expect(listed).toMatchObject({
+      colabs: [
+        {
+          colab: "Landings",
+          members: [
+            { project: "Blueprints", role: "main dev", note: "blueprint" },
+            { project: "Irma Projects", role: "user dev", you: true },
+          ],
+        },
+      ],
+    });
+  });
+
+  it("take the only colab, or the other member's name, and say where the thread landed", async () => {
+    const irma = context("a-irma", "irma");
+    const first = await callInboxTool(db, "inbox_post", { target: "colab", ...fields }, irma);
+    expect(first).toMatchObject({ scope: "colab", colab: "Landings" });
+    expect((first as { seen_by: string }).seen_by).toContain("Blueprints");
+
+    const named = { target: "colab", colab: "blueprints", ...fields };
+    expect(await callInboxTool(db, "inbox_post", named, irma)).toMatchObject({
+      colab: "Landings",
+      to_project: "Blueprints",
+    });
+  });
+
+  it("are listed alone with the colab filter, and count only where they are for", async () => {
+    const irma = context("a-irma", "irma");
+    const post = (args: object) =>
+      callInboxTool(db, "inbox_post", { ...fields, ...args }, irma) as Promise<{ thread: string }>;
+    const forAll = await post({ target: "colab" });
+    const forBlue = await post({ target: "colab", to_project: "Blueprints" });
+    await post({});
+
+    const listed = (await callInboxTool(db, "inbox_list", { colab: "Landings" }, irma)) as {
+      threads: { thread: string; colab: string }[];
+    };
+    expect(listed.threads.map((t) => [t.thread, t.colab])).toEqual([
+      [forBlue.thread, "Landings"],
+      [forAll.thread, "Landings"],
+    ]);
+    expect(countActiveThreads(db, "irma")).toBe(2);
+    expect(countActiveThreads(db, "blue")).toBe(2);
+  });
+
+  it("tell a starting session its colab, purpose, the other members and who is the main one", async () => {
     const line = await sessionLine(db, "irma");
-    expect(line).toContain('colab "Landings" with Blueprints (labs-landings-base), blueprint.');
+    expect(line).toContain(
+      'colab "Landings" with Blueprints (labs-landings-base), blueprint, main dev, makes the changes.',
+    );
     expect(line).toContain("Purpose: Blueprint fixes from its clones");
+    expect(line).toContain("This project is a user dev");
+    const blue = await sessionLine(db, "blue");
+    expect(blue).toContain("This project is its main dev");
+    expect(blue).toContain("clone, user dev, uses it and reports");
     expect(await sessionLine(db, "out")).toBe("");
   });
 });

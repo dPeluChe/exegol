@@ -15,6 +15,9 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - `Cmd+.` no longer stops the focused session: one stray key ended it with no warning. Stop Agent stays in the Command Palette
 
 ### Added
+- Agents: `colabs_list` shows a session its colabs with each member as main dev or user dev; `inbox_post` takes the only colab or another member's name, and answers where the thread landed, who finds it and similar open threads; `inbox_list` filters by `colab`; `agents_list` by `project`
+- Colabs: a colab's members are a room of project cards (icon, a note, remove) with a searchable picker of projects by name. Each has a role: one Main dev, who makes the changes, and User devs, who use it and report; sessions are told theirs. The first project added is the main dev until you pick another
+- Colabs: the Inbox menu has New colab, which opens the Colabs tab on a new one with that project as its first member. The Colabs tab explains how colabs work in five steps (Hide this, and How they work to bring it back)
 - Monitor > Resources: Processes by session. Every live session with how many processes it runs and their memory, for this project or all of them; open one to see its CLI, the Exegol bridge, each of your MCP servers by name and the rest. It replaces the Active Agents table, whose memory counted only part of a session
 - Edit project (right-click a project in the sidebar) has tabs: General, Browser, Worktrees and MCP. MCP lists your MCP servers from Claude Code's configuration, says which start a process in every session, and lets a project load only the ones you check; Exegol's own tools always load
 - Commander chat: the names of live sessions and of projects in its replies and feed are links that open that session or project; Copy still copies the plain text
@@ -84,6 +87,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Browser panes search from the address bar: `?telnyx`, or words that are not an address, open a Google search; `localhost:3000`, `example.com` and full URLs still go straight there
 
 ### Fixed
+- A thread for a whole colab now counts on each member project: the Inbox button, Company room badges and the Colabs project filter missed it
+- A colab just created opened with an empty name and purpose
 - Commander feed: a session that was suspended or restarted (a CLI update) is no longer reported as closed; it says suspended, restarted or resumed
 - Dictation: stopping right as you finish speaking no longer drops the last word; the microphone stays open until you go quiet (0.6 s at most) for every stop, not only hold-to-talk
 - Inbox capture: a link sent as plain text (a share sheet, `exegol://capture?text=`) is captured as a link, not as text
@@ -125,6 +130,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - The "What's new" dialog shows the update's download progress (a bar and the percent), as the title-bar button does, instead of only "Downloading"
 
 ### Changed
+- Inbox menu: one tab per inbox (the project, each colab it is in, Personal) with its count, and status as a filter under them; New thread opens in the tab shown
 - Settings > MCP Server > Activity lists every live agent session with its project, CLI and whether its bridge is connected, and events name the session; the Server tab counts connected bridges. A session's bridge now reports in as soon as it connects, so its plug is right after an app restart without waiting for a tool call (sessions started before this version catch up on their next call)
 - After a restart, sessions come back more gently: the next one starts once the previous CLI is at its prompt with its Exegol tools connected and has stayed so for 2 seconds (10 at most), and shells take their turn too
 - Chat input: the message box grows upward with a long message (up to about ten lines, then it scrolls) instead of staying two lines tall

@@ -7,6 +7,8 @@ import {
   deleteColab,
   listColabs,
   removeColabMember,
+  setColabMain,
+  setColabMemberRole,
   updateColab,
 } from "../../db/queries/colabs";
 import { countColabActiveThreads } from "../../db/queries/inbox";
@@ -46,10 +48,14 @@ export const colabsRouter = router({
   list: publicProcedure.query(({ ctx }) => listColabs(ctx.db)),
 
   create: publicProcedure
-    .input(fields)
-    .mutation(({ ctx, input }) =>
-      changed(uniqueName(() => ({ id: createColab(ctx.db, input.name, input.purpose) }))),
-    ),
+    .input(fields.extend({ firstMember: z.string().nullish() }))
+    .mutation(({ ctx, input }) => {
+      const first =
+        input.firstMember && getProject(ctx.db, input.firstMember) ? input.firstMember : null;
+      return changed(
+        uniqueName(() => ({ id: createColab(ctx.db, input.name, input.purpose, first) })),
+      );
+    }),
 
   update: publicProcedure
     .input(fields.extend({ id: z.string() }))
@@ -77,6 +83,19 @@ export const colabsRouter = router({
       const { colabId, projectId, repo, role } = input;
       return changed(addColabMember(ctx.db, colabId, { projectId, repo, role }));
     }),
+
+  setRole: publicProcedure
+    .input(member.extend({ role: z.string().trim().max(COLAB_ROLE_MAX) }))
+    .mutation(({ ctx, input }) => {
+      const { colabId, projectId, repo, role } = input;
+      return changed(setColabMemberRole(ctx.db, colabId, { projectId, repo, role }));
+    }),
+
+  setMain: publicProcedure
+    .input(member)
+    .mutation(({ ctx, input }) =>
+      changed(setColabMain(ctx.db, input.colabId, input.projectId, input.repo)),
+    ),
 
   removeMember: publicProcedure
     .input(member)

@@ -15,6 +15,7 @@ interface MemberRow {
   project_name: string;
   repo: string;
   role: string;
+  main: number;
 }
 
 const toMember = (r: MemberRow): ColabMember => ({
@@ -22,6 +23,7 @@ const toMember = (r: MemberRow): ColabMember => ({
   projectName: r.project_name,
   repo: r.repo,
   role: r.role,
+  main: r.main === 1,
 });
 
 const OF_PROJECT = "id IN (SELECT colab_id FROM colab_members WHERE project_id = @projectId)";
@@ -53,14 +55,34 @@ export function listColabs(db: Database.Database, projectId: string | null = nul
   }));
 }
 
-export function createColab(db: Database.Database, name: string, purpose: string): string {
+type Member = Omit<ColabMember, "projectName" | "main">;
+
+function insertMember(db: Database.Database, colabId: string, m: Member): void {
+  // A colab with members always has a main one: the first to join until the person picks
+  db.prepare(
+    `INSERT INTO colab_members (colab_id, project_id, repo, role, main)
+     VALUES (@colabId, @projectId, @repo, @role,
+             NOT EXISTS (SELECT 1 FROM colab_members WHERE colab_id = @colabId AND main = 1))
+     ON CONFLICT (colab_id, project_id, repo) DO UPDATE SET role = excluded.role`,
+  ).run({ colabId, ...m });
+}
+
+export function createColab(
+  db: Database.Database,
+  name: string,
+  purpose: string,
+  firstMember: string | null = null,
+): string {
   const id = nanoid();
-  db.prepare("INSERT INTO colabs (id, name, purpose, created_at) VALUES (?, ?, ?, ?)").run(
-    id,
-    name,
-    purpose,
-    Math.floor(Date.now() / 1000),
-  );
+  db.transaction(() => {
+    db.prepare("INSERT INTO colabs (id, name, purpose, created_at) VALUES (?, ?, ?, ?)").run(
+      id,
+      name,
+      purpose,
+      Math.floor(Date.now() / 1000),
+    );
+    if (firstMember) insertMember(db, id, { projectId: firstMember, repo: "", role: "" });
+  })();
   return id;
 }
 
@@ -77,28 +99,44 @@ export function deleteColab(db: Database.Database, id: string): void {
   db.prepare("DELETE FROM colabs WHERE id = ?").run(id);
 }
 
-export function addColabMember(
-  db: Database.Database,
-  colabId: string,
-  m: Omit<ColabMember, "projectName">,
-): void {
-  db.prepare(
-    `INSERT INTO colab_members (colab_id, project_id, repo, role) VALUES (?, ?, ?, ?)
-     ON CONFLICT (colab_id, project_id, repo) DO UPDATE SET role = excluded.role`,
-  ).run(colabId, m.projectId, m.repo, m.role);
+export const addColabMember = insertMember;
+
+const ONE = "colab_id = @colabId AND project_id = @projectId AND repo = @repo";
+
+export function setColabMemberRole(db: Database.Database, colabId: string, m: Member): void {
+  db.prepare(`UPDATE colab_members SET role = @role WHERE ${ONE}`).run({ colabId, ...m });
 }
 
+/** Does nothing for a project that is not a member */
+export function setColabMain(
+  db: Database.Database,
+  colabId: string,
+  projectId: string,
+  repo: string,
+): void {
+  const at = { colabId, projectId, repo };
+  db.transaction(() => {
+    if (!db.prepare(`SELECT 1 FROM colab_members WHERE ${ONE}`).get(at)) return;
+    db.prepare("UPDATE colab_members SET main = 0 WHERE colab_id = @colabId").run(at);
+    db.prepare(`UPDATE colab_members SET main = 1 WHERE ${ONE}`).run(at);
+  })();
+}
+
+/** Removing the main member hands it to the one that joined first */
 export function removeColabMember(
   db: Database.Database,
   colabId: string,
   projectId: string,
   repo: string,
 ): void {
-  db.prepare("DELETE FROM colab_members WHERE colab_id = ? AND project_id = ? AND repo = ?").run(
-    colabId,
-    projectId,
-    repo,
-  );
+  db.transaction(() => {
+    db.prepare(`DELETE FROM colab_members WHERE ${ONE}`).run({ colabId, projectId, repo });
+    db.prepare(
+      `UPDATE colab_members SET main = 1
+       WHERE rowid = (SELECT min(rowid) FROM colab_members WHERE colab_id = @colabId)
+         AND NOT EXISTS (SELECT 1 FROM colab_members WHERE colab_id = @colabId AND main = 1)`,
+    ).run({ colabId });
+  })();
 }
 
 export function isColabMember(db: Database.Database, colabId: string, projectId: string): boolean {

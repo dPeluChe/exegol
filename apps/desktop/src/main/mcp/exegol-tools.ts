@@ -28,6 +28,7 @@ import {
 import { listActiveAgents } from "../db/queries/agents";
 import { claimPaths, listProjectClaims, releasePaths } from "../db/queries/path-claims";
 import { getWorktreeByAgentId } from "../db/queries/worktrees";
+import { sameName, text } from "../lib/names";
 import { isPathInside, realpathSafeSync } from "../security/path-guard";
 import { isCommanderTool } from "./commander-tool-defs";
 import { callInboxTool } from "./exegol-inbox-tools";
@@ -49,9 +50,23 @@ function requireWriteAccess(tool: ExegolToolName, context: ExegolToolContext): v
   }
 }
 
-/** T157: other live agents the caller can message, plus the caller's OWN
- *  identity (agents didn't know their own session name — "me llamó Juanito y
- *  no sé de dónde salió", 2026-08-12). */
+type Listed = ReturnType<typeof listActiveAgents>;
+
+function agentsAsked(others: Listed, args: Record<string, unknown>, projectId: string): Listed {
+  const wanted = text(args.project).trim();
+  if (!wanted) {
+    return args.all_projects === true ? others : others.filter((a) => a.projectId === projectId);
+  }
+  const listed = others.filter((a) => sameName(a.projectName, wanted));
+  if (listed.length > 0) return listed;
+  const names = [...new Set(others.map((a) => a.projectName))].join(", ") || "none";
+  throw new ExegolToolError(
+    `No live agent in a project named ${JSON.stringify(wanted)}. With live agents: ${names}`,
+    -32602,
+  );
+}
+
+/** Also the caller's OWN identity: agents did not know their session name */
 function handleAgentsList(
   db: Database.Database,
   args: Record<string, unknown>,
@@ -60,8 +75,7 @@ function handleAgentsList(
   const all = listActiveAgents(db);
   const me = all.find((a) => a.id === context.agentId);
   const others = all.filter((a) => a.id !== context.agentId && acceptsFollowUps(a));
-  const listed =
-    args.all_projects === true ? others : others.filter((a) => a.projectId === context.projectId);
+  const listed = agentsAsked(others, args, context.projectId);
   // Shape is a CONTRACT: `self` and `agents` are always present, so a client
   // can destructure without guarding (a caller crashed when an early response
   // omitted `self` — Juanito, 2026-08-13).

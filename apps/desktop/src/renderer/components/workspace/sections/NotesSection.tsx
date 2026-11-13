@@ -1,4 +1,5 @@
 import {
+  colabsOf,
   groupNotes,
   NOTES_PER_FOLDER,
   type Note,
@@ -156,7 +157,7 @@ function PlaceNotes({ place }: { place: NotesPlace }) {
 
 export function NotesSection() {
   const { projectId } = useProjectContext();
-  const colabs = useColabs().filter((c) => c.members.some((m) => m.projectId === projectId));
+  const colabs = colabsOf(useColabs(), projectId ?? "");
   const [scope, setScope] = useState<string>("project");
   if (!projectId) return null;
   const colab = colabs.find((c) => c.id === scope);

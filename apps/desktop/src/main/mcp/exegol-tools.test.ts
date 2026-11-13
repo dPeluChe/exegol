@@ -78,6 +78,12 @@ describe("exegol-tools", () => {
 
       const all = await callExegolTool(db, "agents_list", { all_projects: true }, makeContext());
       expect(ids(all).sort()).toEqual(["far", "mate"]);
+
+      const one = await callExegolTool(db, "agents_list", { project: "other" }, makeContext());
+      expect(ids(one)).toEqual(["far"]);
+      await expect(
+        callExegolTool(db, "agents_list", { project: "Nope" }, makeContext()),
+      ).rejects.toThrow("With live agents:");
     });
 
     it("agent_link refuses a plain terminal", async () => {

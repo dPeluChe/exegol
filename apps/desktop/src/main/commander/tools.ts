@@ -22,6 +22,7 @@ import {
 import { listProjects } from "../db/queries/projects";
 import { addProjectFolder, ProjectAddError } from "../ipc/procedures/project-folder";
 import { broadcast } from "../lib/event-bus";
+import { sameName } from "../lib/names";
 import type { CommanderToolName } from "../mcp/commander-tool-defs";
 import { type ExegolToolContext, ExegolToolError } from "../mcp/exegol-protocol";
 import { cliUpdateStatus } from "../system/cli-versions";
@@ -45,10 +46,9 @@ const refused = (message: string) => new ExegolToolError(message, -32010);
 
 /** By name, as fleet_status shows it; the Commander's own project is not a target */
 export function projectNamed(db: Database.Database, name: unknown) {
-  const wanted = text(name).toLowerCase();
   const own = commanderProjectId(db);
   const projects = listProjects(db).filter((p) => p.id !== own);
-  const found = projects.filter((p) => p.name.toLowerCase() === wanted);
+  const found = projects.filter((p) => sameName(p.name, text(name)));
   if (found.length === 1 && found[0]) return found[0];
   if (found.length > 1) {
     throw refused(
