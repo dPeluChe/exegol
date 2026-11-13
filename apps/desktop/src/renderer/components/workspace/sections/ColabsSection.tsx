@@ -1,9 +1,8 @@
-import { type Colab, inboxCountsOn } from "@exegol/shared";
+import { type Colab, colabIdsOf, inboxCountsOn } from "@exegol/shared";
 import { cn, ScrollArea } from "@exegol/ui";
 import { Plus, Users } from "lucide-react";
 import { useState } from "react";
 import { useColabs, useInboxThreads } from "../../../hooks/use-inbox";
-import { colabIdsOf } from "../../../lib/inbox-menu";
 import { useAppStore } from "../../../stores/app";
 import { LABEL_CLASS } from "../../agents/SpawnOptions";
 import { FilterChip } from "../../common/FilterChip";
@@ -90,9 +89,9 @@ export function ColabsSection({ projectMeta }: { projectMeta: ReadonlyMap<string
   const edited = colabs.find((c) => c.id === editing) ?? null;
   const firstMember = panel?.kind === "colab" ? panel.firstMember : undefined;
   // A colab open in the editor narrows the list to its threads
-  const colabIds = project ? colabIdsOf(colabs, project) : null;
+  const colabIds = colabIdsOf(colabs, project ?? "");
   const threads = (showClosed ? closed : active)
-    .filter((t) => !project || !colabIds || inboxCountsOn(t, project, colabIds))
+    .filter((t) => !project || inboxCountsOn(t, project, colabIds))
     .filter((t) => !editing || (t.scope === "colab" && t.scopeId === editing));
 
   return (

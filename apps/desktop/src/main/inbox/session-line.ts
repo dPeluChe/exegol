@@ -1,4 +1,4 @@
-import type { Colab } from "@exegol/shared";
+import { type Colab, memberRole } from "@exegol/shared";
 import type Database from "libsql";
 import { listColabs } from "../db/queries/colabs";
 import { countActiveThreads } from "../db/queries/inbox";
@@ -16,7 +16,7 @@ async function colabLine(db: Database.Database, colab: Colab, projectId: string)
       [
         m.repo ? `${m.projectName} (${m.repo})` : m.projectName,
         m.role,
-        m.main ? "main dev, makes the changes" : "user dev, uses it and reports",
+        `${memberRole(m).label}, ${memberRole(m).does}`,
       ]
         .filter(Boolean)
         .join(", "),

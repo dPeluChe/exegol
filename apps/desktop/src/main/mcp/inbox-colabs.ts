@@ -1,20 +1,14 @@
-import type { Colab, InboxThread } from "@exegol/shared";
-import type Database from "libsql";
-import { listColabs } from "../db/queries/colabs";
+import { type Colab, type ColabMember, type InboxThread, memberRole } from "@exegol/shared";
 import { InboxError, type InboxTarget } from "../inbox/threads";
+import { sameName as same, text } from "../lib/names";
 
-export const text = (value: unknown): string => (typeof value === "string" ? value : "");
-
-export const same = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
-
-const projectNames = (colab: Colab) => [...new Set(colab.members.map((m) => m.projectName))];
+const projectNames = (members: ColabMember[]) => [...new Set(members.map((m) => m.projectName))];
 
 const described = (colabs: Colab[]) =>
-  colabs.map((c) => `${c.name} (${projectNames(c).join(", ")})`).join("; ") || "none";
+  colabs.map((c) => `${c.name} (${projectNames(c.members).join(", ")})`).join("; ") || "none";
 
 /** By its name, by the name of another member when that says which one, or the only one */
-function colabFor(db: Database.Database, projectId: string, name: string) {
-  const colabs = listColabs(db, projectId);
+function colabFor(colabs: Colab[], projectId: string, name: string) {
   if (!name && colabs.length === 1) return { colab: colabs[0] as Colab, member: null };
   const colab = colabs.find((c) => same(c.name, name));
   if (colab) return { colab, member: null };
@@ -29,20 +23,21 @@ function colabFor(db: Database.Database, projectId: string, name: string) {
   throw new InboxError(`${what}. Yours: ${described(colabs)}`);
 }
 
-export const colabNamed = (db: Database.Database, projectId: string, name: unknown): Colab =>
-  colabFor(db, projectId, text(name)).colab;
+/** `colabs`: those the project is in */
+export const colabNamed = (colabs: Colab[], projectId: string, name: unknown): Colab =>
+  colabFor(colabs, projectId, text(name)).colab;
 
 export function colabTarget(
-  db: Database.Database,
+  colabs: Colab[],
   args: Record<string, unknown>,
   projectId: string,
 ): InboxTarget {
-  const { colab, member } = colabFor(db, projectId, text(args.colab));
+  const { colab, member } = colabFor(colabs, projectId, text(args.colab));
   const wanted = text(args.to_project);
   if (!wanted) return { scope: "colab", colabId: colab.id, toProject: member?.projectId ?? null };
   const to = colab.members.find((m) => same(m.projectName, wanted));
   if (!to) {
-    const names = projectNames(colab).join(", ");
+    const names = projectNames(colab.members).join(", ");
     throw new InboxError(`${JSON.stringify(wanted)} is not in ${colab.name}. Members: ${names}`);
   }
   return { scope: "colab", colabId: colab.id, toProject: to.projectId };
@@ -54,7 +49,7 @@ export const colabView = (colab: Colab, projectId: string) => ({
   members: colab.members.map((m) => ({
     project: m.projectName,
     ...(m.repo && { repo: m.repo }),
-    role: m.main ? "main dev" : "user dev",
+    role: memberRole(m).label,
     ...(m.role && { note: m.role }),
     ...(m.projectId === projectId && { you: true }),
   })),
@@ -75,7 +70,7 @@ export function seenBy(thread: InboxThread, colabs: Colab[], projectId: string):
   const colab = colabs.find((c) => c.id === thread.scopeId);
   const others = colab?.members.filter((m) => m.projectId !== projectId) ?? [];
   const to = others.find((m) => m.projectId === thread.toProject);
-  const names = [...new Set(others.map((m) => m.projectName))].join(", ");
+  const names = projectNames(others).join(", ");
   return to
     ? `It counts on ${to.projectName}: its sessions see it at their next start or inbox_list. The person too`
     : `Sessions of ${names || "the other members"} at their next start or inbox_list, and the person`;

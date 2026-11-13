@@ -1,6 +1,6 @@
-import { type Colab, type InboxThread, inboxCountsOn } from "@exegol/shared";
+import { type Colab, colabsOf, type InboxThread } from "@exegol/shared";
 import { describe, expect, it } from "vitest";
-import { colabIdsOf, colabsOf, inboxTabs, shownTab } from "./inbox-menu";
+import { inboxTabs, shownTab } from "./inbox-menu";
 
 const thread = (id: string, scope: InboxThread["scope"], scopeId: string | null, to = null) =>
   ({ id, scope, scopeId, toProject: to as string | null }) as InboxThread;
@@ -39,18 +39,5 @@ describe("shownTab", () => {
     expect(shownTab(tabs, "personal").key).toBe("personal");
     expect(shownTab(tabs, "c9").key).toBe("c1");
     expect(shownTab(inboxTabs([], "a", "A", []), null).key).toBe("project");
-  });
-});
-
-describe("inboxCountsOn", () => {
-  const counted = (projectId: string) =>
-    threads
-      .filter((t) => inboxCountsOn(t, projectId, colabIdsOf(colabs, projectId)))
-      .map((t) => t.id);
-
-  it("counts a thread for the whole colab on every member, one for a member only there", () => {
-    expect(counted("a")).toEqual(["t1", "t2"]);
-    expect(counted("b")).toEqual(["t2", "t3", "t4"]);
-    expect(counted("c")).toEqual(["t4"]);
   });
 });

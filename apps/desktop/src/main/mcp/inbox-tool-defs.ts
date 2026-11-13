@@ -1,4 +1,4 @@
-import { INBOX_TURN_LIMIT } from "@exegol/shared";
+import { INBOX_TURN_LIMIT, MEMBER_ROLE } from "@exegol/shared";
 import type { ToolBody } from "./browser-tool-defs";
 
 export const INBOX_TOOLS = [
@@ -124,9 +124,10 @@ export const INBOX_TOOL_DEFS: ToolBody<InboxToolName>[] = [
     name: "colabs_list",
     title: "List this project's colabs",
     description:
-      "The colabs this project is in: name, purpose and members, each a main dev (makes the " +
-      "changes its threads ask for) or a user dev (uses it and reports). Read it before a " +
-      "thread to a colab. Only a person creates a colab or changes its members.",
+      `The colabs this project is in: name, purpose and members, each a ${MEMBER_ROLE.main.label} ` +
+      `(${MEMBER_ROLE.main.does} its threads ask for) or a ${MEMBER_ROLE.user.label} ` +
+      `(${MEMBER_ROLE.user.does}). Read it before a thread to a colab. Only a person creates a ` +
+      "colab or changes its members.",
     inputSchema: { type: "object", properties: {} },
   },
 ];

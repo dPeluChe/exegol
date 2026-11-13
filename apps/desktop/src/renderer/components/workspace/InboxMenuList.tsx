@@ -5,7 +5,6 @@ import {
   type InboxThread,
   inboxPendingState,
 } from "@exegol/shared";
-import { cn } from "@exegol/ui";
 import { Plus } from "lucide-react";
 import { useState } from "react";
 import { useInboxThreads } from "../../hooks/use-inbox";
@@ -13,6 +12,7 @@ import { type InboxTarget, inboxTabs, shownTab } from "../../lib/inbox-menu";
 import { useAppStore } from "../../stores/app";
 import { FilterChip } from "../common/FilterChip";
 import type { ProjectMeta } from "../common/ProjectChip";
+import { SegmentedTabs } from "../common/SegmentedTabs";
 import { InboxThreadRow } from "./InboxThreadRow";
 import { inboxPlace } from "./inbox-place";
 
@@ -21,6 +21,8 @@ const EMPTY: Record<InboxTarget["kind"], string> = {
   colab: "Nothing pending in this colab",
   personal: "For anything that belongs to no project",
 };
+
+const PANEL_ID = "inbox-menu-panel";
 
 const ADD_CLASS =
   "ml-auto flex shrink-0 items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] text-text-muted hover:bg-white/5 hover:text-text-primary";
@@ -56,42 +58,37 @@ export function InboxMenuList({
 
   return (
     <div className="flex min-h-0 flex-col">
-      <div role="tablist" className="flex items-center gap-1 border-b border-border px-2 pt-1.5">
-        <div className="flex min-w-0 gap-1 overflow-x-auto">
-          {tabs.map((t) => (
-            <button
-              key={t.key}
-              type="button"
-              role="tab"
-              aria-selected={t.key === tab.key}
-              onClick={() => setPicked(t.key)}
-              className={cn(
-                "-mb-px flex shrink-0 items-center gap-1.5 border-b-2 px-1.5 pb-1.5 text-[11px] font-medium",
-                t.key === tab.key
-                  ? "border-accent text-text-primary"
-                  : "border-transparent text-text-muted hover:text-text-secondary",
-              )}
-            >
-              <span className="max-w-40 truncate">{t.label}</span>
-              {t.threads.length > 0 && (
-                <span className="rounded-full bg-white/10 px-1.5 text-[10px] tabular-nums">
-                  {t.threads.length}
-                </span>
-              )}
-            </button>
-          ))}
+      <div className="flex items-center gap-1 border-b border-border p-1.5">
+        <div className="min-w-0 flex-1">
+          <SegmentedTabs
+            compact
+            label="Inboxes"
+            panelId={PANEL_ID}
+            tabs={tabs.map((t) => ({
+              id: t.key,
+              label: t.label,
+              count: t.threads.length || undefined,
+            }))}
+            active={tab.key}
+            onChange={setPicked}
+          />
         </div>
         <button
           type="button"
           onClick={() => useAppStore.getState().openNewColab(projectId)}
           title="Join this project with others so their sessions share threads"
-          className={cn(ADD_CLASS, "mb-1")}
+          className={ADD_CLASS}
         >
           <Plus className="h-3 w-3" />
           Colab
         </button>
       </div>
-      <div className="flex min-h-0 flex-col gap-1.5 overflow-y-auto p-2">
+      <div
+        id={PANEL_ID}
+        role="tabpanel"
+        aria-labelledby={`${PANEL_ID}-${tab.key}`}
+        className="flex min-h-0 flex-col gap-1.5 overflow-y-auto p-2"
+      >
         <div className="flex flex-wrap items-center gap-1">
           <FilterChip active={!archived} onClick={() => setArchived(false)}>
             Active

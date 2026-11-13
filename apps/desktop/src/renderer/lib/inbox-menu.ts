@@ -1,4 +1,4 @@
-import { type Colab, type InboxThread, inboxCountsOn } from "@exegol/shared";
+import { type Colab, colabIdsOf, type InboxThread, inboxCountsOn } from "@exegol/shared";
 
 /** `to`: the member project a colab thread is for, null for the whole colab */
 export type InboxTarget =
@@ -12,12 +12,6 @@ export interface InboxTab {
   target: InboxTarget;
   threads: InboxThread[];
 }
-
-export const colabsOf = (colabs: Colab[], projectId: string) =>
-  colabs.filter((c) => c.members.some((m) => m.projectId === projectId));
-
-export const colabIdsOf = (colabs: Colab[], projectId: string) =>
-  new Set(colabsOf(colabs, projectId).map((c) => c.id));
 
 /** One inbox per tab: the project's own, each colab it is in, then Personal */
 export function inboxTabs(

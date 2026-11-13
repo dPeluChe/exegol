@@ -220,12 +220,19 @@ export function listThreads(db: Database.Database, filter: ThreadFilter): InboxT
   return rows.map(toThread);
 }
 
+// What a project counts as waiting on it: as `inboxCountsOn`, plus what the person handed it
+const COUNTS_ON_SQL = `((t.scope = 'project' AND t.scope_id = @projectId)
+  OR (t.scope = 'personal' AND r.thread_id IS NOT NULL)
+  OR (t.scope = 'colab' AND (t.to_project = @projectId OR (t.to_project IS NULL
+        AND EXISTS (SELECT 1 FROM colab_members cm
+          WHERE cm.colab_id = t.scope_id AND cm.project_id = @projectId)))))`;
+
 export function countActiveThreads(db: Database.Database, projectId: string): number {
   const { n } = db
     .prepare(
       `SELECT COUNT(*) AS n FROM inbox_threads t
        LEFT JOIN inbox_reads r ON r.thread_id = t.id AND r.project_id = @projectId
-       WHERE ${REACH_SQL} ${STATE_SQL.active}`,
+       WHERE ${COUNTS_ON_SQL} ${STATE_SQL.active}`,
     )
     .get({ projectId }) as { n: number };
   return n;

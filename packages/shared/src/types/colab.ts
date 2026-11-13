@@ -23,3 +23,17 @@ export interface ColabMember {
    *  with members; the others are user devs, who use it and report */
   main: boolean;
 }
+
+export const MEMBER_ROLE = {
+  main: { label: "main dev", does: "makes the changes" },
+  user: { label: "user dev", does: "uses it and reports" },
+} as const;
+
+export const memberRole = (m: Pick<ColabMember, "main">) =>
+  m.main ? MEMBER_ROLE.main : MEMBER_ROLE.user;
+
+export const colabsOf = (colabs: Colab[], projectId: string) =>
+  colabs.filter((c) => c.members.some((m) => m.projectId === projectId));
+
+export const colabIdsOf = (colabs: Colab[], projectId: string) =>
+  new Set(colabsOf(colabs, projectId).map((c) => c.id));

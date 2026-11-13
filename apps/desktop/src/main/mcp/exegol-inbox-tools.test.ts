@@ -18,7 +18,8 @@ const a1 = session("a1");
 const a2 = session("a2");
 const b1 = session("b1", "p2");
 
-type Posted = { thread: string; similar_closed: { thread: string }[] };
+type Similar = { thread: string }[];
+type Posted = { thread: string; similar_closed: Similar; similar_open: Similar };
 
 const call = <T = Record<string, unknown>>(
   tool: InboxToolName,
@@ -115,14 +116,17 @@ describe("closing", () => {
 
   it("never reopens: a new thread references it", async () => {
     const { thread } = await post();
+    const twin = await post("Safari form fails here too");
+    expect(twin.similar_open.map((t) => t.thread)).toEqual([thread]);
+    await call("inbox_close", closeArgs(twin.thread), a2);
     await call("inbox_close", closeArgs(thread), a2);
     await expect(call("inbox_reply", { thread, body: "again" }, a2)).rejects.toThrow(/refs/);
 
     const next = await post("Safari form fails again");
-    expect(next.similar_closed.map((t) => t.thread)).toEqual([thread]);
+    expect(next.similar_closed.map((t) => t.thread).sort()).toEqual([thread, twin.thread].sort());
 
     const linked = await post("Safari form fails again", { refs: [thread] });
-    expect(linked.similar_closed).toEqual([]);
+    expect(linked.similar_closed.map((t) => t.thread)).toEqual([twin.thread]);
     const got = await call<{ refs: { resolution: string }[] }>("inbox_get", {
       thread: linked.thread,
     });

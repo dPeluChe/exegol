@@ -1,5 +1,7 @@
 import {
   type Colab,
+  colabIdsOf,
+  colabsOf,
   INBOX_BODY_MAX,
   INBOX_TITLE_MAX,
   type InboxThread,
@@ -14,7 +16,7 @@ import { useAct } from "../../hooks/use-act";
 import { useDismiss } from "../../hooks/use-dismiss";
 import { useColabs, useInboxThreads } from "../../hooks/use-inbox";
 import { useProjects } from "../../hooks/use-trpc";
-import { colabIdsOf, colabsOf, type InboxTarget as Target } from "../../lib/inbox-menu";
+import type { InboxTarget as Target } from "../../lib/inbox-menu";
 import { appKeys } from "../../lib/keymap";
 import { useAppStore } from "../../stores/app";
 import { INPUT_CLASS } from "../agents/SpawnOptions";

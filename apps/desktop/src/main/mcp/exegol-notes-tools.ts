@@ -2,7 +2,9 @@ import { join } from "node:path";
 import type { Note, NoteMeta, NotesPlace } from "@exegol/shared";
 import { NOTES_PER_FOLDER } from "@exegol/shared";
 import type Database from "libsql";
+import { listColabs } from "../db/queries/colabs";
 import { InboxError } from "../inbox/threads";
+import { text } from "../lib/names";
 import {
   ARCHIVE_DIR,
   INDEX_FILE,
@@ -17,7 +19,7 @@ import {
 import { type NotesFolder, notesFolder, notifyNotesChanged } from "../notes/folders";
 import { authorOf } from "./exegol-inbox-tools";
 import { type ExegolToolContext, ExegolToolError } from "./exegol-protocol";
-import { colabNamed, text } from "./inbox-colabs";
+import { colabNamed } from "./inbox-colabs";
 import type { NotesToolName } from "./notes-tool-defs";
 
 function placeOf(
@@ -27,7 +29,10 @@ function placeOf(
 ): NotesPlace {
   if (args.scope === "personal") return { scope: "personal" };
   if (args.scope === "colab")
-    return { scope: "colab", colabId: colabNamed(db, projectId, args.colab).id };
+    return {
+      scope: "colab",
+      colabId: colabNamed(listColabs(db, projectId), projectId, args.colab).id,
+    };
   return { scope: "project", projectId };
 }
 

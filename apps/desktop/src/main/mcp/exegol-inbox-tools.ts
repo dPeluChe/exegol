@@ -1,4 +1,10 @@
-import { type InboxAuthor, type InboxThread, pathBase, pathParent } from "@exegol/shared";
+import {
+  type Colab,
+  type InboxAuthor,
+  type InboxThread,
+  pathBase,
+  pathParent,
+} from "@exegol/shared";
 import type Database from "libsql";
 import { getAgent, getAgentCwd } from "../db/queries/agents";
 import { listColabs } from "../db/queries/colabs";
@@ -12,9 +18,10 @@ import {
   replyTo,
   take,
 } from "../inbox/threads";
+import { text } from "../lib/names";
 import { runGit } from "../lib/worktree-safety";
 import { type ExegolToolContext, ExegolToolError } from "./exegol-protocol";
-import { colabNamed, colabTarget, colabView, placeOf, seenBy, text } from "./inbox-colabs";
+import { colabNamed, colabTarget, colabView, placeOf, seenBy } from "./inbox-colabs";
 import type { InboxToolName } from "./inbox-tool-defs";
 
 const GIT_TIMEOUT_MS = 1_500;
@@ -63,13 +70,9 @@ const summary = (t: InboxThread) => ({
   resolution: t.resolution,
 });
 
-function targetOf(
-  db: Database.Database,
-  args: Record<string, unknown>,
-  projectId: string,
-): InboxTarget {
+function targetOf(colabs: Colab[], args: Record<string, unknown>, projectId: string): InboxTarget {
   if (args.target === "personal") return { scope: "personal" };
-  if (args.target === "colab") return colabTarget(db, args, projectId);
+  if (args.target === "colab") return colabTarget(colabs, args, projectId);
   return { scope: "project", projectId };
 }
 
@@ -84,10 +87,11 @@ type Handler = (
 
 const HANDLERS: Record<InboxToolName, Handler> = {
   inbox_post: async (db, args, context) => {
+    const colabs = listColabs(db, context.projectId);
     const opened = openThread(
       db,
       await authorOf(db, context),
-      targetOf(db, args, context.projectId),
+      targetOf(colabs, args, context.projectId),
       {
         title: text(args.title),
         body: text(args.body),
@@ -95,7 +99,6 @@ const HANDLERS: Record<InboxToolName, Handler> = {
         refs: Array.isArray(args.refs) ? args.refs.map(String) : [],
       },
     );
-    const colabs = listColabs(db, context.projectId);
     return {
       thread: opened.thread.id,
       scope: opened.thread.scope,
@@ -117,9 +120,9 @@ const HANDLERS: Record<InboxToolName, Handler> = {
     const state = args.state === "closed" || args.state === "all" ? args.state : "active";
     const limit = Math.min(Math.max(Number(args.limit) || 20, 1), 50);
     const query = text(args.query) || undefined;
-    const colabId = text(args.colab) ? colabNamed(db, context.projectId, args.colab).id : undefined;
-    const colabs = listColabs(db, context.projectId);
     const projectId = context.projectId;
+    const colabs = listColabs(db, projectId);
+    const colabId = text(args.colab) ? colabNamed(colabs, projectId, args.colab).id : undefined;
     return {
       threads: listThreads(db, { projectId, state, query, limit, colabId }).map((t) => ({
         ...summary(t),
