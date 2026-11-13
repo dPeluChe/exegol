@@ -131,6 +131,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- Commander: `fleet_status` lists the repos inside a workspace project, and says which one each session works in, so work on a repo goes to a session in it and a new repo shows up there
+
 - Inbox: Send to under a thread names each session by its alias and the name it has inside its CLI (Claude Code's `/rename`), and says the project when the sessions belong to several
 - Inbox menu: one tab per inbox (the project, each colab it is in, Personal) with its count, and status as a filter under them; New thread opens in the tab shown
 - Settings > MCP Server > Activity lists every live agent session with its project, CLI and whether its bridge is connected, and events name the session; the Server tab counts connected bridges. A session's bridge now reports in as soon as it connects, so its plug is right after an app restart without waiting for a tool call (sessions started before this version catch up on their next call)
