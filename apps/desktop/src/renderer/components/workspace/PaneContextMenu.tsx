@@ -9,17 +9,21 @@ import {
   Eraser,
   Globe,
   MoveRight,
+  OctagonX,
   Pencil,
   PictureInPicture2,
   RefreshCw,
+  RotateCcw,
   Rows,
   Send,
   TerminalSquare,
   Trash2,
 } from "lucide-react";
 import { useState } from "react";
-import { kickTerminal } from "../../lib/dispatch-refit";
+import { interruptTerminal, kickTerminal } from "../../lib/dispatch-refit";
 import { movePane, paneMoveTargets } from "../../lib/move-pane";
+import { isShellish, restartTerminal } from "../../lib/split-terminal";
+import { useAgentStore } from "../../stores/agents";
 import type { PaneType } from "../../stores/workspace";
 import { ContextMenu, type MenuItem, type MenuSection } from "../common/ContextMenu";
 import { SendSelectionMenu } from "../terminal/SendToList";
@@ -59,7 +63,12 @@ function clipboardSection({ onCopy, onPaste }: MenuActions): MenuItem[] {
   ]);
 }
 
-function terminalActionsSection({ agentId, onScrollTop, onScrollBottom }: MenuActions): MenuItem[] {
+function terminalActionsSection({
+  agentId,
+  paneId,
+  onScrollTop,
+  onScrollBottom,
+}: MenuActions): MenuItem[] {
   const items = present([
     onScrollTop && { label: "Scroll to Top", icon: ArrowUpToLine, action: onScrollTop },
     onScrollBottom && { label: "Scroll to Bottom", icon: ArrowDownToLine, action: onScrollBottom },
@@ -86,6 +95,21 @@ function terminalActionsSection({ agentId, onScrollTop, onScrollBottom }: MenuAc
       icon: RefreshCw,
       action: () => kickTerminal(agentId),
     });
+    items.push({
+      label: "Send Interrupt",
+      icon: OctagonX,
+      shortcut: "Ctrl+C",
+      action: () => interruptTerminal(agentId),
+    });
+    // A plain terminal, or a row the store no longer has: an agent session has Suspend and Resume
+    const agent = useAgentStore.getState().agents[agentId];
+    if (!agent || isShellish(agent)) {
+      items.push({
+        label: "Restart Terminal",
+        icon: RotateCcw,
+        action: () => void restartTerminal(paneId),
+      });
+    }
   }
   return items;
 }
