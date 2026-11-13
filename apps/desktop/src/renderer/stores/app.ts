@@ -42,10 +42,11 @@ interface AppStore {
   /** Colabs tab narrowed to one project, from a Company badge. In memory */
   inboxProject: string | null;
   openInbox: (projectId: string | null) => void;
-  /** The Colabs tab opens on a new colab, with this project as its first member. In memory */
-  colabDraft: { projectId: string | null } | null;
-  openNewColab: (projectId: string | null) => void;
-  clearColabDraft: () => void;
+  /** What the Colabs tab shows beside its lists. In memory */
+  colabsPanel: ColabsPanel;
+  setColabsPanel: (panel: ColabsPanel) => void;
+  /** The Colabs tab on a new colab that starts with this project (the Inbox menu) */
+  openNewColab: (projectId: string) => void;
   colabsHelpHidden: boolean;
   setColabsHelpHidden: (hidden: boolean) => void;
   /** The session Company shows, a pick or the default on screen when it was left, and how; held
@@ -130,6 +131,13 @@ const MAX_CHAT_FONT = 20;
 export type CompanyView = "chat" | "terminal";
 export type CompanySide = "left" | "right";
 
+export type ColabsPanel =
+  | { kind: "thread"; id: string }
+  | { kind: "colab"; id: string | null; firstMember?: string }
+  | null;
+
+const DASHBOARD = { activeView: "dashboard", projectsFrom: null } as const;
+
 export function migrateAppStore(persisted: unknown, fromVersion: number): AppStore {
   if (!persisted || typeof persisted !== "object") return persisted as AppStore;
   const state = persisted as {
@@ -174,7 +182,7 @@ export const useAppStore = create<AppStore>()(
     (set) => ({
       activeView: "projects",
       setActiveView: (view) => set((s) => ({ activeView: view, ...leaving(s, view) })),
-      openDashboard: () => set({ activeView: "dashboard", projectsFrom: null }),
+      openDashboard: () => set(DASHBOARD),
 
       workspaceSection: "agents",
       setWorkspaceSection: (section) => set({ workspaceSection: section }),
@@ -243,17 +251,16 @@ export const useAppStore = create<AppStore>()(
       setDashboardMode: (mode) => set({ dashboardMode: mode }),
       inboxProject: null,
       openInbox: (projectId) => set({ dashboardMode: "colabs", inboxProject: projectId }),
-      colabDraft: null,
+      colabsPanel: null,
+      setColabsPanel: (panel) => set({ colabsPanel: panel }),
       openNewColab: (projectId) =>
         set({
-          activeView: "dashboard",
-          projectsFrom: null,
+          ...DASHBOARD,
           dashboardMode: "colabs",
           inboxProject: null,
           inboxMenuOpen: false,
-          colabDraft: { projectId },
+          colabsPanel: { kind: "colab", id: null, firstMember: projectId },
         }),
-      clearColabDraft: () => set((s) => (s.colabDraft ? { colabDraft: null } : s)),
       colabsHelpHidden: false,
       setColabsHelpHidden: (hidden) => set({ colabsHelpHidden: hidden }),
       companyPickedId: null,

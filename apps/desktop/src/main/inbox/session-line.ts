@@ -7,20 +7,26 @@ import { notesFolder } from "../notes/folders";
 
 const MAX_COLABS = 3;
 const MAX_TITLES = 20;
-const MAIN_MEMBER = "main member, does the work";
 
 /** Names and purpose come from the person; a colab's notes only as a count, never their text */
 async function colabLine(db: Database.Database, colab: Colab, projectId: string) {
   const others = colab.members
     .filter((m) => m.projectId !== projectId)
     .map((m) =>
-      [m.repo ? `${m.projectName} (${m.repo})` : m.projectName, m.role, m.main && MAIN_MEMBER]
+      [
+        m.repo ? `${m.projectName} (${m.repo})` : m.projectName,
+        m.role,
+        m.main ? "main dev, makes the changes" : "user dev, uses it and reports",
+      ]
         .filter(Boolean)
         .join(", "),
     );
-  const own = colab.members.some((m) => m.projectId === projectId && m.main)
-    ? " This project is its main member: the work its threads ask for is done here."
-    : "";
+  const mine = colab.members.filter((m) => m.projectId === projectId);
+  const own = mine.some((m) => m.main)
+    ? " This project is its main dev: the changes its threads ask for are made here."
+    : mine.length > 0
+      ? " This project is a user dev: report what the main dev should change in a colab thread."
+      : "";
   const purpose = colab.purpose ? ` Purpose: ${colab.purpose}` : "";
   const folder = notesFolder(db, { scope: "colab", colabId: colab.id });
   const count = folder ? (await noteIds(folder.dir)).length : 0;

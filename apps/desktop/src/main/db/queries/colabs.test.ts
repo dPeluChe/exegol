@@ -8,6 +8,7 @@ import {
   listColabs,
   removeColabMember,
   setColabMain,
+  setColabMemberRole,
 } from "./colabs";
 
 describe("colabs", () => {
@@ -27,21 +28,9 @@ describe("colabs", () => {
     addColabMember(db, id, { projectId: "irma", repo: "lizaceves-landing", role: "clone" });
     addColabMember(db, id, { projectId: "irma", repo: "lizaceves-landing", role: "clone of it" });
 
-    expect(listColabs(db)[0]?.members).toEqual([
-      {
-        projectId: "blue",
-        projectName: "blue",
-        repo: "labs-landings-base",
-        role: "blueprint",
-        main: true,
-      },
-      {
-        projectId: "irma",
-        projectName: "irma",
-        repo: "lizaceves-landing",
-        role: "clone of it",
-        main: false,
-      },
+    expect(listColabs(db)[0]?.members).toMatchObject([
+      { projectId: "blue", projectName: "blue", repo: "labs-landings-base", role: "blueprint" },
+      { projectId: "irma", projectName: "irma", repo: "lizaceves-landing", role: "clone of it" },
     ]);
 
     removeColabMember(db, id, "irma", "lizaceves-landing");
@@ -52,20 +41,25 @@ describe("colabs", () => {
     expect(listColabs(db)).toEqual([]);
   });
 
-  it("has one main member: the first to join, until another is marked or it is unmarked", () => {
-    const id = createColab(db, "Landings", "");
-    addColabMember(db, id, { projectId: "irma", repo: "", role: "" });
+  it("always has one main member: the first to join, the person's pick, the next when it leaves", () => {
+    const id = createColab(db, "Landings", "", "irma");
     addColabMember(db, id, { projectId: "blue", repo: "", role: "" });
-    const mains = () =>
-      listColabs(db)[0]
-        ?.members.filter((m) => m.main)
-        .map((m) => m.projectId);
-    expect(mains()).toEqual(["irma"]);
-    setColabMain(db, id, "blue", "", true);
-    expect(mains()).toEqual(["blue"]);
-    expect(listColabs(db)[0]?.members[0]?.projectId).toBe("blue");
-    setColabMain(db, id, "blue", "", false);
-    expect(mains()).toEqual([]);
+    const members = () => listColabs(db)[0]?.members.map((m) => [m.projectId, m.main]);
+    expect(members()).toEqual([
+      ["blue", false],
+      ["irma", true],
+    ]);
+    setColabMain(db, id, "blue", "");
+    setColabMain(db, id, "gone", "");
+    expect(members()).toEqual([
+      ["blue", true],
+      ["irma", false],
+    ]);
+    setColabMemberRole(db, id, { projectId: "irma", repo: "", role: "clone" });
+    removeColabMember(db, id, "blue", "");
+    expect(listColabs(db)[0]?.members).toMatchObject([
+      { projectId: "irma", role: "clone", main: true },
+    ]);
   });
 
   it("refuses a second colab with the same name in any case", () => {

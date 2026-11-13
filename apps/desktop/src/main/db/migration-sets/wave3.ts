@@ -474,8 +474,14 @@ export const wave3Migrations: Migration[] = [
     sql: "ALTER TABLE projects ADD COLUMN mcp_servers TEXT;",
   },
   {
-    // The member that does the work the colab's threads ask for; one per colab at most
+    // The member that does the work the colab's threads ask for: the first to join, then the
+    // person's pick. Colabs that existed get their first member
     id: "w3_044_colab_member_main",
-    sql: "ALTER TABLE colab_members ADD COLUMN main INTEGER NOT NULL DEFAULT 0;",
+    sql: `
+      ALTER TABLE colab_members ADD COLUMN main INTEGER NOT NULL DEFAULT 0;
+      UPDATE colab_members SET main = 1
+        WHERE rowid IN (SELECT min(rowid) FROM colab_members GROUP BY colab_id);
+      CREATE UNIQUE INDEX idx_colab_one_main ON colab_members (colab_id) WHERE main = 1;
+    `,
   },
 ];

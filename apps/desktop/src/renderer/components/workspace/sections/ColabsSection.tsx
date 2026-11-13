@@ -4,6 +4,7 @@ import { Plus, Users } from "lucide-react";
 import { useState } from "react";
 import { useColabs, useInboxThreads } from "../../../hooks/use-inbox";
 import { useAppStore } from "../../../stores/app";
+import { LABEL_CLASS } from "../../agents/SpawnOptions";
 import { FilterChip } from "../../common/FilterChip";
 import type { ProjectMeta } from "../../common/ProjectChip";
 import { InboxThreadRow } from "../InboxThreadRow";
@@ -12,28 +13,25 @@ import { ColabEditor } from "./ColabEditor";
 import { ColabsHelp } from "./ColabsHelp";
 import { InboxThreadView } from "./InboxThreadView";
 
-type Panel = { kind: "thread"; id: string } | { kind: "colab"; id: string | null } | null;
-
 function ColabList({
   colabs,
   selected,
   onPick,
-  onHelp,
 }: {
   colabs: Colab[];
   selected: string | null;
   onPick: (id: string | null) => void;
-  /** Set while the explanation is hidden: brings it back */
-  onHelp: (() => void) | null;
 }) {
+  const helpHidden = useAppStore((s) => s.colabsHelpHidden);
+  const showHelp = () => useAppStore.setState({ colabsHelpHidden: false, colabsPanel: null });
   return (
     <div className="flex flex-col gap-1">
-      <div className="flex items-center text-[10px] uppercase tracking-wide text-text-muted">
+      <div className={cn("flex items-center", LABEL_CLASS)}>
         Colabs
-        {onHelp && (
+        {helpHidden && (
           <button
             type="button"
-            onClick={onHelp}
+            onClick={showHelp}
             className="ml-2 rounded px-1 normal-case tracking-normal hover:bg-white/5 hover:text-text-primary"
           >
             How they work
@@ -72,19 +70,13 @@ function ColabList({
   );
 }
 
-/** The inbox across every project. Colabs themselves arrive with step 4 of T217 */
+/** Colabs and the inbox across every project */
 export function ColabsSection({ projectMeta }: { projectMeta: ReadonlyMap<string, ProjectMeta> }) {
   const [showClosed, setShowClosed] = useState(false);
-  const [picked, setPicked] = useState<Panel>(null);
-  const draft = useAppStore((s) => s.colabDraft);
+  const panel = useAppStore((s) => s.colabsPanel);
+  const setPanel = useAppStore((s) => s.setColabsPanel);
   const helpHidden = useAppStore((s) => s.colabsHelpHidden);
   const setHelpHidden = useAppStore((s) => s.setColabsHelpHidden);
-  // A New colab asked from elsewhere (the Inbox menu) wins until something is picked here
-  const panel: Panel = draft ? { kind: "colab", id: null } : picked;
-  const setPanel = (next: Panel) => {
-    useAppStore.getState().clearColabDraft();
-    setPicked(next);
-  };
   const colabs = useColabs();
   const selectedId = panel?.kind === "thread" ? panel.id : null;
   const setSelectedId = (id: string) => setPanel({ kind: "thread", id });
@@ -95,6 +87,7 @@ export function ColabsSection({ projectMeta }: { projectMeta: ReadonlyMap<string
   const openInbox = useAppStore((s) => s.openInbox);
   const colabNames = new Map(colabs.map((c) => [c.id, c.name]));
   const edited = colabs.find((c) => c.id === editing) ?? null;
+  const firstMember = panel?.kind === "colab" ? panel.firstMember : undefined;
   // A colab open in the editor narrows the list to its threads
   const threads = (showClosed ? closed : active)
     .filter((t) => !project || inboxProjectOf(t) === project)
@@ -107,18 +100,8 @@ export function ColabsSection({ projectMeta }: { projectMeta: ReadonlyMap<string
           colabs={colabs}
           selected={editing}
           onPick={(id) => setPanel({ kind: "colab", id })}
-          onHelp={
-            helpHidden
-              ? () => {
-                  setHelpHidden(false);
-                  setPanel(null);
-                }
-              : null
-          }
         />
-        <div className="text-[10px] uppercase tracking-wide text-text-muted">
-          Threads of every project
-        </div>
+        <div className={LABEL_CLASS}>Threads of every project</div>
         <div className="flex items-center gap-1">
           <FilterChip active={!showClosed} onClick={() => setShowClosed(false)}>
             Pending
@@ -158,8 +141,9 @@ export function ColabsSection({ projectMeta }: { projectMeta: ReadonlyMap<string
           <ColabEditor
             key={editing ?? "new"}
             colab={edited}
-            firstMember={draft?.projectId ?? null}
-            projectMeta={projectMeta}
+            firstMember={
+              firstMember ? { id: firstMember, name: projectMeta.get(firstMember)?.name } : null
+            }
             onSaved={(id) => setPanel({ kind: "colab", id })}
             onDeleted={() => setPanel(null)}
           />

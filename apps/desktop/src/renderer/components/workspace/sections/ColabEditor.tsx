@@ -2,25 +2,20 @@ import { COLAB_NAME_MAX, COLAB_PURPOSE_MAX, type Colab } from "@exegol/shared";
 import { Button } from "@exegol/ui";
 import { useState } from "react";
 import { useAct } from "../../../hooks/use-act";
-import { INPUT_CLASS } from "../../agents/SpawnOptions";
+import { INPUT_CLASS, LABEL_CLASS } from "../../agents/SpawnOptions";
 import { ConfirmDialog } from "../../common/ConfirmDialog";
-import type { ProjectMeta } from "../../common/ProjectChip";
 import { ColabRoom } from "./ColabRoom";
-
-const LABEL = "text-[10px] uppercase tracking-wide text-text-muted";
 
 /** Create a colab (colab null) or edit one: name, purpose, members. Only a person does this */
 export function ColabEditor({
   colab,
   firstMember = null,
-  projectMeta,
   onSaved,
   onDeleted,
 }: {
   colab: Colab | null;
   /** A new colab starts with this project as a member (asked from its Inbox) */
-  firstMember?: string | null;
-  projectMeta: ReadonlyMap<string, ProjectMeta>;
+  firstMember?: { id: string; name: string | undefined } | null;
   onSaved: (id: string) => void;
   onDeleted: () => void;
 }) {
@@ -37,12 +32,12 @@ export function ColabEditor({
       }
       return;
     }
-    const created = await act<{ id: string }>("colabs.create", { name, purpose });
-    if (!created) return;
-    const colabId = created.value.id;
-    if (firstMember)
-      await act("colabs.addMember", { colabId, projectId: firstMember, repo: "", role: "" });
-    onSaved(colabId);
+    const created = await act<{ id: string }>("colabs.create", {
+      name,
+      purpose,
+      firstMember: firstMember?.id,
+    });
+    if (created) onSaved(created.value.id);
   };
 
   return (
@@ -53,13 +48,11 @@ export function ColabEditor({
       {!colab && (
         <p className="leading-relaxed text-text-muted">
           Name it and say what it is for, then add the projects that work together
-          {firstMember && projectMeta.get(firstMember)
-            ? `. ${projectMeta.get(firstMember)?.name} joins as its first member.`
-            : "."}
+          {firstMember?.name ? `. ${firstMember.name} joins as its first member.` : "."}
         </p>
       )}
       <label className="flex flex-col gap-1">
-        <span className={LABEL}>Name</span>
+        <span className={LABEL_CLASS}>Name</span>
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
@@ -69,7 +62,7 @@ export function ColabEditor({
         />
       </label>
       <label className="flex flex-col gap-1">
-        <span className={LABEL}>Purpose, read by agents</span>
+        <span className={LABEL_CLASS}>Purpose, read by agents</span>
         <textarea
           value={purpose}
           onChange={(e) => setPurpose(e.target.value)}

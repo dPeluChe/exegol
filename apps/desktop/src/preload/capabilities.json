@@ -400,6 +400,7 @@
       "list",
       "removeMember",
       "setMain",
+      "setRole",
       "update"
     ],
     "commander": [

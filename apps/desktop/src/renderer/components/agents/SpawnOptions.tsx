@@ -195,5 +195,7 @@ export function SkillPicker({
   );
 }
 
+export const LABEL_CLASS = "text-[10px] uppercase tracking-wide text-text-muted";
+
 export const INPUT_CLASS =
   "w-full rounded-lg border border-border bg-bg-secondary px-2.5 py-1.5 text-[11px] text-text-primary outline-none placeholder:text-text-muted focus:border-accent/50";

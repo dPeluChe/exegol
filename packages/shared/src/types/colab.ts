@@ -17,8 +17,9 @@ export interface ColabMember {
   projectName: string;
   /** Folder of an inner repo, relative to the project; "" for the whole project */
   repo: string;
-  /** Free text: "blueprint", "clone of it" */
+  /** A free note about it: "blueprint", "clone of it" */
   role: string;
-  /** The member that does the work the colab's threads ask for; one per colab at most */
+  /** The main dev: its sessions make the changes the colab's threads ask for. One in a colab
+   *  with members; the others are user devs, who use it and report */
   main: boolean;
 }

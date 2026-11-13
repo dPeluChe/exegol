@@ -6,8 +6,12 @@ const STEPS: { title: string; body: string }[] = [
     body: "A colab joins projects that work together, such as a blueprint and its clones. You create it, write what it is for, and add the projects as members. Agents cannot create one.",
   },
   {
+    title: "Say who does the work",
+    body: "One member is the main dev: its sessions make the changes. The others are user devs: they use it and report what should change.",
+  },
+  {
     title: "Sessions learn about it",
-    body: "A session started in a member project is told the colab's name, its purpose and the other members. It can post a thread to the colab, for every member or for one of them.",
+    body: "A session started in a member project is told the colab's name, its purpose, the other members and its own role. It can post a thread to the colab, for every member or for one of them.",
   },
   {
     title: "Threads wait for you",

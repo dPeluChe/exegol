@@ -71,21 +71,24 @@ function ThreadList({
         onSelect={() => onPick(thread.id)}
       />
     ));
-  const heading = (label: string, target: Target) => (
+  const heading = (label: string, action: { text: string; title?: string; run: () => void }) => (
     <div className="flex items-center pt-1 text-[10px] uppercase tracking-wide text-text-muted">
       {label}
       {!archived && (
         <button
           type="button"
-          onClick={() => onNew(target)}
+          onClick={action.run}
+          title={action.title}
           className="ml-auto flex items-center gap-0.5 rounded px-1 normal-case tracking-normal hover:bg-white/5 hover:text-text-primary"
         >
           <Plus className="h-3 w-3" />
-          New thread
+          {action.text}
         </button>
       )}
     </div>
   );
+  const threads = (label: string, target: Target) =>
+    heading(label, { text: "New thread", run: () => onNew(target) });
 
   return (
     <div className="flex min-h-0 flex-col gap-1.5 overflow-y-auto p-2">
@@ -108,7 +111,7 @@ function ThreadList({
             </FilterChip>
           ))}
       </div>
-      {heading(projectName, { kind: "project" })}
+      {threads(projectName, { kind: "project" })}
       {rows(shown)}
       {here.length === 0 && (
         <p className="py-1 text-center text-text-muted">
@@ -117,25 +120,17 @@ function ThreadList({
       )}
       {colabs.map((c) => (
         <div key={c.id} className="flex flex-col gap-1.5">
-          {heading(c.name, { kind: "colab", id: c.id, to: null })}
+          {threads(c.name, { kind: "colab", id: c.id, to: null })}
           {rows(inColab(c.id))}
         </div>
       ))}
-      {!archived && (
-        <div className="flex items-center pt-1 text-[10px] uppercase tracking-wide text-text-muted">
-          {colabs.length === 0 ? "No colab with another project yet" : "Another colab"}
-          <button
-            type="button"
-            onClick={() => useAppStore.getState().openNewColab(projectId)}
-            title="Join this project with others so their sessions share threads"
-            className="ml-auto flex items-center gap-0.5 rounded px-1 normal-case tracking-normal hover:bg-white/5 hover:text-text-primary"
-          >
-            <Plus className="h-3 w-3" />
-            New colab
-          </button>
-        </div>
-      )}
-      {heading("Personal", { kind: "personal" })}
+      {!archived &&
+        heading(colabs.length === 0 ? "No colab with another project yet" : "Another colab", {
+          text: "New colab",
+          title: "Join this project with others so their sessions share threads",
+          run: () => useAppStore.getState().openNewColab(projectId),
+        })}
+      {threads("Personal", { kind: "personal" })}
       {rows(personal)}
       {personal.length === 0 && (
         <p className="py-1 text-center text-text-muted">
