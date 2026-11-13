@@ -6,6 +6,11 @@ import { useScrollback } from "../../hooks/use-trpc";
 // start overlay instead of flashing it until hasContent answers
 const sessionsWithData = new Set<string>();
 
+/** An ended session shows as ended once its output was seen or its saved history was read, even
+ *  an empty one (a shell keeps none): waiting for either was a spinner with no end */
+export const showsEnded = (ended: boolean, output: boolean, historyLoading: boolean) =>
+  ended && (output || !historyLoading);
+
 /**
  * Track first-data arrival on a freshly mounted terminal pane. The PTY may
  * already have buffered content from before app restart, so this also probes
@@ -65,9 +70,7 @@ export function useTerminalLifecycle({
   return {
     hasData,
     startTimedOut,
-    // Don't show "Ended" UI until we've received at least one data chunk,
-    // OR until scrollback is available in DB (reattach/reload scenario)
-    isStopped: rawIsStopped && (hasData || !!scrollbackContent),
+    isStopped: showsEnded(rawIsStopped, hasData, scrollbackLoading),
     scrollbackContent,
     scrollbackLoading,
   };
