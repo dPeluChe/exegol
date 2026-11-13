@@ -22,6 +22,16 @@ export interface SessionFacts {
   /** Seconds: when the first row of its resume chain started */
   lineageStart?: number | null;
   talksWith?: FleetTalk[];
+  /** In a workspace, the repo folder it works in */
+  repo?: string;
+}
+
+export interface ProjectFacts {
+  inboxWaiting: number;
+  /** The session the person marked as Main */
+  main?: string;
+  /** A workspace's repos, as folders inside the project */
+  repos?: string[];
 }
 
 export type SessionState = "working" | "waits_on_person" | "at_prompt" | "starting";
@@ -40,10 +50,14 @@ export interface FleetSession {
   /** The project's main session: the person's mark, else the one whose lineage started first */
   main?: true;
   talks_with?: FleetTalk[];
+  /** In a project with several repos, the one it works in */
+  repo?: string;
 }
 
 export interface FleetProject {
   project: string;
+  /** Only a project that holds repos inside: a new one shows up here */
+  repos?: string[];
   inbox_waiting: number;
   sessions: FleetSession[];
 }
@@ -123,12 +137,12 @@ export function fleetView(
   projects: Pick<Project, "id" | "name">[],
   agents: ActiveAgent[],
   facts: (agentId: string) => SessionFacts,
-  inboxWaiting: (projectId: string) => number,
+  projectFacts: (projectId: string) => ProjectFacts,
   now = Date.now(),
-  preferredMain?: (projectId: string) => string | undefined,
 ): FleetProject[] {
   const order: SessionState[] = ["waits_on_person", "at_prompt", "working", "starting"];
   return projects.map((p) => {
+    const { inboxWaiting, main: marked, repos } = projectFacts(p.id);
     const sessions = agents
       .filter((a) => a.projectId === p.id && a.cliType !== "shell")
       .map((a) => ({ agent: a, facts: facts(a.id) }));
@@ -138,11 +152,12 @@ export function fleetView(
         startedAt: s.agent.startedAt,
         lineageStart: s.facts.lineageStart,
       })),
-      preferredMain?.(p.id),
+      marked,
     );
     return {
       project: p.name,
-      inbox_waiting: inboxWaiting(p.id),
+      ...(repos ? { repos } : {}),
+      inbox_waiting: inboxWaiting,
       sessions: sessions
         .map(({ agent: a, facts: f }): FleetSession => {
           const since = a.statusChangedAt ? now - a.statusChangedAt * 1000 : null;
@@ -158,6 +173,7 @@ export function fleetView(
             ...(f.cliUpdate ? { cli_update: f.cliUpdate } : {}),
             ...(a.id === main ? { main: true } : {}),
             ...(f.talksWith?.length ? { talks_with: f.talksWith } : {}),
+            ...(f.repo ? { repo: f.repo } : {}),
           };
         })
         .sort((a, b) => order.indexOf(a.state) - order.indexOf(b.state)),

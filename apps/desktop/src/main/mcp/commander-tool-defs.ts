@@ -33,6 +33,8 @@ export const COMMANDER_TOOL_DEFS: ToolBody<CommanderToolName>[] = [
     title: "See every project and session",
     description:
       "Every project in Exegol with its live sessions and how many inbox threads wait there. " +
+      "repos: the repos inside a workspace project (folder names), and on a session, " +
+      "repo: the one it works in. " +
       "A session's state: working, at_prompt (its turn ended: read it, it may have asked " +
       "something), waits_on_person (a permission or dialog only the person answers), starting. " +
       "minutes_in_state and quiet_minutes say how long. person_minutes_ago: when the person last " +

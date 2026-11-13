@@ -3,9 +3,7 @@ import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { sanitizeAgentMessage } from "../../agents/agent-message-injection";
 import { queueFollowUp } from "../../agents/follow-up-queue";
-import { hookCwdOf } from "../../agents/hook-cwd";
 import { getAgent } from "../../db/queries";
-import { listLiveProjectSessions } from "../../db/queries/agents";
 import { getProject } from "../../db/queries/projects";
 import { detectGhCli } from "../../integrations/github/gh";
 import {
@@ -20,12 +18,11 @@ import {
   type ProjectRepo,
   parseGitHubRemote,
   projectRepos,
-  sessionsByRepo,
 } from "../../integrations/github/repos";
 import { execFileAsync } from "../../lib/exec-file";
 import { logger } from "../../lib/logger";
-import { pathKey } from "../../lib/worktree-safety";
 import { getApiKey } from "../../security/keystore";
+import { liveSessionsByRepo } from "../../system/session-repos";
 import { publicProcedure, router } from "../trpc";
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
@@ -72,22 +69,6 @@ const targetOf = (repo: ProjectRepo, env: NodeJS.ProcessEnv): GhTarget => ({
   cwd: repo.path,
   env,
 });
-
-function liveSessionsByRepo(
-  db: Parameters<typeof getProject>[0],
-  projectId: string,
-  repos: ProjectRepo[],
-): Map<string, string[]> {
-  const sessions = listLiveProjectSessions(db, projectId).map(({ id, cwd, worktreeRepo }) => ({
-    id,
-    cwd: pathKey(hookCwdOf(id) ?? cwd),
-    worktreeRepo: worktreeRepo ? pathKey(worktreeRepo) : null,
-  }));
-  return sessionsByRepo(
-    sessions,
-    repos.map((r) => ({ folder: r.folder, path: pathKey(r.path) })),
-  );
-}
 
 async function repoOfTask(
   db: Parameters<typeof getProject>[0],
