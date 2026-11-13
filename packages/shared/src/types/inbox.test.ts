@@ -31,4 +31,15 @@ describe("inboxCountsOn", () => {
   it("leaves out a colab the project is not in", () => {
     expect(counted("d")).toEqual([]);
   });
+
+  it("counts a close that waits for the project that opened the thread", () => {
+    const waiting = {
+      ...thread("t5", "colab", "c2", "c"),
+      closing: "resolved",
+      openerProject: "b",
+    };
+    const on = (projectId: string) =>
+      inboxCountsOn(waiting as InboxThread, projectId, new Set<string>());
+    expect([on("b"), on("c"), on("a")]).toEqual([true, true, false]);
+  });
 });

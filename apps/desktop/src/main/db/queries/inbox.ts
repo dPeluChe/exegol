@@ -27,12 +27,13 @@ const now = () => Math.floor(Date.now() / 1000);
 const THREAD_SELECT = `SELECT t.*, r.last_read_seq,
     (SELECT MAX(seq) FROM inbox_messages m WHERE m.thread_id = t.id) AS last_seq,
     (SELECT COUNT(*) FROM inbox_messages m WHERE m.thread_id = t.id AND m.author_kind = 'agent') AS agent_turns,
-    (SELECT agent_id FROM inbox_messages m WHERE m.thread_id = t.id AND m.seq = 1) AS opener_agent,
+    o.agent_id AS opener_agent, o.project_id AS opener_project,
     (SELECT last_read_seq FROM inbox_reads o
       WHERE o.thread_id = t.id AND o.project_id = t.owner_project) AS owner_read_seq,
     (SELECT author_kind FROM inbox_messages m WHERE m.thread_id = t.id ORDER BY m.seq DESC LIMIT 1) AS last_author_kind,
     (SELECT agent_id FROM inbox_messages m WHERE m.thread_id = t.id ORDER BY m.seq DESC LIMIT 1) AS last_agent
   FROM inbox_threads t
+  LEFT JOIN inbox_messages o ON o.thread_id = t.id AND o.seq = 1
   LEFT JOIN inbox_reads r ON r.thread_id = t.id AND r.project_id = @projectId`;
 
 // The one reach rule. A null project is a person. A personal thread reaches a project through
@@ -54,6 +55,8 @@ function toThread(row: Record<string, unknown>): InboxThread {
     url: (row.url as string) ?? null,
     status: row.status as InboxStatus,
     resolution: (row.resolution as string) ?? null,
+    closing: (row.closing_status as InboxCloseStatus) ?? null,
+    closingLine: (row.closing_line as string) ?? null,
     ownerProject: (row.owner_project as string) ?? null,
     forwardedFrom: row.forwarded_from ? threadKey(row.forwarded_from as number) : null,
     openedAt: row.opened_at as number,
@@ -62,6 +65,7 @@ function toThread(row: Record<string, unknown>): InboxThread {
     agentTurns: row.agent_turns as number,
     lastSeq: (row.last_seq as number) ?? 0,
     openerAgent: (row.opener_agent as string) ?? null,
+    openerProject: (row.opener_project as string) ?? null,
     lastTurn: row.last_turn === 1,
     lastReadSeq: (row.last_read_seq as number) ?? null,
     ownerReadSeq: (row.owner_read_seq as number) ?? null,
@@ -220,12 +224,15 @@ export function listThreads(db: Database.Database, filter: ThreadFilter): InboxT
   return rows.map(toThread);
 }
 
-// What a project counts as waiting on it: as `inboxCountsOn`, plus what the person handed it
+// What a project counts as waiting on it: as `inboxCountsOn` (its last line is
+// `inboxAwaitsConfirmFrom`), plus what the person handed it
 const COUNTS_ON_SQL = `((t.scope = 'project' AND t.scope_id = @projectId)
   OR (t.scope = 'personal' AND r.thread_id IS NOT NULL)
   OR (t.scope = 'colab' AND (t.to_project = @projectId OR (t.to_project IS NULL
         AND EXISTS (SELECT 1 FROM colab_members cm
-          WHERE cm.colab_id = t.scope_id AND cm.project_id = @projectId)))))`;
+          WHERE cm.colab_id = t.scope_id AND cm.project_id = @projectId))))
+  OR (t.closing_status IS NOT NULL AND @projectId = (SELECT project_id FROM inbox_messages m
+        WHERE m.thread_id = t.id AND m.seq = 1)))`;
 
 export function countActiveThreads(db: Database.Database, projectId: string): number {
   const { n } = db
@@ -272,8 +279,44 @@ export function closeThread(
   resolution: string,
 ): void {
   db.prepare(
-    "UPDATE inbox_threads SET status = ?, resolution = ?, last_activity_at = ? WHERE id = ?",
+    `UPDATE inbox_threads
+     SET status = ?, resolution = ?, closing_status = NULL, closing_line = NULL,
+         last_activity_at = ? WHERE id = ?`,
   ).run(status, resolution, now(), threadRowId(key));
+}
+
+/** The thread stays active: its close waits for the side that opened it */
+export function proposeClose(
+  db: Database.Database,
+  key: string,
+  status: InboxCloseStatus,
+  line: string,
+): void {
+  db.prepare("UPDATE inbox_threads SET closing_status = ?, closing_line = ? WHERE id = ?").run(
+    status,
+    line,
+    threadRowId(key),
+  );
+}
+
+export function dropProposal(db: Database.Database, key: string): void {
+  db.prepare(
+    "UPDATE inbox_threads SET closing_status = NULL, closing_line = NULL WHERE id = ?",
+  ).run(threadRowId(key));
+}
+
+export function reopenThread(db: Database.Database, key: string): void {
+  db.prepare("UPDATE inbox_threads SET status = 'open', resolution = NULL WHERE id = ?").run(
+    threadRowId(key),
+  );
+}
+
+/** The thread a forward moved this one to, if any */
+export function forwardedTo(db: Database.Database, key: string): string | null {
+  const row = db
+    .prepare("SELECT id FROM inbox_threads WHERE forwarded_from = ? LIMIT 1")
+    .get(threadRowId(key)) as { id: number } | undefined;
+  return row ? threadKey(row.id) : null;
 }
 
 /** Only where none was given: an issue link must not hide the thread's own */

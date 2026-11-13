@@ -2,7 +2,8 @@ import Database from "libsql";
 import { beforeEach, describe, expect, it } from "vitest";
 import { runMigrations } from "../db/migrations";
 import { getThread } from "../db/queries/inbox";
-import { close, giveLastTurn, handOver, PERSON } from "../inbox/threads";
+import { forward } from "../inbox/forward";
+import { close, giveLastTurn, handOver, PERSON, readThread, reopen } from "../inbox/threads";
 import { callInboxTool } from "./exegol-inbox-tools";
 import type { ExegolToolContext } from "./exegol-protocol";
 import type { InboxToolName } from "./inbox-tool-defs";
@@ -114,7 +115,7 @@ describe("closing", () => {
     expect(getThread(db, thread, null)?.resolution).toBe("Not needed");
   });
 
-  it("never reopens: a new thread references it", async () => {
+  it("is never reopened by a session: a new thread references it", async () => {
     const { thread } = await post();
     const twin = await post("Safari form fails here too");
     expect(twin.similar_open.map((t) => t.thread)).toEqual([thread]);
@@ -131,6 +132,20 @@ describe("closing", () => {
       thread: linked.thread,
     });
     expect(got.refs).toEqual([expect.objectContaining({ thread, resolution: "Fixed" })]);
+  });
+
+  it("is reopened only by a person, saying what it was; a forwarded one stays closed", async () => {
+    const { thread } = await post();
+    expect(() => reopen(db, thread)).toThrow("not closed");
+    close(db, PERSON, thread, "dismissed", "Not needed");
+    reopen(db, thread);
+    expect(getThread(db, thread, null)).toMatchObject({ status: "open", resolution: null });
+    expect(readThread(db, PERSON, thread, 0).messages.at(-1)?.body).toBe(
+      "Reopened. It was dismissed: Not needed",
+    );
+
+    const moved = forward(db, thread, { scope: "personal" });
+    expect(() => reopen(db, thread)).toThrow(`reopen ${moved.id}`);
   });
 
   it("refuses a ref to a thread still open", async () => {

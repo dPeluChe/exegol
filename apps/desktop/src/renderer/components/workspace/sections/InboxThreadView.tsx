@@ -223,19 +223,43 @@ function Actions({
   const sendReply = async () => {
     if (await act("inbox.reply", { body: reply })) setReply("");
   };
-  const closeAs = (status: InboxCloseStatus) => act("inbox.close", { status, resolution: line });
+  const closeAs = (status: InboxCloseStatus, resolution = line) =>
+    act("inbox.close", { status, resolution });
 
   return (
     <footer className="flex flex-col gap-1.5 border-t border-border p-2">
+      {thread.closing && (
+        <ThreadNotice tone="text-warning">
+          <span className="min-w-0 flex-1">
+            Close proposed ({thread.closing}): {thread.closingLine}. The project that opened it has
+            not confirmed.
+          </span>
+          <Button
+            size="sm"
+            disabled={busy}
+            onClick={() => thread.closing && void closeAs(thread.closing, "")}
+          >
+            Confirm
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            disabled={busy}
+            onClick={() => void act("inbox.keepOpen", {})}
+          >
+            Keep open
+          </Button>
+        </ThreadNotice>
+      )}
       {atLimit ? (
-        <div className="flex items-center gap-2 text-xs text-warning">
+        <ThreadNotice tone="text-warning">
           <span className="min-w-0 flex-1">
             {INBOX_TURN_LIMIT} agent messages: close it or give one last turn.
           </span>
           <Button size="sm" disabled={busy} onClick={() => void act("inbox.lastTurn", {})}>
             One last turn
           </Button>
-        </div>
+        </ThreadNotice>
       ) : (
         <SendToSession thread={thread} repo={repo} homeProject={homeProject} />
       )}
@@ -289,6 +313,30 @@ function Actions({
         </div>
       )}
     </footer>
+  );
+}
+
+const ThreadNotice = ({ tone, children }: { tone: string; children: React.ReactNode }) => (
+  <div className={cn("flex items-center gap-2 text-xs", tone)}>{children}</div>
+);
+
+/** How it ended, and the person's way back: a session never reopens one */
+function ClosedLine({ thread }: { thread: InboxThread }) {
+  const { busy, act } = useThreadAct(thread.id);
+  return (
+    <ThreadNotice tone="text-text-secondary">
+      <p className="min-w-0 flex-1">
+        {thread.status}: {thread.resolution}
+      </p>
+      <Button
+        size="sm"
+        variant="ghost"
+        disabled={busy}
+        onClick={() => void act("inbox.reopen", {})}
+      >
+        Reopen
+      </Button>
+    </ThreadNotice>
   );
 }
 
@@ -346,7 +394,7 @@ export function InboxThreadView({
             onClick={() => onOpen(ref.id)}
             className="block max-w-full truncate text-[10px] text-text-secondary hover:underline"
           >
-            {ref.id} {ref.title}: {ref.resolution}
+            {ref.id} {ref.title}: {ref.resolution ?? ref.status}
           </button>
         ))}
       </header>
@@ -355,11 +403,7 @@ export function InboxThreadView({
           {messages.map((message) => (
             <Message key={message.seq} message={message} />
           ))}
-          {closed && (
-            <p className="text-xs text-text-secondary">
-              {thread.status}: {thread.resolution}
-            </p>
-          )}
+          {closed && <ClosedLine thread={thread} />}
         </div>
       </div>
       <InboxMoreActions

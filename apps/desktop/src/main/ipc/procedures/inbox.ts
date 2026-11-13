@@ -14,9 +14,11 @@ import {
   giveLastTurn,
   InboxError,
   type InboxTarget,
+  keepOpen,
   openThread,
   PERSON,
   readThread,
+  reopen,
   replyTo,
 } from "../../inbox/threads";
 import { publicProcedure, router } from "../trpc";
@@ -94,6 +96,14 @@ export const inboxRouter = router({
     .mutation(({ ctx, input }) =>
       inboxCall(() => close(ctx.db, PERSON, input.id, input.status, input.resolution)),
     ),
+
+  keepOpen: publicProcedure
+    .input(threadId)
+    .mutation(({ ctx, input }) => inboxCall(() => keepOpen(ctx.db, input.id))),
+
+  reopen: publicProcedure
+    .input(threadId)
+    .mutation(({ ctx, input }) => inboxCall(() => reopen(ctx.db, input.id))),
 
   lastTurn: publicProcedure
     .input(threadId)

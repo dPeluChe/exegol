@@ -484,4 +484,13 @@ export const wave3Migrations: Migration[] = [
       CREATE UNIQUE INDEX idx_colab_one_main ON colab_members (colab_id) WHERE main = 1;
     `,
   },
+  {
+    // A close proposed from another project than the opener's ('resolved' | 'dismissed') and
+    // its line, until the opener's side confirms or answers; null otherwise
+    id: "w3_045_inbox_closing",
+    sql: `
+      ALTER TABLE inbox_threads ADD COLUMN closing_status TEXT;
+      ALTER TABLE inbox_threads ADD COLUMN closing_line TEXT;
+    `,
+  },
 ];

@@ -1,4 +1,9 @@
-import { atInboxTurnLimit, type InboxMessage, type InboxThread } from "@exegol/shared";
+import {
+  atInboxTurnLimit,
+  type InboxMessage,
+  type InboxThread,
+  isInboxClosed,
+} from "@exegol/shared";
 import type Database from "libsql";
 import { FOLLOW_UP_MAX_CHARS, queueFollowUp } from "../agents/follow-up-queue";
 import { getAgent } from "../db/queries/agents";
@@ -10,7 +15,9 @@ import { handOver, InboxError, openThreadOrThrow, PERSON, take } from "./threads
 const MAX_PASTED_CHARS = FOLLOW_UP_MAX_CHARS - 2_000;
 
 const refLine = (ref: InboxThread) =>
-  `See also ${ref.id} (${ref.status}: ${JSON.stringify(ref.resolution)}). Closed, read only.`;
+  isInboxClosed(ref.status)
+    ? `See also ${ref.id} (${ref.status}: ${JSON.stringify(ref.resolution)}). Closed, read only.`
+    : `See also ${ref.id} (${ref.status}, reopened by the person).`;
 
 /** Newest first until the room runs out. A body must not be able to close the marker */
 function pastedBodies(messages: InboxMessage[]): string {
