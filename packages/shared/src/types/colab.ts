@@ -19,4 +19,6 @@ export interface ColabMember {
   repo: string;
   /** Free text: "blueprint", "clone of it" */
   role: string;
+  /** The member that does the work the colab's threads ask for; one per colab at most */
+  main: boolean;
 }

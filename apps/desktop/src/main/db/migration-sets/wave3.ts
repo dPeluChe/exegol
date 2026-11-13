@@ -473,4 +473,9 @@ export const wave3Migrations: Migration[] = [
     id: "w3_043_project_mcp_servers",
     sql: "ALTER TABLE projects ADD COLUMN mcp_servers TEXT;",
   },
+  {
+    // The member that does the work the colab's threads ask for; one per colab at most
+    id: "w3_044_colab_member_main",
+    sql: "ALTER TABLE colab_members ADD COLUMN main INTEGER NOT NULL DEFAULT 0;",
+  },
 ];

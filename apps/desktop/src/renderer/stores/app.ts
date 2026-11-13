@@ -42,6 +42,12 @@ interface AppStore {
   /** Colabs tab narrowed to one project, from a Company badge. In memory */
   inboxProject: string | null;
   openInbox: (projectId: string | null) => void;
+  /** The Colabs tab opens on a new colab, with this project as its first member. In memory */
+  colabDraft: { projectId: string | null } | null;
+  openNewColab: (projectId: string | null) => void;
+  clearColabDraft: () => void;
+  colabsHelpHidden: boolean;
+  setColabsHelpHidden: (hidden: boolean) => void;
   /** The session Company shows, a pick or the default on screen when it was left, and how; held
    *  here, off persist, so leaving the view keeps them */
   companyPickedId: string | null;
@@ -237,6 +243,19 @@ export const useAppStore = create<AppStore>()(
       setDashboardMode: (mode) => set({ dashboardMode: mode }),
       inboxProject: null,
       openInbox: (projectId) => set({ dashboardMode: "colabs", inboxProject: projectId }),
+      colabDraft: null,
+      openNewColab: (projectId) =>
+        set({
+          activeView: "dashboard",
+          projectsFrom: null,
+          dashboardMode: "colabs",
+          inboxProject: null,
+          inboxMenuOpen: false,
+          colabDraft: { projectId },
+        }),
+      clearColabDraft: () => set((s) => (s.colabDraft ? { colabDraft: null } : s)),
+      colabsHelpHidden: false,
+      setColabsHelpHidden: (hidden) => set({ colabsHelpHidden: hidden }),
       companyPickedId: null,
       setCompanyPickedId: (id) =>
         set((s) => (s.companyPickedId === id ? s : { companyPickedId: id })),
@@ -276,6 +295,7 @@ export const useAppStore = create<AppStore>()(
         claudePlanUsage: state.claudePlanUsage,
         companySeenAt: state.companySeenAt,
         dashboardMode: state.dashboardMode,
+        colabsHelpHidden: state.colabsHelpHidden,
         companySessionSide: state.companySessionSide,
         companySessionSizes: state.companySessionSizes,
         companyChatFont: state.companyChatFont,

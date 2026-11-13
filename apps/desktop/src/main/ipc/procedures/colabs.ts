@@ -7,6 +7,7 @@ import {
   deleteColab,
   listColabs,
   removeColabMember,
+  setColabMain,
   updateColab,
 } from "../../db/queries/colabs";
 import { countColabActiveThreads } from "../../db/queries/inbox";
@@ -77,6 +78,12 @@ export const colabsRouter = router({
       const { colabId, projectId, repo, role } = input;
       return changed(addColabMember(ctx.db, colabId, { projectId, repo, role }));
     }),
+
+  setMain: publicProcedure
+    .input(member.extend({ main: z.boolean() }))
+    .mutation(({ ctx, input }) =>
+      changed(setColabMain(ctx.db, input.colabId, input.projectId, input.repo, input.main)),
+    ),
 
   removeMember: publicProcedure
     .input(member)

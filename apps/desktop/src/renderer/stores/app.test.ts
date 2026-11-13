@@ -130,3 +130,20 @@ describe("workspace section", () => {
     expect(useAppStore.getState().workspaceSection).toBe("agents");
   });
 });
+
+describe("openNewColab", () => {
+  it("shows the Colabs tab on a new colab for that project and closes the Inbox menu", () => {
+    useAppStore.setState({ activeView: "projects", inboxMenuOpen: true, inboxProject: "p9" });
+    useAppStore.getState().openNewColab("p1");
+    const s = useAppStore.getState();
+    expect([s.activeView, s.dashboardMode, s.inboxMenuOpen, s.inboxProject]).toEqual([
+      "dashboard",
+      "colabs",
+      false,
+      null,
+    ]);
+    expect(s.colabDraft).toEqual({ projectId: "p1" });
+    s.clearColabDraft();
+    expect(useAppStore.getState().colabDraft).toBeNull();
+  });
+});

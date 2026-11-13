@@ -7,21 +7,27 @@ import { notesFolder } from "../notes/folders";
 
 const MAX_COLABS = 3;
 const MAX_TITLES = 20;
+const MAIN_MEMBER = "main member, does the work";
 
 /** Names and purpose come from the person; a colab's notes only as a count, never their text */
 async function colabLine(db: Database.Database, colab: Colab, projectId: string) {
   const others = colab.members
     .filter((m) => m.projectId !== projectId)
     .map((m) =>
-      [m.repo ? `${m.projectName} (${m.repo})` : m.projectName, m.role].filter(Boolean).join(", "),
+      [m.repo ? `${m.projectName} (${m.repo})` : m.projectName, m.role, m.main && MAIN_MEMBER]
+        .filter(Boolean)
+        .join(", "),
     );
+  const own = colab.members.some((m) => m.projectId === projectId && m.main)
+    ? " This project is its main member: the work its threads ask for is done here."
+    : "";
   const purpose = colab.purpose ? ` Purpose: ${colab.purpose}` : "";
   const folder = notesFolder(db, { scope: "colab", colabId: colab.id });
   const count = folder ? (await noteIds(folder.dir)).length : 0;
   const notes = count > 0 ? ` Its notes: ${count}, see note_list scope colab.` : "";
   return (
     `You are in colab ${JSON.stringify(colab.name)} with ${others.join("; ") || "no one yet"}.` +
-    `${purpose} Tell them what they should know with inbox_post target colab.${notes}`
+    `${own}${purpose} Tell them what they should know with inbox_post target colab.${notes}`
   );
 }
 

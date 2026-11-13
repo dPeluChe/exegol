@@ -399,6 +399,7 @@
       "delete",
       "list",
       "removeMember",
+      "setMain",
       "update"
     ],
     "commander": [
