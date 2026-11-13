@@ -2,6 +2,7 @@ import type { AgentStatus } from "@exegol/shared";
 import { describe, expect, it } from "vitest";
 import {
   buildSendSections,
+  groupTargets,
   hasSendTargets,
   sendAction,
   sendHint,
@@ -154,6 +155,31 @@ describe("sendAction", () => {
   it("never submits into an agent asking a question", () => {
     expect(sendAction(agent, prefs(true, true), true)).toBe("held");
     expect(sendAction(agent, prefs(false, true), true)).toBe("held");
+  });
+});
+
+describe("groupTargets", () => {
+  it("turns sessions into targets under their project's name, or a stand-in for one unknown", () => {
+    const session = (id: string, projectId: string) => ({
+      id,
+      projectId,
+      alias: id,
+      cliType: "codex",
+    });
+    expect(
+      groupTargets([session("amber", "p1"), session("corvus", "p2")], new Map([["p1", "Blue"]])),
+    ).toEqual([
+      {
+        projectId: "p1",
+        projectName: "Blue",
+        targets: [{ id: "amber", name: "amber", cliType: "codex", projectId: "p1" }],
+      },
+      {
+        projectId: "p2",
+        projectName: "another project",
+        targets: [{ id: "corvus", name: "corvus", cliType: "codex", projectId: "p2" }],
+      },
+    ]);
   });
 });
 

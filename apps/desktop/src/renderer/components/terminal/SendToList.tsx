@@ -8,6 +8,7 @@ import {
   type SendGroup,
   type SendSections,
   type SendTarget,
+  sectionGroups,
   sendHint,
   sendLabel,
 } from "./send-targets";
@@ -126,7 +127,7 @@ export function SendToList({
   };
   // A TUI repaint or mouse report can clear the selection while the list is open
   const [opened] = useState(getSelection);
-  const names = useCliSessionNames(sections);
+  const names = useCliSessionNames(sectionGroups(sections));
   const onPick = (t: SendTarget) => {
     const live = getSelection();
     onSent();

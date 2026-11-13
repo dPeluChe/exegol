@@ -1,19 +1,11 @@
 import { cn } from "@exegol/ui";
 import { useProjects } from "../../hooks/use-trpc";
-import { sessionName } from "../../lib/agent-label";
+import { byProject, OTHER_PROJECT, sessionName } from "../../lib/agent-label";
 import { SEMANTIC_BADGE } from "../../lib/semantic-colors";
 import type { AgentState } from "../../stores/agents";
 import { ProjectChip, type ProjectMeta } from "./ProjectChip";
 
 type Session = Pick<AgentState, "id" | "projectId" | "alias" | "taskDescription" | "cliType">;
-
-const OTHER_PROJECT = "another project";
-
-const byProject = <T extends Pick<Session, "projectId">>(list: T[]) => {
-  const groups = new Map<string, T[]>();
-  for (const s of list) groups.set(s.projectId, [...(groups.get(s.projectId) ?? []), s]);
-  return groups;
-};
 
 /** Sessions grouped by project in first-seen order; past `max` they go to `hidden` */
 export function groupSessions<T extends Pick<Session, "projectId">>(sessions: T[], max: number) {

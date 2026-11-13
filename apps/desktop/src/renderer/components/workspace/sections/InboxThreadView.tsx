@@ -17,6 +17,7 @@ import { useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useColabs } from "../../../hooks/use-inbox";
 import { useLaunchableProviders } from "../../../hooks/use-providers";
+import { useProjects } from "../../../hooks/use-trpc";
 import { useGitHubOverview } from "../../../hooks/use-trpc-github";
 import { sessionName } from "../../../lib/agent-label";
 import { startInNewTab, takesPrompt } from "../../../lib/github-handoff";
@@ -25,12 +26,14 @@ import { isLongMessage, keepLineBreaks } from "../../../lib/inbox-text";
 import { openInBrowser } from "../../../lib/open-in-browser";
 import { isOpenSession } from "../../../lib/sidebar-views";
 import { trpcInvoke } from "../../../lib/trpc-client";
-import { type AgentState, useAgentStore } from "../../../stores/agents";
+import { useAgentStore } from "../../../stores/agents";
 import { toastError, useToastStore } from "../../../stores/toasts";
 import { INPUT_CLASS } from "../../agents/SpawnOptions";
 import { AgentIcon } from "../../common/AgentIcon";
 import { FilterChip } from "../../common/FilterChip";
 import type { ProjectMeta } from "../../common/ProjectChip";
+import { groupTargets, type SendTarget, sendLabel } from "../../terminal/send-targets";
+import { useCliSessionNames } from "../../terminal/use-send-to";
 import { inboxPlace } from "../inbox-place";
 import { ChatMarkdown } from "./ChatMarkdown";
 import { InboxMoreActions, useThreadAct } from "./InboxMoreActions";
@@ -103,6 +106,10 @@ function SendToSession({
   const clis = useLaunchableProviders().filter(takesPrompt);
   const { data: overview } = useGitHubOverview(repo ? projectId : null);
   const ordered = sessionsInRepoFirst(sessions, sessionsOfNamedRepo(overview?.repos ?? [], repo));
+  const { data: projects = [] } = useProjects();
+  const groups = groupTargets(ordered, new Map(projects.map((p) => [p.id, p.name])));
+  const cliNames = useCliSessionNames(groups);
+  const several = groups.length > 1;
 
   const startInTab = async (cliType: AgentCliType) => {
     if (!tabProject) return;
@@ -119,15 +126,15 @@ function SendToSession({
     }).catch(toastError(`${thread.id}: session not started`));
   };
 
-  const send = async (session: AgentState) => {
+  const send = async (target: SendTarget, label: string) => {
     const sent = await act<{ delivered: boolean }>("inbox.sendToSession", {
-      agentId: session.id,
+      agentId: target.id,
     });
     if (!sent) return;
     const { delivered } = sent.value;
     useToastStore.getState().addToast({
       type: "info",
-      title: `${thread.id} ${delivered ? "sent to" : "queued for"} ${sessionName(session)}`,
+      title: `${thread.id} ${delivered ? "sent to" : "queued for"} ${label}`,
     });
   };
 
@@ -135,21 +142,30 @@ function SendToSession({
     <div className="flex flex-col gap-1">
       <div className="flex flex-wrap items-center gap-1">
         <span className="text-[10px] text-text-muted">Send to</span>
-        {ordered.length === 0 && (
+        {groups.length === 0 && (
           <span className="text-[10px] text-text-muted">no open session here,</span>
         )}
-        {ordered.map((session) => (
-          <FilterChip
-            key={session.id}
-            active={false}
-            className={CHIP}
-            disabled={busy}
-            onClick={() => void send(session)}
-          >
-            <AgentIcon provider={session.cliType} size={12} />
-            {sessionName(session)}
-          </FilterChip>
-        ))}
+        {groups.flatMap((group) =>
+          group.targets.map((target) => {
+            const name = sendLabel(target, cliNames[target.id]);
+            const label = several ? `${name} · ${group.projectName}` : name;
+            return (
+              <FilterChip
+                key={target.id}
+                active={false}
+                className={CHIP}
+                disabled={busy}
+                onClick={() => void send(target, label)}
+              >
+                <AgentIcon provider={target.cliType} size={12} />
+                <span className="truncate" title={label}>
+                  {name}
+                </span>
+                {several && <span className="shrink-0 text-text-muted">{group.projectName}</span>}
+              </FilterChip>
+            );
+          }),
+        )}
         {tabProject && (
           <FilterChip
             active={picking}
@@ -188,7 +204,7 @@ function SendToSession({
 }
 
 const CHIP =
-  "flex max-w-40 items-center gap-1 truncate border border-border text-[11px] text-text-primary";
+  "flex max-w-72 items-center gap-1 truncate border border-border text-[11px] text-text-primary";
 
 function Actions({
   thread,
