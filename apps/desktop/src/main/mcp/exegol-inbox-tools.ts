@@ -2,6 +2,7 @@ import {
   type Colab,
   type InboxAuthor,
   type InboxThread,
+  inboxAwaitsConfirmFrom,
   pathBase,
   pathParent,
 } from "@exegol/shared";
@@ -68,7 +69,16 @@ const summary = (t: InboxThread) => ({
   title: t.title,
   status: t.status,
   resolution: t.resolution,
+  ...(t.closing ? { closing: t.closing, closing_line: t.closingLine } : {}),
 });
+
+const TO_CONFIRM =
+  "The other side proposes this close (closing, closing_line). Done on your side too: confirm " +
+  "with inbox_close, your resolution adding only what yours did. Not done: inbox_reply with " +
+  "what is missing, and the thread goes on.";
+const PROPOSED =
+  "Not closed yet: the project that opened it confirms, or answers with what is missing. It " +
+  "wakes nobody; to tell a live session there now, agent_send it the thread id.";
 
 function targetOf(colabs: Colab[], args: Record<string, unknown>, projectId: string): InboxTarget {
   if (args.target === "personal") return { scope: "personal" };
@@ -144,6 +154,7 @@ const HANDLERS: Record<InboxToolName, Handler> = {
     const { thread, messages, refs } = readThread(db, actorOf(context), text(args.thread), since);
     return {
       ...summary(thread),
+      ...(inboxAwaitsConfirmFrom(thread, context.projectId) ? { next: TO_CONFIRM } : {}),
       url: thread.url,
       last_seq: thread.lastSeq,
       refs: refs.map(summary),
@@ -167,13 +178,16 @@ const HANDLERS: Record<InboxToolName, Handler> = {
     return { thread, taken: take(db, actorOf(context), thread) };
   },
 
-  inbox_close: (db, args, context) => {
+  inbox_close: async (db, args, context) => {
     if (args.status !== "resolved" && args.status !== "dismissed") {
       throw new InboxError("status must be resolved or dismissed");
     }
     const thread = text(args.thread);
-    close(db, actorOf(context), thread, args.status, text(args.resolution));
-    return { thread, status: args.status };
+    const author = await authorOf(db, context);
+    const done = close(db, author, thread, args.status, text(args.resolution));
+    return done === "closed"
+      ? { thread, status: args.status }
+      : { thread, status: "awaiting_confirmation", proposed: args.status, next: PROPOSED };
   },
 };
 

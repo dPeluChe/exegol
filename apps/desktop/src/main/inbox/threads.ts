@@ -8,12 +8,16 @@ import {
   type InboxAuthor,
   type InboxCloseStatus,
   type InboxThread,
+  inboxAwaitsConfirmFrom,
+  inboxCloseNeedsConfirm,
   isInboxClosed,
 } from "@exegol/shared";
 import type Database from "libsql";
 import { isColabMember } from "../db/queries/colabs";
 import {
   closeThread,
+  dropProposal,
+  forwardedTo,
   getThread,
   grantLastTurn,
   insertMessage,
@@ -21,6 +25,8 @@ import {
   listMessages,
   listThreads,
   markRead,
+  proposeClose,
+  reopenThread,
   takeThread,
   threadsOpenedBySince,
 } from "../db/queries/inbox";
@@ -175,6 +181,8 @@ export function replyTo(
   }
   const seq = insertMessage(db, key, bounded(body, INBOX_BODY_MAX, "body"), author);
   if (author.projectId) markRead(db, key, author.projectId, seq);
+  // The side that confirms answered instead: there is more to do, the proposal is off
+  if (thread.closing && confirms(thread, author)) dropProposal(db, key);
   notifyInboxChanged();
   return seq;
 }
@@ -204,19 +212,59 @@ export function take(db: Database.Database, actor: InboxActor, key: string): boo
   return taken;
 }
 
+/** Who settles a proposed close: a person, or the project that opened the thread */
+const confirms = (thread: InboxThread, actor: InboxActor) =>
+  actor.authorKind === "user" || inboxAwaitsConfirmFrom(thread, actor.projectId);
+
+/** A person or the opener's side closes, with its own status; over a proposed close its line
+ *  follows the proposed one, or stands for it when empty. A session of another project
+ *  proposes: the thread stays active, the proposal kept as a message, until the opener's side
+ *  confirms or answers (only while that project still reaches the thread) */
 export function close(
   db: Database.Database,
   actor: InboxActor,
   key: string,
   status: InboxCloseStatus,
   resolution: string,
-): void {
+): "closed" | "proposed" {
   const thread = reachable(db, actor, key);
   if (isInboxClosed(thread.status)) throw new InboxError(`${key} is already closed`);
-  if (actor.agentId && thread.openerAgent === actor.agentId) {
+  if (inboxCloseNeedsConfirm(thread, actor) && getThread(db, key, thread.openerProject)) {
+    const line = bounded(resolution, INBOX_RESOLUTION_MAX, "resolution");
+    proposeClose(db, key, status, line);
+    const seq = insertMessage(db, key, `Proposes to close as ${status}: ${line}`, {
+      ...PERSON,
+      ...actor,
+    });
+    if (actor.projectId) markRead(db, key, actor.projectId, seq);
+    notifyInboxChanged();
+    return "proposed";
+  }
+  if (actor.agentId && thread.openerAgent === actor.agentId && !thread.closing) {
     throw new InboxError("The session that opened a thread does not close it");
   }
-  closeThread(db, key, status, bounded(resolution, INBOX_RESOLUTION_MAX, "resolution"));
+  const line = [thread.closingLine, resolution.trim()].filter(Boolean).join(" / ");
+  closeThread(db, key, status, bounded(line, INBOX_RESOLUTION_MAX, "resolution"));
+  notifyInboxChanged();
+  return "closed";
+}
+
+/** A person's call: the proposed close is off and the thread goes on */
+export function keepOpen(db: Database.Database, key: string): void {
+  if (!reachable(db, PERSON, key).closing) throw new InboxError(`${key} has no close to refuse`);
+  dropProposal(db, key);
+  notifyInboxChanged();
+}
+
+/** A person's call, never a session's: a closed thread is active again, and says what it was.
+ *  A forwarded one stays closed: the thread it moved to is the live copy */
+export function reopen(db: Database.Database, key: string): void {
+  const thread = reachable(db, PERSON, key);
+  if (!isInboxClosed(thread.status)) throw new InboxError(`${key} is not closed`);
+  const moved = forwardedTo(db, key);
+  if (moved) throw new InboxError(`${key} was forwarded: reopen ${moved}`);
+  reopenThread(db, key);
+  insertMessage(db, key, `Reopened. It was ${thread.status}: ${thread.resolution ?? ""}`, PERSON);
   notifyInboxChanged();
 }
 
