@@ -24,9 +24,13 @@ export interface InboxThread {
   url: string | null;
   status: InboxStatus;
   resolution: string | null;
-  /** A close another project proposed, waiting for the project that opened the thread */
+  /** A close one project proposed, waiting for the others that wrote in the thread */
   closing: InboxCloseStatus | null;
   closingLine: string | null;
+  /** The projects that agreed to that close, the one that proposed it first */
+  closingBy: string[];
+  /** The projects whose sessions wrote in the thread */
+  writers: string[];
   ownerProject: string | null;
   /** The thread this one was forwarded from, closed when it was */
   forwardedFrom: string | null;
@@ -92,30 +96,25 @@ export const INBOX_PENDING_LABEL: Record<InboxPendingState, string> = {
 export const inboxProjectOf = (t: Pick<InboxThread, "scope" | "scopeId" | "toProject">) =>
   t.scope === "project" ? t.scopeId : t.scope === "colab" ? t.toProject : null;
 
-/** A proposed close waits for the project that opened the thread */
-export const inboxAwaitsConfirmFrom = (
-  t: Pick<InboxThread, "closing" | "openerProject">,
-  projectId: string | null,
-) => !!t.closing && !!projectId && t.openerProject === projectId;
+type ClosingThread = Pick<InboxThread, "closing" | "closingBy" | "writers">;
+
+/** The projects a proposed close still waits for: those that wrote and have not agreed */
+export const inboxCloseWaitsOn = (t: ClosingThread): string[] =>
+  t.closing ? t.writers.filter((p) => !t.closingBy.includes(p)) : [];
+
+export const inboxAwaitsConfirmFrom = (t: ClosingThread, projectId: string | null) =>
+  !!projectId && inboxCloseWaitsOn(t).includes(projectId);
 
 /** What a project counts as its own: also a thread for the whole of a colab it is in, and one
- *  it opened whose close waits for it */
+ *  whose close waits for it */
 export const inboxCountsOn = (
-  t: Pick<InboxThread, "scope" | "scopeId" | "toProject" | "closing" | "openerProject">,
+  t: Pick<InboxThread, "scope" | "scopeId" | "toProject"> & ClosingThread,
   projectId: string,
   colabIds: ReadonlySet<string>,
 ) =>
   inboxProjectOf(t) === projectId ||
   (t.scope === "colab" && !t.toProject && colabIds.has(t.scopeId ?? "")) ||
   inboxAwaitsConfirmFrom(t, projectId);
-
-/** A session of another project than the one whose session opened the thread proposes the close;
- *  the opener's side confirms it. A person, or the opener's own project, closes outright */
-export const inboxCloseNeedsConfirm = (
-  t: Pick<InboxThread, "openerAgent" | "openerProject">,
-  actor: Pick<InboxActor, "projectId">,
-) =>
-  !!actor.projectId && !!t.openerAgent && !!t.openerProject && t.openerProject !== actor.projectId;
 
 /** Who an active thread waits on. Derived, never stored: it waits on whoever did not write last */
 export function inboxPendingState(t: InboxThread): InboxPendingState {

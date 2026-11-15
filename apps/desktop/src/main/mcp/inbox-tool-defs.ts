@@ -109,9 +109,9 @@ export const INBOX_TOOL_DEFS: ToolBody<InboxToolName>[] = [
     title: "Close an inbox thread",
     description:
       "Close a thread you received once the work is done, with one line saying how it ended. " +
-      "When a session of another project opened it, your close is a proposal (status " +
-      "awaiting_confirmation) and that project confirms it with its own inbox_close, or answers " +
-      "with what is missing. Only a person reopens a closed thread.",
+      "When other projects wrote in it, your close is your project's agreement (status " +
+      "awaiting_confirmation, waits_for) and it closes once each of them agrees with its own " +
+      "inbox_close; one that answers instead keeps it open. Only a person reopens a closed thread.",
     inputSchema: {
       type: "object",
       properties: {

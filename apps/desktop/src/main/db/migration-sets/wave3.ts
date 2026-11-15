@@ -485,12 +485,26 @@ export const wave3Migrations: Migration[] = [
     `,
   },
   {
-    // A close proposed from another project than the opener's ('resolved' | 'dismissed') and
-    // its line, until the opener's side confirms or answers; null otherwise
+    // A proposed close ('resolved' | 'dismissed') and its line, until the projects it waits
+    // for agree or one answers; null otherwise
     id: "w3_045_inbox_closing",
     sql: `
       ALTER TABLE inbox_threads ADD COLUMN closing_status TEXT;
       ALTER TABLE inbox_threads ADD COLUMN closing_line TEXT;
+    `,
+  },
+  {
+    // The projects that agreed to a proposed close (JSON array of ids), the proposer first;
+    // a close already waiting gets the project of its "Proposes to close" message
+    id: "w3_046_inbox_closing_projects",
+    sql: `
+      ALTER TABLE inbox_threads ADD COLUMN closing_projects TEXT NOT NULL DEFAULT '[]';
+      UPDATE inbox_threads SET closing_projects = COALESCE((
+        SELECT json_array(m.project_id) FROM inbox_messages m
+        WHERE m.thread_id = inbox_threads.id AND m.project_id IS NOT NULL
+          AND m.body LIKE 'Proposes to close as %'
+        ORDER BY m.seq DESC LIMIT 1), '[]')
+      WHERE closing_status IS NOT NULL;
     `,
   },
 ];

@@ -24,11 +24,24 @@ const REFS = z.array(z.string());
 
 const now = () => Math.floor(Date.now() / 1000);
 
+// The one reach rule, for a project. A personal thread reaches it through the read row a
+// hand-over leaves; a colab thread reaches its members, for as long as they are
+const reachSql = (project: string) => `((t.scope = 'project' AND t.scope_id = ${project})
+  OR (t.scope = 'personal' AND EXISTS (SELECT 1 FROM inbox_reads h
+        WHERE h.thread_id = t.id AND h.project_id = ${project}))
+  OR (t.scope = 'colab' AND EXISTS (SELECT 1 FROM colab_members cm
+        WHERE cm.colab_id = t.scope_id AND cm.project_id = ${project})))`;
+
+// A null project is a person, who reaches every thread
+const REACH_SQL = `(@projectId IS NULL OR ${reachSql("@projectId")})`;
+
 const THREAD_SELECT = `SELECT t.*, r.last_read_seq,
     (SELECT MAX(seq) FROM inbox_messages m WHERE m.thread_id = t.id) AS last_seq,
     (SELECT COUNT(*) FROM inbox_messages m WHERE m.thread_id = t.id AND m.author_kind = 'agent'
       AND m.seq > COALESCE((SELECT seq FROM inbox_messages u
         WHERE u.thread_id = t.id AND u.author_kind = 'user' ORDER BY seq DESC LIMIT 1), 0)) AS agent_turns,
+    (SELECT json_group_array(DISTINCT m.project_id) FROM inbox_messages m WHERE m.thread_id = t.id
+      AND m.author_kind = 'agent' AND ${reachSql("m.project_id")}) AS writers,
     o.agent_id AS opener_agent, o.project_id AS opener_project,
     (SELECT last_read_seq FROM inbox_reads o
       WHERE o.thread_id = t.id AND o.project_id = t.owner_project) AS owner_read_seq,
@@ -37,14 +50,6 @@ const THREAD_SELECT = `SELECT t.*, r.last_read_seq,
   FROM inbox_threads t
   LEFT JOIN inbox_messages o ON o.thread_id = t.id AND o.seq = 1
   LEFT JOIN inbox_reads r ON r.thread_id = t.id AND r.project_id = @projectId`;
-
-// The one reach rule. A null project is a person. A personal thread reaches a project through
-// the read row a hand-over leaves; a colab thread reaches its members, for as long as they are
-const REACH_SQL = `(@projectId IS NULL
-  OR (t.scope = 'project' AND t.scope_id = @projectId)
-  OR (t.scope = 'personal' AND r.thread_id IS NOT NULL)
-  OR (t.scope = 'colab' AND EXISTS (SELECT 1 FROM colab_members cm
-        WHERE cm.colab_id = t.scope_id AND cm.project_id = @projectId)))`;
 
 function toThread(row: Record<string, unknown>): InboxThread {
   return {
@@ -59,6 +64,8 @@ function toThread(row: Record<string, unknown>): InboxThread {
     resolution: (row.resolution as string) ?? null,
     closing: (row.closing_status as InboxCloseStatus) ?? null,
     closingLine: (row.closing_line as string) ?? null,
+    closingBy: parseJson(row.closing_projects as string, REFS) ?? [],
+    writers: parseJson(row.writers as string, REFS) ?? [],
     ownerProject: (row.owner_project as string) ?? null,
     forwardedFrom: row.forwarded_from ? threadKey(row.forwarded_from as number) : null,
     openedAt: row.opened_at as number,
@@ -233,8 +240,11 @@ const COUNTS_ON_SQL = `((t.scope = 'project' AND t.scope_id = @projectId)
   OR (t.scope = 'colab' AND (t.to_project = @projectId OR (t.to_project IS NULL
         AND EXISTS (SELECT 1 FROM colab_members cm
           WHERE cm.colab_id = t.scope_id AND cm.project_id = @projectId))))
-  OR (t.closing_status IS NOT NULL AND @projectId = (SELECT project_id FROM inbox_messages m
-        WHERE m.thread_id = t.id AND m.seq = 1)))`;
+  OR (t.closing_status IS NOT NULL
+      AND EXISTS (SELECT 1 FROM inbox_messages m WHERE m.thread_id = t.id
+        AND m.author_kind = 'agent' AND m.project_id = @projectId)
+      AND ${REACH_SQL}
+      AND NOT EXISTS (SELECT 1 FROM json_each(t.closing_projects) j WHERE j.value = @projectId)))`;
 
 export function countActiveThreads(db: Database.Database, projectId: string): number {
   const { n } = db
@@ -283,27 +293,26 @@ export function closeThread(
   db.prepare(
     `UPDATE inbox_threads
      SET status = ?, resolution = ?, closing_status = NULL, closing_line = NULL,
-         last_activity_at = ? WHERE id = ?`,
+         closing_projects = '[]', last_activity_at = ? WHERE id = ?`,
   ).run(status, resolution, now(), threadRowId(key));
 }
 
-/** The thread stays active: its close waits for the side that opened it */
+/** The thread stays active: its close waits for the other projects that wrote in it */
 export function proposeClose(
   db: Database.Database,
   key: string,
   status: InboxCloseStatus,
   line: string,
+  agreed: string[],
 ): void {
-  db.prepare("UPDATE inbox_threads SET closing_status = ?, closing_line = ? WHERE id = ?").run(
-    status,
-    line,
-    threadRowId(key),
-  );
+  db.prepare(
+    "UPDATE inbox_threads SET closing_status = ?, closing_line = ?, closing_projects = ? WHERE id = ?",
+  ).run(status, line, JSON.stringify(agreed), threadRowId(key));
 }
 
 export function dropProposal(db: Database.Database, key: string): void {
   db.prepare(
-    "UPDATE inbox_threads SET closing_status = NULL, closing_line = NULL WHERE id = ?",
+    "UPDATE inbox_threads SET closing_status = NULL, closing_line = NULL, closing_projects = '[]' WHERE id = ?",
   ).run(threadRowId(key));
 }
 

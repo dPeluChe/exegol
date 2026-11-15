@@ -7,6 +7,7 @@ import {
   type InboxCloseStatus,
   type InboxMessage,
   type InboxThread,
+  inboxCloseWaitsOn,
   inboxProjectOf,
   isInboxClosed,
 } from "@exegol/shared";
@@ -32,7 +33,7 @@ import { FilterChip } from "../../common/FilterChip";
 import type { ProjectMeta } from "../../common/ProjectChip";
 import { groupTargets, type SendTarget, sendLabel } from "../../terminal/send-targets";
 import { useCliSessionNames } from "../../terminal/use-send-to";
-import { inboxPlace } from "../inbox-place";
+import { inboxPlace, nameOf } from "../inbox-place";
 import { InboxMessages } from "./InboxMessages";
 import { InboxMoreActions, useThreadAct } from "./InboxMoreActions";
 
@@ -178,16 +179,19 @@ function Actions({
   thread,
   repo,
   homeProject,
+  projectMeta,
 }: {
   thread: InboxThread;
   repo: string | null;
   homeProject: string | null;
+  projectMeta: ReadonlyMap<string, ProjectMeta>;
 }) {
   const { busy, act } = useThreadAct(thread.id);
   const [reply, setReply] = useState("");
   const [line, setLine] = useState("");
   const [closing, setClosing] = useState(false);
   const atLimit = atInboxTurnLimit(thread);
+  const named = (ids: string[]) => ids.map((id) => nameOf(projectMeta, id)).join(", ");
   const sendReply = async () => {
     if (await act("inbox.reply", { body: reply })) setReply("");
   };
@@ -199,8 +203,8 @@ function Actions({
       {thread.closing && (
         <ThreadNotice tone="text-warning">
           <span className="min-w-0 flex-1">
-            Close proposed ({thread.closing}): {thread.closingLine}. The project that opened it has
-            not confirmed.
+            Close proposed ({thread.closing}): {thread.closingLine}. Agreed:{" "}
+            {named(thread.closingBy)}. Waits for: {named(inboxCloseWaitsOn(thread))}.
           </span>
           <Button
             size="sm"
@@ -295,7 +299,8 @@ function ClosedLine({ thread }: { thread: InboxThread }) {
   return (
     <ThreadNotice tone="text-text-secondary">
       <p className="min-w-0 flex-1">
-        {thread.status}: {thread.resolution}
+        {thread.status} on {new Date(thread.lastActivityAt * 1000).toLocaleDateString()}:{" "}
+        {thread.resolution}
       </p>
       <Button
         size="sm"
@@ -379,7 +384,12 @@ export function InboxThreadView({
         onOpen={onOpen}
       />
       {!closed && (
-        <Actions thread={thread} repo={messages[0]?.repo ?? null} homeProject={homeProject} />
+        <Actions
+          thread={thread}
+          repo={messages[0]?.repo ?? null}
+          homeProject={homeProject}
+          projectMeta={projectMeta}
+        />
       )}
     </div>
   );

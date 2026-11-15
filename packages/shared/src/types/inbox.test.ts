@@ -32,11 +32,12 @@ describe("inboxCountsOn", () => {
     expect(counted("d")).toEqual([]);
   });
 
-  it("counts a close that waits for the project that opened the thread", () => {
+  it("counts a close that waits for a project that wrote and has not agreed", () => {
     const waiting = {
       ...thread("t5", "colab", "c2", "c"),
       closing: "resolved",
-      openerProject: "b",
+      closingBy: ["a"],
+      writers: ["a", "b"],
     };
     const on = (projectId: string) =>
       inboxCountsOn(waiting as InboxThread, projectId, new Set<string>());
