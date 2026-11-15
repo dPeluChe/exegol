@@ -1,4 +1,4 @@
-import { type InboxThread, inboxPendingState } from "@exegol/shared";
+import { type InboxThread, inboxCloseWaitsOn, inboxPendingState } from "@exegol/shared";
 import Database from "libsql";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { runMigrations } from "../db/migrations";
@@ -72,7 +72,7 @@ describe("colab threads", () => {
     expect(() => readThread(db, agent("a-irma", "irma"), thread.id, 0)).toThrow();
   });
 
-  it("close by agreement: the other side proposes, the opener's confirms or answers", async () => {
+  it("close by agreement: one side proposes, the other agrees or answers", async () => {
     const irma = agent("a-irma", "irma");
     const target = { scope: "colab", colabId: colab, toProject: "blue" } as const;
     const { thread } = openThread(db, irma, target, fields);
@@ -85,7 +85,12 @@ describe("colab threads", () => {
       { thread: thread.id, status: "resolved", resolution: "Fixed in PR 75" },
       context("a-blue", "blue"),
     );
-    expect(proposed).toMatchObject({ status: "awaiting_confirmation", proposed: "resolved" });
+    expect(proposed).toMatchObject({
+      status: "awaiting_confirmation",
+      proposed: "resolved",
+      waits_for: ["Irma Projects"],
+    });
+    expect(propose).toThrow("already agreed");
     expect(now()).toMatchObject({ status: "open", closing: "resolved", resolution: null });
     expect(inboxPendingState(now())).toBe("to_confirm");
     expect(countActiveThreads(db, "irma")).toBe(1);
@@ -99,16 +104,41 @@ describe("colab threads", () => {
       "Proposes to close as resolved: Fixed in PR 75",
     );
 
-    expect(propose()).toBe("proposed");
+    expect(propose()).toEqual(["irma"]);
     keepOpen(db, thread.id);
     expect(now().closing).toBeNull();
 
-    expect(propose()).toBe("proposed");
-    expect(close(db, irma, thread.id, "resolved", "files synced")).toBe("closed");
+    expect(propose()).toEqual(["irma"]);
+    expect(close(db, irma, thread.id, "resolved", "files synced")).toEqual([]);
     expect(now()).toMatchObject({
       status: "resolved",
       closing: null,
       resolution: "Fixed in PR 75 / files synced",
+    });
+  });
+
+  it("close once every project that wrote agreed, whoever proposes first", () => {
+    const irma = agent("a-irma", "irma");
+    addColabMember(db, colab, { projectId: "out", repo: "other", role: "clone" });
+    const { thread } = openThread(
+      db,
+      irma,
+      { scope: "colab", colabId: colab, toProject: null },
+      fields,
+    );
+    const now = () => getThread(db, thread.id, null) as InboxThread;
+    replyTo(db, blue, thread.id, "On it");
+    replyTo(db, outsider, thread.id, "Same here");
+
+    expect(close(db, irma, thread.id, "resolved", "Works for us")).toEqual(["blue", "out"]);
+    expect(close(db, blue, thread.id, "resolved", "Merged")).toEqual(["out"]);
+    expect(now()).toMatchObject({ status: "open", closingBy: ["irma", "blue"] });
+    expect([countActiveThreads(db, "out"), countActiveThreads(db, "blue")]).toEqual([1, 1]);
+    expect(close(db, outsider, thread.id, "resolved", "")).toEqual([]);
+    expect(now()).toMatchObject({
+      status: "resolved",
+      closingBy: [],
+      resolution: "Works for us / Merged",
     });
   });
 
@@ -124,8 +154,11 @@ describe("colab threads", () => {
     });
 
     const second = openThread(db, irma, target, { ...fields, title: "Another one" }).thread;
+    const third = openThread(db, irma, target, { ...fields, title: "A third" }).thread;
+    close(db, blue, third.id, "resolved", "Fixed");
     removeColabMember(db, colab, "irma", "lizaceves-landing");
-    expect(close(db, blue, second.id, "resolved", "Fixed")).toBe("closed");
+    expect(close(db, blue, second.id, "resolved", "Fixed")).toEqual([]);
+    expect(inboxCloseWaitsOn(getThread(db, third.id, null) as InboxThread)).toEqual([]);
   });
 
   it("are opened by name from inbox_post, and a wrong name lists the right ones", async () => {

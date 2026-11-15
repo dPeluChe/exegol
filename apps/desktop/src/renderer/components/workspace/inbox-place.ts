@@ -1,7 +1,7 @@
 import { type InboxThread, inboxProjectOf } from "@exegol/shared";
 import type { ProjectMeta } from "../common/ProjectChip";
 
-const nameOf = (meta: ReadonlyMap<string, ProjectMeta>, id: string | null) =>
+export const nameOf = (meta: ReadonlyMap<string, ProjectMeta>, id: string | null) =>
   id ? (meta.get(id)?.name ?? id) : "";
 
 /** "Personal", the project, or "Landings > Irma" for a colab thread (the colab alone if for all) */

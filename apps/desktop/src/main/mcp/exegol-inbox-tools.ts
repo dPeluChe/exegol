@@ -10,6 +10,7 @@ import type Database from "libsql";
 import { getAgent, getAgentCwd } from "../db/queries/agents";
 import { listColabs } from "../db/queries/colabs";
 import { listThreads } from "../db/queries/inbox";
+import { getProject } from "../db/queries/projects";
 import {
   close,
   InboxError,
@@ -73,12 +74,12 @@ const summary = (t: InboxThread) => ({
 });
 
 const TO_CONFIRM =
-  "The other side proposes this close (closing, closing_line). Done on your side too: confirm " +
+  "Another project proposes this close (closing, closing_line). Done on your side too: agree " +
   "with inbox_close, your resolution adding only what yours did. Not done: inbox_reply with " +
   "what is missing, and the thread goes on.";
 const PROPOSED =
-  "Not closed yet: the project that opened it confirms, or answers with what is missing. It " +
-  "wakes nobody; to tell a live session there now, agent_send it the thread id.";
+  "Not closed yet: each project in waits_for agrees with its own inbox_close, or answers with " +
+  "what is missing. It wakes nobody; to tell a live session there now, agent_send it the thread id.";
 
 function targetOf(colabs: Colab[], args: Record<string, unknown>, projectId: string): InboxTarget {
   if (args.target === "personal") return { scope: "personal" };
@@ -184,10 +185,15 @@ const HANDLERS: Record<InboxToolName, Handler> = {
     }
     const thread = text(args.thread);
     const author = await authorOf(db, context);
-    const done = close(db, author, thread, args.status, text(args.resolution));
-    return done === "closed"
-      ? { thread, status: args.status }
-      : { thread, status: "awaiting_confirmation", proposed: args.status, next: PROPOSED };
+    const waitsOn = close(db, author, thread, args.status, text(args.resolution));
+    if (waitsOn.length === 0) return { thread, status: args.status };
+    return {
+      thread,
+      status: "awaiting_confirmation",
+      proposed: args.status,
+      waits_for: waitsOn.map((id) => getProject(db, id)?.name ?? id),
+      next: PROPOSED,
+    };
   },
 };
 

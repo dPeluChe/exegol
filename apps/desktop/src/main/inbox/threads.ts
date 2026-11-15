@@ -8,8 +8,6 @@ import {
   type InboxAuthor,
   type InboxCloseStatus,
   type InboxThread,
-  inboxAwaitsConfirmFrom,
-  inboxCloseNeedsConfirm,
   isInboxClosed,
 } from "@exegol/shared";
 import type Database from "libsql";
@@ -181,8 +179,8 @@ export function replyTo(
   }
   const seq = insertMessage(db, key, bounded(body, INBOX_BODY_MAX, "body"), author);
   if (author.projectId) markRead(db, key, author.projectId, seq);
-  // The side that confirms answered instead: there is more to do, the proposal is off
-  if (thread.closing && confirms(thread, author)) dropProposal(db, key);
+  // A side that had not agreed answered instead: there is more to do, the proposal is off
+  if (thread.closing && !thread.closingBy.includes(author.projectId ?? "")) dropProposal(db, key);
   notifyInboxChanged();
   return seq;
 }
@@ -212,41 +210,50 @@ export function take(db: Database.Database, actor: InboxActor, key: string): boo
   return taken;
 }
 
-/** Who settles a proposed close: a person, or the project that opened the thread */
-const confirms = (thread: InboxThread, actor: InboxActor) =>
-  actor.authorKind === "user" || inboxAwaitsConfirmFrom(thread, actor.projectId);
-
-/** A person or the opener's side closes, with its own status; over a proposed close its line
- *  follows the proposed one, or stands for it when empty. A session of another project
- *  proposes: the thread stays active, the proposal kept as a message, until the opener's side
- *  confirms or answers (only while that project still reaches the thread) */
+/** The projects the close still waits for, none once closed. A session agrees for its project
+ *  only, so one side cannot end what another still works on; a person closes outright */
 export function close(
   db: Database.Database,
   actor: InboxActor,
   key: string,
   status: InboxCloseStatus,
   resolution: string,
-): "closed" | "proposed" {
+): string[] {
   const thread = reachable(db, actor, key);
   if (isInboxClosed(thread.status)) throw new InboxError(`${key} is already closed`);
-  if (inboxCloseNeedsConfirm(thread, actor) && getThread(db, key, thread.openerProject)) {
-    const line = bounded(resolution, INBOX_RESOLUTION_MAX, "resolution");
-    proposeClose(db, key, status, line);
-    const seq = insertMessage(db, key, `Proposes to close as ${status}: ${line}`, {
-      ...PERSON,
-      ...actor,
-    });
-    if (actor.projectId) markRead(db, key, actor.projectId, seq);
-    notifyInboxChanged();
-    return "proposed";
+  const line = bounded(
+    [thread.closingLine, resolution.trim()].filter(Boolean).join(" / "),
+    INBOX_RESOLUTION_MAX,
+    "resolution",
+  );
+  const project = actor.projectId;
+  if (project) {
+    if (thread.closingBy.includes(project)) {
+      throw new InboxError(
+        `${key}: your project already agreed to this close, the others have not`,
+      );
+    }
+    const agreed = [...thread.closingBy, project];
+    const waitsOn = thread.writers.filter((p) => !agreed.includes(p));
+    if (waitsOn.length > 0) {
+      proposeClose(db, key, status, line, agreed);
+      const said = thread.closing ? "Agrees to close" : "Proposes to close";
+      const note = resolution.trim() ? `: ${resolution.trim()}` : "";
+      const seq = insertMessage(db, key, `${said} as ${status}${note}`, {
+        ...PERSON,
+        ...actor,
+      });
+      markRead(db, key, project, seq);
+      notifyInboxChanged();
+      return waitsOn;
+    }
+    if (actor.agentId && thread.openerAgent === actor.agentId && !thread.closing) {
+      throw new InboxError("The session that opened a thread does not close it");
+    }
   }
-  if (actor.agentId && thread.openerAgent === actor.agentId && !thread.closing) {
-    throw new InboxError("The session that opened a thread does not close it");
-  }
-  const line = [thread.closingLine, resolution.trim()].filter(Boolean).join(" / ");
-  closeThread(db, key, status, bounded(line, INBOX_RESOLUTION_MAX, "resolution"));
+  closeThread(db, key, status, line);
   notifyInboxChanged();
-  return "closed";
+  return [];
 }
 
 /** A person's call: the proposed close is off and the thread goes on */

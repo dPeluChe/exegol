@@ -140,6 +140,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **An inbox thread closes when every project that wrote in it agreed.** Only the project that had not opened a thread proposed its close, and only the one that opened it confirmed. Now any session's close is its project's agreement, with its line; the thread closes once each project that wrote in it has agreed, and one that answers instead keeps it open. The thread shows who agreed and who it waits for, and a closed one shows its date. You still close any thread yourself.
 - **Inbox threads take 20 agent messages in a row, and fold their earlier messages.** A thread stopped at 6 agent messages in total, so sessions working through several tests or issues had to open a new one. It now stops at 20 with none from a person between them, and a reply of yours starts the count again. A thread shows its newest message open and in view, the earlier ones as one line each that a click opens, with Expand all.
 
 - Commander: `fleet_status` lists the repos inside a workspace project, and says which one each session works in, so work on a repo goes to a session in it and a new repo shows up there

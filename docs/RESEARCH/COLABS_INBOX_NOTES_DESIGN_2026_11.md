@@ -271,7 +271,7 @@ By Antonio on 2026-11-06:
 - A person creates colabs, in a Dashboard tab next to Company, with a badge in Company. A colab holds many projects.
 - Notes outside the repo, per project, with a `README.md` index and limits so they do not grow forever.
 - Notes replace Memory and Knowledge.
-- A closing line is required and the receiver is told to write it. A problem that returns is a new thread referencing the old one; no session reopens a closed thread.
+- A closing line is required and the receiver is told to write it. Since 2026-11-15 a session's close is its project's agreement: the thread closes when every project that wrote in it agreed, and Antonio closes outright. A problem that returns is a new thread referencing the old one; no session reopens a closed thread.
 - Inbox first, notes right after: both.
 - The "link" is capture: sending articles, links and tweets to an inbox from outside Exegol with a right click. Not a copyable link, which is out.
 
