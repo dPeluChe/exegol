@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { findAncestorIn, matchProject, parseEtime } from "./dev-servers";
+import { parseEtime } from "../lib/ps-etime";
+import { findAncestorIn, matchProject } from "./dev-servers";
 
 describe("parseEtime", () => {
   it("reads ps elapsed times", () => {

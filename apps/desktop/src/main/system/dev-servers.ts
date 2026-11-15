@@ -4,16 +4,9 @@ import type Database from "libsql";
 import { listLiveSessionProcesses } from "../db/queries/agents";
 import { execFileAsync } from "../lib/exec-file";
 import { logger } from "../lib/logger";
+import { parseEtime } from "../lib/ps-etime";
 import { isProcessAlive } from "../terminal/pty-sidecar-discovery";
 import { getProcessCwds, isInside, listTcpListeners } from "./ports";
-
-/** `ps` etime: [[dd-]hh:]mm:ss */
-export function parseEtime(etime: string): number | null {
-  const m = etime.trim().match(/^(?:(\d+)-)?(?:(\d+):)?(\d+):(\d+)$/);
-  if (!m) return null;
-  const [, d, h, min, s] = m;
-  return Number(d ?? 0) * 86400 + Number(h ?? 0) * 3600 + Number(min) * 60 + Number(s);
-}
 
 /** Deepest project folder that holds `cwd` */
 export function matchProject<T extends { path: string }>(
