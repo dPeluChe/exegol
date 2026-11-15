@@ -91,6 +91,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- A terminal could come back blank after reopening Exegol on a machine just awake: its history was asked for once, and a slow answer left the view empty until the next restart. It is now read again a few seconds later and the view repaints
 - A terminal that had ended with no output and no saved history (a plain shell keeps none) stayed on "Starting shell..." with no way out; it now shows as ended
 - A thread for a whole colab now counts on each member project: the Inbox button, Company room badges and the Colabs project filter missed it
 - A colab just created opened with an empty name and purpose
