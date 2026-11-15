@@ -1,4 +1,4 @@
-import { type InboxThread, inboxPendingState } from "@exegol/shared";
+import { INBOX_TURN_LIMIT, type InboxThread, inboxPendingState } from "@exegol/shared";
 import Database from "libsql";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { runMigrations } from "../db/migrations";
@@ -76,7 +76,7 @@ describe("inboxPendingState", () => {
 
   it("stops at the limit, and One last turn gives it back to the project", () => {
     const id = post();
-    for (let i = 0; i < 5; i++) replyTo(db, i % 2 ? a1 : a2, id, `turn ${i}`);
+    for (let i = 1; i < INBOX_TURN_LIMIT; i++) replyTo(db, i % 2 ? a1 : a2, id, `turn ${i}`);
     expect(state(id)).toBe("needs_you");
     giveLastTurn(db, id);
     expect(state(id)).toBe("read_no_reply");
@@ -167,7 +167,7 @@ describe("sendToSession", () => {
     expect(() => sendToSession(db, closed, "a2")).toThrow(InboxError);
 
     const limited = post();
-    for (let i = 0; i < 5; i++) replyTo(db, a2, limited, `turn ${i}`);
+    for (let i = 1; i < INBOX_TURN_LIMIT; i++) replyTo(db, a2, limited, `turn ${i}`);
     expect(() => sendToSession(db, limited, "a2")).toThrow("turn limit");
 
     expect(() => sendToSession(db, post(), "b1")).toThrow("another project");

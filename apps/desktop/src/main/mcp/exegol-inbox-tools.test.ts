@@ -1,9 +1,18 @@
+import { INBOX_TURN_LIMIT } from "@exegol/shared";
 import Database from "libsql";
 import { beforeEach, describe, expect, it } from "vitest";
 import { runMigrations } from "../db/migrations";
 import { getThread } from "../db/queries/inbox";
 import { forward } from "../inbox/forward";
-import { close, giveLastTurn, handOver, PERSON, readThread, reopen } from "../inbox/threads";
+import {
+  close,
+  giveLastTurn,
+  handOver,
+  PERSON,
+  readThread,
+  reopen,
+  replyTo,
+} from "../inbox/threads";
 import { callInboxTool } from "./exegol-inbox-tools";
 import type { ExegolToolContext } from "./exegol-protocol";
 import type { InboxToolName } from "./inbox-tool-defs";
@@ -74,15 +83,20 @@ describe("threads", () => {
     expect(got.untrusted_inbox_content.map((m) => m.seq)).toEqual([2]);
   });
 
-  it("stops at 6 agent messages, and one last turn lets one through", async () => {
+  it("stops at the limit of agent messages in a row; one last turn lets one through, a person's message a new round", async () => {
     const { thread } = await post();
-    for (let i = 0; i < 5; i++) await call("inbox_reply", { thread, body: "more" }, a2);
+    for (let i = 1; i < INBOX_TURN_LIMIT; i++)
+      await call("inbox_reply", { thread, body: "more" }, a2);
     const again = () => call("inbox_reply", { thread, body: "again" }, a2);
     await expect(again()).rejects.toThrow(/waits for a person/);
 
     giveLastTurn(db, thread);
     await again();
     await expect(again()).rejects.toThrow(/waits for a person/);
+
+    replyTo(db, PERSON, thread, "Go on");
+    await again();
+    expect(getThread(db, thread, null)?.agentTurns).toBe(1);
   });
 
   it("gives one last turn only at the limit", async () => {

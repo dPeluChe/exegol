@@ -140,6 +140,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ### Changed
 
+- **Inbox threads take 20 agent messages in a row, and fold their earlier messages.** A thread stopped at 6 agent messages in total, so sessions working through several tests or issues had to open a new one. It now stops at 20 with none from a person between them, and a reply of yours starts the count again. A thread shows its newest message open and in view, the earlier ones as one line each that a click opens, with Expand all.
+
 - Commander: `fleet_status` lists the repos inside a workspace project, and says which one each session works in, so work on a repo goes to a session in it and a new repo shows up there
 
 - Inbox: Send to under a thread names each session by its alias and the name it has inside its CLI (Claude Code's `/rename`), and says the project when the sessions belong to several
