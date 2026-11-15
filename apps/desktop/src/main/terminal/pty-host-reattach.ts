@@ -1,5 +1,9 @@
 // Reattach to a session that survived in the sidecar (app restart), split out of PtyHost.
+
+import { createLimiter } from "../lib/concurrency";
 import { broadcast } from "../lib/event-bus";
+import { logger } from "../lib/logger";
+import { delay } from "../lib/timeout";
 import { HeadlessEmulator } from "./headless-emulator";
 import type { Session, SessionCallbacks, ShellReadyState } from "./pty-session-types";
 import type { SidecarClient } from "./pty-sidecar-client";
@@ -114,6 +118,7 @@ export async function reattachSidecarSession(
   const snapshot = ring?.data ?? null;
   if (snapshot) options.onSnapshot?.(snapshot);
   drainHeld(host, session, ring?.seq);
+  if (!ring) void readRingLater(host, session, options.snapshotMaxBytes);
 
   const pending = host.pendingSizes.get(id);
   let repainted: Promise<void> | null = null;
@@ -128,6 +133,29 @@ export async function reattachSidecarSession(
     broadcast("terminal:resized", id, pending.cols, pending.rows);
   }
   return { snapshot, fetchMs: fetched - started, parseMs: parsed - fetched, repainted };
+}
+
+const RING_RETRY_MS = [5_000, 15_000, 45_000];
+const oneRingAtATime = createLimiter(1);
+
+/** A sidecar too busy to answer (a machine just awake) left the model empty: read it again,
+ *  one session at a time */
+async function readRingLater(host: ReattachHost, s: Session, maxBytes?: number): Promise<void> {
+  const current = () => host.sessions.get(s.id) === s && s.alive;
+  logger.warn(`[Reattach] ${s.id} ring not read, its view starts empty: reading again`);
+  for (const wait of RING_RETRY_MS) {
+    await delay(wait);
+    const read = oneRingAtATime(async () => {
+      const client = host.client();
+      return current() && client ? resyncFromRing(s, client, current, maxBytes) : false;
+    });
+    if (await read.catch(() => false)) {
+      logger.info(`[Reattach] ${s.id} ring read on a later try`);
+      return;
+    }
+    if (!current()) return;
+  }
+  logger.warn(`[Reattach] ${s.id} ring never read: its history stays in the sidecar`);
 }
 
 /** Frames that came while the ring was read: those it already holds are dropped. An exit that

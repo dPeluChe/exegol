@@ -41,15 +41,16 @@ export function framesAfter(held: HeldFrame[], ringSeq: number | undefined): Hel
 /**
  * Rebuild one session's model from the ring after a swap. Output read before the ring's reply is
  * in it; output after it is replayed on top. Views reset (RIS) and repaint in the same stream, as
- * the visibility repaint does.
+ * the visibility repaint does. False when the ring was not read.
  */
 export async function resyncFromRing(
   s: Session,
   client: SidecarClient,
   isCurrent: () => boolean,
-): Promise<void> {
-  const ring = await whileSidecarBulk(client.snapshot(s.id)).catch(() => null);
-  if (ring?.data == null || !isCurrent() || s.resyncTail) return;
+  maxBytes?: number,
+): Promise<boolean> {
+  const ring = await whileSidecarBulk(client.snapshot(s.id, maxBytes)).catch(() => null);
+  if (ring?.data == null || !isCurrent() || s.resyncTail) return false;
   const tail: string[] = [];
   s.resyncTail = tail;
   const { cols, rows } = s.emulator.size;
@@ -61,7 +62,7 @@ export async function resyncFromRing(
   }
   if (!isCurrent()) {
     fresh.dispose();
-    return;
+    return false;
   }
   const size = s.emulator.size;
   if (size.cols !== cols || size.rows !== rows) fresh.resize(size.cols, size.rows);
@@ -72,4 +73,5 @@ export async function resyncFromRing(
   if (ring.seq !== undefined) s.lastSeq = Math.max(s.lastSeq ?? 0, ring.seq);
   s.seqGap = false;
   broadcast("terminal:data", s.id, `\x1bc${snapshot}${tail.join("")}`, s.lastSeq);
+  return true;
 }
