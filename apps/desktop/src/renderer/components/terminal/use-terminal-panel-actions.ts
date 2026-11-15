@@ -98,8 +98,13 @@ export function useSendTo(
 
   useEffect(() => {
     if (!paneId) return;
-    return registerSelectionSource(paneId, { agentId, projectId, getSelection });
-  }, [paneId, agentId, projectId, getSelection]);
+    return registerSelectionSource(paneId, {
+      agentId,
+      projectId,
+      getSelection,
+      paste: (text) => terminalRef.current?.paste(text),
+    });
+  }, [paneId, agentId, projectId, getSelection, terminalRef]);
 
   // Offered while fresh: an unused copy goes away, an open list keeps it
   useEffect(() => {

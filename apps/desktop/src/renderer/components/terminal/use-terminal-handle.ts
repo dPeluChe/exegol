@@ -36,6 +36,7 @@ export function useTerminalHandle(
     scrollToTop: () => terminalRef.current?.scrollToTop(),
     scrollToBottom: () => terminalRef.current?.scrollToBottom(),
     getSelection: () => terminalRef.current?.getSelection() ?? "",
+    paste: (text) => terminalRef.current?.paste(text),
     clear: () => terminalRef.current?.clear(),
   }));
 }

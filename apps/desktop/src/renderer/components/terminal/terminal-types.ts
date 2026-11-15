@@ -4,6 +4,8 @@ export interface TerminalInstanceHandle {
   scrollToTop: () => void;
   scrollToBottom: () => void;
   getSelection: () => string;
+  /** xterm's paste: bracketed only when the program asked for it */
+  paste: (text: string) => void;
   clear: () => void;
 }
 

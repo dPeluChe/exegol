@@ -1,3 +1,4 @@
+import { RUNNING_STATUSES } from "@exegol/shared";
 import {
   ArrowDownToLine,
   ArrowUpToLine,
@@ -20,7 +21,6 @@ import {
   Trash2,
 } from "lucide-react";
 import { useState } from "react";
-import { pasteToAgent } from "../../lib/agent-input";
 import { interruptTerminal, kickTerminal } from "../../lib/dispatch-refit";
 import { editKeys } from "../../lib/keymap";
 import { movePane, paneMoveTargets } from "../../lib/move-pane";
@@ -56,7 +56,9 @@ type MenuActions = Omit<PaneContextMenuProps, "children">;
 const present = (items: (MenuItem | false | undefined)[]): MenuItem[] =>
   items.filter((item): item is MenuItem => Boolean(item));
 
-function clipboardSection(agentId: string | undefined, selection: string): MenuItem[] {
+function clipboardSection(paneId: string, selection: string): MenuItem[] {
+  const source = selectionSourceFor(paneId);
+  const status = source && useAgentStore.getState().agents[source.agentId]?.status;
   return present([
     selection.length > 0 && {
       label: "Copy",
@@ -64,16 +66,18 @@ function clipboardSection(agentId: string | undefined, selection: string): MenuI
       shortcut: editKeys("Cmd+C"),
       action: () => void navigator.clipboard.writeText(selection).catch(() => {}),
     },
-    agentId !== undefined && {
-      label: "Paste",
-      icon: ClipboardPaste,
-      shortcut: editKeys("Cmd+V"),
-      action: () =>
-        void navigator.clipboard
-          .readText()
-          .then((text) => text && pasteToAgent(agentId, text, true))
-          .catch(() => {}),
-    },
+    source?.paste !== undefined &&
+      status !== undefined &&
+      RUNNING_STATUSES.has(status) && {
+        label: "Paste",
+        icon: ClipboardPaste,
+        shortcut: editKeys("Cmd+V"),
+        action: () =>
+          void navigator.clipboard
+            .readText()
+            .then((text) => text && source.paste?.(text))
+            .catch(() => {}),
+      },
   ]);
 }
 
@@ -176,10 +180,7 @@ function buildMenuSections(
     : [];
   const candidates = [
     ...(isTerminal
-      ? [
-          [...send, ...clipboardSection(actions.agentId, selection)],
-          terminalActionsSection(actions),
-        ]
+      ? [[...send, ...clipboardSection(actions.paneId, selection)], terminalActionsSection(actions)]
       : []),
     browserSection(actions),
     splitSection(actions),

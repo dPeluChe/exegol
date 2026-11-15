@@ -165,6 +165,8 @@ export interface SelectionSource {
   agentId: string;
   projectId: string | undefined;
   getSelection: () => string;
+  /** The pane's terminal takes a paste (a Dashboard source has none) */
+  paste?: (text: string) => void;
 }
 
 const sources = new Map<string, SelectionSource>();
