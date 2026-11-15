@@ -91,6 +91,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ### Fixed
 
+- **Copy and Paste in a terminal's right-click menu, and a CLI's own copy reaches the clipboard.** The menu had no Copy or Paste. And text selected with the mouse inside a CLI that draws its own selection (Claude Code, opencode) reached the clipboard only if the CLI's own copy command worked; Exegol now writes it too.
+
 - A terminal that had ended with no output and no saved history (a plain shell keeps none) stayed on "Starting shell..." with no way out; it now shows as ended
 - A thread for a whole colab now counts on each member project: the Inbox button, Company room badges and the Colabs project filter missed it
 - A colab just created opened with an empty name and purpose
