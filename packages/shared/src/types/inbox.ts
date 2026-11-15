@@ -1,4 +1,5 @@
-export const INBOX_TURN_LIMIT = 6;
+/** Agent messages in a row, with none from a person between them */
+export const INBOX_TURN_LIMIT = 20;
 export const INBOX_TITLE_MAX = 120;
 export const INBOX_BODY_MAX = 8_000;
 export const INBOX_RESOLUTION_MAX = 200;
@@ -32,7 +33,7 @@ export interface InboxThread {
   openedAt: number;
   lastActivityAt: number;
   refs: string[];
-  /** Derived from the messages */
+  /** Derived from the messages: those of agents since a person last wrote */
   agentTurns: number;
   lastSeq: number;
   openerAgent: string | null;

@@ -26,7 +26,9 @@ const now = () => Math.floor(Date.now() / 1000);
 
 const THREAD_SELECT = `SELECT t.*, r.last_read_seq,
     (SELECT MAX(seq) FROM inbox_messages m WHERE m.thread_id = t.id) AS last_seq,
-    (SELECT COUNT(*) FROM inbox_messages m WHERE m.thread_id = t.id AND m.author_kind = 'agent') AS agent_turns,
+    (SELECT COUNT(*) FROM inbox_messages m WHERE m.thread_id = t.id AND m.author_kind = 'agent'
+      AND m.seq > COALESCE((SELECT seq FROM inbox_messages u
+        WHERE u.thread_id = t.id AND u.author_kind = 'user' ORDER BY seq DESC LIMIT 1), 0)) AS agent_turns,
     o.agent_id AS opener_agent, o.project_id AS opener_project,
     (SELECT last_read_seq FROM inbox_reads o
       WHERE o.thread_id = t.id AND o.project_id = t.owner_project) AS owner_read_seq,

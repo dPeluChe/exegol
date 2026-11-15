@@ -19,10 +19,8 @@ import { useColabs } from "../../../hooks/use-inbox";
 import { useLaunchableProviders } from "../../../hooks/use-providers";
 import { useProjects } from "../../../hooks/use-trpc";
 import { useGitHubOverview } from "../../../hooks/use-trpc-github";
-import { sessionName } from "../../../lib/agent-label";
 import { startInNewTab, takesPrompt } from "../../../lib/github-handoff";
 import { sessionsInRepoFirst, sessionsOfNamedRepo } from "../../../lib/github-repos";
-import { isLongMessage, keepLineBreaks } from "../../../lib/inbox-text";
 import { openInBrowser } from "../../../lib/open-in-browser";
 import { isOpenSession } from "../../../lib/sidebar-views";
 import { trpcInvoke } from "../../../lib/trpc-client";
@@ -35,43 +33,13 @@ import type { ProjectMeta } from "../../common/ProjectChip";
 import { groupTargets, type SendTarget, sendLabel } from "../../terminal/send-targets";
 import { useCliSessionNames } from "../../terminal/use-send-to";
 import { inboxPlace } from "../inbox-place";
-import { ChatMarkdown } from "./ChatMarkdown";
+import { InboxMessages } from "./InboxMessages";
 import { InboxMoreActions, useThreadAct } from "./InboxMoreActions";
 
 interface ThreadData {
   thread: InboxThread;
   messages: InboxMessage[];
   refs: InboxThread[];
-}
-
-function authorLabel(m: InboxMessage, name: string | null): string {
-  if (m.authorKind === "user") return "You";
-  if (m.authorKind === "external") return "Captured";
-  const cli = m.cli === name ? null : m.cli;
-  return [name, cli, m.model, m.repo, m.branch, m.commit].filter(Boolean).join(", ") || "Agent";
-}
-
-function Message({ message }: { message: InboxMessage }) {
-  const name = useAgentStore((s) => {
-    const session = message.agentId ? s.agents[message.agentId] : undefined;
-    return session ? sessionName(session) : null;
-  });
-  return (
-    <article className="rounded-lg border border-border bg-bg-primary px-3 py-2">
-      <header className="mb-1 flex justify-between gap-3 text-[10px] text-text-muted">
-        <span className="truncate">{authorLabel(message, name)}</span>
-        <time className="shrink-0">{new Date(message.createdAt * 1000).toLocaleString()}</time>
-      </header>
-      <div
-        className={cn(
-          "text-xs text-text-primary",
-          isLongMessage(message.body) && "h-56 min-h-16 resize-y overflow-y-auto pr-1",
-        )}
-      >
-        <ChatMarkdown text={keepLineBreaks(message.body)} webLinks />
-      </div>
-    </article>
-  );
 }
 
 /** Every action here names the thread */
@@ -254,7 +222,8 @@ function Actions({
       {atLimit ? (
         <ThreadNotice tone="text-warning">
           <span className="min-w-0 flex-1">
-            {INBOX_TURN_LIMIT} agent messages: close it or give one last turn.
+            {INBOX_TURN_LIMIT} agent messages in a row: reply to go on, close it or give one last
+            turn.
           </span>
           <Button size="sm" disabled={busy} onClick={() => void act("inbox.lastTurn", {})}>
             One last turn
@@ -367,7 +336,7 @@ export function InboxThreadView({
         <h3 className="truncate text-xs font-semibold text-text-primary">{thread.title}</h3>
         <p className="truncate text-[10px] text-text-muted">
           {thread.id}, {inboxPlace(thread, projectMeta)}, {thread.agentTurns} of {INBOX_TURN_LIMIT}{" "}
-          agent messages
+          agent messages in a row
         </p>
         {url && (
           <button
@@ -399,12 +368,9 @@ export function InboxThreadView({
         ))}
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto">
-        <div className="flex flex-col gap-2 p-3">
-          {messages.map((message) => (
-            <Message key={message.seq} message={message} />
-          ))}
+        <InboxMessages key={thread.id} messages={messages}>
           {closed && <ClosedLine thread={thread} />}
-        </div>
+        </InboxMessages>
       </div>
       <InboxMoreActions
         thread={thread}

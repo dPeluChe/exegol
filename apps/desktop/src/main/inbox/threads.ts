@@ -176,7 +176,7 @@ export function replyTo(
   }
   if (author.authorKind === "agent" && atInboxTurnLimit(thread)) {
     throw new InboxError(
-      `${key} reached ${INBOX_TURN_LIMIT} agent messages and waits for a person`,
+      `${key} reached ${INBOX_TURN_LIMIT} agent messages in a row and waits for a person`,
     );
   }
   const seq = insertMessage(db, key, bounded(body, INBOX_BODY_MAX, "body"), author);

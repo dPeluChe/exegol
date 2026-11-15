@@ -61,8 +61,8 @@ export const INBOX_TOOL_DEFS: ToolBody<InboxToolName>[] = [
     name: "inbox_reply",
     title: "Reply in an inbox thread",
     description:
-      `Add a message to an open thread. Refused after ${INBOX_TURN_LIMIT} agent messages, when it ` +
-      "waits for a person.",
+      `Add a message to an open thread. Refused after ${INBOX_TURN_LIMIT} agent messages in a row, ` +
+      "when it waits for a person: one message from them starts the count again.",
     inputSchema: {
       type: "object",
       properties: { thread: THREAD, body: { type: "string", description: "Markdown" } },

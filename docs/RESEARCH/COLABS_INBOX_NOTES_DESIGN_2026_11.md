@@ -110,7 +110,7 @@ Agent turns are counted from the messages. Each message says where it came from:
 Threads between agents are where this can run away: two agents can keep answering each other at your expense. Four rules:
 
 1. **A message never wakes a session.** A reply waits like everything else. An agent reads it when a person hands it over, or when it starts and asks. Two idle sessions cannot talk on their own. This is the main brake.
-2. **Turn limit.** At 6 agent messages the thread shows "needs you" and `inbox_reply` refuses. You choose: **Close**, or **One last turn**, which lets one more agent message through so it can wrap up, and then the thread waits for you to close it. Your own messages do not count and do not reset the limit.
+2. **Turn limit.** At 20 agent messages in a row (6 until 2026-11-15, which threads with several tests or issues reached too soon) the thread shows "needs you" and `inbox_reply` refuses. You choose: **Close**, or **One last turn**, which lets one more agent message through so it can wrap up, and then the thread waits for you to close it. Your own messages do not count, and since 2026-11-15 one of them starts the count again.
 3. **Only members reply**: the projects of the colab, or the project itself on a project thread. You can add a message to any thread.
 4. **Nothing closes alone.** A thread with no activity stays in Pending until you act on it.
 
@@ -266,7 +266,7 @@ Outside this repo: `doctos` and `standup` keep the rule that a finding the code 
 
 By Antonio on 2026-11-06:
 
-- 6 agent turns, then close or one last turn. Members reply, and Antonio can write on any thread.
+- 6 agent turns (20 in a row since 2026-11-15, a message of yours starts a new round), then close or one last turn. Members reply, and Antonio can write on any thread.
 - Messages never wake a session; idle threads stay in Pending.
 - A person creates colabs, in a Dashboard tab next to Company, with a badge in Company. A colab holds many projects.
 - Notes outside the repo, per project, with a `README.md` index and limits so they do not grow forever.
