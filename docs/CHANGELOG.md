@@ -16,6 +16,8 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **Terminals from before your last macOS login are named.** When macOS starts a new login session (a crash at wake, a logout that left the terminals running), the terminals Exegol kept alive lose the pasteboard, name resolution and the keychain: a copy from a CLI goes nowhere, `git push` cannot find the host, a CLI asks to log in again. Exegol now says so in a banner on start, with Restart terminals.
+
 - Inbox: a thread between two projects closes by agreement. When a session of another project than the one that opened it closes it, the close is a proposal (To confirm) until the opener's side confirms or answers; you can Confirm or Keep open, and Reopen any closed thread
 - Terminal pane menu: Send Interrupt (Ctrl+C) for any terminal, and Restart Terminal for a plain one: a new shell takes the pane in the same folder and the old one stops
 - Agents: `colabs_list` shows a session its colabs with each member as main dev or user dev; `inbox_post` takes the only colab or another member's name, and answers where the thread landed, who finds it and similar open threads; `inbox_list` filters by `colab`; `agents_list` by `project`
@@ -92,7 +94,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 ### Fixed
 
 - **Copy and Paste in a terminal's right-click menu, and a CLI's own copy reaches the clipboard.** The menu had no Copy or Paste. And text selected with the mouse inside a CLI that draws its own selection (Claude Code, opencode) reached the clipboard only if the CLI's own copy command worked; Exegol now writes it too.
-
+- A terminal could come back blank after reopening Exegol on a machine just awake: its history was asked for once, and a slow answer left the view empty until the next restart. It is now read again a few seconds later and the view repaints
 - A terminal that had ended with no output and no saved history (a plain shell keeps none) stayed on "Starting shell..." with no way out; it now shows as ended
 - A thread for a whole colab now counts on each member project: the Inbox button, Company room badges and the Colabs project filter missed it
 - A colab just created opened with an empty name and purpose

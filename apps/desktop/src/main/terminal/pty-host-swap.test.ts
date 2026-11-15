@@ -102,7 +102,7 @@ describe("PtyHost Retry swap", () => {
     await host.swapSidecarClient(fresh.client);
     await settle();
     expect(fresh.client.snapshot).toHaveBeenCalledTimes(1);
-    expect(fresh.client.snapshot).toHaveBeenCalledWith("y");
+    expect(fresh.client.snapshot).toHaveBeenCalledWith("y", undefined);
     expect(repaintOf("x")).toBeUndefined();
     expect(host.getSnapshot("y")).toContain("y2");
     // A frame both sockets carried is applied once
@@ -158,6 +158,31 @@ describe("PtyHost reattach ordering", () => {
     await done;
     expect(order).toEqual(["seed history", "data last words", "exit 0"]);
     expect(host.isAlive("e")).toBe(false);
+  });
+
+  it("a ring the sidecar did not answer is read again later, with the same cap, and repaints", async () => {
+    vi.useFakeTimers();
+    try {
+      let calls = 0;
+      const { client } = fakeClient(async () => {
+        if (++calls === 1) throw new Error("Sidecar RPC timeout: session.snapshot");
+        return { data: "history", seq: 4 };
+      });
+      const host = new PtyHost();
+      host.connectToSidecar(client);
+      const done = await host.reattachSession("a", { cols: 80, rows: 24 }, callbacks, {
+        snapshotMaxBytes: 1024,
+      });
+      expect(done?.snapshot).toBeNull();
+
+      await vi.advanceTimersByTimeAsync(5_000);
+      await vi.waitFor(() => expect(host.getSnapshot("a")).toContain("history"));
+      expect(String(repaintOf("a")?.[2])).toContain("history");
+      expect(client.snapshot).toHaveBeenLastCalledWith("a", 1024);
+      expect(calls).toBe(2);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("a Retry swap during the ring read reads it again from the new client", async () => {

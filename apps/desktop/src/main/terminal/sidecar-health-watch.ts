@@ -9,6 +9,7 @@ import { createLogLimiter, suppressedNote } from "../lib/log-limiter";
 import { logger } from "../lib/logger";
 import { withTimeout } from "../lib/timeout";
 import { readProcessMetrics } from "../system/process-metrics";
+import { sidecarOutlivedLogin } from "./login-session";
 import type { SidecarClient } from "./pty-sidecar-client";
 import { readPidFile } from "./pty-sidecar-discovery";
 import {
@@ -40,14 +41,17 @@ let pingTimer: ReturnType<typeof setTimeout> | null = null;
 let loopTimer: ReturnType<typeof setInterval> | null = null;
 let loopMonitor: ReturnType<typeof monitorEventLoopDelay> | null = null;
 let health: SidecarHealth = SIDECAR_HEALTHY;
+/** The sidecar pid found older than this login; a successor is a new pid */
+let oldLoginPid: number | null = null;
+const LOGIN_CHECK_MS = 5_000;
 
 export function getSidecarHealth(): SidecarHealth {
   return health;
 }
 
-function setHealth(next: SidecarHealth): void {
-  health = next;
-  broadcast("sidecar:health", next);
+function setHealth(next: Pick<SidecarHealth, "stalled" | "since">): void {
+  health = { ...next, oldLogin: oldLoginPid !== null && readPidFile()?.pid === oldLoginPid };
+  broadcast("sidecar:health", health);
 }
 
 const onCallAnswered = (): void => calls.settle(true, Date.now());
@@ -165,8 +169,20 @@ export function markSidecarAnswering(): void {
   if (event) void report(event);
 }
 
+/** Once per launch: a session ended under the app takes the app with it */
+async function checkLoginSession(): Promise<void> {
+  const pid = readPidFile()?.pid;
+  if (!pid || !(await sidecarOutlivedLogin(pid).catch(() => false))) return;
+  oldLoginPid = pid;
+  logger.warn(
+    "[Sidecar] started before this login session: its terminals cannot reach the pasteboard, DNS or keychain",
+  );
+  setHealth(health);
+}
+
 export function startSidecarHealthWatch(source: () => SidecarClient | null): void {
   clientSource = source;
+  setTimeout(() => void checkLoginSession(), LOGIN_CHECK_MS).unref?.();
   const loop = monitorEventLoopDelay({ resolution: 50 });
   loop.enable();
   loopMonitor = loop;
