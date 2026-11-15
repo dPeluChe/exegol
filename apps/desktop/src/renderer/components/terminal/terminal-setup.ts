@@ -382,8 +382,14 @@ export function setupTerminalSession(
     disposables.push(terminal.onSelectionChange(() => cb(terminal.hasSelection())));
     if (terminal.element) disposables.push(keepSelection(terminal, terminal.element));
   }
-  if (deps.onTuiCopy && terminal.element) {
-    disposables.push(watchTuiCopy(terminal, terminal.element, deps.onTuiCopy));
+  if (terminal.element) {
+    // The TUI's own pbcopy may fail (a session from before this login): OSC 52 is the copy
+    disposables.push(
+      watchTuiCopy(terminal, terminal.element, (text) => {
+        void navigator.clipboard.writeText(text).catch(() => {});
+        deps.onTuiCopy?.(text);
+      }),
+    );
   }
 
   function dispose(): void {

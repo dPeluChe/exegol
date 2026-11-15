@@ -1,3 +1,4 @@
+import { RUNNING_STATUSES } from "@exegol/shared";
 import {
   ArrowDownToLine,
   ArrowUpToLine,
@@ -21,6 +22,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { interruptTerminal, kickTerminal } from "../../lib/dispatch-refit";
+import { editKeys } from "../../lib/keymap";
 import { movePane, paneMoveTargets } from "../../lib/move-pane";
 import { isShellish, restartTerminal } from "../../lib/split-terminal";
 import { useAgentStore } from "../../stores/agents";
@@ -42,8 +44,6 @@ interface PaneContextMenuProps {
   onClose: () => void;
   /** Only wired for terminal/browser panes — undefined hides the menu entry */
   onFloat?: () => void;
-  onCopy?: () => void;
-  onPaste?: () => void;
   onScrollTop?: () => void;
   onScrollBottom?: () => void;
   /** Browser panes: save the page as an image */
@@ -56,10 +56,28 @@ type MenuActions = Omit<PaneContextMenuProps, "children">;
 const present = (items: (MenuItem | false | undefined)[]): MenuItem[] =>
   items.filter((item): item is MenuItem => Boolean(item));
 
-function clipboardSection({ onCopy, onPaste }: MenuActions): MenuItem[] {
+function clipboardSection(paneId: string, selection: string): MenuItem[] {
+  const source = selectionSourceFor(paneId);
+  const status = source && useAgentStore.getState().agents[source.agentId]?.status;
   return present([
-    onCopy && { label: "Copy", icon: Clipboard, shortcut: "⌘C", action: onCopy },
-    onPaste && { label: "Paste", icon: ClipboardPaste, shortcut: "⌘V", action: onPaste },
+    selection.length > 0 && {
+      label: "Copy",
+      icon: Clipboard,
+      shortcut: editKeys("Cmd+C"),
+      action: () => void navigator.clipboard.writeText(selection).catch(() => {}),
+    },
+    source?.paste !== undefined &&
+      status !== undefined &&
+      RUNNING_STATUSES.has(status) && {
+        label: "Paste",
+        icon: ClipboardPaste,
+        shortcut: editKeys("Cmd+V"),
+        action: () =>
+          void navigator.clipboard
+            .readText()
+            .then((text) => text && source.paste?.(text))
+            .catch(() => {}),
+      },
   ]);
 }
 
@@ -151,14 +169,18 @@ function splitSection({
   ];
 }
 
-function buildMenuSections(actions: MenuActions, sendPage?: MenuItem["page"]): MenuSection[] {
+function buildMenuSections(
+  actions: MenuActions,
+  selection: string,
+  sendPage?: MenuItem["page"],
+): MenuSection[] {
   const isTerminal = actions.paneType === "terminal";
   const send: MenuItem[] = sendPage
     ? [{ label: "Send selection to", icon: Send, action: () => {}, page: sendPage }]
     : [];
   const candidates = [
     ...(isTerminal
-      ? [[...send, ...clipboardSection(actions)], terminalActionsSection(actions)]
+      ? [[...send, ...clipboardSection(actions.paneId, selection)], terminalActionsSection(actions)]
       : []),
     browserSection(actions),
     splitSection(actions),
@@ -198,7 +220,7 @@ export function PaneContextMenu({ children, ...actions }: PaneContextMenuProps) 
   return (
     <ContextMenu
       onOpen={() => setOpenedWith(readSelection())}
-      sections={() => buildMenuSections(actions, sendPage())}
+      sections={() => buildMenuSections(actions, openedWith, sendPage())}
     >
       {children}
     </ContextMenu>
