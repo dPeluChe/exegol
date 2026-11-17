@@ -1,12 +1,13 @@
 import { COLAB_ROLE_MAX, type Colab, type ColabMember, type Project } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import { Check, Plus, Search, Star, X } from "lucide-react";
+import { Plus, Search, Star, X } from "lucide-react";
 import { useState } from "react";
 import { useAct } from "../../../hooks/use-act";
 import { useProjectShapes } from "../../../hooks/use-project-shapes";
 import { useProjects } from "../../../hooks/use-trpc";
 import { joinable, memberKey, memberLabel } from "../../../lib/colab-room";
 import { plural } from "../../../lib/plural";
+import { useToastStore } from "../../../stores/toasts";
 import { INPUT_CLASS, LABEL_CLASS } from "../../agents/SpawnOptions";
 import { ProjectAvatar } from "../../common/ProjectAvatar";
 
@@ -155,8 +156,14 @@ function AddProjects({ colab, projects }: { colab: Colab; projects: Project[] })
   const [query, setQuery] = useState("");
   const [inside, setInside] = useState<Project | null>(null);
   const list = joinable(projects, colab.members, query);
-  const add = (projectId: string, repo: string) =>
-    void act("colabs.addMember", { colabId: colab.id, projectId, repo, role: "" });
+  const add = async (project: Project, repo: string) => {
+    const input = { colabId: colab.id, projectId: project.id, repo, role: "" };
+    if (await act("colabs.addMember", input))
+      useToastStore.getState().addToast({
+        type: "success",
+        title: `${memberLabel({ projectName: project.name, repo })} added to ${colab.name}`,
+      });
+  };
 
   return (
     <div className="flex flex-col gap-2">
@@ -180,35 +187,27 @@ function AddProjects({ colab, projects }: { colab: Colab; projects: Project[] })
         </label>
       </div>
       <div className="grid max-h-56 grid-cols-2 gap-1.5 overflow-y-auto sm:grid-cols-3">
-        {list.map(({ project, joined }) => {
+        {list.map((project) => {
           const shape = shapes?.[project.id];
           const workspace = shape?.kind === "workspace" && shape.repoCount > 0;
           return (
             <button
               key={project.id}
               type="button"
-              aria-disabled={joined}
               aria-expanded={workspace ? inside?.id === project.id : undefined}
-              title={joined ? "Already in this colab" : undefined}
               disabled={busy}
               onClick={() => {
-                if (joined) return;
                 if (workspace) setInside(project);
-                else add(project.id, "");
+                else void add(project, "");
               }}
               className={cn(
-                "flex items-center gap-2 rounded-md border px-2 py-1.5 text-left text-[11px] transition-colors",
-                joined
-                  ? "cursor-default border-border text-text-muted"
-                  : "border-border text-text-primary hover:border-[var(--accent)]/60 hover:bg-white/5",
+                "flex items-center gap-2 rounded-md border border-border px-2 py-1.5 text-left text-[11px] text-text-primary transition-colors hover:border-[var(--accent)]/60 hover:bg-white/5",
                 inside?.id === project.id && "border-[var(--accent)]/60",
               )}
             >
               <ProjectAvatar project={project} className="h-4 w-4" />
               <span className="min-w-0 flex-1 truncate">{project.name}</span>
-              {joined ? (
-                <Check className="h-3 w-3 shrink-0" />
-              ) : workspace ? (
+              {workspace ? (
                 <span className="shrink-0 text-[10px] text-text-muted">
                   {plural(shape.repoCount, "repo")}
                 </span>
@@ -218,9 +217,11 @@ function AddProjects({ colab, projects }: { colab: Colab; projects: Project[] })
             </button>
           );
         })}
-        {list.length === 0 && (
+        {list.length === 0 && projects.length > 0 && (
           <p className="col-span-full py-3 text-center text-[11px] text-text-muted">
-            No project with that name
+            {query.trim()
+              ? "No project with that name left to add"
+              : "Every project is in this colab"}
           </p>
         )}
       </div>
@@ -232,7 +233,7 @@ function AddProjects({ colab, projects }: { colab: Colab; projects: Project[] })
           taken={new Set(colab.members.map(memberKey))}
           busy={busy}
           onPick={(repo) => {
-            add(inside.id, repo);
+            void add(inside, repo);
             setInside(null);
           }}
           onCancel={() => setInside(null)}
