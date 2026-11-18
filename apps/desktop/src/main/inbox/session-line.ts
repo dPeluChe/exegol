@@ -1,5 +1,6 @@
 import { type Colab, memberRole } from "@exegol/shared";
 import type Database from "libsql";
+import { getAgent } from "../db/queries/agents";
 import { listColabs } from "../db/queries/colabs";
 import { countActiveThreads } from "../db/queries/inbox";
 import { INDEX_FILE, loadNotes, noteIds } from "../notes/files";
@@ -49,8 +50,12 @@ async function notesLine(db: Database.Database, projectId: string): Promise<stri
 }
 
 /** What a starting session is told, resume and quick launch included: a prompt would start a turn */
-export async function sessionLine(db: Database.Database, projectId: string): Promise<string> {
-  const waiting = countActiveThreads(db, projectId);
+export async function sessionLine(
+  db: Database.Database,
+  projectId: string,
+  agentId: string,
+): Promise<string> {
+  const waiting = countActiveThreads(db, projectId, getAgent(db, agentId)?.alias ?? "");
   const threads = waiting === 1 ? "1 thread" : `${waiting} threads`;
   const colabs = listColabs(db, projectId).slice(0, MAX_COLABS);
   const lines = await Promise.all([
@@ -58,7 +63,9 @@ export async function sessionLine(db: Database.Database, projectId: string): Pro
     ...colabs.map((c) => colabLine(db, c, projectId)),
   ]);
   return [
-    waiting > 0 ? `Inbox: ${threads} waiting for this project. See them with inbox_list.` : "",
+    waiting > 0
+      ? `Inbox: ${threads} waiting for this session or its project. See them with inbox_list.`
+      : "",
     ...lines,
   ]
     .filter(Boolean)

@@ -3,6 +3,7 @@ import {
   type InboxAuthor,
   type InboxThread,
   inboxAwaitsConfirmFrom,
+  inboxProjectOf,
   pathBase,
   pathParent,
 } from "@exegol/shared";
@@ -20,7 +21,7 @@ import {
   replyTo,
   take,
 } from "../inbox/threads";
-import { text } from "../lib/names";
+import { sameName, text } from "../lib/names";
 import { runGit } from "../lib/worktree-safety";
 import { type ExegolToolContext, ExegolToolError } from "./exegol-protocol";
 import { colabNamed, colabTarget, colabView, placeOf, seenBy } from "./inbox-colabs";
@@ -70,6 +71,7 @@ const summary = (t: InboxThread) => ({
   title: t.title,
   status: t.status,
   resolution: t.resolution,
+  ...(t.toSession ? { for_session: t.toSession } : {}),
   ...(t.closing ? { closing: t.closing, closing_line: t.closingLine } : {}),
 });
 
@@ -108,12 +110,14 @@ const HANDLERS: Record<InboxToolName, Handler> = {
         body: text(args.body),
         url: text(args.url) || null,
         refs: Array.isArray(args.refs) ? args.refs.map(String) : [],
+        toSession: text(args.to_session) || null,
       },
     );
     return {
       thread: opened.thread.id,
       scope: opened.thread.scope,
       ...placeOf(opened.thread, colabs),
+      ...(opened.thread.toSession ? { for_session: opened.thread.toSession } : {}),
       seen_by: seenBy(opened.thread, colabs, context.projectId),
       next: POSTED,
       similar_open: opened.similarOpen.map(summary),
@@ -134,9 +138,13 @@ const HANDLERS: Record<InboxToolName, Handler> = {
     const projectId = context.projectId;
     const colabs = listColabs(db, projectId);
     const colabId = text(args.colab) ? colabNamed(colabs, projectId, args.colab).id : undefined;
+    const me = getAgent(db, context.agentId)?.alias ?? "";
     return {
       threads: listThreads(db, { projectId, state, query, limit, colabId }).map((t) => ({
         ...summary(t),
+        ...(t.toSession && inboxProjectOf(t) === projectId
+          ? { for_you: sameName(t.toSession, me) }
+          : {}),
         ...placeOf(t, colabs),
         kind: t.kind,
         last_activity_at: t.lastActivityAt,

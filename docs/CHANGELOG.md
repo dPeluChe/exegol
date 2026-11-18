@@ -16,6 +16,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 
 ### Added
 
+- **An inbox thread can be for one session.** Under a thread, "For" lists the open sessions of its project, by their Exegol name and the CLI's own session name: pick one and the project's other sessions no longer count that thread as theirs at their start, while they can still read it. Agents address one with `to_session` in `inbox_post`, and `inbox_list` says which threads are for another session. When no open session has that name, the thread counts for the whole project again; renaming a session keeps its threads.
 - **Terminals from before your last macOS login are named.** When macOS starts a new login session (a crash at wake, a logout that left the terminals running), the terminals Exegol kept alive lose the pasteboard, name resolution and the keychain: a copy from a CLI goes nowhere, `git push` cannot find the host, a CLI asks to log in again. Exegol now says so in a banner on start, with Restart terminals.
 
 - Inbox: a thread between two projects closes by agreement. When a session of another project than the one that opened it closes it, the close is a proposal (To confirm) until the opener's side confirms or answers; you can Confirm or Keep open, and Reopen any closed thread

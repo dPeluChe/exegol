@@ -10,6 +10,7 @@ export { cosineSimilarity } from "./lib/cosine";
 export { compactDuration } from "./lib/duration";
 export { fileManagerName, linuxFileManagerName } from "./lib/file-manager";
 export { type LinkFileKind, linkFileKind } from "./lib/link-extensions";
+export { sameName } from "./lib/names";
 export {
   isUnderPath,
   isWindowsPath,

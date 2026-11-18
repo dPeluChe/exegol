@@ -19,6 +19,8 @@ export interface InboxThread {
   scopeId: string | null;
   /** In a colab: the member project it is for; null for the whole colab */
   toProject: string | null;
+  /** The session it is for, by its name in the project the thread counts on; null for any */
+  toSession: string | null;
   kind: InboxKind;
   title: string;
   url: string | null;

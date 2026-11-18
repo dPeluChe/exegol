@@ -2,7 +2,7 @@ import { INBOX_TURN_LIMIT, type InboxThread, inboxPendingState } from "@exegol/s
 import Database from "libsql";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { runMigrations } from "../db/migrations";
-import { getThread, listThreads } from "../db/queries/inbox";
+import { countActiveThreads, getThread, listThreads } from "../db/queries/inbox";
 import { sendToSession, startSession } from "./send-to-session";
 import { sessionLine } from "./session-line";
 import {
@@ -14,6 +14,7 @@ import {
   PERSON,
   readThread,
   replyTo,
+  setSession,
 } from "./threads";
 
 const queued = vi.hoisted(() => ({ texts: [] as string[], refuse: false }));
@@ -89,13 +90,28 @@ describe("inboxPendingState", () => {
 
 describe("sessionLine", () => {
   it("counts the project's open threads, and says nothing with none", async () => {
-    expect(await sessionLine(db, "p1")).toBe("");
+    expect(await sessionLine(db, "p1", "a1")).toBe("");
     const id = post();
     post();
     post(agent("b1", "p2"), { scope: "project", projectId: "p2" });
-    expect(await sessionLine(db, "p1")).toContain("2 threads waiting");
+    expect(await sessionLine(db, "p1", "a1")).toContain("2 threads waiting");
     close(db, PERSON, id, "resolved", "Done");
-    expect(await sessionLine(db, "p1")).toContain("1 thread waiting");
+    expect(await sessionLine(db, "p1", "a1")).toContain("1 thread waiting");
+  });
+
+  it("leaves a thread named for one open session out of the others' count", async () => {
+    db.prepare("UPDATE agents SET alias = 'dash' WHERE id = 'a1'").run();
+    db.prepare("UPDATE agents SET alias = 'core' WHERE id = 'a2'").run();
+    const fields = { title: "Chart is off", body: "It breaks", url: null, refs: [] };
+    const { thread } = openThread(db, PERSON, inP1, { ...fields, toSession: "DASH" });
+    expect(await sessionLine(db, "p1", "a1")).toContain("1 thread waiting");
+    expect(await sessionLine(db, "p1", "a2")).toBe("");
+    expect(countActiveThreads(db, "p1")).toBe(1);
+
+    setSession(db, thread.id, "core");
+    expect(await sessionLine(db, "p1", "a1")).toBe("");
+    db.prepare("UPDATE agents SET status = 'stopped' WHERE id = 'a2'").run();
+    expect(await sessionLine(db, "p1", "a1")).toContain("1 thread waiting");
   });
 });
 

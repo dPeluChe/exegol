@@ -236,15 +236,15 @@ describe("colab threads", () => {
   });
 
   it("tell a starting session its colab, purpose, the other members and who is the main one", async () => {
-    const line = await sessionLine(db, "irma");
+    const line = await sessionLine(db, "irma", "none");
     expect(line).toContain(
       'colab "Landings" with Blueprints (labs-landings-base), blueprint, main dev, makes the changes.',
     );
     expect(line).toContain("Purpose: Blueprint fixes from its clones");
     expect(line).toContain("This project is a user dev");
-    const blue = await sessionLine(db, "blue");
+    const blue = await sessionLine(db, "blue", "none");
     expect(blue).toContain("This project is its main dev");
     expect(blue).toContain("clone, user dev, uses it and reports");
-    expect(await sessionLine(db, "out")).toBe("");
+    expect(await sessionLine(db, "out", "none")).toBe("");
   });
 });

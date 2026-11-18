@@ -20,6 +20,7 @@ import {
   readThread,
   reopen,
   replyTo,
+  setSession,
 } from "../../inbox/threads";
 import { publicProcedure, router } from "../trpc";
 
@@ -108,6 +109,10 @@ export const inboxRouter = router({
   lastTurn: publicProcedure
     .input(threadId)
     .mutation(({ ctx, input }) => inboxCall(() => giveLastTurn(ctx.db, input.id))),
+
+  setSession: publicProcedure
+    .input(threadId.extend({ session: z.string().max(40).nullable() }))
+    .mutation(({ ctx, input }) => inboxCall(() => setSession(ctx.db, input.id, input.session))),
 
   capture: publicProcedure
     .input(

@@ -167,6 +167,22 @@ describe("closing", () => {
     await expect(post("Other", { refs: [thread] })).rejects.toThrow(/still open/);
   });
 
+  it("names the one session a thread is for, and tells each session whether that is it", async () => {
+    db.prepare("UPDATE agents SET alias = 'dash', status = 'running' WHERE id = 'a2'").run();
+    const posted = await post("Chart is off", { to_session: " DASH " });
+    expect(posted).toMatchObject({ for_session: "dash" });
+    const mine = async (context: ExegolToolContext) =>
+      (await call<{ threads: { for_you: boolean }[] }>("inbox_list", {}, context)).threads[0]
+        ?.for_you;
+    expect(await mine(a2)).toBe(true);
+    expect(await mine(a1)).toBe(false);
+
+    await expect(post("Other", { to_session: "nobody" })).rejects.toThrow("Open: dash");
+    await expect(post("Mine", { target: "personal", to_session: "dash" })).rejects.toThrow(
+      "needs its project",
+    );
+  });
+
   it("finds a past thread by its resolution", async () => {
     const { thread } = await post();
     await call("inbox_close", closeArgs(thread), a2);

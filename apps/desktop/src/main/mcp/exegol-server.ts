@@ -133,7 +133,7 @@ export async function handleRequest(
       ? ""
       : isCommander(db, resolved.context)
         ? COMMANDER_LINE
-        : await sessionLine(db, resolved.context.projectId);
+        : await sessionLine(db, resolved.context.projectId, resolved.context.agentId);
     socket.write(encodeResponse(req.id, { text }));
     return;
   }

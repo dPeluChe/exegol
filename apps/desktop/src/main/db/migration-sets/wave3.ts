@@ -507,4 +507,10 @@ export const wave3Migrations: Migration[] = [
       WHERE closing_status IS NOT NULL;
     `,
   },
+  {
+    // The name (alias) of the one session a thread is for, in the project it counts on; null
+    // for any. A name, not an agent id: a resume makes a new row and keeps the name
+    id: "w3_047_inbox_to_session",
+    sql: "ALTER TABLE inbox_threads ADD COLUMN to_session TEXT;",
+  },
 ];

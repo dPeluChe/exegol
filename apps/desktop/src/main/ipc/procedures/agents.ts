@@ -40,6 +40,7 @@ import {
   setAgentPrWatch,
 } from "../../db/queries/agents";
 import { clearMainMark, setProjectMainMark } from "../../db/queries/main-session";
+import { renameSession } from "../../inbox/threads";
 import { getPrWatchStatus, onPrWatchToggled } from "../../integrations/github/pr-watch";
 import { broadcast } from "../../lib/event-bus";
 import { getMcpAgentStates } from "../../mcp/exegol-server";
@@ -102,7 +103,9 @@ export const agentRouter = router({
   setAlias: publicProcedure
     .input(z.object({ id: z.string(), alias: z.string().trim().max(40).nullable() }))
     .mutation(({ ctx, input }) => {
+      const agent = getAgent(ctx.db, input.id);
       setAgentAlias(ctx.db, input.id, input.alias || null);
+      if (agent?.alias) renameSession(ctx.db, agent.projectId, agent.alias, input.alias || null);
       return { success: true };
     }),
   // Returns null (not undefined) for consistency with TanStack Query v5,
