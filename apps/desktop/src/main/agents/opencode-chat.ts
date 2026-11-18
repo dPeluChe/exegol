@@ -81,6 +81,22 @@ const seqOf = (cursor: string | undefined, session: string): number | null => {
   return id === session && seq ? Number(seq) : null;
 };
 
+/** The session's title (its rename, else the one OpenCode gave it); null when there is none to read */
+export function opencodeTitle(path: string, cwds: string[], sinceMs: number): string | null {
+  try {
+    return withReadonlyDb(path, (db) => {
+      const session = latestSession(db, cwds, sinceMs);
+      if (!session) return null;
+      const row = db.prepare("SELECT title FROM session_v2 WHERE id = ?").get(session) as
+        | { title: string | null }
+        | undefined;
+      return row?.title ?? null;
+    });
+  } catch {
+    return null;
+  }
+}
+
 /** From its own database; null when it has no session here, or a schema this does not know */
 export function opencodePage(
   path: string,

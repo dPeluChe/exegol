@@ -120,6 +120,22 @@ const olderMark = (session: string, links: Link[]) => {
   return links.length === PAGE_NODES && parent != null ? `${session}:${parent}` : null;
 };
 
+/** The session's title (its /rename, else the one Devin gave it); null when there is none to read */
+export function devinTitle(path: string, target: DevinTarget): string | null {
+  try {
+    return withReadonlyDb(path, (db) => {
+      const session = findSession(db, target);
+      if (!session) return null;
+      const row = db.prepare("SELECT title FROM sessions WHERE id = ?").get(session.id) as
+        | { title: string | null }
+        | undefined;
+      return row?.title ?? null;
+    });
+  } catch {
+    return null;
+  }
+}
+
 /** From its own database; null when it has no session here, or a schema this does not know */
 export function devinPage(path: string, target: DevinTarget, cursor: string | undefined) {
   try {

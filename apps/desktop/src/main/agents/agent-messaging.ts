@@ -10,7 +10,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { type Agent, acceptsFollowUps, LIVE_STATUSES } from "@exegol/shared";
+import { type Agent, acceptsFollowUps, LIVE_STATUSES, otherCliName } from "@exegol/shared";
 import type Database from "libsql";
 import { getDb } from "../db/client";
 // Direct module imports (not the queries barrel): the barrel pulls
@@ -19,7 +19,6 @@ import { findLiveAgentsByAlias, getAgent } from "../db/queries/agents";
 import { findMessageByClientKey, sendMessage } from "../db/queries/messages";
 import { getProject } from "../db/queries/projects";
 import { logger } from "../lib/logger";
-import { sameName } from "../lib/names";
 import {
   forgetAgentInjectionState,
   injectNow,
@@ -263,7 +262,7 @@ export function sendAgentMessage(
     {
       fromAgentId,
       fromLabel,
-      fromCliName: sender?.cliName && !sameName(sender.cliName, fromLabel) ? sender.cliName : null,
+      fromCliName: sender ? otherCliName(sender) : null,
       replyTarget: sender?.alias ?? fromAgentId,
       text,
       expectsReply: input.expectsReply ?? true,

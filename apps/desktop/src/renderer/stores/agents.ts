@@ -123,8 +123,8 @@ export function startAgentStatusPush(queryClient: QueryClient): void {
   const offMessageHeld = window.api.onMessageHeld(({ agentId, reason }) =>
     useAgentStore.getState().addAttentionItem(agentId, { level: "info", reason }),
   );
-  const offRenamed = window.api.onAgentRenamed(({ agentId, alias }) =>
-    useAgentStore.getState().updateAgent(agentId, { alias }),
+  const offRenamed = window.api.onAgentRenamed(({ agentId, alias, cliName }) =>
+    useAgentStore.getState().updateAgent(agentId, { cliName, ...(alias ? { alias } : {}) }),
   );
   const stopMcp = window.api.onMcpStatus((e) => queryClient.setQueryData(MCP_STATUS_KEY, e));
   const stopFollowUps = window.api.onFollowUps((e) =>
@@ -238,6 +238,7 @@ export function toAgentState(agent: Agent, overrides?: Partial<AgentState>): Age
     taskDescription: agent.taskDescription,
     branchName: agent.branchName ?? null,
     alias: agent.alias ?? null,
+    cliName: agent.cliName ?? null,
     tokenUsage: { input: 0, output: 0, cost: 0 },
     startedAt: agent.startedAt,
     accessMode: agent.accessMode ?? null,
@@ -273,6 +274,8 @@ export interface AgentState {
   branchName: string | null;
   /** T160: session alias — addressing name for agent_send + display label. */
   alias?: string | null;
+  /** Its name inside its CLI, when Exegol has read one */
+  cliName?: string | null;
   tokenUsage: { input: number; output: number; cost: number };
   startedAt: number | null;
   accessMode: AgentAccessMode | null;
@@ -598,6 +601,7 @@ export const useAgentStore = create<AgentStore>()(
                 status: syncedStatus(existing.status, dbAgent.status as AgentStatus),
                 branchName: dbAgent.branchName ?? existing.branchName ?? null,
                 alias: dbAgent.alias ?? existing.alias ?? null,
+                cliName: dbAgent.cliName ?? existing.cliName ?? null,
                 currentStep: existing.currentStep ?? dbAgent.currentStep ?? null,
                 muted: dbAgent.muted ?? existing.muted ?? false,
                 prWatch: dbAgent.prWatch ?? existing.prWatch ?? false,
@@ -632,6 +636,7 @@ export const useAgentStore = create<AgentStore>()(
                 taskDescription: dbAgent.taskDescription,
                 branchName: dbAgent.branchName ?? null,
                 alias: dbAgent.alias ?? null,
+                cliName: dbAgent.cliName ?? null,
                 tokenUsage: { input: 0, output: 0, cost: 0 },
                 startedAt: dbAgent.startedAt,
                 accessMode: dbAgent.accessMode ?? null,

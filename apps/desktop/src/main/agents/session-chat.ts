@@ -1,18 +1,18 @@
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
-import type { Agent, ChatPage, OlderChatPage } from "@exegol/shared";
+import type { Agent, ChatPage, CliName, OlderChatPage } from "@exegol/shared";
 import type Database from "libsql";
 import { getAgent, getAgentCwd, listLiveProjectSessions } from "../db/queries/agents";
-import { claudeProjectDir, claudeRoot } from "../history/providers/claude-code";
-import { codexRoot, dayDirs } from "../history/providers/codex";
+import { claudeProjectDir, claudeRenamedTo, claudeRoot } from "../history/providers/claude-code";
+import { codexRoot, codexThreadName, dayDirs } from "../history/providers/codex";
 import { broadcast } from "../lib/event-bus";
 import { setBounded } from "../lib/set-bounded";
 import { assertSafePath } from "../security/path-guard";
 import { getPtyHost } from "../terminal/pty-host";
 import { agyTurns } from "./agy-terminal";
-import { devinDbPath, devinPage, olderDevinPage } from "./devin-chat";
+import { devinDbPath, devinPage, devinTitle, olderDevinPage } from "./devin-chat";
 import { hookCwdOf, hookSessionOf } from "./hook-cwd";
-import { olderOpencodePage, opencodeDbPath, opencodePage } from "./opencode-chat";
+import { olderOpencodePage, opencodeDbPath, opencodePage, opencodeTitle } from "./opencode-chat";
 import { providerSessionId, SESSION_ID_RE } from "./provider-session-id";
 import {
   type LineParser,
@@ -111,12 +111,6 @@ async function transcriptPath(
   return path;
 }
 
-/** Where its CLI keeps this session's transcript; null for a CLI without one */
-export async function transcriptFile(db: Database.Database, agent: Agent): Promise<string | null> {
-  const provider = PROVIDERS[agent.cliType];
-  return provider ? transcriptPath(db, agent, provider) : null;
-}
-
 const pushTimers = new Map<string, NodeJS.Timeout>();
 
 /** A turn began or ended: cut the terminal text there, and tell an open chat */
@@ -140,6 +134,30 @@ function loneFolders(db: Database.Database, agent: Agent): string[] {
   );
   if (shared) return [];
   return [...new Set([hookCwdOf(agent.id), own])].filter((cwd): cwd is string => !!cwd);
+}
+
+/** The session's name in its CLI's own store; null when Exegol cannot tell which session is its */
+export async function cliNameOf(db: Database.Database, agent: Agent): Promise<CliName | null> {
+  if (agent.cliType === "claude-code") {
+    const path = await transcriptPath(db, agent, PROVIDERS["claude-code"] as Provider);
+    return path ? { name: await claudeRenamedTo(path), renamed: true } : null;
+  }
+  if (agent.cliType === "codex") {
+    const id = sessionIdOf(agent);
+    return id ? { name: await codexThreadName(id), renamed: false } : null;
+  }
+  const id = agent.cliType === "devin" ? sessionIdOf(agent) : null;
+  const cwds = loneFolders(db, agent);
+  if (!id && cwds.length === 0) return null;
+  if (agent.cliType === "devin") {
+    const target = { id, cwds, sinceSec: agent.startedAt ?? 0 };
+    return { name: devinTitle(devinDbPath(), target), renamed: false };
+  }
+  if (agent.cliType === "opencode") {
+    const name = opencodeTitle(opencodeDbPath(), cwds, (agent.startedAt ?? 0) * 1000);
+    return { name, renamed: false };
+  }
+  return null;
 }
 
 type StorePage = Omit<ChatPage, "fromTerminal" | "markdown">;

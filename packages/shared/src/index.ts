@@ -10,7 +10,14 @@ export { cosineSimilarity } from "./lib/cosine";
 export { compactDuration } from "./lib/duration";
 export { fileManagerName, linuxFileManagerName } from "./lib/file-manager";
 export { type LinkFileKind, linkFileKind } from "./lib/link-extensions";
-export { renameEffect, SESSION_NAME_MAX, sameName } from "./lib/names";
+export {
+  CLI_NAME_MAX,
+  type CliName,
+  otherCliName,
+  renameEffect,
+  SESSION_NAME_MAX,
+  sameName,
+} from "./lib/names";
 export {
   isUnderPath,
   isWindowsPath,

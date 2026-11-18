@@ -3,23 +3,22 @@ import { describe, expect, it, vi } from "vitest";
 import { runMigrations } from "../db/migrations";
 
 const mocks = vi.hoisted(() => ({
-  renamed: "taskyserver",
+  read: { name: "taskyserver", renamed: true },
   pushes: [] as unknown[],
   moved: [] as unknown[],
 }));
 vi.mock("../inbox/threads", () => ({
   renameSession: (_db: unknown, ...args: unknown[]) => mocks.moved.push(args),
 }));
-vi.mock("./session-chat", () => ({ transcriptFile: async () => "/t.jsonl" }));
-vi.mock("../history/providers/claude-code", () => ({ claudeRenamedTo: async () => mocks.renamed }));
+vi.mock("./session-chat", () => ({ cliNameOf: async () => mocks.read }));
 vi.mock("../lib/event-bus", () => ({
   broadcast: (channel: string, data: unknown) => mocks.pushes.push([channel, data]),
 }));
 
 import { setAgentAlias } from "../db/queries/agents";
-import { followCliRename } from "./cli-name";
+import { followCliName } from "./cli-name";
 
-describe("followCliRename", () => {
+describe("followCliName", () => {
   it("renames the session and its inbox threads once, and keeps a later name set in Exegol", async () => {
     const db = new Database(":memory:");
     runMigrations(db);
@@ -34,14 +33,21 @@ describe("followCliRename", () => {
         cli_name: string;
       };
 
-    await followCliRename(db, "a1");
+    await followCliName(db, "a1");
 
     expect(row()).toMatchObject({ alias: "taskyserver", cli_name: "taskyserver" });
     expect(mocks.moved).toEqual([["p1", "basalt", "taskyserver"]]);
-    expect(mocks.pushes).toContainEqual(["agent:renamed", { agentId: "a1", alias: "taskyserver" }]);
+    expect(mocks.pushes).toContainEqual([
+      "agent:renamed",
+      { agentId: "a1", cliName: "taskyserver", alias: "taskyserver" },
+    ]);
 
     setAgentAlias(db, "a1", "mine");
-    await followCliRename(db, "a1");
+    await followCliName(db, "a1");
     expect(row().alias).toBe("mine");
+
+    mocks.read = { name: "A title the CLI wrote", renamed: false };
+    await followCliName(db, "a1");
+    expect(row()).toMatchObject({ alias: "mine", cli_name: "A title the CLI wrote" });
   });
 });

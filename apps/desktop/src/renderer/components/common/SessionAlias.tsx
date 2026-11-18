@@ -1,11 +1,11 @@
-import { SESSION_NAME_MAX } from "@exegol/shared";
+import { otherCliName, SESSION_NAME_MAX } from "@exegol/shared";
 import { Pencil } from "lucide-react";
 import { useEffect, useState } from "react";
 import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentStore } from "../../stores/agents";
 
 interface SessionAliasProps {
-  agent: { id: string; alias?: string | null; cliType: string };
+  agent: { id: string; alias?: string | null; cliName?: string | null; cliType: string };
   /** Text size class for the name span (dashboard uses text-sm, toolbar text-[9px]). */
   textClassName?: string;
 }
@@ -19,6 +19,7 @@ interface SessionAliasProps {
 export function SessionAlias({ agent, textClassName = "text-sm" }: SessionAliasProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState("");
+  const cliName = otherCliName(agent);
 
   useEffect(() => {
     const handler = (e: Event) => {
@@ -66,6 +67,14 @@ export function SessionAlias({ agent, textClassName = "text-sm" }: SessionAliasP
       <span className={`truncate font-medium text-text-primary ${textClassName}`}>
         {agent.alias ?? agent.cliType}
       </span>
+      {cliName && (
+        <span
+          title={`Named "${cliName}" inside its CLI`}
+          className={`min-w-0 max-w-48 shrink-[2] truncate text-text-muted ${textClassName}`}
+        >
+          {cliName}
+        </span>
+      )}
       <button
         type="button"
         title="Rename session (addressing name for agent messages)"
