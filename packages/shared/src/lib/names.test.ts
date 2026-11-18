@@ -31,9 +31,14 @@ describe("renameEffect", () => {
       { name: "Fix the login test", renamed: false },
     );
     expect(effect).toEqual({ cliName: "Fix the login test", alias: null });
+  });
+});
+
+describe("otherCliName", () => {
+  it("is the CLI's name only when it is not the session's own", () => {
     expect(otherCliName({ alias: "basalt", cliName: "Fix the login test" })).toBe(
       "Fix the login test",
     );
-    expect(otherCliName({ alias: "Tasky", cliName: "tasky" })).toBeNull();
+    expect(otherCliName({ alias: "tasky", cliName: "tasky" })).toBeNull();
   });
 });

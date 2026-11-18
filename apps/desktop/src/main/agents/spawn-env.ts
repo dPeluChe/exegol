@@ -153,10 +153,7 @@ export function broadcastAgentStatus(event: AgentStatusEvent): void {
       const db = getDb();
       deliverPendingAgentMessages(db, event.agentId);
       if (!event.idleOnly) fireAgentLinks(db, event.agentId);
-      // Claude's is read at its turn start; the others title a session during its first turns
-      if (event.cliType !== "claude-code" && event.cliType !== "shell") {
-        void followCliName(db, event.agentId);
-      }
+      void followCliName(db, { id: event.agentId, cliType: event.cliType }, "turn_end");
     } catch (err) {
       // db not ready during early startup — non-fatal, but never silent: a
       // swallowed delivery failure looks exactly like "nobody wrote to me".

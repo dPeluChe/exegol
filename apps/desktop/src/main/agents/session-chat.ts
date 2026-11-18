@@ -136,58 +136,83 @@ function loneFolders(db: Database.Database, agent: Agent): string[] {
   return [...new Set([hookCwdOf(agent.id), own])].filter((cwd): cwd is string => !!cwd);
 }
 
-/** The session's name in its CLI's own store; null when Exegol cannot tell which session is its */
-export async function cliNameOf(db: Database.Database, agent: Agent): Promise<CliName | null> {
-  if (agent.cliType === "claude-code") {
-    const path = await transcriptPath(db, agent, PROVIDERS["claude-code"] as Provider);
-    return path ? { name: await claudeRenamedTo(path), renamed: true } : null;
-  }
-  if (agent.cliType === "codex") {
-    const id = sessionIdOf(agent);
-    return id ? { name: await codexThreadName(id), renamed: false } : null;
-  }
-  const id = agent.cliType === "devin" ? sessionIdOf(agent) : null;
-  const cwds = loneFolders(db, agent);
-  if (!id && cwds.length === 0) return null;
-  if (agent.cliType === "devin") {
-    const target = { id, cwds, sinceSec: agent.startedAt ?? 0 };
-    return { name: devinTitle(devinDbPath(), target), renamed: false };
-  }
-  if (agent.cliType === "opencode") {
-    const name = opencodeTitle(opencodeDbPath(), cwds, (agent.startedAt ?? 0) * 1000);
-    return { name, renamed: false };
-  }
-  return null;
-}
-
 type StorePage = Omit<ChatPage, "fromTerminal" | "markdown">;
 
 interface ChatStore {
   page: (db: Database.Database, agent: Agent, cursor: string | undefined) => StorePage | null;
+  title: (db: Database.Database, agent: Agent) => { title: string | null } | null;
   older: (before: string) => OlderChatPage;
 }
 
 /** The CLIs that keep their turns in a database of their own */
+const devinTarget = (db: Database.Database, agent: Agent) => ({
+  id: sessionIdOf(agent),
+  cwds: loneFolders(db, agent),
+  sinceSec: agent.startedAt ?? 0,
+});
+
+const opencodeSince = (agent: Agent) => (agent.startedAt ?? 0) * 1000;
+
 const STORES: Record<string, ChatStore> = {
   opencode: {
     page(db, agent, cursor) {
       const cwds = loneFolders(db, agent);
       if (cwds.length === 0) return null;
-      return opencodePage(opencodeDbPath(), cwds, (agent.startedAt ?? 0) * 1000, cursor);
+      return opencodePage(opencodeDbPath(), cwds, opencodeSince(agent), cursor);
+    },
+    title(db, agent) {
+      const cwds = loneFolders(db, agent);
+      return cwds.length > 0 ? opencodeTitle(opencodeDbPath(), cwds, opencodeSince(agent)) : null;
     },
     older: (before) => olderOpencodePage(opencodeDbPath(), before),
   },
   devin: {
-    page(db, agent, cursor) {
-      const target = {
-        id: sessionIdOf(agent),
-        cwds: loneFolders(db, agent),
-        sinceSec: agent.startedAt ?? 0,
-      };
-      return devinPage(devinDbPath(), target, cursor);
-    },
+    page: (db, agent, cursor) => devinPage(devinDbPath(), devinTarget(db, agent), cursor),
+    title: (db, agent) => devinTitle(devinDbPath(), devinTarget(db, agent)),
     older: (before) => olderDevinPage(devinDbPath(), before),
   },
+};
+
+/** When a CLI's name for a session is worth reading, and how often at most */
+interface NameReader {
+  at: "turn_start" | "turn_end";
+  everyMs: number;
+  read: (db: Database.Database, agent: Agent) => Promise<CliName | null>;
+}
+
+// A title the CLI writes by itself changes in its first turns, then rarely
+const TITLE_EVERY_MS = 2 * 60_000;
+
+const fromStore = (cli: string): NameReader => ({
+  at: "turn_end",
+  everyMs: TITLE_EVERY_MS,
+  async read(db, agent) {
+    const found = STORES[cli]?.title(db, agent);
+    return found ? { name: found.title, renamed: false } : null;
+  },
+});
+
+/** The CLIs whose own store names a session; a read is null when Exegol cannot tell which is its */
+export const NAME_READERS: Record<string, NameReader> = {
+  "claude-code": {
+    // /rename is typed at the prompt: the next turn's start is the first to see it
+    at: "turn_start",
+    everyMs: 0,
+    async read(db, agent) {
+      const path = await transcriptPath(db, agent, PROVIDERS["claude-code"] as Provider);
+      return path ? { name: await claudeRenamedTo(path), renamed: true } : null;
+    },
+  },
+  codex: {
+    at: "turn_end",
+    everyMs: TITLE_EVERY_MS,
+    async read(_db, agent) {
+      const id = sessionIdOf(agent);
+      return id ? { name: await codexThreadName(id), renamed: false } : null;
+    },
+  },
+  devin: fromStore("devin"),
+  opencode: fromStore("opencode"),
 };
 
 const NOTHING: ChatPage = {

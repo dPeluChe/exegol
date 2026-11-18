@@ -212,8 +212,7 @@ function trackTurn(
   if (event === "finished") prepareCommanderReply(db, agent);
   if (boundary) noteCommanderTurn(db, agent, event);
   if (event === "turn_started") {
-    // /rename is typed at the prompt: the next turn's start is the first to see it
-    if (agent.cliType === "claude-code") void followCliName(db, agent.id);
+    void followCliName(db, agent, "turn_start");
     clearHookTool(agent.id);
     try {
       const cwd = maps.initialSnapshots.get(agent.id)?.cwd ?? getAgentCwd(db, agent.id);

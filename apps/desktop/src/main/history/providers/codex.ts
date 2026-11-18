@@ -1,7 +1,9 @@
 import { readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
+import { z } from "zod";
 import { mapWithConcurrency } from "../../lib/concurrency";
+import { parseJson } from "../../lib/parse-json";
 import { FILE_CONCURRENCY, mentionsAnyCwd } from "../pool";
 import { readHead, readTail } from "../read-head";
 import { type LocalHistoryProvider, type LocalSession, normalizeTitle } from "../types";
@@ -124,6 +126,8 @@ export async function dayDirs(root: string, since: number): Promise<string[]> {
 
 export const codexRoot = () => join(homedir(), ".codex", "sessions");
 
+const IndexLine = z.object({ id: z.string(), thread_name: z.string().nullish() });
+
 /** The thread's name in Codex's append-only index (/rename, or a title it gave): the last line wins */
 export async function codexThreadName(sessionId: string): Promise<string | null> {
   const index = join(homedir(), ".codex", "session_index.jsonl");
@@ -131,12 +135,8 @@ export async function codexThreadName(sessionId: string): Promise<string | null>
   let name: string | null = null;
   for (const raw of tail.split("\n")) {
     if (!raw.includes(sessionId)) continue;
-    try {
-      const line = JSON.parse(raw) as { id?: string; thread_name?: string };
-      if (line.id === sessionId && line.thread_name) name = normalizeTitle(line.thread_name);
-    } catch {
-      // the tail starts mid-line
-    }
+    const line = parseJson(raw, IndexLine);
+    if (line?.id === sessionId && line.thread_name) name = normalizeTitle(line.thread_name);
   }
   return name;
 }

@@ -3,7 +3,7 @@ import type { OlderChatPage, SessionTurn } from "@exegol/shared";
 import type Database from "libsql";
 import { z } from "zod";
 import { parseJson } from "../lib/parse-json";
-import { withReadonlyDb } from "../lib/readonly-db";
+import { titleOf, withReadonlyDb } from "../lib/readonly-db";
 import { xdgDataDir } from "../lib/xdg-data";
 import { textTurn } from "./session-transcript";
 
@@ -81,16 +81,13 @@ const seqOf = (cursor: string | undefined, session: string): number | null => {
   return id === session && seq ? Number(seq) : null;
 };
 
-/** The session's title (its rename, else the one OpenCode gave it); null when there is none to read */
-export function opencodeTitle(path: string, cwds: string[], sinceMs: number): string | null {
+/** The session's title (its rename, else the one OpenCode gave it); null with no session here */
+export function opencodeTitle(path: string, cwds: string[], sinceMs: number) {
   try {
     return withReadonlyDb(path, (db) => {
       const session = latestSession(db, cwds, sinceMs);
-      if (!session) return null;
-      const row = db.prepare("SELECT title FROM session_v2 WHERE id = ?").get(session) as
-        | { title: string | null }
-        | undefined;
-      return row?.title ?? null;
+      // Its own query: the chat's lookup must not depend on a column only this reads
+      return session ? titleOf(db, "session_v2", session) : null;
     });
   } catch {
     return null;
