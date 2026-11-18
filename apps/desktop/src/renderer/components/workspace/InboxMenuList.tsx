@@ -24,8 +24,11 @@ const EMPTY: Record<InboxTarget["kind"], string> = {
 
 const PANEL_ID = "inbox-menu-panel";
 
-const ADD_CLASS =
-  "ml-auto flex shrink-0 items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] text-text-muted hover:bg-white/5 hover:text-text-primary";
+/** A small text button in a list's header */
+export const HEAD_BUTTON =
+  "flex shrink-0 items-center gap-0.5 rounded px-1.5 py-0.5 text-[10px] text-text-muted hover:bg-white/5 hover:text-text-primary";
+
+const ADD_CLASS = `ml-auto ${HEAD_BUTTON}`;
 
 export function InboxMenuList({
   active,

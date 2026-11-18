@@ -1,25 +1,13 @@
 import { type InboxThread, sameName } from "@exegol/shared";
-import { useShallow } from "zustand/react/shallow";
-import { isLiveSession } from "../../../lib/sidebar-views";
-import { useAgentStore } from "../../../stores/agents";
+import { useSessionTargets } from "../../../hooks/use-session-targets";
 import { AgentIcon } from "../../common/AgentIcon";
 import { FilterChip } from "../../common/FilterChip";
-import { groupTargets, sendLabel } from "../../terminal/send-targets";
-import { useCliSessionNames } from "../../terminal/use-send-to";
+import { sendLabel } from "../../terminal/send-targets";
 import { SESSION_CHIP, useThreadAct } from "./InboxMoreActions";
 
 /** The one session of its project a thread is for: its other sessions do not count it as theirs */
 export function InboxForSession({ thread, projectId }: { thread: InboxThread; projectId: string }) {
-  const sessions = useAgentStore(
-    useShallow((s) =>
-      Object.values(s.agents).filter(
-        (a) => a.projectId === projectId && isLiveSession(a) && !a.archived && !!a.alias,
-      ),
-    ),
-  );
-  const groups = groupTargets(sessions, new Map());
-  const targets = groups.flatMap((g) => g.targets);
-  const cliNames = useCliSessionNames(groups);
+  const { targets, cliNames } = useSessionTargets(projectId);
   const forName = thread.toSession;
   const { busy, act } = useThreadAct(thread.id);
   const set = (session: string | null) => void act("inbox.setSession", { session });

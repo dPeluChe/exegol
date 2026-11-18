@@ -128,6 +128,9 @@ export function inboxPendingState(t: InboxThread): InboxPendingState {
   return (t.ownerReadSeq ?? 0) < t.lastSeq ? "not_read" : "read_no_reply";
 }
 
+export const inboxNeedsYou = (threads: InboxThread[]) =>
+  threads.some((t) => inboxPendingState(t) === "needs_you");
+
 /** What `exegol://capture` carried, before the person confirms it */
 export interface CaptureLink {
   title: string | null;

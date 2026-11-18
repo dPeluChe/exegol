@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { ALL_THREADS } from "../lib/colab-channels";
 import type { WorkspaceSection } from "../lib/workspace-sections";
 
 /** "dashboard" is the cross-project view: no project is selected while it shows. */
@@ -42,8 +43,12 @@ interface AppStore {
   /** Colabs tab narrowed to one project, from a Company badge. In memory */
   inboxProject: string | null;
   openInbox: (projectId: string | null) => void;
-  /** What the Colabs tab shows beside its lists. In memory */
-  colabsPanel: ColabsPanel;
+  /** The Colabs tab: its list ("all", "personal" or a colab id) and what shows beside it. In
+   *  memory */
+  colabsView: ColabsView;
+  /** A channel, on its overview or on a panel */
+  showColabs: (channel: string, panel?: ColabsPanel) => void;
+  /** A panel beside the channel shown */
   setColabsPanel: (panel: ColabsPanel) => void;
   /** The Colabs tab on a new colab that starts with this project (the Inbox menu) */
   openNewColab: (projectId: string) => void;
@@ -131,10 +136,20 @@ const MAX_CHAT_FONT = 20;
 export type CompanyView = "chat" | "terminal";
 export type CompanySide = "left" | "right";
 
+/** A thread, the settings of the channel's colab, a new colab, or a new thread in the channel */
 export type ColabsPanel =
   | { kind: "thread"; id: string }
-  | { kind: "colab"; id: string | null; firstMember?: string }
+  | { kind: "settings" }
+  | { kind: "newColab"; firstMember?: string }
+  | { kind: "newThread" }
   | null;
+
+export interface ColabsView {
+  channel: string;
+  panel: ColabsPanel;
+}
+
+const ALL_COLABS: ColabsView = { channel: ALL_THREADS, panel: null };
 
 const DASHBOARD = { activeView: "dashboard", projectsFrom: null } as const;
 
@@ -250,16 +265,21 @@ export const useAppStore = create<AppStore>()(
       dashboardMode: null,
       setDashboardMode: (mode) => set({ dashboardMode: mode }),
       inboxProject: null,
-      openInbox: (projectId) => set({ dashboardMode: "colabs", inboxProject: projectId }),
-      colabsPanel: null,
-      setColabsPanel: (panel) => set({ colabsPanel: panel }),
+      openInbox: (projectId) =>
+        set({ dashboardMode: "colabs", inboxProject: projectId, colabsView: ALL_COLABS }),
+      colabsView: ALL_COLABS,
+      showColabs: (channel, panel = null) => set({ colabsView: { channel, panel } }),
+      setColabsPanel: (panel) => set((s) => ({ colabsView: { ...s.colabsView, panel } })),
       openNewColab: (projectId) =>
         set({
           ...DASHBOARD,
           dashboardMode: "colabs",
           inboxProject: null,
           inboxMenuOpen: false,
-          colabsPanel: { kind: "colab", id: null, firstMember: projectId },
+          colabsView: {
+            channel: ALL_THREADS,
+            panel: { kind: "newColab", firstMember: projectId },
+          },
         }),
       colabsHelpHidden: false,
       setColabsHelpHidden: (hidden) => set({ colabsHelpHidden: hidden }),
