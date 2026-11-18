@@ -19,6 +19,7 @@ import { findLiveAgentsByAlias, getAgent } from "../db/queries/agents";
 import { findMessageByClientKey, sendMessage } from "../db/queries/messages";
 import { getProject } from "../db/queries/projects";
 import { logger } from "../lib/logger";
+import { sameName } from "../lib/names";
 import {
   forgetAgentInjectionState,
   injectNow,
@@ -262,6 +263,7 @@ export function sendAgentMessage(
     {
       fromAgentId,
       fromLabel,
+      fromCliName: sender?.cliName && !sameName(sender.cliName, fromLabel) ? sender.cliName : null,
       replyTarget: sender?.alias ?? fromAgentId,
       text,
       expectsReply: input.expectsReply ?? true,

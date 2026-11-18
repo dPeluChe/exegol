@@ -109,6 +109,7 @@ export function mapAgentRow(row: Record<string, unknown>): Agent {
     id: r.id,
     projectId: r.project_id,
     alias: r.alias ?? null,
+    cliName: r.cli_name ?? null,
     worktreeId: r.worktree_id,
     branchName: r.branch_name,
     cliType: r.cli_type as Agent["cliType"],

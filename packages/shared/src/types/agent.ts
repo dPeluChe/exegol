@@ -585,6 +585,8 @@ export type Agent = {
   worktreeId: string | null;
   /** T160: user-editable session alias — addressing name for agent_send + UI labels. */
   alias?: string | null;
+  /** The name it was last given inside its CLI (Claude's /rename), when Exegol has read one */
+  cliName?: string | null;
   branchName?: string | null;
   cliType: AgentCliType;
   status: AgentStatus;

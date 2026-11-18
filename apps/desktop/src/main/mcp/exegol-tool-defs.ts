@@ -67,9 +67,12 @@ const OWN_TOOLS: ToolBody<ExegolToolName>[] = [
       "List the live agents you can message: those of your project, of one other project by " +
       "name with project, or every project with all_projects. The response ALWAYS has both keys: `self` (YOUR session id + name — sign " +
       "with it; `name` may be null) and `agents` (the others: id, name, provider, project, " +
-      "status, task; may be an empty array); `inOtherProjects` counts the ones left out. Plain " +
-      "terminals are not listed: they cannot read messages. Ids and names are stable for the " +
-      "whole session — cache them. Address agent_send by name when set, or by id.",
+      "status, task; may be an empty array); `inOtherProjects` counts the ones left out. `name` " +
+      "is the one the person sees on the session; `cli_name` is the one it was given inside " +
+      "its CLI, when known: a rename there becomes the name, so the two differ only after the " +
+      "person renamed the session in Exegol. Plain terminals are not listed: " +
+      "they cannot read messages. Ids are stable for the whole session; a name changes only " +
+      "when the person renames the session. Address agent_send by name when set, or by id.",
     inputSchema: {
       type: "object",
       properties: {

@@ -29,6 +29,7 @@ import { noteAgentBoundarySignal, noteAgentOutput } from "./agent-message-sweep"
 import { clearAgentLinks, clearAgentMessageQueue, isEchoingInjection } from "./agent-messaging";
 import type { OutputProcessor } from "./agent-output-processor";
 import { handleParallelAgentExit } from "./agent-parallel-orchestration";
+import { followCliRename } from "./cli-name";
 import { detectCliSelfUpdate } from "./cli-self-update";
 import { noteHookCwd, noteHookSession } from "./hook-cwd";
 import { clearHookTool, noteHookTool } from "./hook-tool";
@@ -206,10 +207,13 @@ function trackTurn(
   maps: SessionMaps,
   event: AgentSignalType,
 ): void {
-  if (event === "turn_started" || event === "finished") noteChatBoundary(agent.id, agent.cliType);
+  const boundary = event === "turn_started" || event === "finished";
+  if (boundary) noteChatBoundary(agent.id, agent.cliType);
   if (event === "finished") prepareCommanderReply(db, agent);
-  if (event === "turn_started" || event === "finished") noteCommanderTurn(db, agent, event);
+  if (boundary) noteCommanderTurn(db, agent, event);
   if (event === "turn_started") {
+    // /rename is typed at the prompt: the next turn's start is the first to see it
+    if (agent.cliType === "claude-code") void followCliRename(db, agent.id);
     clearHookTool(agent.id);
     try {
       const cwd = maps.initialSnapshots.get(agent.id)?.cwd ?? getAgentCwd(db, agent.id);

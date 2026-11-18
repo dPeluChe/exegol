@@ -1,4 +1,4 @@
-import type { ResumableSession } from "@exegol/shared";
+import { type ResumableSession, SESSION_NAME_MAX } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import { History } from "lucide-react";
@@ -239,7 +239,7 @@ function SessionName({
         <input
           aria-label="Session name"
           value={name}
-          maxLength={40}
+          maxLength={SESSION_NAME_MAX}
           onChange={(e) => onName(e.target.value)}
           placeholder="A codename if empty"
           className={INPUT_CLASS}

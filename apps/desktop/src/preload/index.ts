@@ -230,6 +230,7 @@ contextBridge.exposeInMainWorld("api", {
   onStuckTurn: (callback: (event: unknown) => void) => listen("agent:stuck-turn", callback),
   onAgentActivity: (callback: (event: unknown) => void) => listen("agent:activity", callback),
   onMessageHeld: (callback: (event: unknown) => void) => listen("agent:message-held", callback),
+  onAgentRenamed: (callback: (event: unknown) => void) => listen("agent:renamed", callback),
   onChatUpdated: (callback: (event: unknown) => void) => listen("agent:chat-updated", callback),
   onInboxChanged: (callback: (event: unknown) => void) => listen("inbox:changed", callback),
   onNotesChanged: (callback: (event: unknown) => void) => listen("notes:changed", callback),

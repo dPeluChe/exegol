@@ -343,9 +343,16 @@ export function buildPtyInvocation(
     if (config.resumeSession) {
       const sourceAgentId = config.resumeFromAgentId ?? agent.id;
       const row = db
-        .prepare("SELECT resume_command, claude_session_id, alias FROM agents WHERE id = ?")
+        .prepare(
+          "SELECT resume_command, claude_session_id, alias, cli_name FROM agents WHERE id = ?",
+        )
         .get(sourceAgentId) as
-        | { resume_command: string | null; claude_session_id: string | null; alias: string | null }
+        | {
+            resume_command: string | null;
+            claude_session_id: string | null;
+            alias: string | null;
+            cli_name: string | null;
+          }
         | undefined;
 
       // T160: resume spawns a NEW agent row — carry the session name over or
@@ -361,11 +368,9 @@ export function buildPtyInvocation(
       // The old row is deleted after a resume: keep the id on the new one, or a
       // second crash before the CLI prints its resume line has to search again
       if (sourceAgentId !== agent.id && (row?.claude_session_id || row?.resume_command)) {
-        db.prepare("UPDATE agents SET claude_session_id = ?, resume_command = ? WHERE id = ?").run(
-          row.claude_session_id,
-          row.resume_command,
-          agent.id,
-        );
+        db.prepare(
+          "UPDATE agents SET claude_session_id = ?, resume_command = ?, cli_name = ? WHERE id = ?",
+        ).run(row.claude_session_id, row.resume_command, row.cli_name, agent.id);
       }
 
       // Resume forms replace the task, never the configured args: YOLO and any
