@@ -75,7 +75,7 @@ It agrees with the earlier research: ETH's `AGENTS.md` study found instructions 
 - A project may be in several.
 - `purpose` says what belongs there, and agents read it.
 
-**Reaching someone.** `inbox_post` takes a target: this project, a colab, `to_project` inside a colab, or personal. A project only reaches projects it shares a colab with. One thread: with `to_project` it shows in the colab's inbox and counts on that project.
+**Reaching someone.** `inbox_post` takes a target: this project, a colab, `to_project` inside a colab, or personal. A project only reaches projects it shares a colab with. One thread: with `to_project` it shows in the colab's inbox and counts on that project. With `to_session` (2026-11-17), the name of an open session there, only that session counts it at its start; the project's other sessions still read it, and with no open session of that name it counts for the whole project again.
 
 `agent_send` should follow the same rule when T221 is built; today it crosses projects unchecked.
 
@@ -89,7 +89,7 @@ An inbox item is a **thread**, not a message: an opening message ("improvement s
 
 | Table | Columns |
 |---|---|
-| `inbox_threads` | `id`, `scope` (`project`, `colab`, `personal`) and `scope_id`, `to_project`, `to_repo`, `kind`, `title`, `url`, `status`, `resolution`, `owner_project`, `forwarded_from`, `opened_at`, `last_activity_at`, `last_turn`, `refs` |
+| `inbox_threads` | `id`, `scope` (`project`, `colab`, `personal`) and `scope_id`, `to_project`, `to_session`, `to_repo`, `kind`, `title`, `url`, `status`, `resolution`, `owner_project`, `forwarded_from`, `opened_at`, `last_activity_at`, `last_turn`, `refs` |
 | `inbox_messages` | `thread_id`, `seq`, `body`, `author_kind` (`user`, `agent`, `external`), `project_id`, `repo`, `agent_id`, `cli`, `model`, `branch`, `commit`, `created_at` |
 | `inbox_reads` | `thread_id`, `project_id`, `last_read_seq` |
 

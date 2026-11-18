@@ -45,6 +45,12 @@ export const INBOX_TOOL_DEFS: ToolBody<InboxToolName>[] = [
           type: "string",
           description: "With target colab: the member project it is for, by name. Omit for all",
         },
+        to_session: {
+          type: "string",
+          description:
+            "The one open session it is for, by its name in agents_list, in this project or " +
+            "in to_project. Its other sessions do not count it as theirs. Omit for any session",
+        },
         title: { type: "string", description: "Short and specific" },
         body: { type: "string", description: "Markdown, shown formatted to the person" },
         url: { type: "string" },
@@ -74,8 +80,9 @@ export const INBOX_TOOL_DEFS: ToolBody<InboxToolName>[] = [
     title: "List inbox threads",
     description:
       "The threads this project reaches: its own and those of its colabs, newest activity first, " +
-      "with how many messages you have not read. Search title and resolution with query, for " +
-      "instance to find a past fix.",
+      "with how many messages you have not read. One named for a single session of this project " +
+      "says for_session, and for_you tells whether that is you: leave the others to their session. " +
+      "Search title and resolution with query, for instance to find a past fix.",
     inputSchema: {
       type: "object",
       properties: {

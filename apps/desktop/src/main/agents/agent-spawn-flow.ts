@@ -7,6 +7,7 @@ import {
   setAgentWorktree,
 } from "../db/queries";
 import type { LocalSession } from "../history/types";
+import { renameSession } from "../inbox/threads";
 import { childEnv } from "../lib/child-env";
 import { commandShape } from "../lib/command-shape";
 import { PermanentError } from "../lib/errors";
@@ -354,6 +355,8 @@ export function buildPtyInvocation(
       // A name typed in the launcher wins over the old one
       if (row?.alias && sourceAgentId !== agent.id && !config.name) {
         db.prepare("UPDATE agents SET alias = ? WHERE id = ?").run(row.alias, agent.id);
+      } else if (row?.alias && config.name) {
+        renameSession(db, agent.projectId, row.alias, config.name);
       }
       // The old row is deleted after a resume: keep the id on the new one, or a
       // second crash before the CLI prints its resume line has to search again

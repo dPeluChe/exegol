@@ -60,6 +60,7 @@ export function forward(db: Database.Database, key: string, target: InboxTarget)
       scope: target.scope,
       scopeId,
       toProject,
+      toSession: null,
       ownerProject: owner,
       title: thread.title,
       url: thread.url,

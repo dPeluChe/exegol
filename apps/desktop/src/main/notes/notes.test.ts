@@ -163,10 +163,10 @@ describe("notes tools", () => {
   });
 
   it("tell a starting session its titles, and a colab's only as a count", async () => {
-    expect(await sessionLine(db, "irma")).not.toContain("notes");
+    expect(await sessionLine(db, "irma", "none")).not.toContain("notes");
     await call("note_write", { title: "Use pnpm", body: "Not npm" }, "a-irma");
     await call("note_write", { scope: "colab", colab: "Landings", title: "Secret", body: "S" });
-    const line = await sessionLine(db, "irma");
+    const line = await sessionLine(db, "irma", "none");
     expect(line).toContain(
       'This project\'s notes: 1 (~/.exegol/notes/projects/irma/, index in README.md). Newest first: "Use pnpm"',
     );

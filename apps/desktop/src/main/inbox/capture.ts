@@ -38,6 +38,7 @@ export function capture(
       scope: target.scope,
       scopeId,
       toProject,
+      toSession: null,
       ownerProject: owner,
       title: titleOf(fields),
       url,

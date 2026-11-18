@@ -8,9 +8,11 @@ import {
   type InboxAuthor,
   type InboxCloseStatus,
   type InboxThread,
+  inboxProjectOf,
   isInboxClosed,
 } from "@exegol/shared";
 import type Database from "libsql";
+import { liveSessionNames } from "../db/queries/agents";
 import { isColabMember } from "../db/queries/colabs";
 import {
   closeThread,
@@ -24,11 +26,14 @@ import {
   listThreads,
   markRead,
   proposeClose,
+  renameThreadSession,
   reopenThread,
+  setThreadSession,
   takeThread,
   threadsOpenedBySince,
 } from "../db/queries/inbox";
 import { broadcast } from "../lib/event-bus";
+import { sameName } from "../lib/names";
 
 const MAX_REFS = 5;
 const MAX_THREADS_PER_HOUR = 10;
@@ -118,6 +123,25 @@ export interface ThreadFields {
   body: string;
   url: string | null;
   refs: string[];
+  /** The one session it is for, by name */
+  toSession?: string | null;
+}
+
+/** The name as its open session spells it, in the project the thread counts on */
+function sessionNamed(db: Database.Database, projectId: string | null, name: string): string {
+  if (!projectId) {
+    throw new InboxError(
+      "A thread for one session needs its project: a project thread, or a colab thread with to_project",
+    );
+  }
+  const open = liveSessionNames(db, projectId);
+  const found = open.find((n) => sameName(n, name));
+  if (!found) {
+    throw new InboxError(
+      `No open session named ${JSON.stringify(name)} there. Open: ${open.join(", ") || "none"}`,
+    );
+  }
+  return found;
 }
 
 export function openThread(
@@ -134,12 +158,14 @@ export function openThread(
   }
   checkRefs(db, author, fields.refs);
   const { scopeId, toProject, owner } = placed(db, author, target);
+  const toSession = fields.toSession ? sessionNamed(db, owner, fields.toSession) : null;
   const key = insertThread(
     db,
     {
       scope: target.scope,
       scopeId,
       toProject,
+      toSession,
       ownerProject: owner,
       title: bounded(fields.title, INBOX_TITLE_MAX, "title"),
       url: fields.url,
@@ -272,6 +298,25 @@ export function reopen(db: Database.Database, key: string): void {
   if (moved) throw new InboxError(`${key} was forwarded: reopen ${moved}`);
   reopenThread(db, key);
   insertMessage(db, key, `Reopened. It was ${thread.status}: ${thread.resolution ?? ""}`, PERSON);
+  notifyInboxChanged();
+}
+
+/** A person's call: the one session an open thread is for, or any (null) */
+export function setSession(db: Database.Database, key: string, name: string | null): void {
+  const thread = openThreadOrThrow(db, key);
+  setThreadSession(db, key, name ? sessionNamed(db, inboxProjectOf(thread), name) : null);
+  notifyInboxChanged();
+}
+
+/** A session's name changed: the active threads for it follow, or go back to its project */
+export function renameSession(
+  db: Database.Database,
+  projectId: string,
+  from: string,
+  to: string | null,
+): void {
+  if (to && sameName(from, to)) return;
+  renameThreadSession(db, projectId, from, to);
   notifyInboxChanged();
 }
 

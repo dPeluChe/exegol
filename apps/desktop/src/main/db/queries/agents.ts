@@ -251,6 +251,20 @@ export function findLiveAgentsByAlias(db: Database.Database, alias: string): Age
   return (rows as Record<string, unknown>[]).map(mapAgentRow);
 }
 
+// Open, as the renderer's session lists read it: live and not archived
+export const OPEN_SESSION_SQL = `archived_at IS NULL AND status IN (${[...LIVE_STATUSES].map((s) => `'${s}'`).join(",")})`;
+
+/** The names of a project's open sessions; a plain shell has none */
+export function liveSessionNames(db: Database.Database, projectId: string): string[] {
+  const rows = db
+    .prepare(
+      `SELECT DISTINCT alias FROM agents
+       WHERE project_id = ? AND alias IS NOT NULL AND ${OPEN_SESSION_SQL}`,
+    )
+    .all(projectId) as { alias: string }[];
+  return rows.map((r) => r.alias);
+}
+
 export function getAgent(db: Database.Database, id: string): Agent | null {
   const row = db
     .prepare(

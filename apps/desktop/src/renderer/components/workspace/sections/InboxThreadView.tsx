@@ -34,8 +34,9 @@ import type { ProjectMeta } from "../../common/ProjectChip";
 import { groupTargets, type SendTarget, sendLabel } from "../../terminal/send-targets";
 import { useCliSessionNames } from "../../terminal/use-send-to";
 import { inboxPlace, nameOf } from "../inbox-place";
+import { InboxForSession } from "./InboxForSession";
 import { InboxMessages } from "./InboxMessages";
-import { InboxMoreActions, useThreadAct } from "./InboxMoreActions";
+import { InboxMoreActions, SESSION_CHIP, useThreadAct } from "./InboxMoreActions";
 
 interface ThreadData {
   thread: InboxThread;
@@ -122,7 +123,7 @@ function SendToSession({
               <FilterChip
                 key={target.id}
                 active={false}
-                className={CHIP}
+                className={SESSION_CHIP}
                 disabled={busy}
                 onClick={() => void send(target, label)}
               >
@@ -138,7 +139,7 @@ function SendToSession({
         {tabProject && (
           <FilterChip
             active={picking}
-            className={CHIP}
+            className={SESSION_CHIP}
             disabled={busy}
             onClick={() => setPicking(!picking)}
           >
@@ -153,7 +154,7 @@ function SendToSession({
             <FilterChip
               key={cli.id}
               active={false}
-              className={CHIP}
+              className={SESSION_CHIP}
               disabled={busy}
               onClick={() => void startInTab(cli.id as AgentCliType)}
             >
@@ -172,9 +173,6 @@ function SendToSession({
   );
 }
 
-const CHIP =
-  "flex max-w-72 items-center gap-1 truncate border border-border text-[11px] text-text-primary";
-
 function Actions({
   thread,
   repo,
@@ -191,6 +189,7 @@ function Actions({
   const [line, setLine] = useState("");
   const [closing, setClosing] = useState(false);
   const atLimit = atInboxTurnLimit(thread);
+  const forProject = inboxProjectOf(thread);
   const named = (ids: string[]) => ids.map((id) => nameOf(projectMeta, id)).join(", ");
   const sendReply = async () => {
     if (await act("inbox.reply", { body: reply })) setReply("");
@@ -223,6 +222,7 @@ function Actions({
           </Button>
         </ThreadNotice>
       )}
+      {forProject && <InboxForSession thread={thread} projectId={forProject} />}
       {atLimit ? (
         <ThreadNotice tone="text-warning">
           <span className="min-w-0 flex-1">

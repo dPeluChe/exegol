@@ -11,6 +11,7 @@ import type {
 import type Database from "libsql";
 import { z } from "zod";
 import { parseJson } from "../../lib/parse-json";
+import { OPEN_SESSION_SQL } from "./agents";
 
 const threadKey = (id: number): string => `inb_${id}`;
 
@@ -57,6 +58,7 @@ function toThread(row: Record<string, unknown>): InboxThread {
     scope: row.scope as InboxScope,
     scopeId: (row.scope_id as string) ?? null,
     toProject: (row.to_project as string) ?? null,
+    toSession: (row.to_session as string) ?? null,
     kind: row.kind as InboxKind,
     title: row.title as string,
     url: (row.url as string) ?? null,
@@ -151,6 +153,7 @@ export interface NewThread {
   scope: InboxScope;
   scopeId: string | null;
   toProject: string | null;
+  toSession: string | null;
   title: string;
   url: string | null;
   ownerProject: string | null;
@@ -172,10 +175,10 @@ export function insertThread(
     const { id } = db
       .prepare(
         `INSERT INTO inbox_threads
-           (scope, scope_id, to_project, title, url, owner_project, forwarded_from, opened_at,
-            last_activity_at, refs, kind)
-         VALUES (@scope, @scopeId, @toProject, @title, @url, @ownerProject, @from, @at, @at, @refs,
-            @kind)
+           (scope, scope_id, to_project, to_session, title, url, owner_project, forwarded_from,
+            opened_at, last_activity_at, refs, kind)
+         VALUES (@scope, @scopeId, @toProject, @toSession, @title, @url, @ownerProject, @from, @at,
+            @at, @refs, @kind)
          RETURNING id`,
       )
       .get({
@@ -246,15 +249,49 @@ const COUNTS_ON_SQL = `((t.scope = 'project' AND t.scope_id = @projectId)
       AND ${REACH_SQL}
       AND NOT EXISTS (SELECT 1 FROM json_each(t.closing_projects) j WHERE j.value = @projectId)))`;
 
-export function countActiveThreads(db: Database.Database, projectId: string): number {
+// The project a thread counts on, as `inboxProjectOf`
+const PROJECT_OF_SQL =
+  "CASE t.scope WHEN 'project' THEN t.scope_id WHEN 'colab' THEN t.to_project END";
+
+// A thread named for one session is that session's alone while a session of that name is
+// open in the project; once none is, it is the whole project's again
+const FOR_SESSION_SQL = `(@session IS NULL OR t.to_session IS NULL
+  OR COALESCE(${PROJECT_OF_SQL}, '') != @projectId
+  OR LOWER(t.to_session) = LOWER(@session)
+  OR NOT EXISTS (SELECT 1 FROM agents a WHERE a.project_id = @projectId
+        AND LOWER(a.alias) = LOWER(t.to_session) AND ${OPEN_SESSION_SQL}))`;
+
+/** `session`: the name of the session asking ("" with none), null to count for the project */
+export function countActiveThreads(
+  db: Database.Database,
+  projectId: string,
+  session: string | null = null,
+): number {
   const { n } = db
     .prepare(
       `SELECT COUNT(*) AS n FROM inbox_threads t
        LEFT JOIN inbox_reads r ON r.thread_id = t.id AND r.project_id = @projectId
-       WHERE ${COUNTS_ON_SQL} ${STATE_SQL.active}`,
+       WHERE ${COUNTS_ON_SQL} AND ${FOR_SESSION_SQL} ${STATE_SQL.active}`,
     )
-    .get({ projectId }) as { n: number };
+    .get({ projectId, session }) as { n: number };
   return n;
+}
+
+export function setThreadSession(db: Database.Database, key: string, name: string | null): void {
+  db.prepare("UPDATE inbox_threads SET to_session = ? WHERE id = ?").run(name, threadRowId(key));
+}
+
+/** A renamed session keeps its active threads; one left without a name gives them back */
+export function renameThreadSession(
+  db: Database.Database,
+  projectId: string,
+  from: string,
+  to: string | null,
+): void {
+  db.prepare(
+    `UPDATE inbox_threads AS t SET to_session = @to
+     WHERE LOWER(t.to_session) = LOWER(@from) AND ${PROJECT_OF_SQL} = @projectId ${STATE_SQL.active}`,
+  ).run({ projectId, from, to });
 }
 
 /** The person's own threads still open */

@@ -267,6 +267,7 @@
       "reply",
       "sendAsIssue",
       "sendToSession",
+      "setSession",
       "startSession"
     ],
     "messages": [
