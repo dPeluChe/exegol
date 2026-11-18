@@ -17,10 +17,10 @@ import { useToastStore } from "../../../stores/toasts";
 import { INPUT_CLASS, LABEL_CLASS } from "../../agents/SpawnOptions";
 import { ProjectAvatar } from "../../common/ProjectAvatar";
 
-const ROLE_CHIP = "flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px]";
+export const ROLE_CHIP = "flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px]";
 
 /** "Main dev: makes the changes", marked; "User dev: uses it and reports" */
-export function RoleChip({
+function RoleChip({
   member,
   className,
 }: {

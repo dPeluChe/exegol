@@ -51,7 +51,14 @@ export interface InboxThread {
   ownerReadSeq: number | null;
   lastAuthorKind: InboxAuthorKind;
   lastAgent: string | null;
+  /** The project of the last message's session; null for a person */
+  lastProject: string | null;
+  /** How the last message starts, cut at INBOX_PREVIEW_CHARS: never the whole body */
+  lastPreview: string;
 }
+
+/** A message shown as one line of a list */
+export const INBOX_PREVIEW_CHARS = 200;
 
 export interface InboxMessage {
   threadId: string;

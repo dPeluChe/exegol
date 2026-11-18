@@ -1,21 +1,19 @@
-import { type InboxMessage, speechSentences } from "@exegol/shared";
+import { INBOX_PREVIEW_CHARS, type InboxMessage, speechSentences } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { type ReactNode, type Ref, useState } from "react";
 import { sessionName } from "../../../lib/agent-label";
 import { isLongMessage, keepLineBreaks } from "../../../lib/inbox-text";
 import { useAgentStore } from "../../../stores/agents";
+import { authorKindLabel } from "../inbox-place";
 import { ChatMarkdown } from "./ChatMarkdown";
-
-const PREVIEW_CHARS = 200;
 
 const scrollIn = (el: HTMLElement | null) => el?.scrollIntoView({ block: "nearest" });
 
 function authorLabel(m: InboxMessage, name: string | null): string {
-  if (m.authorKind === "user") return "You";
-  if (m.authorKind === "external") return "Captured";
   const cli = m.cli === name ? null : m.cli;
-  return [name, cli, m.model, m.repo, m.branch, m.commit].filter(Boolean).join(", ") || "Agent";
+  const session = [name, cli, m.model, m.repo, m.branch, m.commit].filter(Boolean).join(", ");
+  return authorKindLabel(m.authorKind, session);
 }
 
 function Message({
@@ -48,7 +46,7 @@ function Message({
         </span>
         {!open && (
           <span className="min-w-0 flex-1 truncate text-text-secondary">
-            {speechSentences(message.body, PREVIEW_CHARS).join(" ")}
+            {speechSentences(message.body, INBOX_PREVIEW_CHARS).join(" ")}
           </span>
         )}
         <time className="ml-auto shrink-0">

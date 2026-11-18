@@ -1,12 +1,13 @@
-import type {
-  InboxAuthor,
-  InboxAuthorKind,
-  InboxCloseStatus,
-  InboxKind,
-  InboxMessage,
-  InboxScope,
-  InboxStatus,
-  InboxThread,
+import {
+  INBOX_PREVIEW_CHARS,
+  type InboxAuthor,
+  type InboxAuthorKind,
+  type InboxCloseStatus,
+  type InboxKind,
+  type InboxMessage,
+  type InboxScope,
+  type InboxStatus,
+  type InboxThread,
 } from "@exegol/shared";
 import type Database from "libsql";
 import { z } from "zod";
@@ -37,7 +38,7 @@ const reachSql = (project: string) => `((t.scope = 'project' AND t.scope_id = ${
 const REACH_SQL = `(@projectId IS NULL OR ${reachSql("@projectId")})`;
 
 const THREAD_SELECT = `SELECT t.*, r.last_read_seq,
-    (SELECT MAX(seq) FROM inbox_messages m WHERE m.thread_id = t.id) AS last_seq,
+    l.seq AS last_seq,
     (SELECT COUNT(*) FROM inbox_messages m WHERE m.thread_id = t.id AND m.author_kind = 'agent'
       AND m.seq > COALESCE((SELECT seq FROM inbox_messages u
         WHERE u.thread_id = t.id AND u.author_kind = 'user' ORDER BY seq DESC LIMIT 1), 0)) AS agent_turns,
@@ -46,10 +47,13 @@ const THREAD_SELECT = `SELECT t.*, r.last_read_seq,
     o.agent_id AS opener_agent, o.project_id AS opener_project,
     (SELECT last_read_seq FROM inbox_reads o
       WHERE o.thread_id = t.id AND o.project_id = t.owner_project) AS owner_read_seq,
-    (SELECT author_kind FROM inbox_messages m WHERE m.thread_id = t.id ORDER BY m.seq DESC LIMIT 1) AS last_author_kind,
-    (SELECT agent_id FROM inbox_messages m WHERE m.thread_id = t.id ORDER BY m.seq DESC LIMIT 1) AS last_agent
+    l.author_kind AS last_author_kind,
+    l.agent_id AS last_agent, l.project_id AS last_project,
+    substr(l.body, 1, ${INBOX_PREVIEW_CHARS}) AS last_preview
   FROM inbox_threads t
   LEFT JOIN inbox_messages o ON o.thread_id = t.id AND o.seq = 1
+  LEFT JOIN inbox_messages l ON l.thread_id = t.id
+    AND l.seq = (SELECT MAX(seq) FROM inbox_messages m WHERE m.thread_id = t.id)
   LEFT JOIN inbox_reads r ON r.thread_id = t.id AND r.project_id = @projectId`;
 
 function toThread(row: Record<string, unknown>): InboxThread {
@@ -82,6 +86,8 @@ function toThread(row: Record<string, unknown>): InboxThread {
     ownerReadSeq: (row.owner_read_seq as number) ?? null,
     lastAuthorKind: row.last_author_kind as InboxAuthorKind,
     lastAgent: (row.last_agent as string) ?? null,
+    lastProject: (row.last_project as string) ?? null,
+    lastPreview: (row.last_preview as string) ?? "",
   };
 }
 

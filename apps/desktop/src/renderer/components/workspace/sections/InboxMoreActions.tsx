@@ -28,9 +28,6 @@ type Panel = "forward" | "note" | "issue" | null;
 
 const CHIP = "border border-border text-[11px] text-text-primary";
 
-/** A chip that names a session */
-export const SESSION_CHIP = `flex max-w-72 items-center gap-1 truncate ${CHIP}`;
-
 /** One select over every place a thread can go, encoded as its value */
 export function inboxTargets(
   thread: InboxThread | null,
