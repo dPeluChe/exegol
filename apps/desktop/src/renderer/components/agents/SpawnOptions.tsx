@@ -197,5 +197,10 @@ export function SkillPicker({
 
 export const LABEL_CLASS = "text-[10px] uppercase tracking-wide text-text-muted";
 
+/** A small dropdown with its label, in a row of actions */
+export const PICKER_LABEL_CLASS = "flex min-w-0 items-center gap-1 text-[10px] text-text-muted";
+export const PICKER_CLASS =
+  "min-w-0 max-w-56 truncate rounded border border-border bg-bg-tertiary px-1.5 py-0.5 text-[11px] text-text-primary outline-none focus:border-accent/50 disabled:opacity-50";
+
 export const INPUT_CLASS =
   "w-full rounded-lg border border-border bg-bg-secondary px-2.5 py-1.5 text-[11px] text-text-primary outline-none placeholder:text-text-muted focus:border-accent/50";

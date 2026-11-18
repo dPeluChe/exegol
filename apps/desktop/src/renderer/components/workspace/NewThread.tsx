@@ -2,41 +2,11 @@ import { type Colab, INBOX_BODY_MAX, INBOX_TITLE_MAX } from "@exegol/shared";
 import { Button } from "@exegol/ui";
 import { useState } from "react";
 import { useAct } from "../../hooks/use-act";
-import { useSessionTargets } from "../../hooks/use-session-targets";
 import type { InboxTarget as Target } from "../../lib/inbox-menu";
 import { INPUT_CLASS } from "../agents/SpawnOptions";
 import { FilterChip } from "../common/FilterChip";
 import type { ProjectMeta } from "../common/ProjectChip";
-import { sendLabel } from "../terminal/send-targets";
-
-/** The one open session of a project a new thread is for; nothing with none open */
-function SessionSelect({
-  projectId,
-  value,
-  onChange,
-}: {
-  projectId: string;
-  value: string | null;
-  onChange: (session: string | null) => void;
-}) {
-  const { targets, cliNames } = useSessionTargets(projectId);
-  if (targets.length === 0) return null;
-  return (
-    <select
-      value={value ?? ""}
-      onChange={(e) => onChange(e.target.value || null)}
-      aria-label="Session it is for"
-      className={INPUT_CLASS}
-    >
-      <option value="">For any session there</option>
-      {targets.map((t) => (
-        <option key={t.id} value={t.name}>
-          For {sendLabel(t, cliNames[t.id])}
-        </option>
-      ))}
-    </select>
-  );
-}
+import { SessionSelect } from "./SessionSelect";
 
 /** A thread the person opens. With a project: in its inbox, one of its colabs or Personal;
  *  without one, in the colab it starts on */
@@ -123,6 +93,9 @@ export function NewThread({
           projectId={forProject}
           value={session}
           onChange={setSession}
+          any="For any session there"
+          prefix="For "
+          className={INPUT_CLASS}
         />
       )}
       <input

@@ -75,6 +75,16 @@ describe("inboxPendingState", () => {
     expect(state(id)).toBe("not_read");
   });
 
+  it("carries who wrote last and how that message starts", () => {
+    const id = post();
+    replyTo(db, a2, id, "Here is what I found");
+    expect(getThread(db, id, null)).toMatchObject({
+      lastPreview: "Here is what I found",
+      lastProject: "p1",
+      lastSeq: 2,
+    });
+  });
+
   it("stops at the limit, and One last turn gives it back to the project", () => {
     const id = post();
     for (let i = 1; i < INBOX_TURN_LIMIT; i++) replyTo(db, i % 2 ? a1 : a2, id, `turn ${i}`);

@@ -4,6 +4,10 @@ import type { ProjectMeta } from "../common/ProjectChip";
 export const nameOf = (meta: ReadonlyMap<string, ProjectMeta>, id: string | null) =>
   id ? (meta.get(id)?.name ?? id) : "";
 
+/** Who wrote a message: the person, a capture, or the name given for its session */
+export const authorKindLabel = (kind: InboxThread["lastAuthorKind"], name: string) =>
+  kind === "user" ? "You" : kind === "external" ? "Captured" : name || "Agent";
+
 /** "Personal", the project, or "Landings > Irma" for a colab thread (the colab alone if for
  *  all), then the session it is for */
 export function inboxPlace(

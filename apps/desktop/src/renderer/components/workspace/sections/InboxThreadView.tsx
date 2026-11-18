@@ -13,7 +13,6 @@ import {
 } from "@exegol/shared";
 import { Button, cn } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
 import { useState } from "react";
 import { useShallow } from "zustand/react/shallow";
 import { useColabs } from "../../../hooks/use-inbox";
@@ -27,16 +26,14 @@ import { isOpenSession } from "../../../lib/sidebar-views";
 import { trpcInvoke } from "../../../lib/trpc-client";
 import { useAgentStore } from "../../../stores/agents";
 import { toastError, useToastStore } from "../../../stores/toasts";
-import { INPUT_CLASS } from "../../agents/SpawnOptions";
-import { AgentIcon } from "../../common/AgentIcon";
-import { FilterChip } from "../../common/FilterChip";
+import { INPUT_CLASS, PICKER_CLASS, PICKER_LABEL_CLASS } from "../../agents/SpawnOptions";
 import type { ProjectMeta } from "../../common/ProjectChip";
 import { groupTargets, type SendTarget, sendLabel } from "../../terminal/send-targets";
 import { useCliSessionNames } from "../../terminal/use-send-to";
 import { inboxPlace, nameOf } from "../inbox-place";
 import { InboxForSession } from "./InboxForSession";
 import { InboxMessages } from "./InboxMessages";
-import { InboxMoreActions, SESSION_CHIP, useThreadAct } from "./InboxMoreActions";
+import { InboxMoreActions, useThreadAct } from "./InboxMoreActions";
 
 interface ThreadData {
   thread: InboxThread;
@@ -71,7 +68,6 @@ function SendToSession({
     ),
   );
   const { busy, act } = useThreadAct(thread.id);
-  const [picking, setPicking] = useState(false);
   const tabProject = projectId ?? homeProject;
   const clis = useLaunchableProviders().filter(takesPrompt);
   const { data: overview } = useGitHubOverview(repo ? projectId : null);
@@ -108,68 +104,45 @@ function SendToSession({
     });
   };
 
+  const targets = groups.flatMap((g) => g.targets.map((target) => ({ target, group: g })));
+  const run = (value: string) => {
+    const hit = targets.find(({ target }) => target.id === value);
+    if (hit) {
+      const name = sendLabel(hit.target, cliNames[hit.target.id]);
+      void send(hit.target, several ? `${name} · ${hit.group.projectName}` : name);
+    } else if (value) void startInTab(value as AgentCliType);
+  };
+
   return (
-    <div className="flex flex-col gap-1">
-      <div className="flex flex-wrap items-center gap-1">
-        <span className="text-[10px] text-text-muted">Send to</span>
-        {groups.length === 0 && (
-          <span className="text-[10px] text-text-muted">no open session here,</span>
-        )}
-        {groups.flatMap((group) =>
-          group.targets.map((target) => {
-            const name = sendLabel(target, cliNames[target.id]);
-            const label = several ? `${name} · ${group.projectName}` : name;
-            return (
-              <FilterChip
-                key={target.id}
-                active={false}
-                className={SESSION_CHIP}
-                disabled={busy}
-                onClick={() => void send(target, label)}
-              >
-                <AgentIcon provider={target.cliType} size={12} />
-                <span className="truncate" title={label}>
-                  {name}
-                </span>
-                {several && <span className="shrink-0 text-text-muted">{group.projectName}</span>}
-              </FilterChip>
-            );
-          }),
-        )}
+    <label className={PICKER_LABEL_CLASS} title="Pastes the thread into that session now">
+      Send to
+      <select
+        value=""
+        disabled={busy}
+        onChange={(e) => run(e.target.value)}
+        className={PICKER_CLASS}
+      >
+        <option value="">{groups.length > 0 ? "Pick a session" : "No open session here"}</option>
+        {groups.map((group) => (
+          <optgroup key={group.projectId} label={group.projectName}>
+            {group.targets.map((target) => (
+              <option key={target.id} value={target.id}>
+                {sendLabel(target, cliNames[target.id])}
+              </option>
+            ))}
+          </optgroup>
+        ))}
         {tabProject && (
-          <FilterChip
-            active={picking}
-            className={SESSION_CHIP}
-            disabled={busy}
-            onClick={() => setPicking(!picking)}
-          >
-            <Plus className="h-3 w-3" />
-            New tab
-          </FilterChip>
+          <optgroup label="A new tab with">
+            {clis.map((cli) => (
+              <option key={cli.id} value={cli.id}>
+                {cli.name}
+              </option>
+            ))}
+          </optgroup>
         )}
-      </div>
-      {picking && (
-        <div className="flex flex-wrap gap-1">
-          {clis.map((cli) => (
-            <FilterChip
-              key={cli.id}
-              active={false}
-              className={SESSION_CHIP}
-              disabled={busy}
-              onClick={() => void startInTab(cli.id as AgentCliType)}
-            >
-              <AgentIcon
-                provider={cli.id}
-                size={12}
-                fallback={cli.icon}
-                fallbackColor={cli.color}
-              />
-              {cli.name}
-            </FilterChip>
-          ))}
-        </div>
-      )}
-    </div>
+      </select>
+    </label>
   );
 }
 
@@ -222,7 +195,6 @@ function Actions({
           </Button>
         </ThreadNotice>
       )}
-      {forProject && <InboxForSession thread={thread} projectId={forProject} />}
       {atLimit ? (
         <ThreadNotice tone="text-warning">
           <span className="min-w-0 flex-1">
@@ -233,9 +205,11 @@ function Actions({
             One last turn
           </Button>
         </ThreadNotice>
-      ) : (
-        <SendToSession thread={thread} repo={repo} homeProject={homeProject} />
-      )}
+      ) : null}
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        {forProject && <InboxForSession thread={thread} projectId={forProject} />}
+        {!atLimit && <SendToSession thread={thread} repo={repo} homeProject={homeProject} />}
+      </div>
       <div className="flex items-end gap-1.5">
         <textarea
           value={reply}
