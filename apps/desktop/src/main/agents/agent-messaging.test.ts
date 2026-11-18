@@ -144,6 +144,21 @@ describe("sendAgentMessage", () => {
     expect(messageCount(db)).toBe(1);
   });
 
+  it("names the sender as its CLI does when that is not its session name", () => {
+    insertAgent(db, "a1", "running");
+    insertAgent(db, "a2", "waiting_input");
+    db.prepare(
+      "UPDATE agents SET alias = 'basalt', cli_name = 'taskyserver' WHERE id = 'a1'",
+    ).run();
+    ptyMock.alive.add("a2");
+
+    sendAgentMessage(db, { fromAgentId: "a1", toAgentId: "a2", text: "hola" });
+
+    expect(ptyMock.writes[0]?.data).toContain(
+      'from agent "basalt", named "taskyserver" in its CLI (id a1)',
+    );
+  });
+
   it("queues for a busy target and delivers ONE per turn boundary", () => {
     insertAgent(db, "a1", "waiting_input");
     insertAgent(db, "a2", "running");

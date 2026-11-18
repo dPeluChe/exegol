@@ -1,3 +1,4 @@
+import { SESSION_NAME_MAX } from "@exegol/shared";
 import { Pencil } from "lucide-react";
 import { useEffect, useState } from "react";
 import { trpcMutate } from "../../lib/trpc-client";
@@ -52,7 +53,7 @@ export function SessionAlias({ agent, textClassName = "text-sm" }: SessionAliasP
             if (e.key === "Enter") commit();
             if (e.key === "Escape") setEditing(false);
           }}
-          maxLength={40}
+          maxLength={SESSION_NAME_MAX}
           placeholder={agent.cliType}
           className={`h-5 w-32 rounded border border-accent/50 bg-bg-primary px-1 font-medium text-text-primary focus:outline-none ${textClassName}`}
         />

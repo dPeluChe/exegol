@@ -9,7 +9,12 @@ vi.mock("node:os", async (importOriginal) => ({
   homedir: () => home.dir,
 }));
 
-import { claudeCodeHistory, claudeProjectDir, claudeSessionName } from "./claude-code";
+import {
+  claudeCodeHistory,
+  claudeProjectDir,
+  claudeRenamedTo,
+  claudeSessionName,
+} from "./claude-code";
 
 // The transcript format is Claude Code's, not ours: a silent change here does
 // not throw, it means the repo's history quietly loses a whole provider.
@@ -79,6 +84,8 @@ describe("claudeCodeHistory", () => {
     const [session] = await claudeCodeHistory.list([REPO], 0);
     expect(session?.name).toBe("ligamuyx");
     expect(session?.title).toBe("ligamuyx");
+    const dir = join(home.dir, ".claude", "projects", REPO.replace(/\//g, "-"));
+    expect(await claudeRenamedTo(join(dir, "sess-named.jsonl"))).toBe("ligamuyx");
   });
 
   it("survives a truncated tail — only a prefix of the file is read", async () => {

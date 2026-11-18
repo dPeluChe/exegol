@@ -1,4 +1,4 @@
-import { agentStatusSchema } from "@exegol/shared";
+import { agentStatusSchema, SESSION_NAME_MAX } from "@exegol/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { saveActiveView } from "../../agents/active-view";
@@ -18,6 +18,7 @@ import { setIdleExempt } from "../../agents/idle-exempt";
 import { mainSessions } from "../../agents/main-session";
 import { notePersonInput } from "../../agents/session-activity";
 import { chatTurns, olderChatTurns } from "../../agents/session-chat";
+import { renameAgent } from "../../agents/session-name";
 import { broadcastShellClosed } from "../../agents/spawn-env";
 import { forgetAgentStatusWrites } from "../../agents/status-writes";
 import {
@@ -36,11 +37,9 @@ import {
   getAgentLastCwd,
   listActiveAgents,
   listCompletedSince,
-  setAgentAlias,
   setAgentPrWatch,
 } from "../../db/queries/agents";
 import { clearMainMark, setProjectMainMark } from "../../db/queries/main-session";
-import { renameSession } from "../../inbox/threads";
 import { getPrWatchStatus, onPrWatchToggled } from "../../integrations/github/pr-watch";
 import { broadcast } from "../../lib/event-bus";
 import { getMcpAgentStates } from "../../mcp/exegol-server";
@@ -101,11 +100,10 @@ export const agentRouter = router({
     .input(z.object({ projectId: z.string().optional() }).optional())
     .mutation(({ ctx, input }) => ({ archived: archiveEndedAgents(ctx.db, input?.projectId) })),
   setAlias: publicProcedure
-    .input(z.object({ id: z.string(), alias: z.string().trim().max(40).nullable() }))
+    .input(z.object({ id: z.string(), alias: z.string().trim().max(SESSION_NAME_MAX).nullable() }))
     .mutation(({ ctx, input }) => {
       const agent = getAgent(ctx.db, input.id);
-      setAgentAlias(ctx.db, input.id, input.alias || null);
-      if (agent?.alias) renameSession(ctx.db, agent.projectId, agent.alias, input.alias || null);
+      if (agent) renameAgent(ctx.db, agent, input.alias || null);
       return { success: true };
     }),
   // Returns null (not undefined) for consistency with TanStack Query v5,

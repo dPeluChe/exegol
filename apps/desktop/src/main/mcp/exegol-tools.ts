@@ -83,11 +83,13 @@ function handleAgentsList(
     self: {
       id: context.agentId,
       name: me?.alias ?? null,
-      note: "This is YOU. Sign messages with this name; others reach you via agent_send with it. Your id and name do not change for the rest of this session.",
+      cli_name: me?.cliName ?? null,
+      note: "This is YOU. Sign messages with this name; others reach you via agent_send with it. Your id does not change for the rest of this session; the name changes only if the person renames you.",
     },
     agents: listed.map((a) => ({
       id: a.id,
       name: a.alias ?? null,
+      cli_name: a.cliName ?? null,
       provider: a.cliType,
       project: a.projectName,
       status: a.status,

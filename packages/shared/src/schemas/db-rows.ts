@@ -66,6 +66,7 @@ export const agentRowSchema = z.object({
   id: z.string(),
   project_id: z.string(),
   alias: optStr,
+  cli_name: optStr,
   worktree_id: optStr,
   branch_name: optStr,
   cli_type: z.enum(AGENT_CLI_TYPES),

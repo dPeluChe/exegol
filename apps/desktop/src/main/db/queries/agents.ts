@@ -237,6 +237,10 @@ export function setAgentAlias(db: Database.Database, id: string, alias: string |
   db.prepare("UPDATE agents SET alias = ? WHERE id = ?").run(alias, id);
 }
 
+export function setAgentCliName(db: Database.Database, id: string, name: string): void {
+  db.prepare("UPDATE agents SET cli_name = ? WHERE id = ?").run(name, id);
+}
+
 /** T160: live agents whose alias matches (case-insensitive) — for name addressing. */
 export function findLiveAgentsByAlias(db: Database.Database, alias: string): Agent[] {
   const statuses = [...LIVE_STATUSES];

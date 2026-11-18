@@ -1,4 +1,4 @@
-import { INBOX_BODY_MAX, INBOX_TITLE_MAX } from "@exegol/shared";
+import { INBOX_BODY_MAX, INBOX_TITLE_MAX, SESSION_NAME_MAX } from "@exegol/shared";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { FollowUpError } from "../../agents/follow-up-queue";
@@ -73,7 +73,7 @@ export const inboxRouter = router({
         /** A colab thread, for one member (toProject) or all of them */
         colabId: z.string().optional(),
         toProject: z.string().nullable().optional(),
-        toSession: z.string().max(40).nullable().optional(),
+        toSession: z.string().max(SESSION_NAME_MAX).nullable().optional(),
       }),
     )
     .mutation(({ ctx, input }) =>
@@ -112,7 +112,7 @@ export const inboxRouter = router({
     .mutation(({ ctx, input }) => inboxCall(() => giveLastTurn(ctx.db, input.id))),
 
   setSession: publicProcedure
-    .input(threadId.extend({ session: z.string().max(40).nullable() }))
+    .input(threadId.extend({ session: z.string().max(SESSION_NAME_MAX).nullable() }))
     .mutation(({ ctx, input }) => inboxCall(() => setSession(ctx.db, input.id, input.session))),
 
   capture: publicProcedure

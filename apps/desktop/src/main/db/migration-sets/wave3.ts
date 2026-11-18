@@ -513,4 +513,10 @@ export const wave3Migrations: Migration[] = [
     id: "w3_047_inbox_to_session",
     sql: "ALTER TABLE inbox_threads ADD COLUMN to_session TEXT;",
   },
+  {
+    // The name the session was last given inside its CLI (Claude's /rename), as Exegol last
+    // read it: a new one moves the alias, a later alias set in Exegol stays
+    id: "w3_048_agent_cli_name",
+    sql: "ALTER TABLE agents ADD COLUMN cli_name TEXT;",
+  },
 ];

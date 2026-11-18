@@ -29,6 +29,8 @@ export interface PendingMessage {
   fromAgentId: string;
   /** "claude-code · fix-auth-flow" — human-legible sender line for the injection. */
   fromLabel: string;
+  /** The sender's name inside its CLI, when it is not the label */
+  fromCliName?: string | null;
   /** What the receiver should pass to agent_send to reply: sender alias or id. */
   replyTarget: string;
   toAgentId: string;

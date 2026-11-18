@@ -462,6 +462,7 @@
     "agent:stuck-turn",
     "agent:activity",
     "agent:message-held",
+    "agent:renamed",
     "inbox:changed",
     "notes:changed",
     "projects:changed",

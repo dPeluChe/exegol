@@ -46,6 +46,7 @@ function firstPromptText(line: HeadLine): string | null {
  * first few lines, and the file's mtime is a better end time than parsing to
  * the last line would be.
  */
+const TITLE_TAIL_BYTES = 32 * 1024;
 const CUSTOM_TITLE = /"type":"custom-title","customTitle":"((?:[^"\\]|\\.)*)"/g;
 
 export const claudeCodeHistory: LocalHistoryProvider = {
@@ -74,6 +75,21 @@ export async function claudeSessionName(cwd: string, sessionId: string): Promise
   const entry = `${sessionId}.jsonl`;
   const parsed = await parseTranscript(join(projectDirFor(cwd), entry), entry, cwd, 0);
   return parsed ? (parsed.session.name ?? parsed.aiTitle) : null;
+}
+
+/** The last /rename name in a transcript's tail (Claude writes it again as the file grows) */
+export async function claudeRenamedTo(path: string): Promise<string | null> {
+  return lastCustomTitle(await readTail(path, undefined, TITLE_TAIL_BYTES));
+}
+
+function lastCustomTitle(text: string): string | null {
+  const renamed = [...text.matchAll(CUSTOM_TITLE)].pop()?.[1];
+  if (!renamed) return null;
+  try {
+    return normalizeTitle(JSON.parse(`"${renamed}"`) as string);
+  } catch {
+    return null;
+  }
 }
 
 async function parseTranscript(
@@ -125,15 +141,12 @@ async function parseTranscript(
     }
 
     // `/rename` re-appends a custom-title line through the whole transcript: the tail has the latest
-    const tail = sizeBytes > head.length ? await readTail(path, sizeBytes, 32 * 1024) : head;
-    const renamed = [...tail.matchAll(CUSTOM_TITLE)].pop()?.[1];
+    const tail = sizeBytes > head.length ? await readTail(path, sizeBytes, TITLE_TAIL_BYTES) : head;
+    // A cut escape at the chunk edge reads as no name: the AI title stays
+    const renamed = lastCustomTitle(tail);
     if (renamed) {
-      try {
-        session.name = normalizeTitle(JSON.parse(`"${renamed}"`) as string);
-        session.title = session.name;
-      } catch {
-        /* a cut escape at the chunk edge: keep the AI title */
-      }
+      session.name = renamed;
+      session.title = renamed;
     }
 
     // The slug is ambiguous; the transcript is not. A session naming a different

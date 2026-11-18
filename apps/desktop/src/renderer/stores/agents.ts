@@ -123,6 +123,9 @@ export function startAgentStatusPush(queryClient: QueryClient): void {
   const offMessageHeld = window.api.onMessageHeld(({ agentId, reason }) =>
     useAgentStore.getState().addAttentionItem(agentId, { level: "info", reason }),
   );
+  const offRenamed = window.api.onAgentRenamed(({ agentId, alias }) =>
+    useAgentStore.getState().updateAgent(agentId, { alias }),
+  );
   const stopMcp = window.api.onMcpStatus((e) => queryClient.setQueryData(MCP_STATUS_KEY, e));
   const stopFollowUps = window.api.onFollowUps((e) =>
     queryClient.setQueryData(followUpsKey(e.agentId), e.items),
@@ -206,6 +209,7 @@ export function startAgentStatusPush(queryClient: QueryClient): void {
     offStuckTurn();
     offActivity();
     offMessageHeld();
+    offRenamed();
     stopMcp();
     stopFollowUps();
     stopTurns();

@@ -111,6 +111,12 @@ async function transcriptPath(
   return path;
 }
 
+/** Where its CLI keeps this session's transcript; null for a CLI without one */
+export async function transcriptFile(db: Database.Database, agent: Agent): Promise<string | null> {
+  const provider = PROVIDERS[agent.cliType];
+  return provider ? transcriptPath(db, agent, provider) : null;
+}
+
 const pushTimers = new Map<string, NodeJS.Timeout>();
 
 /** A turn began or ended: cut the terminal text there, and tell an open chat */
