@@ -1,18 +1,18 @@
 import { readdir, stat } from "node:fs/promises";
 import { join } from "node:path";
-import type { Agent, ChatPage, OlderChatPage } from "@exegol/shared";
+import type { Agent, ChatPage, CliName, OlderChatPage } from "@exegol/shared";
 import type Database from "libsql";
 import { getAgent, getAgentCwd, listLiveProjectSessions } from "../db/queries/agents";
-import { claudeProjectDir, claudeRoot } from "../history/providers/claude-code";
-import { codexRoot, dayDirs } from "../history/providers/codex";
+import { claudeProjectDir, claudeRenamedTo, claudeRoot } from "../history/providers/claude-code";
+import { codexRoot, codexThreadName, dayDirs } from "../history/providers/codex";
 import { broadcast } from "../lib/event-bus";
 import { setBounded } from "../lib/set-bounded";
 import { assertSafePath } from "../security/path-guard";
 import { getPtyHost } from "../terminal/pty-host";
 import { agyTurns } from "./agy-terminal";
-import { devinDbPath, devinPage, olderDevinPage } from "./devin-chat";
+import { devinDbPath, devinPage, devinTitle, olderDevinPage } from "./devin-chat";
 import { hookCwdOf, hookSessionOf } from "./hook-cwd";
-import { olderOpencodePage, opencodeDbPath, opencodePage } from "./opencode-chat";
+import { olderOpencodePage, opencodeDbPath, opencodePage, opencodeTitle } from "./opencode-chat";
 import { providerSessionId, SESSION_ID_RE } from "./provider-session-id";
 import {
   type LineParser,
@@ -111,12 +111,6 @@ async function transcriptPath(
   return path;
 }
 
-/** Where its CLI keeps this session's transcript; null for a CLI without one */
-export async function transcriptFile(db: Database.Database, agent: Agent): Promise<string | null> {
-  const provider = PROVIDERS[agent.cliType];
-  return provider ? transcriptPath(db, agent, provider) : null;
-}
-
 const pushTimers = new Map<string, NodeJS.Timeout>();
 
 /** A turn began or ended: cut the terminal text there, and tell an open chat */
@@ -146,30 +140,79 @@ type StorePage = Omit<ChatPage, "fromTerminal" | "markdown">;
 
 interface ChatStore {
   page: (db: Database.Database, agent: Agent, cursor: string | undefined) => StorePage | null;
+  title: (db: Database.Database, agent: Agent) => { title: string | null } | null;
   older: (before: string) => OlderChatPage;
 }
 
 /** The CLIs that keep their turns in a database of their own */
+const devinTarget = (db: Database.Database, agent: Agent) => ({
+  id: sessionIdOf(agent),
+  cwds: loneFolders(db, agent),
+  sinceSec: agent.startedAt ?? 0,
+});
+
+const opencodeSince = (agent: Agent) => (agent.startedAt ?? 0) * 1000;
+
 const STORES: Record<string, ChatStore> = {
   opencode: {
     page(db, agent, cursor) {
       const cwds = loneFolders(db, agent);
       if (cwds.length === 0) return null;
-      return opencodePage(opencodeDbPath(), cwds, (agent.startedAt ?? 0) * 1000, cursor);
+      return opencodePage(opencodeDbPath(), cwds, opencodeSince(agent), cursor);
+    },
+    title(db, agent) {
+      const cwds = loneFolders(db, agent);
+      return cwds.length > 0 ? opencodeTitle(opencodeDbPath(), cwds, opencodeSince(agent)) : null;
     },
     older: (before) => olderOpencodePage(opencodeDbPath(), before),
   },
   devin: {
-    page(db, agent, cursor) {
-      const target = {
-        id: sessionIdOf(agent),
-        cwds: loneFolders(db, agent),
-        sinceSec: agent.startedAt ?? 0,
-      };
-      return devinPage(devinDbPath(), target, cursor);
-    },
+    page: (db, agent, cursor) => devinPage(devinDbPath(), devinTarget(db, agent), cursor),
+    title: (db, agent) => devinTitle(devinDbPath(), devinTarget(db, agent)),
     older: (before) => olderDevinPage(devinDbPath(), before),
   },
+};
+
+/** When a CLI's name for a session is worth reading, and how often at most */
+interface NameReader {
+  at: "turn_start" | "turn_end";
+  everyMs: number;
+  read: (db: Database.Database, agent: Agent) => Promise<CliName | null>;
+}
+
+// A title the CLI writes by itself changes in its first turns, then rarely
+const TITLE_EVERY_MS = 2 * 60_000;
+
+const fromStore = (cli: string): NameReader => ({
+  at: "turn_end",
+  everyMs: TITLE_EVERY_MS,
+  async read(db, agent) {
+    const found = STORES[cli]?.title(db, agent);
+    return found ? { name: found.title, renamed: false } : null;
+  },
+});
+
+/** The CLIs whose own store names a session; a read is null when Exegol cannot tell which is its */
+export const NAME_READERS: Record<string, NameReader> = {
+  "claude-code": {
+    // /rename is typed at the prompt: the next turn's start is the first to see it
+    at: "turn_start",
+    everyMs: 0,
+    async read(db, agent) {
+      const path = await transcriptPath(db, agent, PROVIDERS["claude-code"] as Provider);
+      return path ? { name: await claudeRenamedTo(path), renamed: true } : null;
+    },
+  },
+  codex: {
+    at: "turn_end",
+    everyMs: TITLE_EVERY_MS,
+    async read(_db, agent) {
+      const id = sessionIdOf(agent);
+      return id ? { name: await codexThreadName(id), renamed: false } : null;
+    },
+  },
+  devin: fromStore("devin"),
+  opencode: fromStore("opencode"),
 };
 
 const NOTHING: ChatPage = {

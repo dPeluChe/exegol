@@ -3,7 +3,7 @@ import type { OlderChatPage, SessionTurn } from "@exegol/shared";
 import type Database from "libsql";
 import { z } from "zod";
 import { parseJson } from "../lib/parse-json";
-import { withReadonlyDb } from "../lib/readonly-db";
+import { titleOf, withReadonlyDb } from "../lib/readonly-db";
 import { windowsAppData, xdgDataDir } from "../lib/xdg-data";
 import { textTurn } from "./session-transcript";
 
@@ -119,6 +119,19 @@ const olderMark = (session: string, links: Link[]) => {
   const parent = links.at(-1)?.parent;
   return links.length === PAGE_NODES && parent != null ? `${session}:${parent}` : null;
 };
+
+/** The session's title (its /rename, else the one Devin gave it); null with no session here */
+export function devinTitle(path: string, target: DevinTarget) {
+  try {
+    return withReadonlyDb(path, (db) => {
+      const found = findSession(db, target);
+      // Its own query: the chat's lookup must not depend on a column only this reads
+      return found ? titleOf(db, "sessions", found.id) : null;
+    });
+  } catch {
+    return null;
+  }
+}
 
 /** From its own database; null when it has no session here, or a schema this does not know */
 export function devinPage(path: string, target: DevinTarget, cursor: string | undefined) {

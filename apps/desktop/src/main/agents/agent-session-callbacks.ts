@@ -29,7 +29,7 @@ import { noteAgentBoundarySignal, noteAgentOutput } from "./agent-message-sweep"
 import { clearAgentLinks, clearAgentMessageQueue, isEchoingInjection } from "./agent-messaging";
 import type { OutputProcessor } from "./agent-output-processor";
 import { handleParallelAgentExit } from "./agent-parallel-orchestration";
-import { followCliRename } from "./cli-name";
+import { followCliName } from "./cli-name";
 import { detectCliSelfUpdate } from "./cli-self-update";
 import { noteHookCwd, noteHookSession } from "./hook-cwd";
 import { clearHookTool, noteHookTool } from "./hook-tool";
@@ -212,8 +212,7 @@ function trackTurn(
   if (event === "finished") prepareCommanderReply(db, agent);
   if (boundary) noteCommanderTurn(db, agent, event);
   if (event === "turn_started") {
-    // /rename is typed at the prompt: the next turn's start is the first to see it
-    if (agent.cliType === "claude-code") void followCliRename(db, agent.id);
+    void followCliName(db, agent, "turn_start");
     clearHookTool(agent.id);
     try {
       const cwd = maps.initialSnapshots.get(agent.id)?.cwd ?? getAgentCwd(db, agent.id);

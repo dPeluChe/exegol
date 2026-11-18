@@ -26,6 +26,7 @@ import { refreshTray } from "../system/tray";
 import { isAgentAwaitingApproval, setAgentAwaitingApproval } from "./agent-message-queue";
 import { deliverPendingAgentMessages, fireAgentLinks } from "./agent-messaging";
 import { COMMAND_ALIASES } from "./cli-catalog";
+import { followCliName } from "./cli-name";
 import { scoreAgent } from "./scoring";
 import { windowsShell } from "./shell-dialect";
 import { bashPath, HOOKS_DIR, type NotifyEvent, notifyCommand } from "./wrappers";
@@ -152,6 +153,7 @@ export function broadcastAgentStatus(event: AgentStatusEvent): void {
       const db = getDb();
       deliverPendingAgentMessages(db, event.agentId);
       if (!event.idleOnly) fireAgentLinks(db, event.agentId);
+      void followCliName(db, { id: event.agentId, cliType: event.cliType }, "turn_end");
     } catch (err) {
       // db not ready during early startup — non-fatal, but never silent: a
       // swallowed delivery failure looks exactly like "nobody wrote to me".

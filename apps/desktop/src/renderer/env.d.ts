@@ -112,7 +112,9 @@ interface Window {
       }) => void,
     ) => () => void;
     onMessageHeld: (callback: (event: { agentId: string; reason: string }) => void) => () => void;
-    onAgentRenamed: (callback: (event: { agentId: string; alias: string }) => void) => () => void;
+    onAgentRenamed: (
+      callback: (event: { agentId: string; cliName: string; alias: string | null }) => void,
+    ) => () => void;
     onChatUpdated: (callback: (event: { agentId: string }) => void) => () => void;
     onInboxChanged: (callback: () => void) => () => void;
     onNotesChanged: (callback: () => void) => () => void;

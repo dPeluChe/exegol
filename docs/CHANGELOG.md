@@ -140,6 +140,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - The "What's new" dialog shows the update's download progress (a bar and the percent), as the title-bar button does, instead of only "Downloading"
 
 ### Changed
+- A session shows the name it has inside its CLI beside its Exegol name when the two differ (pane toolbar, Dashboard cards, Company): Claude Code's `/rename`, Codex's thread name, and the titles of Devin and OpenCode. Agents get both too, in the message header and `agents_list`. Only a Claude rename replaces the Exegol name: the other three keep their own titles in the same field, so theirs is shown, never applied
 - A session renamed inside Claude Code (`/rename`) takes that name in Exegol: its pane, the sidebar and what other agents address it by follow when its next turn starts. A message between agents names the sender's CLI name when it differs, and `agents_list` returns it as `cli_name`
 
 - **Colabs shows a feed of threads with a side panel.** Each thread is a card with its whole title, who wrote last and how that message starts; the cards fill the width, in several columns on a wide window. A click opens the thread in a panel at the right, which closes back to the feed. A colab's members sit in its header as small chips, and its settings and New thread open in the same panel. Under a thread, the rows of session chips became two dropdowns on one line: Assigned to (the one session it is for) and Send to (paste it into a session now, or a new tab).
