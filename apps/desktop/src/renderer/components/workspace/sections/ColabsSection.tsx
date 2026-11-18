@@ -1,108 +1,108 @@
-import { type Colab, colabIdsOf, inboxCountsOn } from "@exegol/shared";
-import { cn, ScrollArea } from "@exegol/ui";
-import { Plus, Users } from "lucide-react";
+import { colabIdsOf, inboxCountsOn } from "@exegol/shared";
+import { ScrollArea } from "@exegol/ui";
+import { Plus, Settings } from "lucide-react";
 import { useState } from "react";
 import { useColabs, useInboxThreads } from "../../../hooks/use-inbox";
+import { ALL_THREADS, channelThreads, PERSONAL } from "../../../lib/colab-channels";
+import { plural } from "../../../lib/plural";
 import { useAppStore } from "../../../stores/app";
-import { LABEL_CLASS } from "../../agents/SpawnOptions";
 import { FilterChip } from "../../common/FilterChip";
 import type { ProjectMeta } from "../../common/ProjectChip";
+import { HEAD_BUTTON } from "../InboxMenuList";
 import { InboxThreadRow } from "../InboxThreadRow";
 import { inboxPlace } from "../inbox-place";
+import { NewThread } from "../NewThread";
+import { ColabChannels } from "./ColabChannels";
 import { ColabEditor } from "./ColabEditor";
+import { ColabOverview } from "./ColabOverview";
 import { ColabsHelp } from "./ColabsHelp";
 import { InboxThreadView } from "./InboxThreadView";
 
-function ColabList({
-  colabs,
-  selected,
-  onPick,
-}: {
-  colabs: Colab[];
-  selected: string | null;
-  onPick: (id: string | null) => void;
-}) {
-  const helpHidden = useAppStore((s) => s.colabsHelpHidden);
-  const showHelp = () => useAppStore.setState({ colabsHelpHidden: false, colabsPanel: null });
-  return (
-    <div className="flex flex-col gap-1">
-      <div className={cn("flex items-center", LABEL_CLASS)}>
-        Colabs
-        {helpHidden && (
-          <button
-            type="button"
-            onClick={showHelp}
-            className="ml-2 rounded px-1 normal-case tracking-normal hover:bg-white/5 hover:text-text-primary"
-          >
-            How they work
-          </button>
-        )}
-        <button
-          type="button"
-          onClick={() => onPick(null)}
-          className="ml-auto flex items-center gap-0.5 rounded px-1 normal-case tracking-normal hover:bg-white/5 hover:text-text-primary"
-        >
-          <Plus className="h-3 w-3" />
-          New colab
-        </button>
-      </div>
-      {colabs.length === 0 && (
-        <p className="text-[11px] text-text-muted">None yet. Create one to join two projects.</p>
-      )}
-      {colabs.map((c) => (
-        <button
-          key={c.id}
-          type="button"
-          onClick={() => onPick(c.id)}
-          className={cn(
-            "flex items-center gap-2 rounded-md border px-2 py-1.5 text-left text-xs transition-colors hover:bg-white/5",
-            selected === c.id ? "border-[var(--accent)]/60" : "border-border",
-          )}
-        >
-          <Users className="h-3.5 w-3.5 shrink-0 text-text-muted" />
-          <span className="truncate text-text-primary">{c.name}</span>
-          <span className="ml-auto shrink-0 text-[10px] text-text-muted">
-            {c.members.length} member{c.members.length === 1 ? "" : "s"}
-          </span>
-        </button>
-      ))}
-    </div>
-  );
-}
-
-/** Colabs and the inbox across every project */
+/** Colabs as channels: the lists on the left, the picked one's threads, then the thread, the
+ *  colab's overview, its settings or a new thread */
 export function ColabsSection({ projectMeta }: { projectMeta: ReadonlyMap<string, ProjectMeta> }) {
   const [showClosed, setShowClosed] = useState(false);
-  const panel = useAppStore((s) => s.colabsPanel);
+  const view = useAppStore((s) => s.colabsView);
+  const show = useAppStore((s) => s.showColabs);
   const setPanel = useAppStore((s) => s.setColabsPanel);
   const helpHidden = useAppStore((s) => s.colabsHelpHidden);
   const setHelpHidden = useAppStore((s) => s.setColabsHelpHidden);
-  const colabs = useColabs();
-  const selectedId = panel?.kind === "thread" ? panel.id : null;
-  const setSelectedId = (id: string) => setPanel({ kind: "thread", id });
-  const editing = panel?.kind === "colab" ? panel.id : null;
-  const active = useInboxThreads("active");
-  const closed = useInboxThreads("closed", showClosed);
   const project = useAppStore((s) => s.inboxProject);
   const openInbox = useAppStore((s) => s.openInbox);
+  const colabs = useColabs();
+  const active = useInboxThreads("active");
+  const closed = useInboxThreads("closed", showClosed);
+
+  const { panel } = view;
+  const colab = colabs.find((c) => c.id === view.channel) ?? null;
+  // A colab that is gone lists everything
+  const channel = colab || view.channel === PERSONAL ? view.channel : ALL_THREADS;
+  const loading = channel !== view.channel && panel?.kind === "settings";
+  const selectedId = panel?.kind === "thread" ? panel.id : null;
+  const openThread = (id: string) => setPanel({ kind: "thread", id });
   const colabNames = new Map(colabs.map((c) => [c.id, c.name]));
-  const edited = colabs.find((c) => c.id === editing) ?? null;
-  const firstMember = panel?.kind === "colab" ? panel.firstMember : undefined;
-  // A colab open in the editor narrows the list to its threads
   const colabIds = colabIdsOf(colabs, project ?? "");
-  const threads = (showClosed ? closed : active)
-    .filter((t) => !project || inboxCountsOn(t, project, colabIds))
-    .filter((t) => !editing || (t.scope === "colab" && t.scopeId === editing));
+  // A Company room badge narrows All threads to what counts on that project
+  const narrowed = channel === ALL_THREADS ? project : null;
+  const threads = channelThreads(showClosed ? closed : active, channel).filter(
+    (t) => !narrowed || inboxCountsOn(t, narrowed, colabIds),
+  );
+  const title = colab?.name ?? (channel === PERSONAL ? "Personal" : "All threads");
 
   return (
     <div className="flex min-h-0 flex-1 gap-3 p-4 pt-0">
-      <div className="flex w-80 shrink-0 flex-col gap-3">
-        <ColabList
-          colabs={colabs}
-          selected={editing}
-          onPick={(id) => setPanel({ kind: "colab", id })}
-        />
-        <div className={LABEL_CLASS}>Threads of every project</div>
+      <ColabChannels
+        colabs={colabs}
+        active={active}
+        channel={channel}
+        onPick={show}
+        onNew={() => show(ALL_THREADS, { kind: "newColab" })}
+        onHelp={
+          helpHidden
+            ? () => {
+                setHelpHidden(false);
+                show(ALL_THREADS);
+              }
+            : undefined
+        }
+      />
+      <div className="flex w-80 shrink-0 flex-col gap-2">
+        <div className="flex items-center gap-1">
+          <h2 className="min-w-0 flex-1 truncate text-xs font-semibold text-text-primary">
+            {title}
+          </h2>
+          {colab && (
+            <>
+              <button
+                type="button"
+                disabled={colab.members.length === 0}
+                onClick={() => setPanel({ kind: "newThread" })}
+                className={HEAD_BUTTON}
+              >
+                <Plus className="h-3 w-3" />
+                Thread
+              </button>
+              <button
+                type="button"
+                onClick={() => setPanel({ kind: "settings" })}
+                className={HEAD_BUTTON}
+              >
+                <Settings className="h-3 w-3" />
+                Settings
+              </button>
+            </>
+          )}
+        </div>
+        {colab && (
+          <button
+            type="button"
+            onClick={() => setPanel(null)}
+            className="truncate text-left text-[10px] text-text-muted hover:text-text-secondary"
+          >
+            {plural(colab.members.length, "member")}
+            {colab.purpose ? `, ${colab.purpose}` : ""}
+          </button>
+        )}
         <div className="flex items-center gap-1">
           <FilterChip active={!showClosed} onClick={() => setShowClosed(false)}>
             Pending
@@ -110,9 +110,9 @@ export function ColabsSection({ projectMeta }: { projectMeta: ReadonlyMap<string
           <FilterChip active={showClosed} onClick={() => setShowClosed(true)}>
             Archived
           </FilterChip>
-          {project && (
+          {narrowed && (
             <FilterChip active onClick={() => openInbox(null)}>
-              {projectMeta.get(project)?.name ?? project}, show all
+              {projectMeta.get(narrowed)?.name ?? narrowed}, show all
             </FilterChip>
           )}
         </div>
@@ -124,7 +124,7 @@ export function ColabsSection({ projectMeta }: { projectMeta: ReadonlyMap<string
                 thread={thread}
                 place={inboxPlace(thread, projectMeta, colabNames)}
                 selected={thread.id === selectedId}
-                onSelect={() => setSelectedId(thread.id)}
+                onSelect={() => openThread(thread.id)}
               />
             ))}
             {threads.length === 0 && (
@@ -135,29 +135,42 @@ export function ColabsSection({ projectMeta }: { projectMeta: ReadonlyMap<string
           </div>
         </ScrollArea>
       </div>
-      <div className="flex max-h-full min-w-0 flex-1 flex-col self-start rounded-lg border border-border bg-bg-secondary">
-        {panel?.kind === "colab" && editing && !edited ? (
+      <div className="flex max-h-full min-w-0 flex-1 flex-col self-start overflow-y-auto rounded-lg border border-border bg-bg-secondary">
+        {loading ? (
           <p className="py-8 text-center text-xs text-text-muted">Loading the colab…</p>
-        ) : panel?.kind === "colab" ? (
+        ) : panel?.kind === "newColab" || (colab && panel?.kind === "settings") ? (
           <ColabEditor
-            key={editing ?? "new"}
-            colab={edited}
+            key={colab?.id ?? "new"}
+            colab={panel.kind === "settings" ? colab : null}
             firstMember={
-              firstMember ? { id: firstMember, name: projectMeta.get(firstMember)?.name } : null
+              panel.kind === "newColab" && panel.firstMember
+                ? { id: panel.firstMember, name: projectMeta.get(panel.firstMember)?.name }
+                : null
             }
-            onSaved={(id) => setPanel({ kind: "colab", id })}
-            onDeleted={() => setPanel(null)}
+            onSaved={(id) => show(id, { kind: "settings" })}
+            onDeleted={() => show(ALL_THREADS)}
           />
         ) : selectedId ? (
           <InboxThreadView
             key={selectedId}
             id={selectedId}
             projectMeta={projectMeta}
-            onOpen={setSelectedId}
+            onOpen={openThread}
           />
+        ) : colab && panel?.kind === "newThread" ? (
+          <NewThread
+            key={colab.id}
+            project={null}
+            colabs={[colab]}
+            meta={projectMeta}
+            start={{ kind: "colab", id: colab.id, to: null }}
+            onOpened={openThread}
+          />
+        ) : colab ? (
+          <ColabOverview colab={colab} />
         ) : !helpHidden ? (
           <ColabsHelp
-            onNew={() => setPanel({ kind: "colab", id: null })}
+            onNew={() => show(ALL_THREADS, { kind: "newColab" })}
             onHide={() => setHelpHidden(true)}
           />
         ) : (

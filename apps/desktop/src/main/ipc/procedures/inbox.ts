@@ -73,6 +73,7 @@ export const inboxRouter = router({
         /** A colab thread, for one member (toProject) or all of them */
         colabId: z.string().optional(),
         toProject: z.string().nullable().optional(),
+        toSession: z.string().max(40).nullable().optional(),
       }),
     )
     .mutation(({ ctx, input }) =>
@@ -83,7 +84,7 @@ export const inboxRouter = router({
           : projectId
             ? { scope: "project", projectId }
             : { scope: "personal" };
-        const fields = { title, body, url: null, refs: [] };
+        const fields = { title, body, url: null, refs: [], toSession: input.toSession };
         return { id: openThread(ctx.db, PERSON, target, fields).thread.id };
       }),
     ),

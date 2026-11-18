@@ -1,4 +1,4 @@
-import { type Agent, inboxPendingState, LIVE_STATUSES } from "@exegol/shared";
+import { type Agent, inboxNeedsYou, LIVE_STATUSES } from "@exegol/shared";
 import { ScrollArea } from "@exegol/ui";
 import { useQuery } from "@tanstack/react-query";
 import { Cpu, Plus } from "lucide-react";
@@ -156,7 +156,7 @@ export function AgentDashboard() {
       id: "colabs",
       label: "Colabs",
       count: inbox.length,
-      alert: inbox.some((t) => inboxPendingState(t) === "needs_you"),
+      alert: inboxNeedsYou(inbox),
     },
     { id: "watching", label: "Watching" },
     { id: "all", label: "All sessions" },

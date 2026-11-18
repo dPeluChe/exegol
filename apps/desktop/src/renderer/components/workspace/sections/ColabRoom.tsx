@@ -1,4 +1,10 @@
-import { COLAB_ROLE_MAX, type Colab, type ColabMember, type Project } from "@exegol/shared";
+import {
+  COLAB_ROLE_MAX,
+  type Colab,
+  type ColabMember,
+  memberRole,
+  type Project,
+} from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { Plus, Search, Star, X } from "lucide-react";
 import { useState } from "react";
@@ -12,6 +18,37 @@ import { INPUT_CLASS, LABEL_CLASS } from "../../agents/SpawnOptions";
 import { ProjectAvatar } from "../../common/ProjectAvatar";
 
 const ROLE_CHIP = "flex items-center gap-1 rounded-full border px-2 py-0.5 text-[10px]";
+
+/** "Main dev: makes the changes", marked; "User dev: uses it and reports" */
+export function RoleChip({
+  member,
+  className,
+}: {
+  member: Pick<ColabMember, "main">;
+  className?: string;
+}) {
+  const { label, does } = memberRole(member);
+  return (
+    <span
+      className={cn(
+        ROLE_CHIP,
+        "shrink-0",
+        member.main
+          ? "border-[var(--accent)]/70 bg-[var(--accent)]/15 text-text-primary"
+          : "border-border text-text-secondary",
+        className,
+      )}
+      title={
+        member.main
+          ? "Makes the changes the colab's threads ask for. Pick another member to change it"
+          : undefined
+      }
+    >
+      {member.main && <Star className="h-3 w-3 fill-current" />}
+      {label.charAt(0).toUpperCase() + label.slice(1)}: {does}
+    </span>
+  );
+}
 
 function MemberCard({
   colabId,
@@ -52,21 +89,10 @@ function MemberCard({
         </div>
       </div>
       {member.main ? (
-        <span
-          className={cn(
-            ROLE_CHIP,
-            "self-start border-[var(--accent)]/70 bg-[var(--accent)]/15 text-text-primary",
-          )}
-          title="Makes the changes the colab's threads ask for. Pick another member to change it"
-        >
-          <Star className="h-3 w-3 fill-current" />
-          Main dev: makes the changes
-        </span>
+        <RoleChip member={member} className="self-start" />
       ) : (
         <div className="flex flex-wrap items-center gap-1.5">
-          <span className={cn(ROLE_CHIP, "border-border text-text-secondary")}>
-            User dev: uses it and reports
-          </span>
+          <RoleChip member={member} />
           <button
             type="button"
             disabled={busy}

@@ -6,6 +6,12 @@ export type InboxTarget =
   | { kind: "personal" }
   | { kind: "colab"; id: string; to: string | null };
 
+export const colabThreads = (threads: InboxThread[], colabId: string) =>
+  threads.filter((t) => t.scope === "colab" && t.scopeId === colabId);
+
+export const personalThreads = (threads: InboxThread[]) =>
+  threads.filter((t) => t.scope === "personal");
+
 export interface InboxTab {
   key: string;
   label: string;
@@ -31,13 +37,13 @@ export function inboxTabs(
       key: c.id,
       label: c.name,
       target: { kind: "colab" as const, id: c.id, to: null },
-      threads: threads.filter((t) => t.scope === "colab" && t.scopeId === c.id),
+      threads: colabThreads(threads, c.id),
     })),
     {
       key: "personal",
       label: "Personal",
       target: { kind: "personal" },
-      threads: threads.filter((t) => t.scope === "personal"),
+      threads: personalThreads(threads),
     },
   ];
 }

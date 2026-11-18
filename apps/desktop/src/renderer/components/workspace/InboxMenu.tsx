@@ -1,129 +1,25 @@
 import {
-  type Colab,
   colabIdsOf,
   colabsOf,
-  INBOX_BODY_MAX,
-  INBOX_TITLE_MAX,
   type InboxThread,
   inboxCountsOn,
-  inboxPendingState,
+  inboxNeedsYou,
 } from "@exegol/shared";
-import { Button, cn } from "@exegol/ui";
+import { cn } from "@exegol/ui";
 import { ChevronLeft, Inbox } from "lucide-react";
 import { useCallback, useMemo, useRef, useState } from "react";
 import { useProjectContext } from "../../contexts/ProjectContext";
-import { useAct } from "../../hooks/use-act";
 import { useDismiss } from "../../hooks/use-dismiss";
 import { useColabs, useInboxThreads } from "../../hooks/use-inbox";
 import { useProjects } from "../../hooks/use-trpc";
 import type { InboxTarget as Target } from "../../lib/inbox-menu";
 import { appKeys } from "../../lib/keymap";
 import { useAppStore } from "../../stores/app";
-import { INPUT_CLASS } from "../agents/SpawnOptions";
-import { FilterChip } from "../common/FilterChip";
-import type { ProjectMeta } from "../common/ProjectChip";
 import { InboxMenuList } from "./InboxMenuList";
+import { NewThread } from "./NewThread";
 import { InboxThreadView } from "./sections/InboxThreadView";
 
 type View = { kind: "list" } | { kind: "new"; target: Target } | { kind: "thread"; id: string };
-
-function NewThread({
-  projectId,
-  projectName,
-  colabs,
-  meta,
-  start,
-  onOpened,
-}: {
-  projectId: string;
-  projectName: string;
-  colabs: Colab[];
-  meta: ReadonlyMap<string, ProjectMeta>;
-  start: Target;
-  onOpened: (id: string) => void;
-}) {
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-  const [target, setTarget] = useState<Target>(start);
-  const { busy, act } = useAct("Thread not opened");
-  const colab = target.kind === "colab" ? colabs.find((c) => c.id === target.id) : undefined;
-  const memberIds = [...new Set(colab?.members.map((m) => m.projectId))];
-
-  const post = async () => {
-    const opened = await act<{ id: string }>("inbox.open", {
-      title,
-      body,
-      projectId: target.kind === "project" ? projectId : null,
-      ...(target.kind === "colab" && { colabId: target.id, toProject: target.to }),
-    });
-    if (opened) onOpened(opened.value.id);
-  };
-
-  return (
-    <div className="flex flex-col gap-2 p-2">
-      <div className="flex flex-wrap items-center gap-1">
-        <FilterChip
-          active={target.kind === "project"}
-          onClick={() => setTarget({ kind: "project" })}
-        >
-          {projectName}
-        </FilterChip>
-        {colabs.map((c) => (
-          <FilterChip
-            key={c.id}
-            active={colab?.id === c.id}
-            onClick={() => setTarget({ kind: "colab", id: c.id, to: null })}
-          >
-            {c.name}
-          </FilterChip>
-        ))}
-        <FilterChip
-          active={target.kind === "personal"}
-          onClick={() => setTarget({ kind: "personal" })}
-        >
-          Personal
-        </FilterChip>
-      </div>
-      {colab && (
-        <select
-          value={target.kind === "colab" ? (target.to ?? "") : ""}
-          onChange={(e) => setTarget({ kind: "colab", id: colab.id, to: e.target.value || null })}
-          className={INPUT_CLASS}
-        >
-          <option value="">For the whole colab</option>
-          {memberIds.map((id) => (
-            <option key={id} value={id}>
-              For {meta.get(id)?.name ?? id}
-            </option>
-          ))}
-        </select>
-      )}
-      <input
-        value={title}
-        onChange={(e) => setTitle(e.target.value)}
-        maxLength={INBOX_TITLE_MAX}
-        placeholder="Title"
-        className={INPUT_CLASS}
-      />
-      <textarea
-        value={body}
-        onChange={(e) => setBody(e.target.value)}
-        rows={6}
-        maxLength={INBOX_BODY_MAX}
-        placeholder="What should a session know"
-        className={INPUT_CLASS}
-      />
-      <Button
-        size="sm"
-        className="self-end"
-        disabled={busy || !title.trim() || !body.trim()}
-        onClick={() => void post()}
-      >
-        Open thread
-      </Button>
-    </div>
-  );
-}
 
 function Panel({
   active,
@@ -168,8 +64,7 @@ function Panel({
       )}
       {view.kind === "new" && (
         <NewThread
-          projectId={projectId}
-          projectName={projectName}
+          project={{ id: projectId, name: projectName }}
           colabs={colabs}
           meta={meta}
           start={view.target}
@@ -203,7 +98,7 @@ export function InboxMenu() {
 
   const colabIds = colabIdsOf(colabs, projectId);
   const threads = active.filter((t) => inboxCountsOn(t, projectId, colabIds));
-  const needsYou = threads.some((t) => inboxPendingState(t) === "needs_you");
+  const needsYou = inboxNeedsYou(threads);
 
   return (
     <div ref={rootRef} className="relative">

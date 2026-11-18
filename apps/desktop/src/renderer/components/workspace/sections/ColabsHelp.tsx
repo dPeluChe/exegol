@@ -1,3 +1,4 @@
+import { INBOX_TURN_LIMIT } from "@exegol/shared";
 import { Button } from "@exegol/ui";
 
 const STEPS: { title: string; body: string }[] = [
@@ -19,7 +20,7 @@ const STEPS: { title: string; body: string }[] = [
   },
   {
     title: "You close the loop",
-    body: "After six messages between agents a person decides what happens next. Closing a thread takes one line saying how it ended, and it moves to Archived.",
+    body: `After ${INBOX_TURN_LIMIT} messages in a row between agents a person decides what happens next. Closing a thread takes one line saying how it ended, and it moves to Archived.`,
   },
 ];
 
