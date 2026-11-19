@@ -2,7 +2,9 @@
 
 import { hostOf } from "../types/agent-browser";
 
-const SPEECH_MAX_CHARS = 1500;
+// About 8 minutes of speech: sentences are made and played one by one, so length costs time only
+const SPEECH_MAX_CHARS = 8000;
+const WORDS_PER_MINUTE = 150;
 const SENTENCE_MAX_CHARS = 280;
 
 const FENCE = /^\s*(```|~~~)/;
@@ -120,12 +122,38 @@ function capped(sentences: string[], maxChars: number): string[] {
   return out;
 }
 
-/** The reply's prose split into sentences, at most `maxChars` in all; empty when nothing reads */
-export function speechSentences(markdown: string, maxChars = SPEECH_MAX_CHARS): string[] {
-  const sentences = units(markdown)
+function sentencesOf(markdown: string): string[] {
+  return units(markdown)
     .flatMap((unit) => unit.split(/(?<=[.!?…])\s+(?=\S)/))
     .map((s) => s.trim())
     .filter((s) => /[\p{L}\p{N}]/u.test(s))
     .flatMap(shorten);
-  return capped(sentences, maxChars);
+}
+
+/** The reply's prose split into sentences, at most `maxChars` in all; empty when nothing reads */
+export function speechSentences(markdown: string, maxChars = SPEECH_MAX_CHARS): string[] {
+  return capped(sentencesOf(markdown), maxChars);
+}
+
+const wordsIn = (sentences: string[]) =>
+  sentences.reduce((n, s) => n + s.split(/\s+/).filter(Boolean).length, 0);
+
+export interface SpeechLength {
+  words: number;
+  /** At an ordinary pace, before the voice's speed */
+  minutes: number;
+  /** The reply is longer than what is read */
+  cut: boolean;
+}
+
+/** How much of a reply is read aloud, known before any audio is made */
+export function speechLength(markdown: string, maxChars = SPEECH_MAX_CHARS): SpeechLength {
+  const all = sentencesOf(markdown);
+  const read = capped(all, maxChars);
+  const words = wordsIn(read);
+  return {
+    words,
+    minutes: Math.max(1, Math.round(words / WORDS_PER_MINUTE)),
+    cut: wordsIn(all) > words,
+  };
 }
