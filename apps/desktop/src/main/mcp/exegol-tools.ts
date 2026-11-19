@@ -14,6 +14,7 @@ import {
   resolveTargetAgent,
   sendAgentMessage,
 } from "../agents/agent-messaging";
+import { messageHistory } from "../agents/message-history";
 import { callBrowserTool, isBrowserTool } from "../browser/agent-browser-tools";
 import { commanderAutonomy, isCommander } from "../commander/home";
 import { recorded } from "../commander/log";
@@ -25,7 +26,7 @@ import {
   createAgentLink,
   reverseLinkExists,
 } from "../db/queries/agent-links";
-import { listActiveAgents } from "../db/queries/agents";
+import { getAgent, listActiveAgents } from "../db/queries/agents";
 import { claimPaths, listProjectClaims, releasePaths } from "../db/queries/path-claims";
 import { getWorktreeByAgentId } from "../db/queries/worktrees";
 import { sameName, text } from "../lib/names";
@@ -376,6 +377,8 @@ async function dispatch(
         return handleMessageCancel(db, args, context);
       case "messages_check":
         return checkAgentMessages(db, context.agentId);
+      case "messages_list":
+        return messageHistory(db, getAgent(db, context.agentId) ?? { id: context.agentId }, args);
       case "claim_paths":
         return handleClaimPaths(db, args, context);
       case "release_paths":
