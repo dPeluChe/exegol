@@ -12,6 +12,7 @@ import { useWorkspaceStore } from "../../stores/workspace";
 import { layoutHasPane, pwOf } from "../../stores/workspace/helpers";
 import { EmptyState } from "../common";
 import { ViewDetails } from "./ViewDetails";
+import { ViewLightbox } from "./ViewLightbox";
 import { ViewsCanvas } from "./ViewsCanvas";
 
 const Chip = ({ children }: { children: React.ReactNode }) => (
@@ -31,6 +32,7 @@ function Views({ projectId, paneId }: { projectId: string; paneId: string }) {
   const servers = useViewServers(projectId);
   const [port, setPort] = useState<number | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
+  const [enlarged, setEnlarged] = useState<string | null>(null);
 
   const ports = servers.data ?? [];
   const statePort = state?.base ? Number(new URL(state.base).port) : null;
@@ -56,6 +58,7 @@ function Views({ projectId, paneId }: { projectId: string; paneId: string }) {
   const views = state?.views ?? [];
   const counts = viewCounts(views);
   const picked = views.find((v) => v.path === selected);
+  const large = views.find((v) => v.path === enlarged);
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-3 py-1.5">
@@ -164,7 +167,10 @@ function Views({ projectId, paneId }: { projectId: string; paneId: string }) {
           </div>
         </div>
       )}
-      <div className="flex min-h-0 flex-1">
+      <div className="relative flex min-h-0 flex-1">
+        {large && (
+          <ViewLightbox projectId={projectId} view={large} onClose={() => setEnlarged(null)} />
+        )}
         {views.length > 0 && state ? (
           <>
             <ViewsCanvas
@@ -173,6 +179,7 @@ function Views({ projectId, paneId }: { projectId: string; paneId: string }) {
               selected={selected}
               running={!!state.running}
               onSelect={setSelected}
+              onEnlarge={setEnlarged}
             />
             {picked && (
               <ViewDetails
@@ -181,6 +188,7 @@ function Views({ projectId, paneId }: { projectId: string; paneId: string }) {
                 view={picked}
                 onSelect={setSelected}
                 onOpenLive={openLive}
+                onEnlarge={() => setEnlarged(picked.path)}
               />
             )}
           </>

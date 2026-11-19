@@ -1,6 +1,14 @@
 import type { ViewEntry, ViewsState } from "@exegol/shared";
 import { Button } from "@exegol/ui";
-import { Copy, ExternalLink, FileImage, PanelRightOpen, X } from "lucide-react";
+import {
+  Copy,
+  ExternalLink,
+  FileImage,
+  Maximize2,
+  PanelRightOpen,
+  RefreshCw,
+  X,
+} from "lucide-react";
 import { useMemo } from "react";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { linkedFrom } from "../../lib/views-canvas";
@@ -59,12 +67,14 @@ export function ViewDetails({
   view,
   onSelect,
   onOpenLive,
+  onEnlarge,
 }: {
   projectId: string;
   state: ViewsState;
   view: ViewEntry;
   onSelect: (path: string | null) => void;
   onOpenLive: (url: string) => void;
+  onEnlarge: () => void;
 }) {
   const url = `${state.base ?? ""}${view.path}`;
   const known = useMemo(() => new Set(state.views.map((v) => v.path)), [state.views]);
@@ -93,9 +103,32 @@ export function ViewDetails({
         </button>
       </div>
       <div className="flex flex-wrap gap-1.5">
+        <Button
+          size="sm"
+          variant="outline"
+          className="gap-1.5"
+          disabled={view.shot === undefined}
+          onClick={onEnlarge}
+        >
+          <Maximize2 className="h-3.5 w-3.5" />
+          Enlarge
+        </Button>
         <Button size="sm" variant="outline" className="gap-1.5" onClick={() => onOpenLive(url)}>
           <PanelRightOpen className="h-3.5 w-3.5" />
           Open live
+        </Button>
+        <Button
+          size="sm"
+          variant="outline"
+          className="gap-1.5"
+          disabled={!!state.running || view.status === "loading"}
+          title="Load this page and capture it again"
+          onClick={() =>
+            trpcMutate("views.recapture", input).catch(toastError("Could not capture the view"))
+          }
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          Capture again
         </Button>
         <Button
           size="sm"

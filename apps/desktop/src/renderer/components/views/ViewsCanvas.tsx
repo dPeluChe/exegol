@@ -22,12 +22,14 @@ export function ViewsCanvas({
   selected,
   running,
   onSelect,
+  onEnlarge,
 }: {
   projectId: string;
   views: ViewEntry[];
   selected: string | null;
   running: boolean;
   onSelect: (path: string | null) => void;
+  onEnlarge: (path: string) => void;
 }) {
   const frame = useRef<HTMLDivElement>(null);
   const [camera, setCamera] = useState<Camera | null>(null);
@@ -168,6 +170,7 @@ export function ViewsCanvas({
               linked={linkedPaths.has(box.path)}
               running={running}
               onSelect={onSelect}
+              onEnlarge={onEnlarge}
             />
           ) : null;
         })}

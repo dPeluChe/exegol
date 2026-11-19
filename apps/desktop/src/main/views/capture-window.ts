@@ -1,16 +1,37 @@
-import {
-  browserPartitionFor,
-  VIEW_PAGE,
-  VIEW_THUMB_WIDTH,
-  type ViewLink,
-  viewPath,
-} from "@exegol/shared";
+import { browserPartitionFor, VIEW_PAGE, type ViewLink, viewPath } from "@exegol/shared";
 import { BrowserWindow, type NativeImage } from "electron";
 import { captureFullPage } from "../browser/screenshot";
-import { delay, withTimeout } from "../lib/timeout";
+import { withTimeout } from "../lib/timeout";
 
 const LOAD_TIMEOUT_MS = 20_000;
-const SETTLE_MS = 500;
+const QUIET_MS = 500;
+const QUIET_CAP_MS = 6_000;
+
+// Resolves once the page stopped changing and shows no loading placeholder: an app paints its
+// frame first and its data later, and a capture or a link read before that sees skeletons
+const QUIET_SCRIPT = `new Promise((resolve) => {
+  const BUSY = '[aria-busy="true"], [class*="skeleton" i], [class*="animate-pulse"], [class*="shimmer" i], [class*="spinner" i], [role="progressbar"]';
+  const busy = () => {
+    for (const el of document.querySelectorAll(BUSY)) {
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) return true;
+    }
+    return false;
+  };
+  const started = Date.now();
+  let last = Date.now();
+  const seen = new MutationObserver(() => { last = Date.now(); });
+  seen.observe(document.documentElement, { childList: true, subtree: true, characterData: true });
+  const check = () => {
+    const now = Date.now();
+    const capped = now - started >= ${QUIET_CAP_MS};
+    if (capped || (now - last >= ${QUIET_MS} && !busy())) {
+      seen.disconnect();
+      resolve(!capped);
+    } else setTimeout(check, 100);
+  };
+  setTimeout(check, 100);
+})`;
 const LINKS_WORLD_ID = 1339;
 const RUN_DIALOG = "-run-dialog";
 
@@ -96,10 +117,9 @@ async function capture(wc: Electron.WebContents): Promise<NativeImage | null> {
     5_000,
     "page reveal",
   ).catch(() => undefined);
-  return captureFullPage(wc, {
-    width: VIEW_THUMB_WIDTH,
-    height: Math.round((VIEW_PAGE.maxHeight * VIEW_THUMB_WIDTH) / VIEW_PAGE.width),
-  }).catch(() => null);
+  return captureFullPage(wc, { width: VIEW_PAGE.width, height: VIEW_PAGE.maxHeight }).catch(
+    () => null,
+  );
 }
 
 /** Load one page and read it: where it ended, its links and the top of it as an image. A page
@@ -114,7 +134,11 @@ export async function readPage(win: BrowserWindow, url: string): Promise<PageRea
   try {
     // A redirect rejects the first load with ERR_ABORTED while the page it led to loads fine
     await withTimeout(wc.loadURL(url), LOAD_TIMEOUT_MS, "page load").catch(() => undefined);
-    await delay(SETTLE_MS);
+    await withTimeout(
+      wc.executeJavaScriptInIsolatedWorld(LINKS_WORLD_ID, [{ code: QUIET_SCRIPT }]),
+      QUIET_CAP_MS + 2_000,
+      "page quiet",
+    ).catch(() => undefined);
     const finalPath = viewPath(new URL(wc.getURL()).pathname);
     const page = (await withTimeout(
       wc.executeJavaScriptInIsolatedWorld(LINKS_WORLD_ID, [{ code: LINKS_SCRIPT }]),

@@ -8,6 +8,7 @@ import {
   pickDevServerPort,
   robotsBlocks,
   skipsView,
+  VIEW_THUMB_WIDTH,
   VIEWS_MAX,
   type ViewEntry,
   type ViewSource,
@@ -23,12 +24,13 @@ import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { delay } from "../lib/timeout";
 import { EXEGOL_DIR } from "../mcp/exegol-protocol";
-import { captureWindow, readPage } from "./capture-window";
+import { captureWindow, type PageRead, readPage } from "./capture-window";
 import { fileRoutes, siteMeta, viewServers } from "./discover";
 import { seedSession } from "./session-seed";
 
 const POOL = 3;
 const JPEG_QUALITY = 72;
+const FULL_QUALITY = 82;
 
 interface Pass {
   state: ViewsState;
@@ -128,12 +130,23 @@ export function resumeViews(projectId: string, retry: boolean): void {
   push(projectId, pass);
 }
 
-export const viewFile = (projectId: string, path: string): string | null =>
-  passes.get(projectId)?.files.get(path) ?? null;
+const fullOf = (thumb: string) => thumb.replace(/\.jpg$/, "-full.jpg");
 
-export async function viewThumb(projectId: string, path: string): Promise<string | null> {
-  const file = viewFile(projectId, path);
-  if (!file) return null;
+/** The capture at the page's own size: what is copied, pasted to an agent or shown large */
+export function viewFile(projectId: string, path: string): string | null {
+  const thumb = passes.get(projectId)?.files.get(path);
+  return thumb ? fullOf(thumb) : null;
+}
+
+/** The capture as a data URL: the thumbnail, or with `full` the page at its own size */
+export async function viewThumb(
+  projectId: string,
+  path: string,
+  full = false,
+): Promise<string | null> {
+  const thumb = passes.get(projectId)?.files.get(path);
+  if (!thumb) return null;
+  const file = full ? fullOf(thumb) : thumb;
   const data = await readFile(file).catch(() => null);
   return data ? `data:image/jpeg;base64,${data.toString("base64")}` : null;
 }
@@ -144,6 +157,62 @@ export function copyViewImage(projectId: string, path: string): boolean {
   if (!image || image.isEmpty()) return false;
   clipboard.writeImage(image);
   return true;
+}
+
+/** What a page read says about its view, with its capture at full size and as a thumbnail */
+async function record(
+  pass: Pass,
+  dir: string,
+  view: ViewEntry,
+  page: PageRead,
+): Promise<ViewEntry["status"]> {
+  view.status = page.finalPath === view.path ? "done" : "redirected";
+  view.finalPath = view.status === "redirected" ? page.finalPath : undefined;
+  view.login = view.status === "redirected" ? page.login : undefined;
+  // A login page may answer 401: that view was sent to it, it did not fail
+  if (page.http >= 400 && view.status === "done") view.status = "failed";
+  view.http = page.http;
+  view.links = page.links;
+  view.externalHosts = page.externalHosts;
+  view.newTabLinks = page.newTabLinks;
+  view.cut = page.cut;
+  if (!page.image) return view.status;
+  const thumb = page.image.resize({ width: VIEW_THUMB_WIDTH, quality: "best" });
+  const size = thumb.getSize();
+  const file = join(dir, `${++shot}.jpg`);
+  const full = fullOf(file);
+  await Promise.all([
+    writeFile(file, opaqueJpeg(thumb, JPEG_QUALITY), { mode: 0o600 }),
+    writeFile(full, opaqueJpeg(page.image, FULL_QUALITY), { mode: 0o600 }),
+  ]);
+  pass.files.set(view.path, file);
+  view.width = size.width;
+  view.height = size.height;
+  view.shot = shot;
+  return view.status;
+}
+
+/** One view loaded and captured again, when no pass runs: the page may not have been ready,
+ *  or changed since. Views it newly links to wait for the next pass */
+export async function recaptureView(projectId: string, path: string): Promise<void> {
+  const pass = passes.get(projectId);
+  const view = pass?.state.views.find((v) => v.path === path);
+  const base = pass?.state.base;
+  if (!pass || !view || !base || pass.state.running || view.status === "loading") return;
+  const before = view.status;
+  view.status = "loading";
+  push(projectId, pass, view);
+  const win = captureWindow(projectId, base);
+  try {
+    await seedSession(win, projectId, base);
+    const page = await readPage(win, base + view.path);
+    if (passes.get(projectId) === pass) await record(pass, dirOf(projectId), view, page);
+  } catch {
+    view.status = before;
+  } finally {
+    if (!win.isDestroyed()) win.destroy();
+  }
+  if (passes.get(projectId) === pass) push(projectId, pass, view);
 }
 
 /** One pass over a local server of the project: routes from its page files, its sitemap and
@@ -247,29 +316,9 @@ export async function startViews(
       try {
         const page = await readPage(win, base + view.path);
         if (pass.stopped) return;
-        view.status = page.finalPath === view.path ? "done" : "redirected";
-        if (view.status === "redirected") {
-          view.finalPath = page.finalPath;
-          view.login = page.login;
-        }
-        // A login page may answer 401: that view was sent to it, it did not fail
-        if (page.http >= 400 && view.status === "done") view.status = "failed";
-        view.http = page.http;
-        view.links = page.links;
-        view.externalHosts = page.externalHosts;
-        view.newTabLinks = page.newTabLinks;
-        view.cut = page.cut;
-        if (page.image) {
-          const size = page.image.getSize();
-          const file = join(dir, `${++shot}.jpg`);
-          await writeFile(file, opaqueJpeg(page.image, JPEG_QUALITY), { mode: 0o600 });
-          pass.files.set(view.path, file);
-          view.width = size.width;
-          view.height = size.height;
-          view.shot = shot;
-        }
-        if (view.status === "done") for (const link of page.links) add(link.to, "links");
-        if (view.status === "redirected") {
+        const status = await record(pass, dir, view, page);
+        if (status === "done") for (const link of page.links) add(link.to, "links");
+        if (status === "redirected") {
           add(page.finalPath, "links");
           const hold = holdFor(state.views, pass.skipped);
           if (hold && !state.hold) {

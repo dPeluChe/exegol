@@ -36,11 +36,17 @@ export function useViewServers(projectId: string) {
   });
 }
 
-/** A thumbnail as a data URL; `shot` changes with each capture, so a new one is fetched */
-export function useViewThumb(projectId: string, path: string, shot: number | undefined) {
+/** A capture as a data URL, the thumbnail or with `full` the page at its own size; `shot`
+ *  changes with each capture, so a new one is fetched */
+export function useViewThumb(
+  projectId: string,
+  path: string,
+  shot: number | undefined,
+  full = false,
+) {
   return useQuery({
-    queryKey: ["views", "thumb", projectId, path, shot],
-    queryFn: () => trpcInvoke<string | null>("views.thumb", { projectId, path }),
+    queryKey: ["views", "thumb", projectId, path, shot, full],
+    queryFn: () => trpcInvoke<string | null>("views.thumb", { projectId, path, full }),
     enabled: shot !== undefined,
     staleTime: Number.POSITIVE_INFINITY,
     gcTime: 60_000,
