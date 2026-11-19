@@ -99,6 +99,7 @@ function applyAgentSignals(
   signals: Array<{ agentId: string; event: string }>,
   currentStep: string | null,
   source: AgentSignalEvent["source"] = "hook",
+  everyTurn = source === "hook",
 ): void {
   let signalStatus: AgentStatus | undefined;
   let turnStarted: number | undefined;
@@ -119,7 +120,7 @@ function applyAgentSignals(
     const derived = deriveStatusFromSignal(sig.event);
     trackTurn(db, agent, maps, sig.event);
     if (sig.event === "turn_started") {
-      noteTurnStarted(agent.id);
+      noteTurnStarted(agent.id, everyTurn);
       noteStuckTurnStart(agent.id);
     }
 
@@ -343,7 +344,9 @@ export function createSpawnCallbacks(
         // Sync, before the pane's DA reply can come back: Claude Code ends its probe on DA
         if (term.reply) getPtyHost().write(agent.id, PROGRAM_STATUS_REPLY);
         const signals = term.signals.map((event) => ({ agentId: agent.id, event }));
-        if (signals.length) applyAgentSignals(db, agent, maps, signals, null, "terminal");
+        if (signals.length) {
+          applyAgentSignals(db, agent, maps, signals, null, "terminal", term.everyTurn);
+        }
       }
       // Full-screen TUIs: their own status reports above are deterministic, the scrape is not
       if (SKIP_PARSING.has(agent.cliType)) return;

@@ -76,12 +76,13 @@ export function noteHookSignal(agentId: string): void {
   hooked.add(agentId);
 }
 
-/** The signals a chunk's reports mean for this agent, and whether it asked for the 7501 reply */
+/** The signals a chunk's reports mean for this agent, whether it asked for the 7501 reply, and
+ *  whether it reports every turn (OSC 7501 does, OSC 9;4 progress only some) */
 export function takeTermStatus(
   agentId: string,
   cliType: string,
   reports: readonly TermReport[],
-): { signals: AgentSignalType[]; reply: boolean } {
+): { signals: AgentSignalType[]; reply: boolean; everyTurn: boolean } {
   const reply = reports.some((r) => r.kind === "query");
   if (reply && !answered.has(agentId)) {
     answered.add(agentId);
@@ -95,7 +96,11 @@ export function takeTermStatus(
     );
   }
   if (state !== prev) sessions.set(agentId, state);
-  return { signals: hooked.has(agentId) ? [] : signals, reply };
+  return {
+    signals: hooked.has(agentId) ? [] : signals,
+    reply,
+    everyTurn: state.reportsStatus,
+  };
 }
 
 export function forgetTermStatus(agentId: string): void {

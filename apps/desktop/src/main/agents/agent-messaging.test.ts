@@ -24,7 +24,7 @@ vi.mock("../terminal/pty-host", () => ({
 import { createAgentLink, listLinksFrom } from "../db/queries/agent-links";
 import { getMessageDelivery, markStaleQueuedUndeliverable } from "../db/queries/messages";
 import { noteTurnStarted, SUBMIT_CONFIRM_MS, SUBMIT_RETRIES } from "./agent-message-injection";
-import { setAgentAwaitingApproval } from "./agent-message-queue";
+import { noteDraftInput, setAgentAwaitingApproval } from "./agent-message-queue";
 import { stopSweep } from "./agent-message-sweep";
 import {
   cancelQueuedMessage,
@@ -763,7 +763,7 @@ describe("submit confirmation", () => {
   const enters = () => ptyMock.writes.filter((w) => w.data === "\r").length;
 
   it("sends Enter again while no turn starts, at most SUBMIT_RETRIES times", () => {
-    noteTurnStarted("s2");
+    noteTurnStarted("s2", true);
     sendAgentMessage(db, { fromAgentId: "s1", toAgentId: "s2", text: "retry me" });
     vi.advanceTimersByTime(600);
     expect(enters()).toBe(1);
@@ -774,12 +774,38 @@ describe("submit confirmation", () => {
   });
 
   it("stops once the turn starts", () => {
-    noteTurnStarted("s2");
+    noteTurnStarted("s2", true);
     sendAgentMessage(db, { fromAgentId: "s1", toAgentId: "s2", text: "turn starts" });
     vi.advanceTimersByTime(600);
-    noteTurnStarted("s2");
+    noteTurnStarted("s2", true);
     vi.advanceTimersByTime(SUBMIT_CONFIRM_MS * 3);
     expect(enters()).toBe(1);
+  });
+
+  it("never retries on a turn start read off the screen: such a CLI reports only some", () => {
+    noteTurnStarted("s2", false);
+    sendAgentMessage(db, { fromAgentId: "s1", toAgentId: "s2", text: "no hooks" });
+    vi.advanceTimersByTime(600 + SUBMIT_CONFIRM_MS * 3);
+    expect(enters()).toBe(1);
+  });
+
+  it("sends no Enter again once the person has begun to type", () => {
+    noteTurnStarted("s2", true);
+    sendAgentMessage(db, { fromAgentId: "s1", toAgentId: "s2", text: "then they type" });
+    vi.advanceTimersByTime(600);
+    noteDraftInput("s2", "h");
+    vi.advanceTimersByTime(SUBMIT_CONFIRM_MS * 3);
+    expect(enters()).toBe(1);
+  });
+
+  it("sends no Enter again into an approval the turn raised", () => {
+    noteTurnStarted("s2", true);
+    sendAgentMessage(db, { fromAgentId: "s1", toAgentId: "s2", text: "then it asks" });
+    vi.advanceTimersByTime(600);
+    setAgentAwaitingApproval("s2", true);
+    vi.advanceTimersByTime(SUBMIT_CONFIRM_MS * 3);
+    expect(enters()).toBe(1);
+    setAgentAwaitingApproval("s2", false);
   });
 
   it("never retries for an agent that has not reported a turn start", () => {
