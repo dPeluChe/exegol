@@ -107,7 +107,11 @@ export function WorkspaceLayout({ layout, tabId }: WorkspaceLayoutProps) {
   const hosted = useWorkspaceStore(
     useShallow((s) => {
       const panes = selectPanesOf(projectId)(s);
-      return collectPaneIds(layout).filter((id) => HOSTED_PANE_TYPES.has(panes[id]?.type ?? ""));
+      // Sorted by id, not by place: React moves a node whose order changed, and a webview
+      // moved in the DOM reloads
+      return collectPaneIds(layout)
+        .filter((id) => HOSTED_PANE_TYPES.has(panes[id]?.type ?? ""))
+        .sort();
     }),
   );
 
@@ -128,7 +132,7 @@ export function WorkspaceLayout({ layout, tabId }: WorkspaceLayoutProps) {
     <div ref={layer} className="relative h-full w-full">
       <LayoutRenderer node={layout} tabId={tabId} path={[]} />
       {hosted.map((paneId) => (
-        <div key={paneId} {...{ [HOST_ATTR]: paneId }} className="absolute">
+        <div key={paneId} {...{ [HOST_ATTR]: paneId }} className="absolute overflow-hidden">
           <WorkspacePane paneId={paneId} tabId={tabId} />
         </div>
       ))}
