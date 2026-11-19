@@ -1,15 +1,15 @@
 import type { ViewEntry, ViewsState } from "@exegol/shared";
 import { Button } from "@exegol/ui";
 import { Copy, ExternalLink, FileImage, PanelRightOpen, X } from "lucide-react";
+import { useMemo } from "react";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { linkedFrom } from "../../lib/views-canvas";
-import { toastError, useToastStore } from "../../stores/toasts";
+import { toastError, toastSuccess } from "../../stores/toasts";
 
 const SOURCE: Record<ViewEntry["sources"][number], string> = {
   files: "page file",
   links: "a link",
   sitemap: "sitemap",
-  added: "added by hand",
 };
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -52,8 +52,6 @@ function PathList({
   );
 }
 
-const said = (title: string) => useToastStore.getState().addToast({ type: "success", title });
-
 /** What the canvas knows about the selected view, with the ways to take it elsewhere */
 export function ViewDetails({
   projectId,
@@ -69,7 +67,8 @@ export function ViewDetails({
   onOpenLive: (url: string) => void;
 }) {
   const url = `${state.base ?? ""}${view.path}`;
-  const known = new Set(state.views.map((v) => v.path));
+  const known = useMemo(() => new Set(state.views.map((v) => v.path)), [state.views]);
+  const from = useMemo(() => linkedFrom(state.views, view.path), [state.views, view.path]);
   const links = view.links ?? [];
   const input = { projectId, path: view.path };
   return (
@@ -105,7 +104,7 @@ export function ViewDetails({
           disabled={view.shot === undefined}
           onClick={() =>
             trpcMutate("views.copyImage", input)
-              .then((ok) => ok && said("Capture copied"))
+              .then((ok) => ok && toastSuccess("Capture copied"))
               .catch(toastError("Could not copy the capture"))
           }
         >
@@ -123,7 +122,7 @@ export function ViewDetails({
               .then(async (file) => {
                 if (!file) return;
                 await navigator.clipboard.writeText(file);
-                said("File path copied");
+                toastSuccess("File path copied");
               })
               .catch(toastError("Could not copy the path"))
           }
@@ -176,11 +175,8 @@ export function ViewDetails({
         </Section>
       )}
       <Section title="Linked from">
-        {linkedFrom(state.views, view.path).length > 0 ? (
-          <PathList
-            paths={linkedFrom(state.views, view.path).map((path) => ({ path }))}
-            onPick={onSelect}
-          />
+        {from.length > 0 ? (
+          <PathList paths={from.map((path) => ({ path }))} onPick={onSelect} />
         ) : (
           <p className="text-[11px] text-text-muted">No captured view links here.</p>
         )}

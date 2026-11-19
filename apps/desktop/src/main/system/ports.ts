@@ -8,6 +8,8 @@ interface DetectedPort {
   port: number;
   pid: number;
   process: string;
+  /** Where the process runs */
+  cwd?: string;
   source: "runtime";
 }
 
@@ -186,6 +188,7 @@ async function detectListeningPorts(projectPath: string): Promise<DetectedPort[]
       port,
       pid,
       process: proc,
+      cwd: cwds.get(pid),
       source: "runtime" as const,
     }));
 }

@@ -48,6 +48,9 @@ export const useToastStore = create<ToastStore>((set) => ({
   },
 }));
 
+export const toastSuccess = (title: string) =>
+  useToastStore.getState().addToast({ type: "success", title });
+
 /** onError handler for mutations: surfaces the server message instead of failing silently. */
 export const toastError = (title: string) => (err: unknown) =>
   useToastStore.getState().addToast({

@@ -1,13 +1,12 @@
+import { viewCounts } from "@exegol/shared";
 import { Button } from "@exegol/ui";
-import { useQueryClient } from "@tanstack/react-query";
 import { LayoutDashboard, Play, Square, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { usePaneProject } from "../../contexts/ProjectScope";
 import { useMountEffect } from "../../hooks/use-mount-effect";
 import { useViewServers, useViews } from "../../hooks/use-views";
 import { splitWithBrowser } from "../../lib/split-terminal";
-import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
-import { viewCounts } from "../../lib/views-canvas";
+import { trpcMutate } from "../../lib/trpc-client";
 import { toastError } from "../../stores/toasts";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { layoutHasPane, pwOf } from "../../stores/workspace/helpers";
@@ -28,7 +27,6 @@ export function ViewsPane({ paneId }: { paneId: string }) {
 }
 
 function Views({ projectId, paneId }: { projectId: string; paneId: string }) {
-  const queryClient = useQueryClient();
   const { data: state } = useViews(projectId);
   const servers = useViewServers(projectId);
   const [port, setPort] = useState<number | null>(null);
@@ -42,15 +40,9 @@ function Views({ projectId, paneId }: { projectId: string; paneId: string }) {
       toastError("Could not start the pass"),
     );
 
-  // Opening the pane is what runs a pass, unless one already ran or runs
+  // Opening the pane is what runs a pass; main skips it when one ran or runs
   useMountEffect(() => {
-    void (async () => {
-      const [now, found] = await Promise.all([
-        trpcInvoke<{ running: boolean; views: unknown[] }>("views.state", { projectId }),
-        trpcInvoke<number[]>("views.servers", { projectId }),
-      ]);
-      if (!now.running && now.views.length === 0 && found[0]) void start(found[0]);
-    })().catch(() => undefined);
+    void trpcMutate("views.start", { projectId, ifEmpty: true }).catch(() => undefined);
   });
 
   const openLive = (url: string) => {
@@ -117,7 +109,7 @@ function Views({ projectId, paneId }: { projectId: string; paneId: string }) {
           {state?.sitemap === "missing" && <Chip>no sitemap</Chip>}
           {state?.robots === "found" && <Chip>robots.txt</Chip>}
           {(state?.patterns.length ?? 0) > 0 && (
-            <span title={state?.patterns.map((p) => p.pattern).join("\n")}>
+            <span title={state?.patterns.join("\n")}>
               <Chip>{state?.patterns.length} routes need values</Chip>
             </span>
           )}
@@ -128,9 +120,7 @@ function Views({ projectId, paneId }: { projectId: string; paneId: string }) {
               className="rounded p-1 text-text-muted hover:bg-bg-tertiary"
               onClick={() => {
                 setSelected(null);
-                void trpcMutate("views.clear", { projectId }).then(() =>
-                  queryClient.removeQueries({ queryKey: ["views", "thumb", projectId] }),
-                );
+                void trpcMutate("views.clear", { projectId });
               }}
             >
               <Trash2 className="h-3.5 w-3.5" />

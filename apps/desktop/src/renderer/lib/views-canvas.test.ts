@@ -1,5 +1,6 @@
+import { VIEW_PAGE } from "@exegol/shared";
 import { describe, expect, it } from "vitest";
-import { cardHeight, fitCamera, zoomAt } from "./views-canvas";
+import { CARD_LABEL_HEIGHT, CARD_WIDTH, cardHeight, fitCamera, zoomAt } from "./views-canvas";
 
 describe("views canvas", () => {
   it("keeps the point under the pointer while zooming, within the limits", () => {
@@ -19,7 +20,9 @@ describe("views canvas", () => {
   });
 
   it("sizes a card by its thumbnail, a screen tall until captured", () => {
-    expect(cardHeight(undefined)).toBe(135 + 52);
+    expect(cardHeight(undefined)).toBe(
+      Math.round((CARD_WIDTH * VIEW_PAGE.height) / VIEW_PAGE.width) + CARD_LABEL_HEIGHT,
+    );
     expect(
       cardHeight({
         path: "/",
@@ -30,6 +33,6 @@ describe("views canvas", () => {
         width: 960,
         height: 960,
       }),
-    ).toBe(240 + 52);
+    ).toBe(CARD_WIDTH + CARD_LABEL_HEIGHT);
   });
 });

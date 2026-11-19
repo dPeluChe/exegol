@@ -3,19 +3,25 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   checkAgentUrl,
+  PREFERRED_PORTS_KEY,
+  pickDevServerPort,
   robotsBlocks,
   skipsView,
   VIEWS_MAX,
   type ViewEntry,
   type ViewSource,
   type ViewsState,
+  viewCounts,
 } from "@exegol/shared";
-import { app, type BrowserWindow, clipboard, nativeImage } from "electron";
+import { type BrowserWindow, clipboard, nativeImage } from "electron";
 import type Database from "libsql";
 import { opaqueJpeg } from "../browser/page-image";
 import { getProject } from "../db/queries/projects";
+import { getJsonSetting } from "../db/queries/settings";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
+import { delay } from "../lib/timeout";
+import { EXEGOL_DIR } from "../mcp/exegol-protocol";
 import { captureWindow, readPage } from "./capture-window";
 import { fileRoutes, siteMeta, viewServers } from "./discover";
 
@@ -31,7 +37,9 @@ interface Pass {
 }
 
 const passes = new Map<string, Pass>();
-const root = () => join(app.getPath("temp"), "exegol-views");
+const root = () => join(EXEGOL_DIR, "views");
+/** Never reused: a capture's number is what tells the renderer its thumbnail is new */
+let shot = 0;
 const dirOf = (projectId: string) => join(root(), projectId);
 
 const EMPTY: ViewsState = {
@@ -41,7 +49,6 @@ const EMPTY: ViewsState = {
   patterns: [],
   sitemap: "unread",
   robots: "unread",
-  sitemapOnly: [],
 };
 
 export const viewsState = (projectId: string): ViewsState => passes.get(projectId)?.state ?? EMPTY;
@@ -60,7 +67,7 @@ export function stopViews(projectId: string): void {
   closeWindows(pass);
 }
 
-/** Thumbnails are disposable: gone with the pass's state, on a new pass and when the app quits */
+/** Captures are disposable: gone with the pass's state, on a new pass and when the app quits */
 export async function clearViews(projectId: string): Promise<void> {
   stopViews(projectId);
   passes.delete(projectId);
@@ -95,11 +102,17 @@ export function copyViewImage(projectId: string, path: string): boolean {
 export async function startViews(
   db: Database.Database,
   projectId: string,
-  port: number,
-  extra: readonly string[] = [],
+  opts: { port?: number; ifEmpty?: boolean },
 ): Promise<void> {
   const project = getProject(db, projectId);
-  if (!project || passes.get(projectId)?.state.running) return;
+  const last = passes.get(projectId)?.state;
+  if (!project || last?.running || (opts.ifEmpty && last?.views.length)) return;
+  const servers = await viewServers(project.path);
+  const preferred = getJsonSetting<Record<string, number>>(db, PREFERRED_PORTS_KEY, {})[projectId];
+  const port =
+    opts.port ??
+    pickDevServerPort(servers, servers.some((s) => s.port === preferred) ? preferred : null);
+  if (!port || passes.get(projectId)?.state.running) return;
   const checked = checkAgentUrl(`http://localhost:${port}`, project.browserHosts ?? []);
   if (!checked.ok) return;
   const base = new URL(checked.url).origin;
@@ -112,12 +125,12 @@ export async function startViews(
   const dir = dirOf(projectId);
   await rm(dir, { recursive: true, force: true });
   await mkdir(dir, { recursive: true, mode: 0o700 });
-  const server = (await viewServers(project.path)).find((s) => s.port === port);
+  const server = servers.find((s) => s.port === port);
   const [meta, files] = await Promise.all([siteMeta(base), fileRoutes(server?.folder ?? null)]);
   const inSitemap = new Set(meta.sitemap ?? []);
   state.sitemap = meta.sitemap ? "found" : "missing";
   state.robots = meta.robots ? "found" : "missing";
-  state.patterns = files.patterns.map((pattern) => ({ pattern }));
+  state.patterns = files.patterns;
 
   const byPath = new Map<string, ViewEntry>();
   const queue: ViewEntry[] = [];
@@ -142,10 +155,9 @@ export async function startViews(
   add("/", "links");
   for (const path of files.paths) add(path, "files");
   for (const path of inSitemap) add(path, "sitemap");
-  for (const path of extra) add(path, "added");
   push(projectId, { state });
 
-  let shot = 0;
+  let loading = 0;
   const worker = async (): Promise<void> => {
     const win = captureWindow(projectId, base);
     pass.windows.push(win);
@@ -153,12 +165,11 @@ export async function startViews(
       const view = queue.shift();
       if (!view) {
         // Another window may still be on a page whose links add work
-        if (state.views.some((v) => v.status === "loading")) {
-          await new Promise((r) => setTimeout(r, 150));
-          continue;
-        }
-        return;
+        if (loading === 0) return;
+        await delay(150);
+        continue;
       }
+      loading++;
       view.status = "loading";
       push(projectId, { view });
       try {
@@ -185,6 +196,8 @@ export async function startViews(
       } catch {
         if (pass.stopped) return;
         view.status = "failed";
+      } finally {
+        loading--;
       }
       push(projectId, { view });
     }
@@ -192,13 +205,10 @@ export async function startViews(
   await Promise.all(Array.from({ length: POOL }, worker)).catch(() => undefined);
   closeWindows(pass);
   for (const view of state.views) if (view.status === "loading") view.status = "waiting";
-  state.sitemapOnly = state.views
-    .filter((v) => v.inSitemap && v.status === "failed")
-    .map((v) => v.path);
   state.running = false;
   push(projectId, { state });
-  const count = (s: ViewEntry["status"]) => state.views.filter((v) => v.status === s).length;
+  const counts = viewCounts(state.views);
   logger.info(
-    `[Views] pass ${projectId}: ${state.views.length} views in ${Date.now() - started}ms (${count("redirected")} redirected, ${count("failed")} failed${pass.stopped ? ", stopped" : ""})`,
+    `[Views] pass ${projectId}: ${counts.total} views in ${Date.now() - started}ms (${counts.redirected} redirected, ${counts.failed} failed${pass.stopped ? ", stopped" : ""})`,
   );
 }

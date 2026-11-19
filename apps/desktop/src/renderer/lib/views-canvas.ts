@@ -62,17 +62,6 @@ export function linkCurve(
   return `M${x1} ${y1}C${x1} ${y1 - bend} ${x2} ${y2 - bend} ${x2} ${y2}`;
 }
 
-export function viewCounts(views: readonly ViewEntry[]) {
-  const of = (s: ViewEntry["status"]) => views.filter((v) => v.status === s).length;
-  return {
-    total: views.length,
-    done: of("done"),
-    redirected: of("redirected"),
-    failed: of("failed"),
-    left: of("waiting") + of("loading"),
-  };
-}
-
 /** Views that link to `path`, for the details of a selected view */
 export function linkedFrom(views: readonly ViewEntry[], path: string): string[] {
   return views

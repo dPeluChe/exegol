@@ -1,4 +1,4 @@
-import type { ViewBox, ViewEntry } from "@exegol/shared";
+import type { ViewEntry } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { Ban, ExternalLink, FileCheck2, Loader2, LogIn, TriangleAlert } from "lucide-react";
 import { memo } from "react";
@@ -18,14 +18,20 @@ const ICON = "h-3 w-3";
 export const ViewCard = memo(function ViewCard({
   projectId,
   view,
-  box,
+  x,
+  y,
+  width,
+  height,
   selected,
   linked,
   onSelect,
 }: {
   projectId: string;
   view: ViewEntry;
-  box: ViewBox;
+  x: number;
+  y: number;
+  width: number;
+  height: number;
   selected: boolean;
   /** A link of the selected view ends here */
   linked: boolean;
@@ -46,7 +52,7 @@ export const ViewCard = memo(function ViewCard({
             ? "border-accent/60"
             : "border-border",
       )}
-      style={{ left: box.x, top: box.y, width: box.width, height: box.height }}
+      style={{ left: x, top: y, width, height }}
     >
       <div className="relative min-h-0 flex-1 bg-bg-tertiary">
         {thumb.data ? (

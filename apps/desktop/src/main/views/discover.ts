@@ -1,7 +1,7 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import {
-  type DevPort,
+  dedupeDevPorts,
   parseRobots,
   parseSitemap,
   type RobotsRules,
@@ -9,7 +9,9 @@ import {
   splitDevPorts,
   viewPath,
 } from "@exegol/shared";
-import { getProcessCwds, getProjectPorts } from "../system/ports";
+import { net } from "electron";
+import { getProjectPorts } from "../system/ports";
+import { SKIP_DIRS } from "../system/scripts";
 
 const PAGE_ROOTS = [["app"], ["pages"], ["src", "app"], ["src", "pages"], ["src", "routes"]];
 const MAX_FILES = 5_000;
@@ -25,13 +27,13 @@ export interface ViewServer {
 
 /** The project's running local servers that serve pages, each with its process's folder */
 export async function viewServers(projectPath: string): Promise<ViewServer[]> {
-  const running = (await getProjectPorts(projectPath)).filter(
-    (p) => p.source === "runtime",
-  ) as (DevPort & { pid?: number })[];
-  const { pages } = splitDevPorts(running);
-  const pids = pages.flatMap((p) => (p.pid ? [p.pid] : []));
-  const cwds = pids.length > 0 ? await getProcessCwds(pids) : new Map<number, string>();
-  return pages.map((p) => ({ port: p.port, folder: (p.pid && cwds.get(p.pid)) || null }));
+  const running = (await getProjectPorts(projectPath)).flatMap((p) =>
+    p.source === "runtime" ? [p] : [],
+  );
+  return splitDevPorts(dedupeDevPorts(running)).pages.map((p) => ({
+    port: p.port,
+    folder: p.cwd ?? null,
+  }));
 }
 
 async function walk(dir: string, rel: string, out: string[]): Promise<void> {
@@ -39,7 +41,7 @@ async function walk(dir: string, rel: string, out: string[]): Promise<void> {
   const entries = await readdir(dir, { withFileTypes: true }).catch(() => []);
   for (const entry of entries) {
     if (out.length >= MAX_FILES) return;
-    if (entry.name.startsWith(".") || entry.name === "node_modules") continue;
+    if (entry.name.startsWith(".") || SKIP_DIRS.has(entry.name)) continue;
     const path = `${rel}/${entry.name}`;
     if (entry.isDirectory()) await walk(join(dir, entry.name), path, out);
     else if (entry.isFile()) out.push(path);
@@ -57,7 +59,7 @@ export async function fileRoutes(folder: string | null) {
 
 async function fetchText(url: string): Promise<string | null> {
   try {
-    const res = await fetch(url, {
+    const res = await net.fetch(url, {
       signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       redirect: "follow",
     });

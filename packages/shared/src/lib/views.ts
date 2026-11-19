@@ -1,4 +1,4 @@
-export type ViewSource = "files" | "links" | "sitemap" | "added";
+export type ViewSource = "files" | "links" | "sitemap";
 
 export interface ViewLink {
   /** Same-origin path the link goes to */
@@ -31,20 +31,14 @@ export interface ViewEntry {
   shot?: number;
 }
 
-/** A route pattern from page files that needs values (`/users/[id]`): listed, never loaded */
-export interface ViewPattern {
-  pattern: string;
-}
-
 export interface ViewsState {
   base: string | null;
   running: boolean;
   views: ViewEntry[];
-  patterns: ViewPattern[];
+  /** Route patterns from page files that need values (`/users/[id]`): listed, never loaded */
+  patterns: string[];
   sitemap: "found" | "missing" | "unread";
   robots: "found" | "missing" | "unread";
-  /** Sitemap paths the site did not serve as a page */
-  sitemapOnly: string[];
 }
 
 export const VIEWS_MAX = 200;
@@ -167,13 +161,12 @@ export interface ViewBox {
   y: number;
   width: number;
   height: number;
-  parent: string | null;
 }
 
 export interface ViewsLayout {
   boxes: ViewBox[];
   /** Parent to child lines, as SVG path data */
-  lines: { from: string; to: string; d: string }[];
+  lines: { to: string; d: string }[];
   width: number;
   height: number;
 }
@@ -230,9 +223,9 @@ export function layoutViews(paths: readonly string[], opts: LayoutOptions): View
     }));
   };
 
-  const build = (path: string, parent: string | null): Block => {
+  const build = (path: string): Block => {
     const cardH = opts.cardHeight(path);
-    const rows = rowsOf((kids.get(path) ?? []).map((k) => build(k, path)));
+    const rows = rowsOf((kids.get(path) ?? []).map(build));
     const below = rows.reduce((h, r) => h + opts.gapY + r.height, 0);
     const width = Math.max(opts.cardWidth, ...rows.map((r) => r.width));
     return {
@@ -241,7 +234,7 @@ export function layoutViews(paths: readonly string[], opts: LayoutOptions): View
       height: cardH + below,
       place: (x, y) => {
         const cardX = x + (width - opts.cardWidth) / 2;
-        boxes.push({ path, x: cardX, y, width: opts.cardWidth, height: cardH, parent });
+        boxes.push({ path, x: cardX, y, width: opts.cardWidth, height: cardH });
         const fromX = cardX + opts.cardWidth / 2;
         const fromY = y + cardH;
         let rowY = fromY + opts.gapY;
@@ -251,7 +244,6 @@ export function layoutViews(paths: readonly string[], opts: LayoutOptions): View
           for (const b of r.row) {
             const toX = childX + b.width / 2;
             lines.push({
-              from: path,
               to: b.path,
               d: `M${fromX} ${fromY}V${busY}H${toX}V${rowY}`,
             });
@@ -264,7 +256,7 @@ export function layoutViews(paths: readonly string[], opts: LayoutOptions): View
     };
   };
 
-  const roots = rowsOf((kids.get(null) ?? []).map((p) => build(p, null)));
+  const roots = rowsOf((kids.get(null) ?? []).map(build));
   let y = 0;
   let width = 0;
   for (const r of roots) {
@@ -277,4 +269,15 @@ export function layoutViews(paths: readonly string[], opts: LayoutOptions): View
     y += r.height + opts.gapY * 2;
   }
   return { boxes, lines, width, height: Math.max(0, y - opts.gapY * 2) };
+}
+
+/** How many views a pass holds by outcome; `left` are the ones not loaded yet */
+export function viewCounts(views: readonly ViewEntry[]) {
+  const counts = { total: views.length, redirected: 0, failed: 0, left: 0 };
+  for (const v of views) {
+    if (v.status === "redirected") counts.redirected++;
+    else if (v.status === "failed") counts.failed++;
+    else if (v.status !== "done") counts.left++;
+  }
+  return counts;
 }

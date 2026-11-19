@@ -90,15 +90,17 @@ describe("robots and sitemap", () => {
   });
 });
 
-describe("layoutViews", () => {
-  const opts = { cardWidth: 100, cardHeight: () => 50, gapX: 10, gapY: 20, perRow: 2 };
-
+describe("parentView", () => {
   it("hangs a view from its nearest listed ancestor", () => {
     const all = new Set(["/", "/a", "/a/b/c"]);
     expect(parentView("/a/b/c", all)).toBe("/a");
     expect(parentView("/z", all)).toBe("/");
     expect(parentView("/z", new Set(["/z"]))).toBeNull();
   });
+});
+
+describe("layoutViews", () => {
+  const opts = { cardWidth: 100, cardHeight: () => 50, gapX: 10, gapY: 20, perRow: 2 };
 
   it("wraps children in rows and never overlaps two cards", () => {
     const paths = ["/", "/a", "/b", "/c", "/a/x", "/a/y", "/a/z"];

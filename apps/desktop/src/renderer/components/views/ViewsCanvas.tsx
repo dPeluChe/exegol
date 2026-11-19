@@ -158,7 +158,10 @@ export function ViewsCanvas({
               key={box.path}
               projectId={projectId}
               view={view}
-              box={box}
+              x={box.x}
+              y={box.y}
+              width={box.width}
+              height={box.height}
               selected={box.path === selected}
               linked={linkedPaths.has(box.path)}
               onSelect={onSelect}

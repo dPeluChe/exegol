@@ -1,4 +1,3 @@
-import { viewPath } from "@exegol/shared";
 import { z } from "zod";
 import { getProject } from "../../db/queries/projects";
 import { viewServers } from "../../views/discover";
@@ -25,12 +24,14 @@ export const viewsRouter = router({
   start: publicProcedure
     .input(
       project.extend({
-        port: z.number().int().min(1).max(65_535),
-        extra: z.array(z.string().max(2_000)).max(50).default([]),
+        /** Absent: the port a new browser pane of the project would open */
+        port: z.number().int().min(1).max(65_535).optional(),
+        /** Only when no pass ran yet: what opening the pane asks for */
+        ifEmpty: z.boolean().optional(),
       }),
     )
-    .mutation(({ ctx, input }) => {
-      void startViews(ctx.db, input.projectId, input.port, input.extra.map(viewPath));
+    .mutation(({ ctx, input: { projectId, ...opts } }) => {
+      void startViews(ctx.db, projectId, opts);
     }),
   stop: publicProcedure.input(project).mutation(({ input }) => stopViews(input.projectId)),
   clear: publicProcedure.input(project).mutation(({ input }) => clearViews(input.projectId)),
