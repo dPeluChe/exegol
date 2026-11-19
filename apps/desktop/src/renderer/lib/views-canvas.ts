@@ -3,7 +3,8 @@ import { VIEW_PAGE, type ViewEntry } from "@exegol/shared";
 export const CARD_WIDTH = 240;
 export const CARD_LABEL_HEIGHT = 52;
 export const ZOOM_MIN = 0.1;
-export const ZOOM_MAX = 2;
+// A card is a quarter of its thumbnail's width: 4 shows the thumbnail at its own size
+export const ZOOM_MAX = 4;
 
 export interface Camera {
   x: number;

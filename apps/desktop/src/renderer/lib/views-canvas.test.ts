@@ -1,13 +1,20 @@
 import { VIEW_PAGE } from "@exegol/shared";
 import { describe, expect, it } from "vitest";
-import { CARD_LABEL_HEIGHT, CARD_WIDTH, cardHeight, fitCamera, zoomAt } from "./views-canvas";
+import {
+  CARD_LABEL_HEIGHT,
+  CARD_WIDTH,
+  cardHeight,
+  fitCamera,
+  ZOOM_MAX,
+  zoomAt,
+} from "./views-canvas";
 
 describe("views canvas", () => {
   it("keeps the point under the pointer while zooming, within the limits", () => {
     const cam = zoomAt({ x: 10, y: 20, k: 1 }, 110, 220, 2);
     expect(cam).toEqual({ k: 2, x: -90, y: -180 });
     expect((110 - cam.x) / cam.k).toBe(100);
-    expect(zoomAt(cam, 0, 0, 10).k).toBe(2);
+    expect(zoomAt(cam, 0, 0, 10).k).toBe(ZOOM_MAX);
   });
 
   it("fits the tree centered and never enlarges it", () => {

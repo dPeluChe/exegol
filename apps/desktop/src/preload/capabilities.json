@@ -433,6 +433,7 @@
       "clear",
       "copyImage",
       "file",
+      "recapture",
       "resume",
       "servers",
       "start",

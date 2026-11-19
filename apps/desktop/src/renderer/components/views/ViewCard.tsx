@@ -26,6 +26,7 @@ export const ViewCard = memo(function ViewCard({
   linked,
   running,
   onSelect,
+  onEnlarge,
 }: {
   projectId: string;
   view: ViewEntry;
@@ -39,6 +40,7 @@ export const ViewCard = memo(function ViewCard({
   /** A pass is under way: a view not loaded yet is coming */
   running: boolean;
   onSelect: (path: string) => void;
+  onEnlarge: (path: string) => void;
 }) {
   const thumb = useViewThumb(projectId, view.path, view.shot);
   const external = view.externalHosts?.length ?? 0;
@@ -47,6 +49,7 @@ export const ViewCard = memo(function ViewCard({
       type="button"
       data-view-card
       onClick={() => onSelect(view.path)}
+      onDoubleClick={() => view.shot !== undefined && onEnlarge(view.path)}
       className={cn(
         "absolute flex flex-col overflow-hidden rounded-lg border bg-bg-secondary text-left",
         selected

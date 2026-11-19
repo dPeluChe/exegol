@@ -1,16 +1,62 @@
-import {
-  browserPartitionFor,
-  VIEW_PAGE,
-  VIEW_THUMB_WIDTH,
-  type ViewLink,
-  viewPath,
-} from "@exegol/shared";
+import { browserPartitionFor, VIEW_PAGE, type ViewLink, viewPath } from "@exegol/shared";
 import { BrowserWindow, type NativeImage } from "electron";
 import { captureFullPage } from "../browser/screenshot";
-import { delay, withTimeout } from "../lib/timeout";
+import { withTimeout } from "../lib/timeout";
 
 const LOAD_TIMEOUT_MS = 20_000;
-const SETTLE_MS = 500;
+const QUIET_MS = 500;
+const QUIET_CAP_MS = 6_000;
+
+// Resolves once the page stopped changing and shows no loading placeholder: an app paints its
+// frame first and its data later, and a capture or a link read before that sees skeletons.
+// Only what is visible on the first screen counts, and text alone (a clock) is no change
+const QUIET_SCRIPT = `new Promise((resolve) => {
+  const BUSY = '[aria-busy="true"], [class*="skeleton" i], [class*="animate-pulse"], [class*="shimmer" i], [class*="spinner" i], [role="progressbar"]:not([aria-valuenow])';
+  const busy = () => {
+    for (const el of document.querySelectorAll(BUSY)) {
+      const r = el.getBoundingClientRect();
+      if (r.width < 24 || r.height < 4 || r.bottom <= 0 || r.top >= innerHeight) continue;
+      if (el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return true;
+    }
+    return false;
+  };
+  const started = Date.now();
+  let last = Date.now();
+  const seen = new MutationObserver(() => { last = Date.now(); });
+  seen.observe(document, { childList: true, subtree: true });
+  const check = () => {
+    const now = Date.now();
+    const capped = now - started >= ${QUIET_CAP_MS};
+    if (capped || (now - last >= ${QUIET_MS} && !busy())) {
+      seen.disconnect();
+      resolve(!capped);
+    } else setTimeout(check, 100);
+  };
+  setTimeout(check, 100);
+})`;
+
+/** True when the page went quiet before the cap. A navigation under the wait (a guard sending
+ *  the page elsewhere) ends the script's world: the wait starts once more on the new document */
+async function settle(wc: Electron.WebContents): Promise<boolean> {
+  for (let round = 0; round < 2; round++) {
+    let moved = () => {};
+    const navigated = new Promise<"moved">((resolve) => {
+      moved = () => resolve("moved");
+    });
+    wc.once("did-navigate", moved);
+    const result = await Promise.race([
+      withTimeout(
+        wc.executeJavaScriptInIsolatedWorld(LINKS_WORLD_ID, [{ code: QUIET_SCRIPT }]),
+        QUIET_CAP_MS + 2_000,
+        "page quiet",
+      ).catch(() => false),
+      navigated,
+    ]);
+    wc.off("did-navigate", moved);
+    if (result !== "moved") return result === true;
+  }
+  return false;
+}
 const LINKS_WORLD_ID = 1339;
 const RUN_DIALOG = "-run-dialog";
 
@@ -48,6 +94,8 @@ const REVEAL_SCRIPT = `(async () => {
 export interface PageRead {
   finalPath: string;
   http: number;
+  /** False when the page was still loading or changing at the cap */
+  quiet: boolean;
   image: NativeImage | null;
   cut: boolean;
   links: ViewLink[];
@@ -96,10 +144,9 @@ async function capture(wc: Electron.WebContents): Promise<NativeImage | null> {
     5_000,
     "page reveal",
   ).catch(() => undefined);
-  return captureFullPage(wc, {
-    width: VIEW_THUMB_WIDTH,
-    height: Math.round((VIEW_PAGE.maxHeight * VIEW_THUMB_WIDTH) / VIEW_PAGE.width),
-  }).catch(() => null);
+  return captureFullPage(wc, { width: VIEW_PAGE.width, height: VIEW_PAGE.maxHeight }).catch(
+    () => null,
+  );
 }
 
 /** Load one page and read it: where it ended, its links and the top of it as an image. A page
@@ -114,7 +161,7 @@ export async function readPage(win: BrowserWindow, url: string): Promise<PageRea
   try {
     // A redirect rejects the first load with ERR_ABORTED while the page it led to loads fine
     await withTimeout(wc.loadURL(url), LOAD_TIMEOUT_MS, "page load").catch(() => undefined);
-    await delay(SETTLE_MS);
+    const quiet = await settle(wc);
     const finalPath = viewPath(new URL(wc.getURL()).pathname);
     const page = (await withTimeout(
       wc.executeJavaScriptInIsolatedWorld(LINKS_WORLD_ID, [{ code: LINKS_SCRIPT }]),
@@ -138,6 +185,7 @@ export async function readPage(win: BrowserWindow, url: string): Promise<PageRea
     return {
       finalPath,
       http,
+      quiet,
       image: image && !image.isEmpty() ? image : null,
       cut: page.height > VIEW_PAGE.maxHeight,
       links: [...byPath].map(([to, newTab]) => ({ to, newTab })),
