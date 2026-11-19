@@ -77,9 +77,13 @@ Not measured: the app behind the login (nobody logged in), full page thumbnails,
 3. The navigation tree: edges from links, grouped by layout and by public or protected.
 4. Widths: the picker, the row of three, a live view at several widths with synced scroll.
 
-## Open decisions
+## Decisions (2026-11-18)
 
-- A section under Project, or a pane type that takes the whole tab.
-- First screen or full page thumbnails (full pages are taller and need the stitched capture).
-- Whether a pass may run by itself when the dev server starts.
-- Where the dev server comes from: one already running, or started by Exegol from the project's commands.
+- A pane type of its own (`views`), not a section: alone in a tab it has the whole area.
+- Full page captures, cut at 1,920 px of a 1920 x 1080 screen (the most used desktop size); the limit is one constant.
+- A pass runs when the pane opens and the views paint as they load. Captures are temporary files: deleted on a new pass, by hand and when Exegol quits; they can be copied as an image or as a file path for an agent.
+- robots.txt and the sitemap are read from the local server and shown as badges per view.
+- The tree is laid out by path. The real links are drawn only for the selected view, dashed when they open a new tab, with the outside sites listed.
+- The server is one already running for the project. Exegol starts none.
+
+Phase 1 was built with these (see `TASK_COMPLETED/2611.md`). The "Design" section above is the first proposal and differs where these say so.

@@ -9,7 +9,7 @@ import type {
 
 // ─── Types ──────────────────────────────────────────────────────────────────
 
-export type PaneType = "terminal" | "browser" | "files" | "git" | "empty";
+export type PaneType = "terminal" | "browser" | "files" | "git" | "views" | "empty";
 
 export interface Pane {
   id: string;

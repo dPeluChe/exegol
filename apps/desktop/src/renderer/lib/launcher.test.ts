@@ -65,6 +65,7 @@ describe("launcherActions", () => {
       "files",
       "git",
       "browser",
+      "views",
       "finder",
       "editor",
     ]);
@@ -72,6 +73,7 @@ describe("launcherActions", () => {
       "terminal",
       "files",
       "browser",
+      "views",
       "finder",
     ]);
   });

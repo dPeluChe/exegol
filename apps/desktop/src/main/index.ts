@@ -63,6 +63,7 @@ import { getPtyHost } from "./terminal/pty-host";
 import { ensureShellIntegration, ensureShellWrappers } from "./terminal/shell-wrappers";
 import { startSidecarHealthWatch, stopSidecarHealthWatch } from "./terminal/sidecar-health-watch";
 import { scheduleUsageImport } from "./tokens/usage-import";
+import { clearAllViews } from "./views/pass";
 import { installAppMenu } from "./windows/app-menu";
 import { closeAllFloatingPanes, registerFloatingIpcHandlers } from "./windows/floating";
 import { closeSettingsWindow, registerSettingsIpcHandlers } from "./windows/settings";
@@ -274,6 +275,7 @@ function teardownSteps() {
     { name: "dictationEngine", run: stopEngine },
     { name: "speechEngine", run: stopSpeechEngine },
     { name: "dictationMedia", run: releaseMediaNow },
+    { name: "viewThumbnails", run: clearAllViews },
     // T145: close the MCP socket + revoke all tokens so shim calls fail fast
     // instead of hanging, and the socket file doesn't go stale on disk.
     { name: "mcpServer", run: stopExegolMcpServer },

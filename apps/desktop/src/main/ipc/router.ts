@@ -40,6 +40,7 @@ import { storageRouter } from "./procedures/storage";
 import { terminalLinksRouter } from "./procedures/terminal-links";
 import { tokenUsageRouter } from "./procedures/token-usage";
 import { updatesRouter } from "./procedures/updates";
+import { viewsRouter } from "./procedures/views";
 import { router } from "./trpc";
 
 export const appRouter = router({
@@ -83,6 +84,7 @@ export const appRouter = router({
   models: modelsRouter,
   dictation: dictationRouter,
   storage: storageRouter,
+  views: viewsRouter,
   ide: ideRouter,
   sidecar: sidecarRouter,
 });

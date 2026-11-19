@@ -8,6 +8,7 @@ export type LauncherAction =
   | "files"
   | "git"
   | "browser"
+  | "views"
   | "finder"
   | "editor"
   | "simulator";
@@ -17,6 +18,7 @@ export const LAUNCHER_ACTION_KEYS: Record<LauncherAction, string> = {
   files: "F",
   git: "G",
   browser: "B",
+  views: "V",
   finder: "O",
   editor: "E",
   simulator: "S",
@@ -95,7 +97,7 @@ export function launcherActions(opts: {
 }): LauncherAction[] {
   const actions: LauncherAction[] = ["terminal", "files"];
   if (opts.atRoot || opts.git) actions.push("git");
-  actions.push("browser", "finder");
+  actions.push("browser", "views", "finder");
   if (opts.editor) actions.push("editor");
   if (opts.simulator) actions.push("simulator");
   return actions;
