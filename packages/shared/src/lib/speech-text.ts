@@ -2,7 +2,8 @@
 
 import { hostOf } from "../types/agent-browser";
 
-const SPEECH_MAX_CHARS = 1500;
+// About 6 minutes of speech at the ordinary speed, which the 48 MB audio cache still holds
+const SPEECH_MAX_CHARS = 6000;
 const SENTENCE_MAX_CHARS = 280;
 
 const FENCE = /^\s*(```|~~~)/;
@@ -102,12 +103,12 @@ function shorten(sentence: string): string[] {
   return parts;
 }
 
-function capped(sentences: string[], maxChars: number): string[] {
+function capped(sentences: string[], maxChars: number): { sentences: string[]; cut: boolean } {
   const out: string[] = [];
   let used = 0;
   for (const sentence of sentences) {
     const room = maxChars - used;
-    if (room <= 0) break;
+    if (room <= 0) return { sentences: out, cut: true };
     if (sentence.length <= room) {
       out.push(sentence);
       used += sentence.length + 1;
@@ -115,17 +116,35 @@ function capped(sentences: string[], maxChars: number): string[] {
     }
     const cut = sentence.slice(0, room).replace(/\s+\S*$/, "");
     if (/[\p{L}\p{N}]/u.test(cut)) out.push(`${cut.replace(/[,;:]$/, "")}.`);
-    break;
+    return { sentences: out, cut: true };
   }
-  return out;
+  return { sentences: out, cut: false };
 }
 
-/** The reply's prose split into sentences, at most `maxChars` in all; empty when nothing reads */
-export function speechSentences(markdown: string, maxChars = SPEECH_MAX_CHARS): string[] {
-  const sentences = units(markdown)
+function sentencesOf(markdown: string): string[] {
+  return units(markdown)
     .flatMap((unit) => unit.split(/(?<=[.!?…])\s+(?=\S)/))
     .map((s) => s.trim())
     .filter((s) => /[\p{L}\p{N}]/u.test(s))
     .flatMap(shorten);
-  return capped(sentences, maxChars);
+}
+
+/** The reply's prose split into sentences, at most `maxChars` in all; empty when nothing reads */
+export function speechSentences(markdown: string, maxChars = SPEECH_MAX_CHARS): string[] {
+  return capped(sentencesOf(markdown), maxChars).sentences;
+}
+
+export const wordsIn = (sentences: string[]): number =>
+  sentences.reduce((n, s) => n + s.split(/\s+/).filter(Boolean).length, 0);
+
+export interface SpeechLength {
+  words: number;
+  /** The reply is longer than what is read */
+  cut: boolean;
+}
+
+/** How much of a reply is read aloud, known before any audio is made */
+export function speechLength(markdown: string, maxChars = SPEECH_MAX_CHARS): SpeechLength {
+  const { sentences, cut } = capped(sentencesOf(markdown), maxChars);
+  return { words: wordsIn(sentences), cut };
 }
