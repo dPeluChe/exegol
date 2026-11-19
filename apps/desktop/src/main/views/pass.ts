@@ -17,7 +17,7 @@ import {
 } from "@exegol/shared";
 import { type BrowserWindow, clipboard, nativeImage } from "electron";
 import type Database from "libsql";
-import { opaqueJpeg } from "../browser/page-image";
+import { opaque } from "../browser/page-image";
 import { getProject } from "../db/queries/projects";
 import { getJsonSetting } from "../db/queries/settings";
 import { broadcast } from "../lib/event-bus";
@@ -42,6 +42,10 @@ interface Pass {
   /** Pages the person said to go on without (a login they will not do now) */
   skipped: Set<string>;
   waiting: (() => void)[];
+  /** A view being captured again on its own: no pass starts over it */
+  recapturing: boolean;
+  /** Pages still loading at the cap: their captures may show placeholders */
+  unsettled: number;
 }
 
 const passes = new Map<string, Pass>();
@@ -90,7 +94,11 @@ function closeWindows(pass: Pass): void {
 
 export function stopViews(projectId: string): void {
   const pass = passes.get(projectId);
-  if (!pass?.state.running) return;
+  if (!pass?.state.running) {
+    // A view captured on its own has a window too
+    if (pass) closeWindows(pass);
+    return;
+  }
   pass.stopped = true;
   closeWindows(pass);
   wake(pass);
@@ -176,14 +184,26 @@ async function record(
   view.externalHosts = page.externalHosts;
   view.newTabLinks = page.newTabLinks;
   view.cut = page.cut;
-  if (!page.image) return view.status;
-  const thumb = page.image.resize({ width: VIEW_THUMB_WIDTH, quality: "best" });
+  if (!page.quiet) pass.unsettled++;
+  const old = pass.files.get(view.path);
+  if (old) {
+    pass.files.delete(view.path);
+    for (const gone of [old, fullOf(old)]) void rm(gone, { force: true });
+  }
+  if (!page.image) {
+    // Sent elsewhere this time: the capture it had is no longer its page
+    view.shot = undefined;
+    view.width = undefined;
+    view.height = undefined;
+    return view.status;
+  }
+  const image = opaque(page.image);
+  const thumb = image.resize({ width: VIEW_THUMB_WIDTH, quality: "best" });
   const size = thumb.getSize();
   const file = join(dir, `${++shot}.jpg`);
-  const full = fullOf(file);
   await Promise.all([
-    writeFile(file, opaqueJpeg(thumb, JPEG_QUALITY), { mode: 0o600 }),
-    writeFile(full, opaqueJpeg(page.image, FULL_QUALITY), { mode: 0o600 }),
+    writeFile(file, thumb.toJPEG(JPEG_QUALITY), { mode: 0o600 }),
+    writeFile(fullOf(file), image.toJPEG(FULL_QUALITY), { mode: 0o600 }),
   ]);
   pass.files.set(view.path, file);
   view.width = size.width;
@@ -198,11 +218,13 @@ export async function recaptureView(projectId: string, path: string): Promise<vo
   const pass = passes.get(projectId);
   const view = pass?.state.views.find((v) => v.path === path);
   const base = pass?.state.base;
-  if (!pass || !view || !base || pass.state.running || view.status === "loading") return;
+  if (!pass || !view || !base || pass.state.running || pass.recapturing) return;
   const before = view.status;
+  pass.recapturing = true;
   view.status = "loading";
   push(projectId, pass, view);
   const win = captureWindow(projectId, base);
+  pass.windows.push(win);
   try {
     await seedSession(win, projectId, base);
     const page = await readPage(win, base + view.path);
@@ -210,7 +232,8 @@ export async function recaptureView(projectId: string, path: string): Promise<vo
   } catch {
     view.status = before;
   } finally {
-    if (!win.isDestroyed()) win.destroy();
+    pass.recapturing = false;
+    closeWindows(pass);
   }
   if (passes.get(projectId) === pass) push(projectId, pass, view);
 }
@@ -224,7 +247,8 @@ export async function startViews(
 ): Promise<void> {
   const project = getProject(db, projectId);
   const last = passes.get(projectId)?.state;
-  if (!project || last?.running || (opts.ifEmpty && last?.views.length)) return;
+  const busy = last?.running || passes.get(projectId)?.recapturing;
+  if (!project || busy || (opts.ifEmpty && last?.views.length)) return;
   const servers = await viewServers(project.path);
   const preferred = getJsonSetting<Record<string, number>>(db, PREFERRED_PORTS_KEY, {})[projectId];
   const port =
@@ -245,6 +269,8 @@ export async function startViews(
     queue,
     skipped: new Set(),
     waiting: [],
+    recapturing: false,
+    unsettled: 0,
   };
   passes.set(projectId, pass);
   push(projectId, pass);
@@ -347,6 +373,6 @@ export async function startViews(
   push(projectId, pass);
   const counts = viewCounts(state.views);
   logger.info(
-    `[Views] pass ${projectId}: ${counts.total} views in ${Date.now() - started}ms (${counts.redirected} redirected, ${counts.failed} failed${pass.stopped ? ", stopped" : ""})`,
+    `[Views] pass ${projectId}: ${counts.total} views in ${Date.now() - started}ms (${counts.redirected} redirected, ${counts.failed} failed, ${pass.unsettled} not settled${pass.stopped ? ", stopped" : ""})`,
   );
 }

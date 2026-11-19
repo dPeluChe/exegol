@@ -1,7 +1,7 @@
 import type { ViewEntry } from "@exegol/shared";
 import { Button } from "@exegol/ui";
 import { X } from "lucide-react";
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useMountEffect } from "../../hooks/use-mount-effect";
 import { useViewThumb } from "../../hooks/use-views";
 
@@ -18,17 +18,22 @@ export function ViewLightbox({
 }) {
   const [actual, setActual] = useState(false);
   const image = useViewThumb(projectId, view.path, view.shot, true);
-  useMountEffect(() => {
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      event.stopPropagation();
-      onClose();
-    };
-    window.addEventListener("keydown", onKey, true);
-    return () => window.removeEventListener("keydown", onKey, true);
-  });
+  const frame = useRef<HTMLDivElement>(null);
+  // Focused, so Esc is its own: a listener on the window would take Esc from every other pane
+  useMountEffect(() => frame.current?.focus());
   return (
-    <div className="absolute inset-0 z-20 flex flex-col bg-bg-primary">
+    <div
+      ref={frame}
+      role="dialog"
+      aria-label={`Capture of ${view.path}`}
+      tabIndex={-1}
+      onKeyDown={(event) => {
+        if (event.key !== "Escape") return;
+        event.stopPropagation();
+        onClose();
+      }}
+      className="absolute inset-0 z-20 flex flex-col bg-bg-primary outline-none"
+    >
       <div className="flex h-9 shrink-0 items-center gap-2 border-b border-border px-3">
         <span className="min-w-0 flex-1 truncate font-mono text-xs text-text-primary">
           {view.path}

@@ -17,8 +17,11 @@ export function flattenOnWhite(bitmap: Buffer): boolean {
   return changed;
 }
 
-export function opaqueJpeg(img: NativeImage, quality: number): Buffer {
+/** The image with nothing transparent left: itself when every pixel was opaque */
+export function opaque(img: NativeImage): NativeImage {
   const bitmap = img.toBitmap();
-  if (!flattenOnWhite(bitmap)) return img.toJPEG(quality);
-  return nativeImage.createFromBitmap(bitmap, img.getSize()).toJPEG(quality);
+  return flattenOnWhite(bitmap) ? nativeImage.createFromBitmap(bitmap, img.getSize()) : img;
 }
+
+export const opaqueJpeg = (img: NativeImage, quality: number): Buffer =>
+  opaque(img).toJPEG(quality);

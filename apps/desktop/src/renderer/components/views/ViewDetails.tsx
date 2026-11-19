@@ -121,7 +121,7 @@ export function ViewDetails({
           size="sm"
           variant="outline"
           className="gap-1.5"
-          disabled={!!state.running || view.status === "loading"}
+          disabled={!!state.running || state.views.some((v) => v.status === "loading")}
           title="Load this page and capture it again"
           onClick={() =>
             trpcMutate("views.recapture", input).catch(toastError("Could not capture the view"))

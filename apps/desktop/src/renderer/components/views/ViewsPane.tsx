@@ -32,7 +32,8 @@ function Views({ projectId, paneId }: { projectId: string; paneId: string }) {
   const servers = useViewServers(projectId);
   const [port, setPort] = useState<number | null>(null);
   const [selected, setSelected] = useState<string | null>(null);
-  const [enlarged, setEnlarged] = useState<string | null>(null);
+  // With its pass: a later pass that finds the same path must not bring the capture back up
+  const [enlarged, setEnlarged] = useState<{ path: string; run: number } | null>(null);
 
   const ports = servers.data ?? [];
   const statePort = state?.base ? Number(new URL(state.base).port) : null;
@@ -58,7 +59,11 @@ function Views({ projectId, paneId }: { projectId: string; paneId: string }) {
   const views = state?.views ?? [];
   const counts = viewCounts(views);
   const picked = views.find((v) => v.path === selected);
-  const large = views.find((v) => v.path === enlarged);
+  const large =
+    enlarged && enlarged.run === state?.run
+      ? views.find((v) => v.path === enlarged.path)
+      : undefined;
+  const enlarge = (path: string) => setEnlarged({ path, run: state?.run ?? 0 });
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-3 py-1.5">
@@ -94,7 +99,8 @@ function Views({ projectId, paneId }: { projectId: string; paneId: string }) {
             size="sm"
             variant="outline"
             className="h-6 gap-1.5 px-2 text-[11px]"
-            disabled={chosen === null}
+            // A view being captured on its own: a pass waits for it
+            disabled={chosen === null || views.some((v) => v.status === "loading")}
             onClick={() => chosen !== null && start(chosen)}
           >
             <Play className="h-3 w-3" />
@@ -179,7 +185,7 @@ function Views({ projectId, paneId }: { projectId: string; paneId: string }) {
               selected={selected}
               running={!!state.running}
               onSelect={setSelected}
-              onEnlarge={setEnlarged}
+              onEnlarge={enlarge}
             />
             {picked && (
               <ViewDetails
@@ -188,7 +194,7 @@ function Views({ projectId, paneId }: { projectId: string; paneId: string }) {
                 view={picked}
                 onSelect={setSelected}
                 onOpenLive={openLive}
-                onEnlarge={() => setEnlarged(picked.path)}
+                onEnlarge={() => enlarge(picked.path)}
               />
             )}
           </>
