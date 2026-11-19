@@ -367,8 +367,13 @@ export const injectedHeaders = (messageId: string): [string, string] => [
   `[Exegol notice ${messageId} `,
 ];
 
-// Claude Code wraps a long paste in <pasted_content> in its transcript
-const INJECTED_HEADER = /^(?:<pasted_content[^>]*>\s*)?\[Exegol (?:message|notice) (\S+) /;
+const PASTE_TAGS = /^\s*<pasted_content[^>]*>\n?|\n?<\/pasted_content[^>]*>\s*$/g;
+
+/** A person's turn as they wrote it: Claude Code's transcript wraps a pasted message (how
+ *  Exegol sends one) in `<pasted_content>`. Only the wrapping pair goes, never a tag in the text */
+export const stripPasteTags = (text: string): string => text.replace(PASTE_TAGS, "");
+
+const INJECTED_HEADER = /^\[Exegol (?:message|notice) (\S+) /;
 
 /** The message a turn was typed in for, read from its header; null for any other turn */
 export const injectedMessageId = (text: string): string | null =>

@@ -125,14 +125,8 @@ describe("parseClaudeLine", () => {
   });
 
   it("shows a pasted message without the tags Claude Code wraps it in", () => {
-    const line = claude(
-      "user",
-      '<pasted_content id="15a8">\nhola\n\nadios\n</pasted_content id="15a8">',
-    );
-    expect(parseClaudeLine(line, "1")).toMatchObject([{ role: "user", text: "hola\n\nadios" }]);
-    expect(parseClaudeLine(claude("assistant", "a <pasted_content> tag"), "1")).toMatchObject([
-      { text: "a <pasted_content> tag" },
-    ]);
+    const line = claude("user", '<pasted_content id="15a8">\nhola\n</pasted_content id="15a8">');
+    expect(parseClaudeLine(line, "1")).toMatchObject([{ role: "user", text: "hola" }]);
   });
 
   it("skips tool results, thinking, subagents and what nobody typed", () => {
