@@ -1,6 +1,6 @@
 import { viewCounts } from "@exegol/shared";
 import { Button } from "@exegol/ui";
-import { LayoutDashboard, Play, Square, Trash2 } from "lucide-react";
+import { LayoutDashboard, Loader2, LogIn, Play, Square, Trash2 } from "lucide-react";
 import { useState } from "react";
 import { usePaneProject } from "../../contexts/ProjectScope";
 import { useMountEffect } from "../../hooks/use-mount-effect";
@@ -45,6 +45,8 @@ function Views({ projectId, paneId }: { projectId: string; paneId: string }) {
     void trpcMutate("views.start", { projectId, ifEmpty: true }).catch(() => undefined);
   });
 
+  const resume = (retry: boolean) =>
+    trpcMutate("views.resume", { projectId, retry }).catch(toastError("Could not continue"));
   const openLive = (url: string) => {
     const pw = pwOf(useWorkspaceStore.getState(), projectId);
     const tab = pw.tabs.find((t) => layoutHasPane(t.layout, paneId));
@@ -96,6 +98,9 @@ function Views({ projectId, paneId }: { projectId: string; paneId: string }) {
             {views.length > 0 ? "Capture again" : "Capture"}
           </Button>
         )}
+        {state?.running && !state.hold && (
+          <Loader2 className="h-3.5 w-3.5 animate-spin text-text-muted" />
+        )}
         {views.length > 0 && (
           <span className="text-[11px] text-text-muted">
             {counts.total} view{counts.total === 1 ? "" : "s"}
@@ -128,6 +133,37 @@ function Views({ projectId, paneId }: { projectId: string; paneId: string }) {
           )}
         </div>
       </div>
+      {state?.hold && (
+        <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-bg-secondary px-3 py-2">
+          <LogIn className="h-3.5 w-3.5 shrink-0 text-accent" />
+          <span className="text-xs text-text-primary">
+            Paused: {state.hold.views} views led to{" "}
+            <span className="font-mono">{state.hold.path}</span>. If it is a login, log in and
+            continue.
+          </span>
+          <div className="ml-auto flex items-center gap-1.5">
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-6 px-2 text-[11px]"
+              onClick={() => openLive(`${state.base}${state.hold?.path}`)}
+            >
+              Open that page
+            </Button>
+            <Button size="sm" className="h-6 px-2 text-[11px]" onClick={() => resume(true)}>
+              I logged in, continue
+            </Button>
+            <Button
+              size="sm"
+              variant="outline"
+              className="h-6 px-2 text-[11px]"
+              onClick={() => resume(false)}
+            >
+              Continue without it
+            </Button>
+          </div>
+        </div>
+      )}
       <div className="flex min-h-0 flex-1">
         {views.length > 0 && state ? (
           <>
@@ -135,6 +171,7 @@ function Views({ projectId, paneId }: { projectId: string; paneId: string }) {
               projectId={projectId}
               views={views}
               selected={selected}
+              running={!!state.running}
               onSelect={setSelected}
             />
             {picked && (

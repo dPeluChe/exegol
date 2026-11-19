@@ -121,6 +121,7 @@ interface Window {
     onViewsChanged: (
       callback: (event: {
         projectId: string;
+        run: number;
         view?: import("@exegol/shared").ViewEntry;
         state?: import("@exegol/shared").ViewsState;
       }) => void,

@@ -14,7 +14,7 @@ export function useViews(projectId: string) {
       queryClient.setQueryData<ViewsState>(stateKey(projectId), (old) => {
         if (event.state) return event.state;
         const view = event.view;
-        if (!old || !view) return old;
+        if (!old || !view || event.run !== old.run) return old;
         const at = old.views.findIndex((v) => v.path === view.path);
         const views = at < 0 ? [...old.views, view] : old.views.with(at, view);
         return { ...old, views };

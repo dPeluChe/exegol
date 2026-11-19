@@ -3,6 +3,7 @@ import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   checkAgentUrl,
+  holdFor,
   PREFERRED_PORTS_KEY,
   pickDevServerPort,
   robotsBlocks,
@@ -34,27 +35,34 @@ interface Pass {
   files: Map<string, string>;
   windows: BrowserWindow[];
   stopped: boolean;
+  queue: ViewEntry[];
+  /** Pages the person said to go on without (a login they will not do now) */
+  skipped: Set<string>;
 }
 
 const passes = new Map<string, Pass>();
 const root = () => join(EXEGOL_DIR, "views");
 /** Never reused: a capture's number is what tells the renderer its thumbnail is new */
 let shot = 0;
+let runs = 0;
 const dirOf = (projectId: string) => join(root(), projectId);
 
-const EMPTY: ViewsState = {
+// A function: a pass fills its own lists, and a shared one doubled the views of the next pass
+const empty = (): ViewsState => ({
   base: null,
+  run: 0,
   running: false,
   views: [],
   patterns: [],
   sitemap: "unread",
   robots: "unread",
-};
+});
 
-export const viewsState = (projectId: string): ViewsState => passes.get(projectId)?.state ?? EMPTY;
+export const viewsState = (projectId: string): ViewsState =>
+  passes.get(projectId)?.state ?? empty();
 
 const push = (projectId: string, patch: { view?: ViewEntry; state?: ViewsState }) =>
-  broadcast("views:changed", { projectId, ...patch });
+  broadcast("views:changed", { projectId, run: viewsState(projectId).run, ...patch });
 
 function closeWindows(pass: Pass): void {
   for (const win of pass.windows.splice(0)) if (!win.isDestroyed()) win.destroy();
@@ -72,11 +80,31 @@ export async function clearViews(projectId: string): Promise<void> {
   stopViews(projectId);
   passes.delete(projectId);
   await rm(dirOf(projectId), { recursive: true, force: true });
-  push(projectId, { state: EMPTY });
+  push(projectId, { state: empty() });
 }
 
 export function clearAllViews(): void {
   rmSync(root(), { recursive: true, force: true });
+}
+
+/** The person answered a hold: `retry` loads again the views that were sent to that page (they
+ *  logged in), else the pass goes on and never stops for that page again */
+export function resumeViews(projectId: string, retry: boolean): void {
+  const pass = passes.get(projectId);
+  const hold = pass?.state.hold;
+  if (!pass || !hold) return;
+  if (retry) {
+    for (const view of pass.state.views) {
+      if (view.status !== "redirected" || view.finalPath !== hold.path) continue;
+      view.status = "waiting";
+      view.finalPath = undefined;
+      pass.queue.push(view);
+    }
+  } else {
+    pass.skipped.add(hold.path);
+  }
+  pass.state.hold = undefined;
+  push(projectId, { state: pass.state });
 }
 
 export const viewFile = (projectId: string, path: string): string | null =>
@@ -117,8 +145,16 @@ export async function startViews(
   if (!checked.ok) return;
   const base = new URL(checked.url).origin;
   const started = Date.now();
-  const state: ViewsState = { ...EMPTY, base, running: true };
-  const pass: Pass = { state, files: new Map(), windows: [], stopped: false };
+  const state: ViewsState = { ...empty(), base, run: ++runs, running: true };
+  const queue: ViewEntry[] = [];
+  const pass: Pass = {
+    state,
+    files: new Map(),
+    windows: [],
+    stopped: false,
+    queue,
+    skipped: new Set(),
+  };
   passes.set(projectId, pass);
   push(projectId, { state });
 
@@ -133,7 +169,6 @@ export async function startViews(
   state.patterns = files.patterns;
 
   const byPath = new Map<string, ViewEntry>();
-  const queue: ViewEntry[] = [];
   const add = (path: string, source: ViewSource): void => {
     const known = byPath.get(path);
     if (known) {
@@ -159,9 +194,12 @@ export async function startViews(
 
   let loading = 0;
   const worker = async (): Promise<void> => {
-    const win = captureWindow(projectId, base);
-    pass.windows.push(win);
+    let win: BrowserWindow | null = null;
     while (!pass.stopped) {
+      if (state.hold) {
+        await delay(300);
+        continue;
+      }
       const view = queue.shift();
       if (!view) {
         // Another window may still be on a page whose links add work
@@ -169,11 +207,16 @@ export async function startViews(
         await delay(150);
         continue;
       }
+      if (!win || win.isDestroyed()) {
+        win = captureWindow(projectId, base);
+        pass.windows.push(win);
+      }
       loading++;
       view.status = "loading";
       push(projectId, { view });
       try {
-        const page = await readPage(win, base + view.path);
+        // A view sent elsewhere is not captured: the page it was sent to is a view of its own
+        const page = await readPage(win, base + view.path, (final) => final === view.path);
         if (pass.stopped) return;
         view.status = page.finalPath === view.path ? "done" : "redirected";
         if (view.status === "redirected") view.finalPath = page.finalPath;
@@ -193,9 +236,21 @@ export async function startViews(
           view.shot = shot;
         }
         if (view.status === "done") for (const link of page.links) add(link.to, "links");
+        if (view.status === "redirected") {
+          add(page.finalPath, "links");
+          const hold = holdFor(state.views, pass.skipped);
+          if (hold && !state.hold) {
+            // Waiting on the person: the windows go, so the wait costs nothing
+            state.hold = hold;
+            closeWindows(pass);
+            push(projectId, { state });
+          }
+        }
       } catch {
         if (pass.stopped) return;
-        view.status = "failed";
+        // Its window went with a hold: the view waits with the rest
+        view.status = state.hold ? "waiting" : "failed";
+        if (state.hold) queue.unshift(view);
       } finally {
         loading--;
       }
@@ -206,6 +261,7 @@ export async function startViews(
   closeWindows(pass);
   for (const view of state.views) if (view.status === "loading") view.status = "waiting";
   state.running = false;
+  state.hold = undefined;
   push(projectId, { state });
   const counts = viewCounts(state.views);
   logger.info(

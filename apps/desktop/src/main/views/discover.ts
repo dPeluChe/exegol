@@ -1,7 +1,8 @@
-import { readdir } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { join } from "node:path";
 import {
   dedupeDevPorts,
+  frameworkOf,
   parseRobots,
   parseSitemap,
   type RobotsRules,
@@ -10,6 +11,8 @@ import {
   viewPath,
 } from "@exegol/shared";
 import { net } from "electron";
+import { z } from "zod";
+import { parseJson } from "../lib/parse-json";
 import { getProjectPorts } from "../system/ports";
 import { SKIP_DIRS } from "../system/scripts";
 
@@ -48,13 +51,22 @@ async function walk(dir: string, rel: string, out: string[]): Promise<void> {
   }
 }
 
-/** Routes the app's page files name; nothing when the folder is unknown or holds none */
+const Manifest = z.object({
+  dependencies: z.record(z.string(), z.unknown()).optional(),
+  devDependencies: z.record(z.string(), z.unknown()).optional(),
+});
+
+/** Routes the app's page files name; none when the folder is unknown or its package.json names
+ *  no framework that routes by files */
 export async function fileRoutes(folder: string | null) {
   const files: string[] = [];
-  if (folder) {
+  const text = folder ? await readFile(join(folder, "package.json"), "utf-8").catch(() => "") : "";
+  const manifest = parseJson(text, Manifest);
+  const framework = frameworkOf({ ...manifest?.dependencies, ...manifest?.devDependencies });
+  if (folder && framework) {
     for (const root of PAGE_ROOTS) await walk(join(folder, ...root), root.join("/"), files);
   }
-  return routesFromFiles(files);
+  return routesFromFiles(files, framework);
 }
 
 async function fetchText(url: string): Promise<string | null> {

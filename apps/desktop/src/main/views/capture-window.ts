@@ -87,8 +87,26 @@ export function captureWindow(projectId: string, origin: string): BrowserWindow 
   return win;
 }
 
-/** Load one page and read it: where it ended, its links and the top of it as an image */
-export async function readPage(win: BrowserWindow, url: string): Promise<PageRead> {
+async function capture(wc: Electron.WebContents): Promise<NativeImage | null> {
+  await wc.insertCSS(SETTLE_CSS).catch(() => undefined);
+  await withTimeout(
+    wc.executeJavaScriptInIsolatedWorld(LINKS_WORLD_ID, [{ code: REVEAL_SCRIPT }]),
+    5_000,
+    "page reveal",
+  ).catch(() => undefined);
+  return captureFullPage(wc, {
+    width: VIEW_THUMB_WIDTH,
+    height: Math.round((VIEW_PAGE.maxHeight * VIEW_THUMB_WIDTH) / VIEW_PAGE.width),
+  }).catch(() => null);
+}
+
+/** Load one page and read it: where it ended, its links and, when `wants` says so for the path
+ *  it ended on, the top of it as an image */
+export async function readPage(
+  win: BrowserWindow,
+  url: string,
+  wants: (finalPath: string) => boolean,
+): Promise<PageRead> {
   const wc = win.webContents;
   let http = 0;
   const onNavigate = (_e: unknown, _url: string, code: number) => {
@@ -110,16 +128,7 @@ export async function readPage(win: BrowserWindow, url: string): Promise<PageRea
       const path = viewPath(to);
       byPath.set(path, (byPath.get(path) ?? false) || blank);
     }
-    await wc.insertCSS(SETTLE_CSS).catch(() => undefined);
-    await withTimeout(
-      wc.executeJavaScriptInIsolatedWorld(LINKS_WORLD_ID, [{ code: REVEAL_SCRIPT }]),
-      5_000,
-      "page reveal",
-    ).catch(() => undefined);
-    const image = await captureFullPage(wc, {
-      width: VIEW_THUMB_WIDTH,
-      height: Math.round((VIEW_PAGE.maxHeight * VIEW_THUMB_WIDTH) / VIEW_PAGE.width),
-    }).catch(() => null);
+    const image = wants(finalPath) ? await capture(wc) : null;
     return {
       finalPath,
       http,

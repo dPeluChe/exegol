@@ -24,6 +24,7 @@ export const ViewCard = memo(function ViewCard({
   height,
   selected,
   linked,
+  running,
   onSelect,
 }: {
   projectId: string;
@@ -35,6 +36,8 @@ export const ViewCard = memo(function ViewCard({
   selected: boolean;
   /** A link of the selected view ends here */
   linked: boolean;
+  /** A pass is under way: a view not loaded yet is coming */
+  running: boolean;
   onSelect: (path: string) => void;
 }) {
   const thumb = useViewThumb(projectId, view.path, view.shot);
@@ -65,6 +68,10 @@ export const ViewCard = memo(function ViewCard({
         ) : (
           <div className="flex h-full items-center justify-center text-text-muted">
             {view.status === "loading" && <Loader2 className="h-4 w-4 animate-spin" />}
+            {view.status === "waiting" && running && (
+              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-text-muted" />
+            )}
+            {view.status === "redirected" && <LogIn className="h-4 w-4" />}
             {view.status === "failed" && <TriangleAlert className="h-4 w-4" />}
           </div>
         )}
