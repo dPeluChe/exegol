@@ -68,9 +68,8 @@ describe("speechSentences", () => {
       "\n",
     );
     expect(speechSentences(reply)).toHaveLength(60);
-    expect(speechLength(reply)).toEqual({ words: 420, minutes: 3, cut: false });
+    expect(speechLength(reply)).toEqual({ words: 420, cut: false });
     expect(speechLength(reply, 100)).toMatchObject({ cut: true });
-    expect(speechLength("```\nls\n```")).toEqual({ words: 0, minutes: 1, cut: false });
   });
 
   it("returns nothing for a reply that is only code", () => {

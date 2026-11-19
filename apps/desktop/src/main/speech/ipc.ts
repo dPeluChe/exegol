@@ -1,9 +1,4 @@
-import {
-  dictationSettingsOf,
-  type SpeakResult,
-  speechLength,
-  speechSentences,
-} from "@exegol/shared";
+import { dictationSettingsOf, type SpeakResult, speechSentences, wordsIn } from "@exegol/shared";
 import { ipcMain, type WebContents } from "electron";
 import { z } from "zod";
 import { commanderVoice } from "../commander/home";
@@ -45,10 +40,7 @@ async function speak(sender: WebContents, raw: unknown): Promise<SpeakResult> {
     sender,
   });
   if (!id) return { skipped: "no-model" };
-  const { words, cut } = speechLength(input.text);
-  logger.info(
-    `[Speech] reading ${sentences.length} sentence(s), ${words} words${cut ? " (cut at the limit)" : ""}`,
-  );
+  logger.info(`[Speech] reading ${sentences.length} sentence(s), ${wordsIn(sentences)} words`);
   noteSpokenWith(sentences, { voice: settings.voice, speed: settings.speed, model: entry.id });
   return { id };
 }

@@ -17,15 +17,18 @@ export function SpeakButton({
   ready: boolean;
 }) {
   const speaking = useSpeaking(turnId);
-  const length = useMemo(() => speechLength(text), [text]);
-  const size = `${length.words.toLocaleString()} words, about ${length.minutes} min${
-    length.cut ? ", the first part of a longer reply" : ""
-  }`;
-  const title = !ready
+  const length = useMemo(() => (ready ? speechLength(text) : null), [ready, text]);
+  const words = length ? `${length.words.toLocaleString()} words${length.cut ? ", cut" : ""}` : "";
+  const label = !ready
     ? "Download a voice in Settings > Models to hear replies"
     : speaking
-      ? `Stop reading (${size})`
-      : `Read aloud (${size})`;
+      ? "Stop reading"
+      : "Read aloud";
+  const title = length?.cut
+    ? `${label} (${words}: the first part of a longer reply)`
+    : words
+      ? `${label} (${words})`
+      : label;
   const onClick = () => {
     if (!ready) void window.api.settings.open("models");
     else if (speaking) stopSpeaking();
@@ -37,7 +40,7 @@ export function SpeakButton({
       type="button"
       onClick={onClick}
       title={title}
-      aria-label={title}
+      aria-label={label}
       className={cn(
         "flex items-center gap-1 rounded p-0.5 text-text-muted hover:text-text-primary",
         speaking && "text-accent",
@@ -45,11 +48,7 @@ export function SpeakButton({
       )}
     >
       <Icon className="h-3 w-3" aria-hidden="true" />
-      {speaking && (
-        <span className="text-[9px] tabular-nums">
-          {length.words.toLocaleString()} words{length.cut ? ", cut" : ""}
-        </span>
-      )}
+      {speaking && <span className="text-[9px] tabular-nums">{words}</span>}
     </button>
   );
 }
