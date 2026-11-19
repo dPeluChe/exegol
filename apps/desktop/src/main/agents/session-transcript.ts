@@ -178,6 +178,9 @@ const CodexLine = z
   })
   .passthrough();
 
+// Claude Code wraps a pasted message (how Exegol's chat sends one) in these tags
+const PASTE_TAG = /<\/?pasted_content(?: id="[^"]*")?>\n?/g;
+
 /** Text and tool names only: a tool's input and result never reach the chat */
 export const parseClaudeLine: LineParser = (line, id) => {
   const d = parseJson(line, ClaudeLine);
@@ -194,7 +197,8 @@ export const parseClaudeLine: LineParser = (line, id) => {
     }
     if (b.type !== "text" || !b.text) return [];
     if (d.type === "user" && CLAUDE_SCAFFOLD.test(b.text.trimStart())) return [];
-    return textTurn(turnId, d.type === "user" ? "user" : "assistant", b.text, at);
+    if (d.type === "user") return textTurn(turnId, "user", b.text.replace(PASTE_TAG, ""), at);
+    return textTurn(turnId, "assistant", b.text, at);
   });
 };
 
