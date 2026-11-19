@@ -38,6 +38,7 @@ interface Pass {
   queue: ViewEntry[];
   /** Pages the person said to go on without (a login they will not do now) */
   skipped: Set<string>;
+  waiting: (() => void)[];
 }
 
 const passes = new Map<string, Pass>();
@@ -61,8 +62,24 @@ const empty = (): ViewsState => ({
 export const viewsState = (projectId: string): ViewsState =>
   passes.get(projectId)?.state ?? empty();
 
-const push = (projectId: string, patch: { view?: ViewEntry; state?: ViewsState }) =>
-  broadcast("views:changed", { projectId, run: viewsState(projectId).run, ...patch });
+/** A pass that was cleared or replaced says nothing more: its push would undo what came after */
+function push(projectId: string, pass: Pass, view?: ViewEntry): void {
+  if (passes.get(projectId) !== pass) return;
+  const run = pass.state.run;
+  broadcast(
+    "views:changed",
+    view ? { projectId, run, view } : { projectId, run, state: pass.state },
+  );
+}
+
+/** Workers of a held pass wait here until the person answers or the pass stops */
+function held(pass: Pass): Promise<void> {
+  return new Promise((resolve) => pass.waiting.push(resolve));
+}
+
+function wake(pass: Pass): void {
+  for (const resolve of pass.waiting.splice(0)) resolve();
+}
 
 function closeWindows(pass: Pass): void {
   for (const win of pass.windows.splice(0)) if (!win.isDestroyed()) win.destroy();
@@ -73,6 +90,7 @@ export function stopViews(projectId: string): void {
   if (!pass?.state.running) return;
   pass.stopped = true;
   closeWindows(pass);
+  wake(pass);
 }
 
 /** Captures are disposable: gone with the pass's state, on a new pass and when the app quits */
@@ -80,7 +98,7 @@ export async function clearViews(projectId: string): Promise<void> {
   stopViews(projectId);
   passes.delete(projectId);
   await rm(dirOf(projectId), { recursive: true, force: true });
-  push(projectId, { state: empty() });
+  broadcast("views:changed", { projectId, run: 0, state: empty() });
 }
 
 export function clearAllViews(): void {
@@ -98,13 +116,15 @@ export function resumeViews(projectId: string, retry: boolean): void {
       if (view.status !== "redirected" || view.finalPath !== hold.path) continue;
       view.status = "waiting";
       view.finalPath = undefined;
+      view.login = undefined;
       pass.queue.push(view);
     }
   } else {
     pass.skipped.add(hold.path);
   }
   pass.state.hold = undefined;
-  push(projectId, { state: pass.state });
+  wake(pass);
+  push(projectId, pass);
 }
 
 export const viewFile = (projectId: string, path: string): string | null =>
@@ -154,9 +174,10 @@ export async function startViews(
     stopped: false,
     queue,
     skipped: new Set(),
+    waiting: [],
   };
   passes.set(projectId, pass);
-  push(projectId, { state });
+  push(projectId, pass);
 
   const dir = dirOf(projectId);
   await rm(dir, { recursive: true, force: true });
@@ -190,14 +211,14 @@ export async function startViews(
   add("/", "links");
   for (const path of files.paths) add(path, "files");
   for (const path of inSitemap) add(path, "sitemap");
-  push(projectId, { state });
+  push(projectId, pass);
 
   let loading = 0;
   const worker = async (): Promise<void> => {
     let win: BrowserWindow | null = null;
     while (!pass.stopped) {
       if (state.hold) {
-        await delay(300);
+        await held(pass);
         continue;
       }
       const view = queue.shift();
@@ -213,14 +234,17 @@ export async function startViews(
       }
       loading++;
       view.status = "loading";
-      push(projectId, { view });
+      push(projectId, pass, view);
       try {
-        // A view sent elsewhere is not captured: the page it was sent to is a view of its own
-        const page = await readPage(win, base + view.path, (final) => final === view.path);
+        const page = await readPage(win, base + view.path);
         if (pass.stopped) return;
         view.status = page.finalPath === view.path ? "done" : "redirected";
-        if (view.status === "redirected") view.finalPath = page.finalPath;
-        if (page.http >= 400) view.status = "failed";
+        if (view.status === "redirected") {
+          view.finalPath = page.finalPath;
+          view.login = page.login;
+        }
+        // A login page may answer 401: that view was sent to it, it did not fail
+        if (page.http >= 400 && view.status === "done") view.status = "failed";
         view.http = page.http;
         view.links = page.links;
         view.externalHosts = page.externalHosts;
@@ -243,7 +267,7 @@ export async function startViews(
             // Waiting on the person: the windows go, so the wait costs nothing
             state.hold = hold;
             closeWindows(pass);
-            push(projectId, { state });
+            push(projectId, pass);
           }
         }
       } catch {
@@ -254,7 +278,7 @@ export async function startViews(
       } finally {
         loading--;
       }
-      push(projectId, { view });
+      push(projectId, pass, view);
     }
   };
   await Promise.all(Array.from({ length: POOL }, worker)).catch(() => undefined);
@@ -262,7 +286,7 @@ export async function startViews(
   for (const view of state.views) if (view.status === "loading") view.status = "waiting";
   state.running = false;
   state.hold = undefined;
-  push(projectId, { state });
+  push(projectId, pass);
   const counts = viewCounts(state.views);
   logger.info(
     `[Views] pass ${projectId}: ${counts.total} views in ${Date.now() - started}ms (${counts.redirected} redirected, ${counts.failed} failed${pass.stopped ? ", stopped" : ""})`,

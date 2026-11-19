@@ -137,7 +137,7 @@ function Views({ projectId, paneId }: { projectId: string; paneId: string }) {
         <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border bg-bg-secondary px-3 py-2">
           <LogIn className="h-3.5 w-3.5 shrink-0 text-accent" />
           <span className="text-xs text-text-primary">
-            Paused: {state.hold.views} views led to{" "}
+            Paused: {state.hold.views === 1 ? "a view" : `${state.hold.views} views`} led to{" "}
             <span className="font-mono">{state.hold.path}</span>. If it is a login, log in and
             continue.
           </span>

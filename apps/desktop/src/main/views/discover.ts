@@ -5,6 +5,7 @@ import {
   frameworkOf,
   parseRobots,
   parseSitemap,
+  ROUTE_ROOTS,
   type RobotsRules,
   routesFromFiles,
   splitDevPorts,
@@ -16,7 +17,6 @@ import { parseJson } from "../lib/parse-json";
 import { getProjectPorts } from "../system/ports";
 import { SKIP_DIRS } from "../system/scripts";
 
-const PAGE_ROOTS = [["app"], ["pages"], ["src", "app"], ["src", "pages"], ["src", "routes"]];
 const MAX_FILES = 5_000;
 const FETCH_TIMEOUT_MS = 3_000;
 const MAX_SITEMAPS = 5;
@@ -64,7 +64,10 @@ export async function fileRoutes(folder: string | null) {
   const manifest = parseJson(text, Manifest);
   const framework = frameworkOf({ ...manifest?.dependencies, ...manifest?.devDependencies });
   if (folder && framework) {
-    for (const root of PAGE_ROOTS) await walk(join(folder, ...root), root.join("/"), files);
+    for (const root of ROUTE_ROOTS[framework]) {
+      await walk(join(folder, root), root, files);
+      await walk(join(folder, "src", root), `src/${root}`, files);
+    }
   }
   return routesFromFiles(files, framework);
 }

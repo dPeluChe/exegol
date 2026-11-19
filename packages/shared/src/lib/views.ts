@@ -14,6 +14,8 @@ export interface ViewEntry {
   status: ViewStatus;
   /** Where the load ended when it was not `path` (a login, a locale) */
   finalPath?: string;
+  /** The page it ended on asks for a password */
+  login?: boolean;
   /** The response's status, 0 when none came */
   http?: number;
   /** Thumbnail size in px, once captured */
@@ -49,8 +51,8 @@ export const VIEWS_MAX = 200;
 /** Views ending on one other page before a pass stops to ask */
 export const HOLD_AFTER = 2;
 
-/** The page a pass should stop for: where `HOLD_AFTER` views or more were sent, unless the
- *  person already said to go on without it */
+/** The page a pass should stop for: one that asks for a password, or where `HOLD_AFTER` views
+ *  or more were sent, unless the person already said to go on without it */
 export function holdFor(
   views: readonly ViewEntry[],
   skipped: ReadonlySet<string>,
@@ -59,7 +61,7 @@ export function holdFor(
   for (const v of views) {
     if (v.status !== "redirected" || !v.finalPath || skipped.has(v.finalPath)) continue;
     const n = (sent.get(v.finalPath) ?? 0) + 1;
-    if (n >= HOLD_AFTER) return { path: v.finalPath, views: n };
+    if (v.login || n >= HOLD_AFTER) return { path: v.finalPath, views: n };
     sent.set(v.finalPath, n);
   }
   return null;
@@ -94,7 +96,8 @@ export function frameworkOf(deps: Readonly<Record<string, unknown>>): ViewFramew
   return null;
 }
 
-const ROUTE_ROOTS: Record<ViewFramework, readonly string[]> = {
+/** The folders, under the app or its `src`, whose files name routes */
+export const ROUTE_ROOTS: Record<ViewFramework, readonly string[]> = {
   next: ["app", "pages"],
   astro: ["pages"],
   nuxt: ["pages"],

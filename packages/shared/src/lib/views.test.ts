@@ -25,7 +25,6 @@ describe("routesFromFiles", () => {
         "pages/blog/index.tsx",
         "pages/api/hello.ts",
         "pages/_app.tsx",
-        "src/routes/settings/+page.svelte",
       ],
       "next",
     );
@@ -44,9 +43,15 @@ describe("routesFromFiles", () => {
 
   it("takes no route from the components of an app with its own router", () => {
     const files = ["src/pages/AccountsPage.tsx", "src/pages/home/AppLine.tsx"];
-    expect(frameworkOf({ vite: "8", react: "19" })).toBeNull();
-    expect(frameworkOf({ next: "16" })).toBe("next");
     expect(routesFromFiles(files, null)).toEqual({ paths: [], patterns: [] });
+  });
+});
+
+describe("frameworkOf", () => {
+  it("names only a framework that routes by files", () => {
+    expect(frameworkOf({ vite: "8", react: "19" })).toBeNull();
+    expect(frameworkOf({ next: "16", react: "19" })).toBe("next");
+    expect(frameworkOf({ "@sveltejs/kit": "2" })).toBe("sveltekit");
   });
 });
 
@@ -159,5 +164,9 @@ describe("holdFor", () => {
     expect(holdFor(views.slice(0, 2), new Set())).toBeNull();
     expect(holdFor(views, new Set())).toEqual({ path: "/login", views: 2 });
     expect(holdFor(views, new Set(["/login"]))).toBeNull();
+    expect(holdFor([{ ...sent("/", "/signin"), login: true }], new Set())).toEqual({
+      path: "/signin",
+      views: 1,
+    });
   });
 });

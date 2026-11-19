@@ -12,6 +12,7 @@ export function useViews(projectId: string) {
     window.api.onViewsChanged((event) => {
       if (event.projectId !== projectId) return;
       queryClient.setQueryData<ViewsState>(stateKey(projectId), (old) => {
+        if (old && event.run !== 0 && event.run < old.run) return old;
         if (event.state) return event.state;
         const view = event.view;
         if (!old || !view || event.run !== old.run) return old;
