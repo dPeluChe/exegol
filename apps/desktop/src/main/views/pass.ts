@@ -25,6 +25,7 @@ import { delay } from "../lib/timeout";
 import { EXEGOL_DIR } from "../mcp/exegol-protocol";
 import { captureWindow, readPage } from "./capture-window";
 import { fileRoutes, siteMeta, viewServers } from "./discover";
+import { seedSession } from "./session-seed";
 
 const POOL = 3;
 const JPEG_QUALITY = 72;
@@ -231,6 +232,14 @@ export async function startViews(
       if (!win || win.isDestroyed()) {
         win = captureWindow(projectId, base);
         pass.windows.push(win);
+        // Counted while it waits: with one view queued the other windows must not give up
+        loading++;
+        await seedSession(win, projectId, base);
+        loading--;
+        if (pass.stopped || win.isDestroyed()) {
+          queue.unshift(view);
+          continue;
+        }
       }
       loading++;
       view.status = "loading";
