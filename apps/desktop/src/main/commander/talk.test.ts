@@ -173,8 +173,23 @@ describe("messages_list", () => {
     await expect(callExegolTool(db, "messages_list", { message_id: other }, self)).rejects.toThrow(
       "No message",
     );
-    await expect(
-      callExegolTool(db, "session_messages", { session: "browdev" }, self),
-    ).rejects.toThrow();
+  });
+
+  it("reaches what was written before a resume, and with a session that has ended", async () => {
+    const self: ExegolToolContext = { agentId: "a", accessMode: "write", projectId: "p1" };
+    const before = say("b", "a0", "to the first browdev");
+    const now = say("a", "b", "from the resumed one");
+    db.prepare("UPDATE agents SET status = 'stopped', archived_at = 1 WHERE id = 'b'").run();
+    const list = (await callExegolTool(db, "messages_list", { with: "onyx" }, self)) as {
+      untrusted_message_content: Record<string, unknown>[];
+    };
+    expect(list.untrusted_message_content.map((m) => m.id)).toEqual([before, now]);
+    const full = (await callExegolTool(db, "messages_list", { message_id: before }, self)) as {
+      untrusted_message_content: Record<string, unknown>;
+    };
+    expect(full.untrusted_message_content.body).toBe("to the first browdev");
+    await expect(callExegolTool(db, "messages_list", { with: "browdev" }, self)).rejects.toThrow(
+      "No other session",
+    );
   });
 });

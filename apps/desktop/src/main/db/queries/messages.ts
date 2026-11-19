@@ -270,21 +270,26 @@ const mapSessionMessage = (row: Record<string, unknown>): SessionMessage => ({
   toAlias: (row.to_alias as string) ?? null,
 });
 
-/** The newest messages `agentId` sent or received (with `withId` only, when given), oldest first */
+/** The newest messages the rows `ids` sent or received (with the rows `withIds` only, when
+ *  given), oldest first. A resumed session has several rows */
 export function listSessionMessages(
   db: Database.Database,
-  agentId: string,
-  withId: string | null,
+  ids: string[],
+  withIds: string[] | null,
   limit: number,
 ): SessionMessage[] {
+  if (ids.length === 0 || withIds?.length === 0) return [];
+  const marks = (list: string[]) => list.map(() => "?").join(",");
+  const mine = marks(ids);
+  const theirs = withIds ? marks(withIds) : "";
   const rows = db
     .prepare(
       `${SESSION_MESSAGE}
-       WHERE (m.from_agent_id = ?1 AND (?2 IS NULL OR m.to_agent_id = ?2))
-          OR (m.to_agent_id = ?1 AND (?2 IS NULL OR m.from_agent_id = ?2))
-       ORDER BY m.rowid DESC LIMIT ?3`,
+       WHERE (m.from_agent_id IN (${mine})${withIds ? ` AND m.to_agent_id IN (${theirs})` : ""})
+          OR (m.to_agent_id IN (${mine})${withIds ? ` AND m.from_agent_id IN (${theirs})` : ""})
+       ORDER BY m.rowid DESC LIMIT ?`,
     )
-    .all(agentId, withId, limit);
+    .all(...ids, ...(withIds ?? []), ...ids, ...(withIds ?? []), limit);
   return (rows as Record<string, unknown>[]).map(mapSessionMessage).reverse();
 }
 

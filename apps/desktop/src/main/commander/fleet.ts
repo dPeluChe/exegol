@@ -1,6 +1,7 @@
 import type { Project } from "@exegol/shared";
 import type { ActiveAgent } from "../db/queries/agents";
 import type { TalkPair } from "../db/queries/messages";
+import { sessionName } from "../lib/names";
 
 export interface FleetTalk {
   session: string;
@@ -74,8 +75,7 @@ export function sessionState(status: string, needsUser: boolean): SessionState {
 export const TALK_HOURS = 24;
 const MAX_TALKS = 3;
 
-export const sessionName = (s: { id: string; alias?: string | null }) =>
-  s.alias || s.id.slice(0, 8);
+export { sessionName };
 
 /** The session whose lineage started first; `preferred` (a mark by the person) wins while live */
 export function mainSessionId(
