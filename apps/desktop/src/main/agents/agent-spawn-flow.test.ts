@@ -1,10 +1,12 @@
 import { execFileSync } from "node:child_process";
+import { delimiter } from "node:path";
 import type { Agent, AgentCreate } from "@exegol/shared";
 import Database from "libsql";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { runMigrations } from "../db/migrations";
 import { createAgent } from "../db/queries";
 import type { LocalSession } from "../history/types";
+import { AGENT_BIN_DIR } from "../mcp/agent-cli-install";
 import { beforeAgentPrefix, buildPtyInvocation, setupAgentCwd } from "./agent-spawn-flow";
 import type { AgentProviderRegistry } from "./registry";
 
@@ -169,7 +171,7 @@ describe("buildPtyInvocation", () => {
     expect(inv.env.DISABLE_AUTO_UPDATE).toBe("true");
     expect(inv.env.ANTHROPIC_API_KEY).toBe("sk-test");
     expect(inv.env.CLI_EXTRA).toBe("1");
-    expect(inv.env.PATH).toBe("/usr/local/bin:/usr/bin");
+    expect(inv.env.PATH).toBe(`/usr/local/bin:/usr/bin${delimiter}${AGENT_BIN_DIR}`);
     expect(inv.env.EXEGOL_AGENT_ID).toBe(agent.id);
     expect(inv.env.EXEGOL_ACCESS_MODE).toBe("write");
     expect(inv.env.EXEGOL_MCP_TOKEN).toBe("test-mcp-token");

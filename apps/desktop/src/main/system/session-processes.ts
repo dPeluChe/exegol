@@ -1,5 +1,6 @@
 import type { SessionProcesses, SessionProcessGroup } from "@exegol/shared";
 import type { LiveSessionProcess } from "../db/queries/agents";
+import { AGENT_BIN } from "../mcp/agent-cli";
 import type { KnownServer } from "../mcp/claude-servers";
 import { CLAIM_GUARD_BIN, SHIM_BIN } from "../mcp/exegol-mcp-config";
 import type { ProcRow } from "./process-table";
@@ -15,6 +16,7 @@ function classify(row: ProcRow, shellPid: number, known: KnownServer[]): Kind {
   if (row.pid === shellPid) return { kind: "shell", name };
   if (row.args.includes(SHIM_BIN)) return { kind: "bridge", name: "MCP bridge" };
   if (row.args.includes(CLAIM_GUARD_BIN)) return { kind: "bridge", name: "Claim guard" };
+  if (row.args.includes(AGENT_BIN)) return { kind: "bridge", name: "Exegol command" };
   const parts = new Set([program, ...rest, ...row.args.split(/\s+/)]);
   const server = known.find((s) => parts.has(s.hint));
   return server ? { kind: "mcp", name: server.name } : { kind: "other", name };

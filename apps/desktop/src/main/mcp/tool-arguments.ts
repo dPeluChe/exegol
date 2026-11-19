@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { parseJson } from "../lib/parse-json";
+import { AGENT_CLI } from "./agent-cli";
 import { ExegolToolError } from "./exegol-protocol";
 import { EXEGOL_TOOL_DEFS } from "./exegol-tool-defs";
 
@@ -30,7 +31,7 @@ export function toolArguments(tool: string, raw: unknown): Record<string, unknow
   const inner = Fields.safeParse(given.arguments).data;
   if (inner && has(inner)) return inner;
   throw new ExegolToolError(
-    `${tool} received none of the arguments it needs: ${needs.join(", ")}. The call reached Exegol, so the connection works: send them as the call's arguments object (a client that wraps MCP calls takes them inside its own "arguments" field) and call again.`,
+    `${tool} received none of the arguments it needs: ${needs.join(", ")}. The call reached Exegol, so the connection works: send them as the call's arguments object (a client that wraps MCP calls takes them inside its own "arguments" field) and call again. If they keep arriving empty, run the tool from a shell: ${AGENT_CLI} help.`,
     -32602,
   );
 }

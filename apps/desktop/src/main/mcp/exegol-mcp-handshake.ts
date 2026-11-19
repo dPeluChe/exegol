@@ -1,3 +1,5 @@
+import { AGENT_CLI } from "./agent-cli";
+
 /** Answers both eras of MCP on stdio: `initialize` (up to 2025-11-25), and per-request `_meta` with
  *  `server/discover` (2026-07-28). The session state is the shim's own, so nothing else differs. */
 
@@ -36,6 +38,9 @@ const EXEGOL_INSTRUCTIONS = [
   "In read and plan mode you can open a new pane and read it, not act on it. Use " +
     "agents_list and agent_send to reach another agent, messages_list to read again what you " +
     "and other sessions wrote, and claim_paths before editing files others may touch.",
+  `If your tool calls reach Exegol without their arguments, the same tools run from a shell: ` +
+    `${AGENT_CLI} send <session> "<message>", ${AGENT_CLI} call <tool> '<json>', ` +
+    `${AGENT_CLI} help.`,
 ].join("\n\n");
 
 const serverInfo = (version: string) => ({ name: "exegol", title: "Exegol", version });
