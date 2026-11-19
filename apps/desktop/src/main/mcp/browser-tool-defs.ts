@@ -75,12 +75,14 @@ const BROWSER_TOOLS: ToolBody<BrowserToolName>[] = [
     inputSchema: {
       type: "object",
       properties: {
-        url: { type: "string", description: 'http(s) URL on an allowed host, or "dev"' },
+        url: {
+          type: "string",
+          description: 'http(s) URL on an allowed host, or "dev" (the default)',
+        },
         new_pane: { type: "boolean", description: "Open a new pane instead of reusing one" },
         ...SNAPSHOT_ARG,
         ...PANE_ARG,
       },
-      required: ["url"],
     },
   },
   {

@@ -1,3 +1,5 @@
+import { z } from "zod";
+import { parseJson } from "../lib/parse-json";
 import { ExegolToolError } from "./exegol-protocol";
 import { EXEGOL_TOOL_DEFS } from "./exegol-tool-defs";
 
@@ -8,28 +10,27 @@ const required = new Map(
   ]),
 );
 
-/** The arguments a tool reads. A client that sends them as JSON text is read; a call with none
- *  for a tool that needs some says so and names them, so the caller does not take the tool's
- *  own "requires target" for a broken connection and send the same empty call again */
+const Fields = z.record(z.string(), z.unknown());
+
+/** The arguments a tool reads. A call that carries none of the fields its tool needs says so
+ *  and names them: the tool's own "requires target" reads like lost data, and the caller sends
+ *  the same empty call again. Arguments sent as JSON text, or one level too deep, are read */
 export function toolArguments(tool: string, raw: unknown): Record<string, unknown> {
-  let args: unknown = raw;
-  if (typeof raw === "string") {
-    try {
-      args = JSON.parse(raw);
-    } catch {
-      args = null;
-    }
-  }
-  const given =
-    args && typeof args === "object" && !Array.isArray(args)
-      ? (args as Record<string, unknown>)
-      : {};
   const needs = required.get(tool) ?? [];
-  if (needs.length > 0 && Object.keys(given).length === 0) {
+  const has = (fields: Record<string, unknown>) => needs.some((key) => key in fields);
+  const parsed = typeof raw === "string" && raw.trim() ? parseJson(raw, Fields) : raw;
+  if (typeof raw === "string" && raw.trim() && !parsed) {
     throw new ExegolToolError(
-      `${tool} received no arguments. It needs: ${needs.join(", ")}. The call reached Exegol, so the connection works: send them as the call's arguments object (a client that wraps MCP calls takes them inside its own "arguments" field) and call again.`,
+      `${tool} received its arguments as text that is not a JSON object. Send an object.`,
       -32602,
     );
   }
-  return given;
+  const given = Fields.safeParse(parsed).data ?? {};
+  if (needs.length === 0 || has(given)) return given;
+  const inner = Fields.safeParse(given.arguments).data;
+  if (inner && has(inner)) return inner;
+  throw new ExegolToolError(
+    `${tool} received none of the arguments it needs: ${needs.join(", ")}. The call reached Exegol, so the connection works: send them as the call's arguments object (a client that wraps MCP calls takes them inside its own "arguments" field) and call again.`,
+    -32602,
+  );
 }

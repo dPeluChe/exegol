@@ -287,7 +287,7 @@ function sessionInstructions(): Promise<string> {
     .catch(() => "");
 }
 
-async function callTool(tool: string, args: Record<string, unknown>): Promise<unknown> {
+async function callTool(tool: string, args: unknown): Promise<unknown> {
   try {
     return await callSocket("call_tool", { tool, args, token, ppid: process.ppid }, tool);
   } catch (err) {
@@ -360,7 +360,7 @@ function handleClientMessage(
     }
 
     case "tools/call": {
-      const params = msg.params as { name: string; arguments?: Record<string, unknown> };
+      const params = msg.params as { name: string; arguments?: unknown };
       callTool(params.name, params.arguments ?? {})
         .then((result) => {
           // Ready-made content blocks (browser_screenshot's image) go through as they are
