@@ -51,6 +51,8 @@ export interface BrowserPaneHandle {
   /** False when there is nowhere to go */
   history(action: HistoryAction): boolean;
   lastHttpStatus(): number | null;
+  /** Milliseconds since the person's own input on the page, null when there was none */
+  sinceUserInput(): number | null;
   logs: LogRing;
 }
 

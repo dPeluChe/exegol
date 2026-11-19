@@ -3,6 +3,7 @@ import type Database from "libsql";
 import { getProject } from "../db/queries/projects";
 import { HISTORY_ACTIONS, SCROLL_TARGETS } from "../mcp/browser-tool-defs";
 import { ExegolToolError } from "../mcp/exegol-protocol";
+import { originOf } from "./clipboard-policy";
 import { getPaneControl, lastPaneOf, markOpenedBy } from "./control";
 import { isLogLevel } from "./log-ring";
 import { type ActionResult, actionScript, type PageAction, scrollScript } from "./page-actions";
@@ -65,15 +66,39 @@ export async function handleList(db: Database.Database, ctx: BrowserToolContext)
   };
 }
 
-// A pane nobody named may be what the user is reading
-function paneToReuse(ctx: BrowserToolContext, requested: unknown): BrowserPaneHandle | null {
+// Input this recent means the person is on the page right now: an agent taking it would cut in
+const PERSON_BUSY_MS = 15_000;
+
+function personBusy(pane: BrowserPaneHandle): boolean {
+  const since = pane.sinceUserInput();
+  return since !== null && since < PERSON_BUSY_MS;
+}
+
+/** The pane the agent named or used last, else one already on that site and free: the person
+ *  left it ready (its login may live in that tab only), and a second pane of it helps nobody.
+ *  A pane on another site may be what they are reading: it is left alone */
+function paneToReuse(
+  ctx: BrowserToolContext,
+  requested: unknown,
+  url: string,
+): { pane: BrowserPaneHandle; onSite: boolean } | null {
   const live = requireHost().livePanes(ctx.projectId);
-  if (requested) return resolvePane(live, ctx, requested);
+  if (requested) return { pane: resolvePane(live, ctx, requested), onSite: false };
   const last = lastPaneOf(
     ctx.agentId,
     live.map((p) => p.paneId),
   );
-  return live.find((p) => p.paneId === last) ?? null;
+  const own = live.find((p) => p.paneId === last);
+  if (own) return { pane: own, onSite: false };
+  const origin = originOf(url);
+  const onSite = live.find(
+    (p) =>
+      origin !== null &&
+      originOf(p.getUrl()) === origin &&
+      !actBlocked(p, ctx.agentId) &&
+      !personBusy(p),
+  );
+  return onSite ? { pane: onSite, onSite: true } : null;
 }
 
 export async function handleOpen(
@@ -101,14 +126,16 @@ export async function handleOpen(
     target = dev;
   }
   const url = checkUrlArg(db, ctx, target);
-  const reuse = readOnly || args.new_pane === true ? null : paneToReuse(ctx, args.pane);
-  const blocked = reuse && actBlocked(reuse, ctx.agentId);
+  const reuse = readOnly || args.new_pane === true ? null : paneToReuse(ctx, args.pane, url);
+  const blocked = reuse && actBlocked(reuse.pane, ctx.agentId);
   if (blocked) return blocked;
   let pane: BrowserPaneHandle;
   if (reuse) {
-    pane = reuse;
+    pane = reuse.pane;
     touch(db, ctx, pane);
-    pane.loadUrl(url);
+    // Already there: a reload would drop what the person typed or opened on the page
+    const there = reuse.onSite && pane.getUrl() === url && !pane.loadState().failure;
+    if (!there) pane.loadUrl(url);
   } else {
     pane = await h.openPane({ projectId: ctx.projectId, agentId: ctx.agentId, url });
     markOpenedBy(pane.paneId, ctx.projectId, ctx.agentId);
@@ -121,7 +148,7 @@ export async function handleOpen(
     host: hostOf(url),
     outcome: result.status,
   });
-  return result;
+  return reuse?.onSite ? { ...result, reused: "a pane already open on this site" } : result;
 }
 
 export function handleClose(

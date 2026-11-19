@@ -75,6 +75,7 @@ function fakePane(scene: Scene) {
       return scene.canGo !== false;
     },
     lastHttpStatus: () => scene.http ?? 200,
+    sinceUserInput: () => null,
     logs,
   };
   return { pane, keys, moves, history };

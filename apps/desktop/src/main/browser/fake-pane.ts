@@ -23,7 +23,13 @@ export const page = (over: Partial<RawSnapshot> = {}): RawSnapshot => ({
 export function fakePane(
   paneId: string,
   projectId: string,
-  opts: { snapshot?: RawSnapshot; action?: unknown; url?: string } = {},
+  opts: {
+    snapshot?: RawSnapshot;
+    action?: unknown;
+    url?: string;
+    sinceUserInput?: number;
+    failed?: boolean;
+  } = {},
 ): BrowserPaneHandle & { scripts: string[]; loaded: string[]; evals: string[] } {
   const scripts: string[] = [];
   const loaded: string[] = [];
@@ -53,12 +59,16 @@ export function fakePane(
       url = u;
     },
     awaitLoad: async () => false,
-    loadState: () => ({ failure: null, stopped: false }),
+    loadState: () => ({
+      failure: opts.failed ? { error: "ERR_CONNECTION_REFUSED", url } : null,
+      stopped: false,
+    }),
     capture: async () => Buffer.from("jpeg"),
     sendKey: () => {},
     moveMouse: () => {},
     history: () => true,
     lastHttpStatus: () => 200,
+    sinceUserInput: () => opts.sinceUserInput ?? null,
     logs: new LogRing(),
   };
 }

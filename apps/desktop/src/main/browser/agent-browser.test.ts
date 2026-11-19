@@ -152,7 +152,8 @@ describe("agent browser tools", () => {
     const w = (await callBrowserTool(db, "browser_open", { url: "localhost:3000/y" }, ctx())) as {
       pane: string;
     };
-    expect(["pane-a", "pane-new"]).toContain(w.pane);
+    // The pane it opened while reading is the one it used last
+    expect(w.pane).toBe("pane-new");
   });
 
   it("refuses URLs outside the policy and allows the project's allowlist", async () => {
