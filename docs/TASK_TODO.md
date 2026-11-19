@@ -619,6 +619,17 @@ exchange-bus MVP only, no headless council executions. Absorbs:
 
 ---
 
+### T228: Views canvas, every view of a local web app at once `added: 2026-11-18`
+**Priority**: P2 | **Effort**: M per phase | **Source**: `RESEARCH/VIEWS_CANVAS_2026_11.md`
+
+A full-area canvas with a thumbnail per route of the project's running web app, public and behind a login, captured by a few hidden windows on the project's partition; one view opens live. The spike measured a capture at about 15 ms and a live view at about 140 MB, so thumbnails first. Waits for Antonio's decisions in the doc (section or pane, first screen or full page, when a pass runs, where the dev server comes from).
+- Phase 1: routes from page files and links, the canvas, open one live, the login step
+- Phase 2: notes on a view sent to a session, and agent tools to list and capture views
+- Phase 3: the navigation tree
+- Phase 4: widths (1280, 768, 375) and a live view at several widths
+
+---
+
 ### T227 — MCP processes per session and the load of a full restart `added: 2026-11-12`
 **Priority**: P2 | **Effort**: S to M per option | **Source**: `RESEARCH/MCP_FOOTPRINT_AND_RESTART_LOAD_2026_11.md`
 
