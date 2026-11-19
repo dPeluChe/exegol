@@ -83,16 +83,28 @@ describe("who may use a pane", () => {
     expect(heldByOther("pane-a", "agent-b")).toBeNull();
   });
 
-  it("browser_open never loads over a pane nobody named", async () => {
-    const opened = await run("agent-b", "browser_open", URL_ARG);
+  const OTHER_SITE = { url: "http://localhost:4000/next" };
+
+  it("browser_open never loads over a pane on another site that nobody named", async () => {
+    await run("agent-b", "browser_snapshot");
+    const opened = await run("agent-b", "browser_open", OTHER_SITE);
     expect(opened.pane).toBe("pane-new");
+    expect(opened).not.toHaveProperty("reused");
     expect(panes[0]?.loaded).toEqual([]);
   });
 
-  it("reading a pane does not make it yours: browser_open still leaves it alone", async () => {
-    await run("agent-b", "browser_snapshot");
-    expect((await run("agent-b", "browser_open", URL_ARG)).pane).toBe("pane-new");
+  it("browser_open takes a pane already open on that site, without a reload when it is there", async () => {
+    const there = await run("agent-b", "browser_open", { url: "http://localhost:3000/" });
+    expect(there).toMatchObject({ pane: "pane-a", reused: expect.any(String) });
     expect(panes[0]?.loaded).toEqual([]);
+    forgetBrowserAgent("agent-b");
+    expect((await run("agent-b", "browser_open", URL_ARG)).pane).toBe("pane-a");
+    expect(panes[0]?.loaded).toEqual([URL_ARG.url]);
+  });
+
+  it("browser_open leaves a pane on that site that another agent drives", async () => {
+    await run("agent-a", "browser_navigate", URL_ARG);
+    expect((await run("agent-b", "browser_open", URL_ARG)).pane).toBe("pane-new");
   });
 
   it("a driver that only reads keeps its pane", async () => {
