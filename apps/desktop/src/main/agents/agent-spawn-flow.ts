@@ -1,3 +1,4 @@
+import { delimiter } from "node:path";
 import type { Agent, AgentCreate, Worktree } from "@exegol/shared";
 import { isUnderPath, samePath } from "@exegol/shared";
 import type Database from "libsql";
@@ -13,6 +14,7 @@ import { commandShape } from "../lib/command-shape";
 import { PermanentError } from "../lib/errors";
 import { logger } from "../lib/logger";
 import { loadLifecycleConfig } from "../lifecycle/loader";
+import { AGENT_BIN_DIR } from "../mcp/agent-cli-install";
 import {
   resolveMcpShimPath,
   writeAgentMcpConfigFor,
@@ -527,7 +529,7 @@ export function buildPtyInvocation(
       ...shellInitGuards,
       ...apiKeyEnv,
       ...cliConfig.env,
-      PATH: _getFullPath(),
+      PATH: `${_getFullPath()}${delimiter}${AGENT_BIN_DIR}`,
       TERM: "xterm-256color",
       EXEGOL_AGENT_ID: agent.id,
       EXEGOL_ACCESS_MODE: config.accessMode ?? "write",
