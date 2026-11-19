@@ -9,6 +9,7 @@ import {
   isNewerVersion,
   MODEL_ID_PATTERN,
   roleModelProblem,
+  stripPasteTags,
 } from "./agent";
 
 // ─── classifyActivity ─────────────────────────────────────────────────────
@@ -165,8 +166,19 @@ describe("injectedMessageId", () => {
     for (const header of injectedHeaders("m-1")) {
       expect(injectedMessageId(`${header}from x]`)).toBe("m-1");
       expect(injectedMessageId(`see ${header}from x]`)).toBeNull();
-      expect(injectedMessageId(`<pasted_content id="15a8">\n${header}from x]`)).toBe("m-1");
+      expect(
+        injectedMessageId(stripPasteTags(`<pasted_content id="15a8">\n${header}from x]`)),
+      ).toBe("m-1");
     }
     expect(injectedMessageId("[Exegol said hi")).toBeNull();
+  });
+
+  it("drops only the tags that wrap a pasted turn", () => {
+    expect(
+      stripPasteTags('<pasted_content id="15a8">\nhola\n\nadios\n</pasted_content id="15a8">'),
+    ).toBe("hola\n\nadios");
+    expect(stripPasteTags("why does <pasted_content> show?")).toBe(
+      "why does <pasted_content> show?",
+    );
   });
 });

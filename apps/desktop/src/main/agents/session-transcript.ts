@@ -1,5 +1,10 @@
 import { type FileHandle, open } from "node:fs/promises";
-import type { ChatPage, OlderChatPage, SessionTurn } from "@exegol/shared";
+import {
+  type ChatPage,
+  type OlderChatPage,
+  type SessionTurn,
+  stripPasteTags,
+} from "@exegol/shared";
 import { z } from "zod";
 import { BOILERPLATE_PREFIXES } from "../history/providers/codex";
 import { parseJson } from "../lib/parse-json";
@@ -194,7 +199,8 @@ export const parseClaudeLine: LineParser = (line, id) => {
     }
     if (b.type !== "text" || !b.text) return [];
     if (d.type === "user" && CLAUDE_SCAFFOLD.test(b.text.trimStart())) return [];
-    return textTurn(turnId, d.type === "user" ? "user" : "assistant", b.text, at);
+    if (d.type === "user") return textTurn(turnId, "user", stripPasteTags(b.text), at);
+    return textTurn(turnId, "assistant", b.text, at);
   });
 };
 

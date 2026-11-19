@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
+import { stripPasteTags } from "@exegol/shared";
 import { scanPerCwdDir } from "../pool";
 import { readHead, readTail } from "../read-head";
 import { type LocalHistoryProvider, type LocalSession, normalizeTitle } from "../types";
@@ -29,13 +30,13 @@ interface HeadLine {
 /** First user prompt, when the session never earned an AI title. */
 function firstPromptText(line: HeadLine): string | null {
   const content = line.message?.content;
-  if (typeof content === "string") return content;
+  if (typeof content === "string") return stripPasteTags(content);
   if (Array.isArray(content)) {
     const text = content.find(
       (c): c is { type: string; text: string } =>
         typeof c === "object" && c !== null && (c as { type?: string }).type === "text",
     );
-    return text?.text ?? null;
+    return text ? stripPasteTags(text.text) : null;
   }
   return null;
 }
