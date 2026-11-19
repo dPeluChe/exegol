@@ -623,7 +623,7 @@ exchange-bus MVP only, no headless council executions. Absorbs:
 **Priority**: P2 | **Effort**: M per phase | **Source**: `RESEARCH/VIEWS_CANVAS_2026_11.md`
 
 Phase 1 is built (2026-11-18): the Views pane, routes from page files, sitemap and links, full page captures on a tree canvas.
-- Phase 1 left: see the pane live; views behind a login (log in in a browser pane, then Capture again); values for routes with params; Windows and Linux
+- Phase 1 left: see the login hold live; routes of an app with its own router that no link reaches (read its route table); values for routes with params; Windows and Linux
 - Phase 2: notes on a view sent to a session, and agent tools to list and capture views
 - Phase 3: a sitemap made from the tree, and what the sitemap and the app disagree on
 - Phase 4: widths (1920, 768, 375) and a live view at several widths

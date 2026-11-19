@@ -94,6 +94,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Browser panes search from the address bar: `?telnyx`, or words that are not an address, open a Google search; `localhost:3000`, `example.com` and full URLs still go straight there
 
 ### Fixed
+- **Views pane on an app with its own router**: a Vite or React Router app keeps components in `src/pages`, and each was listed as a route; page files now count only for Next.js, Astro, Nuxt and SvelteKit (from the app's package.json), and other apps are mapped by their links. Capture again doubled the list each time and never finished: a pass now starts from its own empty list.
 - **Full page screenshot on a page with smooth scrolling**: Save Screenshot's full page stopped after the first screen on sites that set `scroll-behavior: smooth`; the capture now scrolls at once.
 
 - **Copy and Paste in a terminal's right-click menu, and a CLI's own copy reaches the clipboard.** The menu had no Copy or Paste. And text selected with the mouse inside a CLI that draws its own selection (Claude Code, opencode) reached the clipboard only if the CLI's own copy command worked; Exegol now writes it too.
@@ -142,6 +143,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - The "What's new" dialog shows the update's download progress (a bar and the percent), as the title-bar button does, instead of only "Downloading"
 
 ### Changed
+- **Views pane waits for a login**: when a view ends on a page that asks for a password, or two views end on the same other page, the pass pauses with its windows closed and asks: Open that page, I logged in, continue (loads those views again) or Continue without it. A view sent elsewhere is no longer captured (the page it was sent to is a view of its own), views waiting their turn pulse and the one loading spins, and the header spins while a pass runs.
 - A session shows the name it has inside its CLI beside its Exegol name when the two differ (pane toolbar, Dashboard cards, Company): Claude Code's `/rename`, Codex's thread name, and the titles of Devin and OpenCode. Agents get both too, in the message header and `agents_list`. Only a Claude rename replaces the Exegol name: the other three keep their own titles in the same field, so theirs is shown, never applied
 - A session renamed inside Claude Code (`/rename`) takes that name in Exegol: its pane, the sidebar and what other agents address it by follow when its next turn starts. A message between agents names the sender's CLI name when it differs, and `agents_list` returns it as `cli_name`
 

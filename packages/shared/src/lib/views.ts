@@ -14,6 +14,8 @@ export interface ViewEntry {
   status: ViewStatus;
   /** Where the load ended when it was not `path` (a login, a locale) */
   finalPath?: string;
+  /** The page it ended on asks for a password */
+  login?: boolean;
   /** The response's status, 0 when none came */
   http?: number;
   /** Thumbnail size in px, once captured */
@@ -33,15 +35,37 @@ export interface ViewEntry {
 
 export interface ViewsState {
   base: string | null;
+  /** Which pass this is: a view pushed by an earlier one is dropped */
+  run: number;
   running: boolean;
   views: ViewEntry[];
   /** Route patterns from page files that need values (`/users/[id]`): listed, never loaded */
   patterns: string[];
+  /** The pass waits: this many views ended on `path`, most likely a login */
+  hold?: { path: string; views: number };
   sitemap: "found" | "missing" | "unread";
   robots: "found" | "missing" | "unread";
 }
 
 export const VIEWS_MAX = 200;
+/** Views ending on one other page before a pass stops to ask */
+export const HOLD_AFTER = 2;
+
+/** The page a pass should stop for: one that asks for a password, or where `HOLD_AFTER` views
+ *  or more were sent, unless the person already said to go on without it */
+export function holdFor(
+  views: readonly ViewEntry[],
+  skipped: ReadonlySet<string>,
+): { path: string; views: number } | null {
+  const sent = new Map<string, number>();
+  for (const v of views) {
+    if (v.status !== "redirected" || !v.finalPath || skipped.has(v.finalPath)) continue;
+    const n = (sent.get(v.finalPath) ?? 0) + 1;
+    if (v.login || n >= HOLD_AFTER) return { path: v.finalPath, views: n };
+    sent.set(v.finalPath, n);
+  }
+  return null;
+}
 /** The page as most desktops show it, and how far down a thumbnail goes */
 export const VIEW_PAGE = { width: 1920, height: 1080, maxHeight: 1920 } as const;
 export const VIEW_THUMB_WIDTH = 960;
@@ -60,9 +84,33 @@ function cleanSegments(parts: string[]): { path: string; dynamic: boolean } | nu
   return { path: `/${out.join("/")}`, dynamic };
 }
 
-/** Routes named by page files (paths relative to the app's folder, `/` separators): Next.js
- *  `app` and `pages`, SvelteKit `src/routes`, Astro and Nuxt `pages`. Endpoints are left out */
-export function routesFromFiles(files: readonly string[]): { paths: string[]; patterns: string[] } {
+export type ViewFramework = "next" | "astro" | "nuxt" | "sveltekit";
+
+/** The framework whose folders name routes, from a package.json's dependencies. Any other app
+ *  (a Vite SPA with its own router) keeps components in `pages`, which are no routes */
+export function frameworkOf(deps: Readonly<Record<string, unknown>>): ViewFramework | null {
+  if ("next" in deps) return "next";
+  if ("astro" in deps) return "astro";
+  if ("nuxt" in deps) return "nuxt";
+  if ("@sveltejs/kit" in deps) return "sveltekit";
+  return null;
+}
+
+/** The folders, under the app or its `src`, whose files name routes */
+export const ROUTE_ROOTS: Record<ViewFramework, readonly string[]> = {
+  next: ["app", "pages"],
+  astro: ["pages"],
+  nuxt: ["pages"],
+  sveltekit: ["routes"],
+};
+
+/** Routes named by the framework's page files (paths relative to the app's folder, `/`
+ *  separators). Endpoints are left out; with no such framework there are none */
+export function routesFromFiles(
+  files: readonly string[],
+  framework: ViewFramework | null,
+): { paths: string[]; patterns: string[] } {
+  const roots = framework ? ROUTE_ROOTS[framework] : [];
   const paths = new Set<string>();
   const patterns = new Set<string>();
   for (const raw of files) {
@@ -70,6 +118,7 @@ export function routesFromFiles(files: readonly string[]): { paths: string[]; pa
     if (!PAGE_FILE.test(file)) continue;
     const parts = file.split("/");
     const root = parts.shift();
+    if (!root || !roots.includes(root)) continue;
     const name = (parts.pop() ?? "").replace(PAGE_FILE, "");
     let segments: string[] | null = null;
     if (root === "app" && name === "page") segments = parts;

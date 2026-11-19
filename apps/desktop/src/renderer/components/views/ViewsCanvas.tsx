@@ -20,11 +20,13 @@ export function ViewsCanvas({
   projectId,
   views,
   selected,
+  running,
   onSelect,
 }: {
   projectId: string;
   views: ViewEntry[];
   selected: string | null;
+  running: boolean;
   onSelect: (path: string | null) => void;
 }) {
   const frame = useRef<HTMLDivElement>(null);
@@ -164,6 +166,7 @@ export function ViewsCanvas({
               height={box.height}
               selected={box.path === selected}
               linked={linkedPaths.has(box.path)}
+              running={running}
               onSelect={onSelect}
             />
           ) : null;

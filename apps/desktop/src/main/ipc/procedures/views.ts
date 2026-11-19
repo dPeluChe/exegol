@@ -4,6 +4,7 @@ import { viewServers } from "../../views/discover";
 import {
   clearViews,
   copyViewImage,
+  resumeViews,
   startViews,
   stopViews,
   viewFile,
@@ -33,6 +34,9 @@ export const viewsRouter = router({
     .mutation(({ ctx, input: { projectId, ...opts } }) => {
       void startViews(ctx.db, projectId, opts);
     }),
+  resume: publicProcedure
+    .input(project.extend({ retry: z.boolean() }))
+    .mutation(({ input }) => resumeViews(input.projectId, input.retry)),
   stop: publicProcedure.input(project).mutation(({ input }) => stopViews(input.projectId)),
   clear: publicProcedure.input(project).mutation(({ input }) => clearViews(input.projectId)),
   thumb: publicProcedure.input(view).query(({ input }) => viewThumb(input.projectId, input.path)),

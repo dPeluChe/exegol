@@ -26,7 +26,7 @@ const LINKS_SCRIPT = `(() => {
     if (u.origin === location.origin) links.push([u.pathname, blank]);
     else external.add(u.hostname);
   }
-  return { links: links.slice(0, 500), external: [...external].slice(0, 40), newTab, height: document.documentElement.scrollHeight };
+  return { links: links.slice(0, 500), external: [...external].slice(0, 40), newTab, height: document.documentElement.scrollHeight, login: !!document.querySelector("input[type=password]") };
 })()`;
 
 /** Content that appears as it scrolls into view would be blank in a capture taken at once:
@@ -53,6 +53,8 @@ export interface PageRead {
   links: ViewLink[];
   externalHosts: string[];
   newTabLinks: number;
+  /** The page has a password field */
+  login: boolean;
 }
 
 /** A hidden window on the project's browser session: it loads pages, never shows and answers
@@ -87,7 +89,21 @@ export function captureWindow(projectId: string, origin: string): BrowserWindow 
   return win;
 }
 
-/** Load one page and read it: where it ended, its links and the top of it as an image */
+async function capture(wc: Electron.WebContents): Promise<NativeImage | null> {
+  await wc.insertCSS(SETTLE_CSS).catch(() => undefined);
+  await withTimeout(
+    wc.executeJavaScriptInIsolatedWorld(LINKS_WORLD_ID, [{ code: REVEAL_SCRIPT }]),
+    5_000,
+    "page reveal",
+  ).catch(() => undefined);
+  return captureFullPage(wc, {
+    width: VIEW_THUMB_WIDTH,
+    height: Math.round((VIEW_PAGE.maxHeight * VIEW_THUMB_WIDTH) / VIEW_PAGE.width),
+  }).catch(() => null);
+}
+
+/** Load one page and read it: where it ended, its links and the top of it as an image. A page
+ *  that ended elsewhere is not captured: the page it was sent to is a view of its own */
 export async function readPage(win: BrowserWindow, url: string): Promise<PageRead> {
   const wc = win.webContents;
   let http = 0;
@@ -104,22 +120,21 @@ export async function readPage(win: BrowserWindow, url: string): Promise<PageRea
       wc.executeJavaScriptInIsolatedWorld(LINKS_WORLD_ID, [{ code: LINKS_SCRIPT }]),
       5_000,
       "page links",
-    )) as { links: [string, boolean][]; external: string[]; newTab: number; height: number };
+    )) as {
+      links: [string, boolean][];
+      external: string[];
+      newTab: number;
+      height: number;
+      login: boolean;
+    };
     const byPath = new Map<string, boolean>();
     for (const [to, blank] of page.links) {
       const path = viewPath(to);
       byPath.set(path, (byPath.get(path) ?? false) || blank);
     }
-    await wc.insertCSS(SETTLE_CSS).catch(() => undefined);
-    await withTimeout(
-      wc.executeJavaScriptInIsolatedWorld(LINKS_WORLD_ID, [{ code: REVEAL_SCRIPT }]),
-      5_000,
-      "page reveal",
-    ).catch(() => undefined);
-    const image = await captureFullPage(wc, {
-      width: VIEW_THUMB_WIDTH,
-      height: Math.round((VIEW_PAGE.maxHeight * VIEW_THUMB_WIDTH) / VIEW_PAGE.width),
-    }).catch(() => null);
+    const image = finalPath === viewPath(new URL(url).pathname) ? await capture(wc) : null;
+    // Closed under the capture (a hold): no image is not this page's answer
+    if (wc.isDestroyed()) throw new Error("window closed");
     return {
       finalPath,
       http,
@@ -128,6 +143,7 @@ export async function readPage(win: BrowserWindow, url: string): Promise<PageRea
       links: [...byPath].map(([to, newTab]) => ({ to, newTab })),
       externalHosts: page.external,
       newTabLinks: page.newTab,
+      login: page.login,
     };
   } finally {
     wc.off("did-navigate", onNavigate);

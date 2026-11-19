@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
+  frameworkOf,
+  holdFor,
   layoutViews,
   parentView,
   parseRobots,
@@ -11,24 +13,45 @@ import {
 } from "./views";
 
 describe("routesFromFiles", () => {
-  it("reads Next, SvelteKit and Astro page files and sets patterns apart", () => {
-    const { paths, patterns } = routesFromFiles([
-      "src/app/(landing)/page.tsx",
-      "src/app/(landing)/about/page.tsx",
-      "src/app/dashboard/users/[id]/page.tsx",
-      "src/app/dashboard/layout.tsx",
-      "src/app/api/chat/route.ts",
-      "src/app/@modal/login/page.tsx",
-      "pages/blog/index.tsx",
-      "pages/api/hello.ts",
-      "pages/_app.tsx",
-      "src/pages/[...lang]/index.astro",
-      "src/pages/robots.txt.ts",
-      "src/routes/settings/+page.svelte",
-      "src/routes/settings/+page.server.ts",
-    ]);
-    expect(paths).toEqual(["/", "/about", "/blog", "/settings"]);
-    expect(patterns).toEqual(["/[...lang]", "/dashboard/users/[id]"]);
+  it("reads the page files of the app's framework and sets patterns apart", () => {
+    const next = routesFromFiles(
+      [
+        "src/app/(landing)/page.tsx",
+        "src/app/(landing)/about/page.tsx",
+        "src/app/dashboard/users/[id]/page.tsx",
+        "src/app/dashboard/layout.tsx",
+        "src/app/api/chat/route.ts",
+        "src/app/@modal/login/page.tsx",
+        "pages/blog/index.tsx",
+        "pages/api/hello.ts",
+        "pages/_app.tsx",
+      ],
+      "next",
+    );
+    expect(next.paths).toEqual(["/", "/about", "/blog"]);
+    expect(next.patterns).toEqual(["/dashboard/users/[id]"]);
+    expect(
+      routesFromFiles(["src/pages/[...lang]/index.astro", "src/pages/robots.txt.ts"], "astro"),
+    ).toEqual({ paths: [], patterns: ["/[...lang]"] });
+    expect(
+      routesFromFiles(
+        ["src/routes/settings/+page.svelte", "src/routes/+page.server.ts"],
+        "sveltekit",
+      ).paths,
+    ).toEqual(["/settings"]);
+  });
+
+  it("takes no route from the components of an app with its own router", () => {
+    const files = ["src/pages/AccountsPage.tsx", "src/pages/home/AppLine.tsx"];
+    expect(routesFromFiles(files, null)).toEqual({ paths: [], patterns: [] });
+  });
+});
+
+describe("frameworkOf", () => {
+  it("names only a framework that routes by files", () => {
+    expect(frameworkOf({ vite: "8", react: "19" })).toBeNull();
+    expect(frameworkOf({ next: "16", react: "19" })).toBe("next");
+    expect(frameworkOf({ "@sveltejs/kit": "2" })).toBe("sveltekit");
   });
 });
 
@@ -123,5 +146,27 @@ describe("layoutViews", () => {
     expect(at("/c")?.y).toBeGreaterThan((at("/b")?.y ?? 0) + 120);
     expect(Math.max(...boxes.map((b) => b.x + b.width))).toBeLessThanOrEqual(width);
     expect(Math.min(...boxes.map((b) => b.x))).toBeGreaterThanOrEqual(0);
+  });
+});
+
+describe("holdFor", () => {
+  const sent = (path: string, finalPath: string) => ({
+    path,
+    sources: [],
+    status: "redirected" as const,
+    finalPath,
+    inSitemap: false,
+    robotsBlocked: false,
+  });
+
+  it("stops for the page two views were sent to, unless it was skipped", () => {
+    const views = [sent("/a", "/login"), sent("/b", "/en"), sent("/c", "/login")];
+    expect(holdFor(views.slice(0, 2), new Set())).toBeNull();
+    expect(holdFor(views, new Set())).toEqual({ path: "/login", views: 2 });
+    expect(holdFor(views, new Set(["/login"]))).toBeNull();
+    expect(holdFor([{ ...sent("/", "/signin"), login: true }], new Set())).toEqual({
+      path: "/signin",
+      views: 1,
+    });
   });
 });
