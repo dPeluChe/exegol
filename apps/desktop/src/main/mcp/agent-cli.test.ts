@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseAgentCli, toolsAnswer } from "./agent-cli";
+import { parseAgentCli, printable, toolsAnswer } from "./agent-cli";
 import { launcherText } from "./agent-cli-install";
 
 describe("parseAgentCli", () => {
@@ -21,6 +21,9 @@ describe("parseAgentCli", () => {
       },
     });
     expect(parseAgentCli(["send", "lynx", "-"])).toMatchObject({ stdin: "message" });
+    expect(parseAgentCli(["send", "lynx", "--", "use", "--id", "here"])).toMatchObject({
+      args: { target: "lynx", message: "use --id here" },
+    });
   });
 
   it("reads status, any tool with JSON, and the tool list", () => {
@@ -42,6 +45,7 @@ describe("parseAgentCli", () => {
     for (const argv of [
       ["send", "lynx"],
       ["send", "lynx", "hi", "--reply-to"],
+      ["send", "--replyto", "m-1", "lynx", "hi"],
       ["status"],
       ["call", "x", "[1]"],
       ["nope"],
@@ -67,10 +71,27 @@ describe("toolsAnswer", () => {
   });
 });
 
+describe("printable", () => {
+  it("shows a tool's text and never an image's bytes", () => {
+    expect(printable({ ok: true })).toEqual({ ok: true });
+    expect(
+      printable({
+        __mcpContent: [
+          { type: "text", text: "saved" },
+          { type: "image", data: "AAAA" },
+        ],
+      }),
+    ).toEqual(["saved", { type: "image", omitted: "not shown in a shell" }]);
+  });
+});
+
 describe("launcherText", () => {
-  it("runs the bundled script as Node and passes the arguments on", () => {
-    const sh = launcherText("/app/out/main/exegol-agent-bin.js", "darwin");
-    expect(sh).toMatch(/^#!\/bin\/sh\nELECTRON_RUN_AS_NODE=1 .*exegol-agent-bin\.js" "\$@"\n$/);
-    expect(launcherText("/app/x.js", "win32")).toContain("set ELECTRON_RUN_AS_NODE=1\r\n");
+  it("passes the arguments on, and on Windows keeps its variable to itself", () => {
+    expect(launcherText("/app/exegol-agent-bin.js", "sh")).toMatch(
+      /^#!\/bin\/sh\nexec env ELECTRON_RUN_AS_NODE=1 .* "\$@"\n$/,
+    );
+    expect(launcherText("/app/x.js", "cmd")).toMatch(
+      /setlocal\r\nset ELECTRON_RUN_AS_NODE=1\r\n".*" "\/app\/x\.js" %\*\r\n$/,
+    );
   });
 });

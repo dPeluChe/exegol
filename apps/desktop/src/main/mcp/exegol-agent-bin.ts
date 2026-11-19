@@ -4,8 +4,8 @@
  */
 
 import { connect } from "node:net";
-import { AGENT_CLI_USAGE, jsonObject, parseAgentCli, toolsAnswer } from "./agent-cli";
-import { SESSION_TOKEN_ENV, tokenFromEnvBlock } from "./exegol-mcp-token-file";
+import { AGENT_CLI_USAGE, jsonObject, parseAgentCli, printable, toolsAnswer } from "./agent-cli";
+import { SESSION_TOKEN_ENV } from "./exegol-mcp-token-file";
 import {
   createFrameReader,
   encodeRequest,
@@ -20,45 +20,58 @@ const fail = (message: string, code = 1): never => {
   process.exit(code);
 };
 
-// Env only: the cwd's .mcp.json may hold another session's token
-const token = process.env[SESSION_TOKEN_ENV] || tokenFromEnvBlock(process.env) || "";
+const STDIN_TIMEOUT_MS = 10_000;
+
+// The session's own, from its env: a token file or the folder's .mcp.json can be a sibling's
+const token = process.env[SESSION_TOKEN_ENV] ?? "";
 
 function readStdin(): Promise<string> {
-  return new Promise((resolve) => {
+  return new Promise((resolve, reject) => {
     let text = "";
+    const timer = setTimeout(
+      () => reject(new Error("nothing arrived on stdin: pipe the text in, or pass it as words")),
+      STDIN_TIMEOUT_MS,
+    );
     process.stdin.setEncoding("utf-8");
     process.stdin.on("data", (chunk) => {
       text += chunk;
     });
-    process.stdin.on("end", () => resolve(text));
-    process.stdin.on("error", () => resolve(text));
+    process.stdin.on("end", () => {
+      clearTimeout(timer);
+      if (text.trim()) resolve(text);
+      else reject(new Error("stdin was empty"));
+    });
   });
 }
 
 function request(method: string, params: Record<string, unknown>): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const socket = connect(MCP_SOCK_PATH);
-    const timer = setTimeout(() => {
-      socket.destroy();
-      reject(new Error("Exegol did not answer in 30s: the call may or may not have run"));
-    }, TIMEOUT_MS);
-    const done = (act: () => void) => {
+    let settled = false;
+    const settle = (act: () => void) => {
+      if (settled) return;
+      settled = true;
       clearTimeout(timer);
       socket.destroy();
       act();
     };
-    socket.on("connect", () =>
-      socket.write(encodeRequest(1, method, { ...params, token, ppid: process.ppid })),
+    const lost = (why: string) => settle(() => reject(new Error(why)));
+    const timer = setTimeout(
+      () => lost("Exegol did not answer in 30s: the call may or may not have run"),
+      TIMEOUT_MS,
     );
+    // No ppid: the token is this session's, and a walk up from a launcher's shell names nobody
+    socket.on("connect", () => socket.write(encodeRequest(1, method, { ...params, token })));
     socket.on(
       "data",
-      createFrameReader<JsonRpcResponse>((msg) =>
-        done(() => (msg.error ? reject(new Error(msg.error.message)) : resolve(msg.result))),
+      createFrameReader<JsonRpcResponse>(
+        (msg) =>
+          settle(() => (msg.error ? reject(new Error(msg.error.message)) : resolve(msg.result))),
+        () => lost("the answer is too large for a shell: use the MCP tool"),
       ),
     );
-    socket.on("error", () =>
-      done(() => reject(new Error("Exegol is not reachable: is the app running?"))),
-    );
+    socket.on("error", () => lost("Exegol is not reachable: is the app running?"));
+    socket.on("close", () => lost("Exegol closed the connection without an answer"));
   });
 }
 
@@ -82,7 +95,7 @@ async function main(): Promise<void> {
     }
     answer = await request("call_tool", { tool: command.tool, args });
   }
-  process.stdout.write(`${JSON.stringify(answer, null, 2)}\n`);
+  process.stdout.write(`${JSON.stringify(printable(answer), null, 2)}\n`);
 }
 
 main().catch((err) => fail(err instanceof Error ? err.message : String(err)));

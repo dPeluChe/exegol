@@ -1,10 +1,11 @@
 /** `exegol-agent`: the Exegol tools from a shell, for a CLI whose MCP client drops arguments */
 
 export const AGENT_CLI = "exegol-agent";
+export const AGENT_BIN = "exegol-agent-bin.js";
 
 export const AGENT_CLI_USAGE = `Exegol tools from a shell, as this session.
 
-  ${AGENT_CLI} send <session> <message> [--reply-to <id>] [--no-reply] [--id <key>]
+  ${AGENT_CLI} send [--reply-to <id>] [--no-reply] [--id <key>] <session> [--] <message>
   ${AGENT_CLI} status <message-id>
   ${AGENT_CLI} call <tool> ['<json arguments>']
   ${AGENT_CLI} tools [<tool>]
@@ -23,18 +24,25 @@ function sendCommand(rest: string[]): AgentCliCommand {
   const words: string[] = [];
   for (let i = 0; i < rest.length; i++) {
     const arg = rest[i] as string;
+    // After --, everything is the message: a word of it may look like a flag
+    if (arg === "--") {
+      words.push(...rest.slice(i + 1));
+      break;
+    }
     if (arg === "--no-reply") args.expects_reply = false;
     else if (arg === "--reply-to" || arg === "--id") {
       const value = rest[++i];
       if (!value) return usage(`${arg} needs a value`);
       args[arg === "--id" ? "message_id" : "in_reply_to"] = value;
-    } else words.push(arg);
+    } else if (arg.startsWith("--")) return usage(`unknown flag: ${arg} (put -- before a message)`);
+    else words.push(arg);
   }
   const [target, ...message] = words;
   if (!target || message.length === 0) return usage("send needs a session and a message");
   args.target = target;
-  if (message.length === 1 && message[0] === "-")
+  if (message.length === 1 && message[0] === "-") {
     return { kind: "call", tool: "agent_send", args, stdin: "message" };
+  }
   args.message = message.join(" ");
   return { kind: "call", tool: "agent_send", args };
 }
@@ -91,4 +99,13 @@ interface ListedTool {
 export function toolsAnswer(tools: ListedTool[], name?: string): unknown {
   if (name) return tools.find((t) => t.name === name) ?? { error: `no tool named ${name}` };
   return tools.map((t) => ({ name: t.name, needs: t.inputSchema?.required ?? [] }));
+}
+
+/** What the shell shows of a tool's answer: its text; an image says only that it exists */
+export function printable(answer: unknown): unknown {
+  const blocks = (answer as { __mcpContent?: unknown } | null)?.__mcpContent;
+  if (!Array.isArray(blocks)) return answer;
+  return blocks.map((block: { type?: string; text?: string }) =>
+    block.type === "text" ? block.text : { type: block.type, omitted: "not shown in a shell" },
+  );
 }
