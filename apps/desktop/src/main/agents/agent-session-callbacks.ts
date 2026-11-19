@@ -119,7 +119,7 @@ function applyAgentSignals(
     const derived = deriveStatusFromSignal(sig.event);
     trackTurn(db, agent, maps, sig.event);
     if (sig.event === "turn_started") {
-      noteTurnStarted(agent.id);
+      noteTurnStarted(agent.id, source === "hook");
       noteStuckTurnStart(agent.id);
     }
 

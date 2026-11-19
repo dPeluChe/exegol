@@ -24,7 +24,7 @@ vi.mock("../terminal/pty-host", () => ({
 import { createAgentLink, listLinksFrom } from "../db/queries/agent-links";
 import { getMessageDelivery, markStaleQueuedUndeliverable } from "../db/queries/messages";
 import { noteTurnStarted, SUBMIT_CONFIRM_MS, SUBMIT_RETRIES } from "./agent-message-injection";
-import { setAgentAwaitingApproval } from "./agent-message-queue";
+import { noteDraftInput, setAgentAwaitingApproval } from "./agent-message-queue";
 import { stopSweep } from "./agent-message-sweep";
 import {
   cancelQueuedMessage,
@@ -780,6 +780,23 @@ describe("submit confirmation", () => {
     noteTurnStarted("s2");
     vi.advanceTimersByTime(SUBMIT_CONFIRM_MS * 3);
     expect(enters()).toBe(1);
+  });
+
+  it("never retries on a turn start read off the screen: such a CLI reports only some", () => {
+    noteTurnStarted("s2", false);
+    sendAgentMessage(db, { fromAgentId: "s1", toAgentId: "s2", text: "no hooks" });
+    vi.advanceTimersByTime(600 + SUBMIT_CONFIRM_MS * 3);
+    expect(enters()).toBe(1);
+  });
+
+  it("sends no Enter again once the person has begun to type", () => {
+    noteTurnStarted("s2");
+    sendAgentMessage(db, { fromAgentId: "s1", toAgentId: "s2", text: "then they type" });
+    vi.advanceTimersByTime(600);
+    noteDraftInput("s2", "h");
+    vi.advanceTimersByTime(SUBMIT_CONFIRM_MS * 3);
+    expect(enters()).toBe(1);
+    noteDraftInput("s2", "\u0015");
   });
 
   it("never retries for an agent that has not reported a turn start", () => {
