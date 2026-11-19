@@ -109,7 +109,7 @@ export function readsExegolMcpConfig(cliType: string): boolean {
 }
 
 /** Bundled bins sit beside this file in prod and under mcp/ in dev builds. */
-function resolveBundledBin(fileName: string): string | null {
+export function resolveBundledBin(fileName: string): string | null {
   const primary = join(__dirname, fileName);
   if (existsSync(primary)) return primary;
   const nested = join(__dirname, "mcp", fileName);

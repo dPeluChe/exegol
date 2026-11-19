@@ -32,6 +32,7 @@ import { registerDictationIpc } from "./ipc/procedures/dictation";
 import { registerTrpcIpcHandler } from "./ipc/trpc-ipc";
 import { broadcast } from "./lib/event-bus";
 import { flushLogSync, logger, markShutdown, startLogFile } from "./lib/logger";
+import { installAgentCli } from "./mcp/agent-cli-install";
 import {
   ensureExegolMcpServerStarted,
   getMcpAgentStates,
@@ -121,6 +122,7 @@ app.whenReady().then(async () => {
   registerGlobalHotkey(settings.globalHotkey, showMainWindow);
   installAppMenu(); // Custom menu overrides Cmd+W to close pane, not window
   ensureCanonicalPaths(); // path resolution; required by some tRPC procedures
+  installAgentCli();
   // Before any pane loads: a project's first page in its own partition finds its logins there.
   // Capped, so a slow cookie store never holds the window back
   await Promise.race([
