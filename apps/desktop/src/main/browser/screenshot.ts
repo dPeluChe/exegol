@@ -41,7 +41,7 @@ const PLAN_SCRIPT = `(() => {
   }
   const s = el || doc;
   const style = document.createElement("style");
-  style.textContent = "*::-webkit-scrollbar{display:none!important}*{scrollbar-width:none!important}";
+  style.textContent = "*::-webkit-scrollbar{display:none!important}*{scrollbar-width:none!important;scroll-behavior:auto!important}";
   document.documentElement.appendChild(style);
   window.__exegolShot = { s, top: s.scrollTop, style, bars };
   return { total: s.scrollHeight, view: s.clientHeight, offset: el ? Math.max(0, el.getBoundingClientRect().top) : 0, vh };

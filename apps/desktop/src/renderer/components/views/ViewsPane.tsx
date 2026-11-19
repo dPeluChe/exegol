@@ -1,0 +1,180 @@
+import { Button } from "@exegol/ui";
+import { useQueryClient } from "@tanstack/react-query";
+import { LayoutDashboard, Play, Square, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { usePaneProject } from "../../contexts/ProjectScope";
+import { useMountEffect } from "../../hooks/use-mount-effect";
+import { useViewServers, useViews } from "../../hooks/use-views";
+import { splitWithBrowser } from "../../lib/split-terminal";
+import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
+import { viewCounts } from "../../lib/views-canvas";
+import { toastError } from "../../stores/toasts";
+import { useWorkspaceStore } from "../../stores/workspace";
+import { layoutHasPane, pwOf } from "../../stores/workspace/helpers";
+import { EmptyState } from "../common";
+import { ViewDetails } from "./ViewDetails";
+import { ViewsCanvas } from "./ViewsCanvas";
+
+const Chip = ({ children }: { children: React.ReactNode }) => (
+  <span className="rounded border border-border px-1.5 py-0.5 text-[10px] text-text-muted">
+    {children}
+  </span>
+);
+
+/** Every view of the project's running web app as a tree of captures (T228) */
+export function ViewsPane({ paneId }: { paneId: string }) {
+  const { projectId } = usePaneProject();
+  return projectId ? <Views key={projectId} projectId={projectId} paneId={paneId} /> : null;
+}
+
+function Views({ projectId, paneId }: { projectId: string; paneId: string }) {
+  const queryClient = useQueryClient();
+  const { data: state } = useViews(projectId);
+  const servers = useViewServers(projectId);
+  const [port, setPort] = useState<number | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
+
+  const ports = servers.data ?? [];
+  const statePort = state?.base ? Number(new URL(state.base).port) : null;
+  const chosen = port ?? statePort ?? ports[0] ?? null;
+  const start = (on: number) =>
+    trpcMutate("views.start", { projectId, port: on }).catch(
+      toastError("Could not start the pass"),
+    );
+
+  // Opening the pane is what runs a pass, unless one already ran or runs
+  useMountEffect(() => {
+    void (async () => {
+      const [now, found] = await Promise.all([
+        trpcInvoke<{ running: boolean; views: unknown[] }>("views.state", { projectId }),
+        trpcInvoke<number[]>("views.servers", { projectId }),
+      ]);
+      if (!now.running && now.views.length === 0 && found[0]) void start(found[0]);
+    })().catch(() => undefined);
+  });
+
+  const openLive = (url: string) => {
+    const pw = pwOf(useWorkspaceStore.getState(), projectId);
+    const tab = pw.tabs.find((t) => layoutHasPane(t.layout, paneId));
+    if (tab) splitWithBrowser(tab.id, paneId, "horizontal", url);
+  };
+
+  const views = state?.views ?? [];
+  const counts = viewCounts(views);
+  const picked = views.find((v) => v.path === selected);
+  return (
+    <div className="flex h-full min-h-0 flex-col">
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-3 py-1.5">
+        <LayoutDashboard className="h-3.5 w-3.5 text-text-muted" />
+        <span className="text-xs font-medium text-text-primary">Views</span>
+        {ports.length > 0 && (
+          <select
+            aria-label="Local server"
+            className="rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-[11px] text-text-secondary"
+            value={chosen ?? ""}
+            disabled={state?.running}
+            onChange={(e) => setPort(Number(e.target.value))}
+          >
+            {ports.map((p) => (
+              <option key={p} value={p}>
+                localhost:{p}
+              </option>
+            ))}
+          </select>
+        )}
+        {state?.running ? (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-6 gap-1.5 px-2 text-[11px]"
+            onClick={() => trpcMutate("views.stop", { projectId })}
+          >
+            <Square className="h-3 w-3" />
+            Stop
+          </Button>
+        ) : (
+          <Button
+            size="sm"
+            variant="outline"
+            className="h-6 gap-1.5 px-2 text-[11px]"
+            disabled={chosen === null}
+            onClick={() => chosen !== null && start(chosen)}
+          >
+            <Play className="h-3 w-3" />
+            {views.length > 0 ? "Capture again" : "Capture"}
+          </Button>
+        )}
+        {views.length > 0 && (
+          <span className="text-[11px] text-text-muted">
+            {counts.total} view{counts.total === 1 ? "" : "s"}
+            {counts.left > 0 && `, ${counts.left} to go`}
+            {counts.redirected > 0 && `, ${counts.redirected} redirected`}
+            {counts.failed > 0 && `, ${counts.failed} failed`}
+          </span>
+        )}
+        <div className="ml-auto flex items-center gap-1.5">
+          {state?.sitemap === "found" && <Chip>sitemap</Chip>}
+          {state?.sitemap === "missing" && <Chip>no sitemap</Chip>}
+          {state?.robots === "found" && <Chip>robots.txt</Chip>}
+          {(state?.patterns.length ?? 0) > 0 && (
+            <span title={state?.patterns.map((p) => p.pattern).join("\n")}>
+              <Chip>{state?.patterns.length} routes need values</Chip>
+            </span>
+          )}
+          {views.length > 0 && !state?.running && (
+            <button
+              type="button"
+              title="Delete the captures"
+              className="rounded p-1 text-text-muted hover:bg-bg-tertiary"
+              onClick={() => {
+                setSelected(null);
+                void trpcMutate("views.clear", { projectId }).then(() =>
+                  queryClient.removeQueries({ queryKey: ["views", "thumb", projectId] }),
+                );
+              }}
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
+        </div>
+      </div>
+      <div className="flex min-h-0 flex-1">
+        {views.length > 0 && state ? (
+          <>
+            <ViewsCanvas
+              projectId={projectId}
+              views={views}
+              selected={selected}
+              onSelect={setSelected}
+            />
+            {picked && (
+              <ViewDetails
+                projectId={projectId}
+                state={state}
+                view={picked}
+                onSelect={setSelected}
+                onOpenLive={openLive}
+              />
+            )}
+          </>
+        ) : (
+          <EmptyState
+            className="h-full w-full"
+            icon={<LayoutDashboard className="h-7 w-7 text-text-muted" />}
+            title={ports.length > 0 ? "No captures yet" : "No local server is running"}
+            description={
+              ports.length > 0
+                ? "A pass loads every page of the running app and captures it. Nothing is clicked."
+                : "Start the project's dev server in a terminal of this project, then check again."
+            }
+            action={
+              ports.length > 0
+                ? undefined
+                : { label: "Check again", onClick: () => void servers.refetch() }
+            }
+          />
+        )}
+      </div>
+    </div>
+  );
+}

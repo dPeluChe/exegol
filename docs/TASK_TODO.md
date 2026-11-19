@@ -622,11 +622,11 @@ exchange-bus MVP only, no headless council executions. Absorbs:
 ### T228: Views canvas, every view of a local web app at once `added: 2026-11-18`
 **Priority**: P2 | **Effort**: M per phase | **Source**: `RESEARCH/VIEWS_CANVAS_2026_11.md`
 
-A full-area canvas with a thumbnail per route of the project's running web app, public and behind a login, captured by a few hidden windows on the project's partition; one view opens live. The spike measured a capture at about 15 ms and a live view at about 140 MB, so thumbnails first. Waits for Antonio's decisions in the doc (section or pane, first screen or full page, when a pass runs, where the dev server comes from).
-- Phase 1: routes from page files and links, the canvas, open one live, the login step
+Phase 1 is built (2026-11-18): the Views pane, routes from page files, sitemap and links, full page captures on a tree canvas.
+- Phase 1 left: see the pane live; views behind a login (log in in a browser pane, then Capture again); values for routes with params; Windows and Linux
 - Phase 2: notes on a view sent to a session, and agent tools to list and capture views
-- Phase 3: the navigation tree
-- Phase 4: widths (1280, 768, 375) and a live view at several widths
+- Phase 3: a sitemap made from the tree, and what the sitemap and the app disagree on
+- Phase 4: widths (1920, 768, 375) and a live view at several widths
 
 ---
 

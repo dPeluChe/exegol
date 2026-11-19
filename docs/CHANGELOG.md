@@ -15,6 +15,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - `Cmd+.` no longer stops the focused session: one stray key ended it with no warning. Stop Agent stays in the Command Palette
 
 ### Added
+- **Views pane (T228, phase 1)**: a new pane (V in the launcher) shows every view of the project's running web app as a tree of captures on a canvas you pan and zoom. Routes come from the app's page files (Next.js, SvelteKit, Astro, Nuxt), its sitemap and the links of each page; each page is loaded by a hidden window on the project's browser session (so a login done in a browser pane counts), captured from the top down to 1,920 px at a 1920 x 1080 screen, and never clicked. A card says when a view redirected (a login), failed, is in the sitemap or is kept out by robots.txt; selecting one draws its links to other views (dashed when they open a new tab) and lists the sites it links out to, with Open live, Copy capture and Copy file path. Captures are temporary files, deleted on a new pass, with the trash button and when Exegol quits.
 
 - **An inbox thread can be for one session.** Under a thread, "For" lists the open sessions of its project, by their Exegol name and the CLI's own session name: pick one and the project's other sessions no longer count that thread as theirs at their start, while they can still read it. Agents address one with `to_session` in `inbox_post`, and `inbox_list` says which threads are for another session. When no open session has that name, the thread counts for the whole project again; renaming a session keeps its threads.
 - **Terminals from before your last macOS login are named.** When macOS starts a new login session (a crash at wake, a logout that left the terminals running), the terminals Exegol kept alive lose the pasteboard, name resolution and the keychain: a copy from a CLI goes nowhere, `git push` cannot find the host, a CLI asks to log in again. Exegol now says so in a banner on start, with Restart terminals.
@@ -93,6 +94,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Browser panes search from the address bar: `?telnyx`, or words that are not an address, open a Google search; `localhost:3000`, `example.com` and full URLs still go straight there
 
 ### Fixed
+- **Full page screenshot on a page with smooth scrolling**: Save Screenshot's full page stopped after the first screen on sites that set `scroll-behavior: smooth`; the capture now scrolls at once.
 
 - **Copy and Paste in a terminal's right-click menu, and a CLI's own copy reaches the clipboard.** The menu had no Copy or Paste. And text selected with the mouse inside a CLI that draws its own selection (Claude Code, opencode) reached the clipboard only if the CLI's own copy command worked; Exegol now writes it too.
 - A terminal could come back blank after reopening Exegol on a machine just awake: its history was asked for once, and a slow answer left the view empty until the next restart. It is now read again a few seconds later and the view repaints

@@ -428,6 +428,16 @@
       "restore",
       "retire",
       "save"
+    ],
+    "views": [
+      "clear",
+      "copyImage",
+      "file",
+      "servers",
+      "start",
+      "state",
+      "stop",
+      "thumb"
     ]
   },
   "ipc": [
@@ -465,6 +475,7 @@
     "agent:renamed",
     "inbox:changed",
     "notes:changed",
+    "views:changed",
     "projects:changed",
     "commander:restart-session",
     "commander:alert",

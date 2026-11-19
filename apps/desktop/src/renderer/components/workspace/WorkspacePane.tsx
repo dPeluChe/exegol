@@ -36,6 +36,7 @@ import {
 import { closeTargetFor } from "../../stores/workspace/helpers";
 import { EmptyState, LoadingSpinner } from "../common";
 import { ErrorBoundary, paneFallback } from "../ErrorBoundary";
+import { ViewsPane } from "../views/ViewsPane";
 import { FileExplorer } from "../workspace/FileExplorer";
 import { GitPane } from "../workspace/GitPane";
 import { BrowserPane } from "./BrowserPaneContent";
@@ -391,6 +392,7 @@ const PANE_CONTENT: Record<Pane["type"], (props: PaneContentProps) => React.Reac
     <FilesPaneContent key={pane.filePath ?? "default"} pane={pane} paneId={paneId} />
   ),
   git: ({ pane }) => <GitPane key={pane.filePath ?? "default"} overridePath={pane.filePath} />,
+  views: ({ paneId }) => <ViewsPane paneId={paneId} />,
   empty: ({ pane, paneId }) => <EmptyPane paneId={paneId} folder={pane.launcherFolder} />,
 };
 

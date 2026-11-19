@@ -234,6 +234,7 @@ contextBridge.exposeInMainWorld("api", {
   onChatUpdated: (callback: (event: unknown) => void) => listen("agent:chat-updated", callback),
   onInboxChanged: (callback: (event: unknown) => void) => listen("inbox:changed", callback),
   onNotesChanged: (callback: (event: unknown) => void) => listen("notes:changed", callback),
+  onViewsChanged: (callback: (event: unknown) => void) => listen("views:changed", callback),
   onProjectsChanged: (callback: (event: unknown) => void) => listen("projects:changed", callback),
   onCommanderAlert: (callback: (event: unknown) => void) => listen("commander:alert", callback),
   onCommanderOpen: (callback: (event: unknown) => void) => listen("commander:open", callback),

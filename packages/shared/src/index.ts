@@ -31,5 +31,6 @@ export {
 export { speechSentences } from "./lib/speech-text";
 export { stripTerminalReports } from "./lib/terminal-reports";
 export { type TestBuild, testBuildOf, testBuildVersion } from "./lib/test-build";
+export * from "./lib/views";
 export * from "./schemas";
 export * from "./types";

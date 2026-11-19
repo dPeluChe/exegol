@@ -118,6 +118,13 @@ interface Window {
     onChatUpdated: (callback: (event: { agentId: string }) => void) => () => void;
     onInboxChanged: (callback: () => void) => () => void;
     onNotesChanged: (callback: () => void) => () => void;
+    onViewsChanged: (
+      callback: (event: {
+        projectId: string;
+        view?: import("@exegol/shared").ViewEntry;
+        state?: import("@exegol/shared").ViewsState;
+      }) => void,
+    ) => () => void;
     onProjectsChanged: (callback: () => void) => () => void;
     onCommanderAlert: (
       callback: (event: { message: string; sound: boolean }) => void,

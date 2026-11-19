@@ -94,6 +94,7 @@ export function useLauncherActions({
     if (action === "files")
       updatePane(paneId, { type: "files", filePath: cwd, openFile: undefined });
     if (action === "git") updatePane(paneId, { type: "git", filePath: cwd });
+    if (action === "views") updatePane(paneId, { type: "views" });
     if (action === "browser") {
       void projectBrowserUrl(projectId, projectPath).then((url) =>
         updatePane(paneId, { type: "browser", url }),
