@@ -232,7 +232,10 @@ export async function startViews(
       if (!win || win.isDestroyed()) {
         win = captureWindow(projectId, base);
         pass.windows.push(win);
+        // Counted while it waits: with one view queued the other windows must not give up
+        loading++;
         await seedSession(win, projectId, base);
+        loading--;
         if (pass.stopped || win.isDestroyed()) {
           queue.unshift(view);
           continue;
