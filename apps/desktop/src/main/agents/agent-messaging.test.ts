@@ -763,7 +763,7 @@ describe("submit confirmation", () => {
   const enters = () => ptyMock.writes.filter((w) => w.data === "\r").length;
 
   it("sends Enter again while no turn starts, at most SUBMIT_RETRIES times", () => {
-    noteTurnStarted("s2");
+    noteTurnStarted("s2", true);
     sendAgentMessage(db, { fromAgentId: "s1", toAgentId: "s2", text: "retry me" });
     vi.advanceTimersByTime(600);
     expect(enters()).toBe(1);
@@ -774,10 +774,10 @@ describe("submit confirmation", () => {
   });
 
   it("stops once the turn starts", () => {
-    noteTurnStarted("s2");
+    noteTurnStarted("s2", true);
     sendAgentMessage(db, { fromAgentId: "s1", toAgentId: "s2", text: "turn starts" });
     vi.advanceTimersByTime(600);
-    noteTurnStarted("s2");
+    noteTurnStarted("s2", true);
     vi.advanceTimersByTime(SUBMIT_CONFIRM_MS * 3);
     expect(enters()).toBe(1);
   });
@@ -790,13 +790,22 @@ describe("submit confirmation", () => {
   });
 
   it("sends no Enter again once the person has begun to type", () => {
-    noteTurnStarted("s2");
+    noteTurnStarted("s2", true);
     sendAgentMessage(db, { fromAgentId: "s1", toAgentId: "s2", text: "then they type" });
     vi.advanceTimersByTime(600);
     noteDraftInput("s2", "h");
     vi.advanceTimersByTime(SUBMIT_CONFIRM_MS * 3);
     expect(enters()).toBe(1);
-    noteDraftInput("s2", "\u0015");
+  });
+
+  it("sends no Enter again into an approval the turn raised", () => {
+    noteTurnStarted("s2", true);
+    sendAgentMessage(db, { fromAgentId: "s1", toAgentId: "s2", text: "then it asks" });
+    vi.advanceTimersByTime(600);
+    setAgentAwaitingApproval("s2", true);
+    vi.advanceTimersByTime(SUBMIT_CONFIRM_MS * 3);
+    expect(enters()).toBe(1);
+    setAgentAwaitingApproval("s2", false);
   });
 
   it("never retries for an agent that has not reported a turn start", () => {

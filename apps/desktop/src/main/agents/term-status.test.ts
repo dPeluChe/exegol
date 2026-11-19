@@ -77,7 +77,11 @@ describe("takeTermStatus", () => {
   const query: TermReport = { kind: "query", state: "", detail: null };
 
   it("asks for the 7501 reply on every query, hooks or not", () => {
-    expect(takeTermStatus("a1", "pi", [query])).toEqual({ signals: [], reply: true });
+    expect(takeTermStatus("a1", "pi", [query])).toEqual({
+      signals: [],
+      reply: true,
+      everyTurn: false,
+    });
     noteHookSignal("a1");
     expect(takeTermStatus("a1", "pi", [query]).reply).toBe(true);
     forgetTermStatus("a1");
