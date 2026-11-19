@@ -158,3 +158,23 @@ describe("session_messages", () => {
     expect(listCommanderLog(db, 10)).toEqual([]);
   });
 });
+
+describe("messages_list", () => {
+  it("gives a session its own history and nobody else's", async () => {
+    const self: ExegolToolContext = { agentId: "b", accessMode: "read", projectId: "p1" };
+    const mine = say("a", "b", "for onyx");
+    const other = say("a", "c2345678901", "not for onyx");
+    const list = (await callExegolTool(db, "messages_list", {}, self)) as {
+      session: string;
+      untrusted_message_content: Record<string, unknown>[];
+    };
+    expect(list.session).toBe("onyx");
+    expect(list.untrusted_message_content.map((m) => m.id)).toEqual([mine]);
+    await expect(callExegolTool(db, "messages_list", { message_id: other }, self)).rejects.toThrow(
+      "No message",
+    );
+    await expect(
+      callExegolTool(db, "session_messages", { session: "browdev" }, self),
+    ).rejects.toThrow();
+  });
+});
