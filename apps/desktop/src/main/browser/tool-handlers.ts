@@ -66,6 +66,14 @@ export async function handleList(db: Database.Database, ctx: BrowserToolContext)
   };
 }
 
+// Input this recent means the person is on the page right now: an agent taking it would cut in
+const PERSON_BUSY_MS = 15_000;
+
+function personBusy(pane: BrowserPaneHandle): boolean {
+  const since = pane.sinceUserInput();
+  return since !== null && since < PERSON_BUSY_MS;
+}
+
 /** The pane the agent named or used last, else one already on that site and free: the person
  *  left it ready (its login may live in that tab only), and a second pane of it helps nobody.
  *  A pane on another site may be what they are reading: it is left alone */
@@ -84,7 +92,11 @@ function paneToReuse(
   if (own) return { pane: own, onSite: false };
   const origin = originOf(url);
   const onSite = live.find(
-    (p) => origin !== null && originOf(p.getUrl()) === origin && !actBlocked(p, ctx.agentId),
+    (p) =>
+      origin !== null &&
+      originOf(p.getUrl()) === origin &&
+      !actBlocked(p, ctx.agentId) &&
+      !personBusy(p),
   );
   return onSite ? { pane: onSite, onSite: true } : null;
 }
@@ -122,7 +134,8 @@ export async function handleOpen(
     pane = reuse.pane;
     touch(db, ctx, pane);
     // Already there: a reload would drop what the person typed or opened on the page
-    if (!(reuse.onSite && pane.getUrl() === url)) pane.loadUrl(url);
+    const there = reuse.onSite && pane.getUrl() === url && !pane.loadState().failure;
+    if (!there) pane.loadUrl(url);
   } else {
     pane = await h.openPane({ projectId: ctx.projectId, agentId: ctx.agentId, url });
     markOpenedBy(pane.paneId, ctx.projectId, ctx.agentId);

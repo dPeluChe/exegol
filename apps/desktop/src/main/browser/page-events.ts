@@ -177,6 +177,12 @@ export function markAgentInput(wcId: number): void {
 }
 
 /** Clipboard permissions of pages in browser panes */
+/** How long since the person's own input on this page, null when there was none */
+export function sinceUserInputOf(wcId: number): number | null {
+  const at = pages.get(wcId)?.gesture?.at;
+  return at === undefined ? null : Date.now() - at;
+}
+
 export function pageClipboardDecision(
   wc: WebContents,
   permission: string,

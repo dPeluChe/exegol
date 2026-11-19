@@ -107,6 +107,20 @@ describe("who may use a pane", () => {
     expect((await run("agent-b", "browser_open", URL_ARG)).pane).toBe("pane-new");
   });
 
+  it("browser_open leaves a pane the person typed in a moment ago", async () => {
+    panes = [fakePane("pane-a", "proj-a", { sinceUserInput: 2_000 })];
+    expect((await run("agent-b", "browser_open", URL_ARG)).pane).toBe("pane-new");
+    panes = [fakePane("pane-a", "proj-a", { sinceUserInput: 60_000 })];
+    expect((await run("agent-b", "browser_open", URL_ARG)).pane).toBe("pane-a");
+  });
+
+  it("browser_open loads again a pane whose page failed, even on that url", async () => {
+    panes = [fakePane("pane-a", "proj-a", { failed: true })];
+    const url = "http://localhost:3000/";
+    expect((await run("agent-b", "browser_open", { url })).pane).toBe("pane-a");
+    expect(panes[0]?.loaded).toEqual([url]);
+  });
+
   it("a driver that only reads keeps its pane", async () => {
     await run("agent-a", "browser_navigate", URL_ARG);
     const expired = Date.now() + 61_000;

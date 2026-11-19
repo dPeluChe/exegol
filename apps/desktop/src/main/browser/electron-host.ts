@@ -23,7 +23,12 @@ import { getNotificationBus } from "../notifications/bus";
 import { getProjectPorts } from "../system/ports";
 import { getMainWindow } from "../windows/main-window-ref";
 import { handBack, listPaneStates, onBrowserControlChange, takeOver } from "./control";
-import { installPageEvents, markAgentInput, takeOverPageDialogs } from "./page-events";
+import {
+  installPageEvents,
+  markAgentInput,
+  sinceUserInputOf,
+  takeOverPageDialogs,
+} from "./page-events";
 import { opaqueJpeg } from "./page-image";
 import { installPagePermissions } from "./page-permissions";
 import {
@@ -146,6 +151,7 @@ function handleFor(r: Registered, wc: WebContents): BrowserPaneHandle {
       wc.sendInputEvent({ type: "keyUp", keyCode, modifiers: mods });
     },
     lastHttpStatus: () => lastHttpStatusOf(wc.id),
+    sinceUserInput: () => sinceUserInputOf(wc.id),
     logs: ringOf(wc.id),
   };
 }

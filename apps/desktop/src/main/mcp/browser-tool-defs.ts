@@ -71,7 +71,7 @@ const BROWSER_TOOLS: ToolBody<BrowserToolName>[] = [
       "Start here to look at a page. In write mode it loads the url in the pane you used last, " +
       "else in a pane already open on that site (the person left it ready, logged in: the " +
       "result says reused), else in a new one. It never takes a pane on another site unless " +
-      "you name it, nor one another agent or the person is using. In read " +
+      "you name it, nor one another agent drives or the person took over or just typed in. In read " +
       'and plan mode it always opens a new pane. url "dev" opens the project\'s running dev ' +
       `server. To move a pane you are driving, use browser_navigate. ${BROWSER_SCOPE} ${UNTRUSTED}`,
     inputSchema: {

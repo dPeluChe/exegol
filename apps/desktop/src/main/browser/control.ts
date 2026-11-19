@@ -169,7 +169,7 @@ export function lastSeenPane(agentId: string, paneIds: readonly string[]): strin
   return id && paneIds.includes(id) ? id : null;
 }
 
-/** The last pane this agent drove, the only kind browser_open may reuse unasked */
+/** The last pane this agent drove: browser_open reuses it first */
 export function lastPaneOf(agentId: string, paneIds: readonly string[]): string | null {
   let best: PaneControl | null = null;
   for (const id of paneIds) {
