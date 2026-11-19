@@ -53,6 +53,17 @@ describe("exegol-tools", () => {
   });
 
   describe("callExegolTool", () => {
+    it("names what a call with no arguments is missing, and reads arguments sent as text", async () => {
+      for (const empty of [{}, undefined, "", []]) {
+        await expect(callExegolTool(db, "agent_send", empty, makeContext())).rejects.toThrow(
+          /agent_send received no arguments\. It needs: target, message\..*connection works/,
+        );
+      }
+      await expect(
+        callExegolTool(db, "agent_send", '{"target":"nobody-here","message":"hi"}', makeContext()),
+      ).rejects.not.toThrow(/received no arguments/);
+    });
+
     it("rejects unknown tools", async () => {
       await expect(callExegolTool(db, "not_a_tool", {}, makeContext())).rejects.toThrow(
         ExegolToolError,

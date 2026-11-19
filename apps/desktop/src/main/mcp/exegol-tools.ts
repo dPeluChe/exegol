@@ -37,6 +37,7 @@ import { type ExegolToolContext, ExegolToolError, type ExegolToolName } from "./
 import { EXEGOL_TOOL_NAMES, NON_WRITE_TOOLS } from "./exegol-tool-defs";
 import { isInboxTool } from "./inbox-tool-defs";
 import { isNotesTool } from "./notes-tool-defs";
+import { toolArguments } from "./tool-arguments";
 
 export { ExegolToolError };
 
@@ -324,7 +325,7 @@ function handleAgentLink(
 export async function callExegolTool(
   db: Database.Database,
   tool: string,
-  args: Record<string, unknown>,
+  given: unknown,
   context: ExegolToolContext,
 ): Promise<unknown> {
   if (!(EXEGOL_TOOL_NAMES as readonly string[]).includes(tool)) {
@@ -332,6 +333,7 @@ export async function callExegolTool(
   }
   const toolName = tool as ExegolToolName;
   requireWriteAccess(toolName, context);
+  const args = toolArguments(toolName, given);
   if (isBrowserTool(toolName)) return callBrowserTool(db, toolName, args, context);
   if (isCommander(db, context)) {
     return recorded(db, context.agentId, toolName, args, () =>
