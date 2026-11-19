@@ -94,6 +94,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Browser panes search from the address bar: `?telnyx`, or words that are not an address, open a Google search; `localhost:3000`, `example.com` and full URLs still go straight there
 
 ### Fixed
+- **A tool call that arrives with no arguments says so**: an Exegol MCP tool that gets none of the arguments it needs now answers that none arrived, which ones it needs and that the connection works, instead of its own "requires target", which an agent read as a broken transport and retried eleven times. Arguments sent as JSON text, or one level too deep, are read.
 - **Views pane on an app with its own router**: a Vite or React Router app keeps components in `src/pages`, and each was listed as a route; page files now count only for Next.js, Astro, Nuxt and SvelteKit (from the app's package.json), and other apps are mapped by their links. Capture again doubled the list each time and never finished: a pass now starts from its own empty list.
 - **Full page screenshot on a page with smooth scrolling**: Save Screenshot's full page stopped after the first screen on sites that set `scroll-behavior: smooth`; the capture now scrolls at once.
 

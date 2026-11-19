@@ -60,7 +60,8 @@ export interface ExegolToolContext {
  */
 export interface ExegolToolCallParams {
   tool: string;
-  args: Record<string, unknown>;
+  /** As the client sent them: `toolArguments` reads them */
+  args: unknown;
   token?: string;
   /** Shim's parent pid — disambiguates agents that share a config file. */
   ppid?: number;

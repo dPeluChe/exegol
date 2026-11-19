@@ -53,6 +53,26 @@ describe("exegol-tools", () => {
   });
 
   describe("callExegolTool", () => {
+    it("names what a call is missing when none of its arguments arrived", async () => {
+      for (const empty of [{}, undefined, "", [], { arguments: {} }, { server_name: "exegol" }]) {
+        await expect(callExegolTool(db, "agent_send", empty, makeContext())).rejects.toThrow(
+          /agent_send received none of the arguments it needs: target, message\..*connection works/,
+        );
+      }
+      await expect(callExegolTool(db, "agent_send", "{target", makeContext())).rejects.toThrow(
+        /not a JSON object/,
+      );
+    });
+
+    it("reads arguments sent as JSON text or one level too deep", async () => {
+      const sent = { target: "nobody-here", message: "hi" };
+      for (const given of [JSON.stringify(sent), { arguments: sent }]) {
+        await expect(callExegolTool(db, "agent_send", given, makeContext())).rejects.toThrow(
+          /nobody-here/,
+        );
+      }
+    });
+
     it("rejects unknown tools", async () => {
       await expect(callExegolTool(db, "not_a_tool", {}, makeContext())).rejects.toThrow(
         ExegolToolError,
