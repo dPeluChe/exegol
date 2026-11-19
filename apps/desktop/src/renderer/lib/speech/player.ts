@@ -21,6 +21,9 @@ let waiting: WaitingReply[] = [];
 const subscribers = new Set<() => void>();
 
 let reported = false;
+let renewal: ReturnType<typeof setInterval> | null = null;
+// Main forgets a reading after 10 minutes: a long one says it is still on
+const RENEW_MS = 4 * 60_000;
 
 function emit(): void {
   for (const fn of subscribers) fn();
@@ -30,6 +33,8 @@ function emit(): void {
 /** Main holds the Commander's feed while a reply is heard; each reading that starts renews it */
 function report(busy: boolean): void {
   reported = busy;
+  if (renewal) clearInterval(renewal);
+  renewal = busy ? setInterval(() => void window.api.speech.reading(true), RENEW_MS) : null;
   void window.api.speech.reading(busy).catch(() => {
     reported = !busy;
   });

@@ -1,5 +1,7 @@
+import { speechLength } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { Square, Volume2 } from "lucide-react";
+import { useMemo } from "react";
 import { speakReply, stopSpeaking, useSpeaking } from "../../../lib/speech/player";
 
 /** Reads one reply aloud; while it plays, stops it. Without a voice installed, opens the Models tab */
@@ -15,11 +17,18 @@ export function SpeakButton({
   ready: boolean;
 }) {
   const speaking = useSpeaking(turnId);
-  const title = !ready
+  const length = useMemo(() => (ready ? speechLength(text) : null), [ready, text]);
+  const words = length ? `${length.words.toLocaleString()} words${length.cut ? ", cut" : ""}` : "";
+  const label = !ready
     ? "Download a voice in Settings > Models to hear replies"
     : speaking
       ? "Stop reading"
       : "Read aloud";
+  const title = length?.cut
+    ? `${label} (${words}: the first part of a longer reply)`
+    : words
+      ? `${label} (${words})`
+      : label;
   const onClick = () => {
     if (!ready) void window.api.settings.open("models");
     else if (speaking) stopSpeaking();
@@ -31,14 +40,15 @@ export function SpeakButton({
       type="button"
       onClick={onClick}
       title={title}
-      aria-label={title}
+      aria-label={label}
       className={cn(
-        "rounded p-0.5 text-text-muted hover:text-text-primary",
+        "flex items-center gap-1 rounded p-0.5 text-text-muted hover:text-text-primary",
         speaking && "text-accent",
         !ready && "opacity-60",
       )}
     >
       <Icon className="h-3 w-3" aria-hidden="true" />
+      {speaking && <span className="text-[9px] tabular-nums">{words}</span>}
     </button>
   );
 }

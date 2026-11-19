@@ -142,7 +142,9 @@ function begin(opts: UtteranceInput, sender: WebContents | null): string | null 
   const key = clipKey(opts.sentences, voice.id, opts.speed);
   const ready = getClip(key);
   if (!sender && (ready || current)) return null;
-  if (sender && !ready && current && !current.sender && current.key === key) {
+  // Past the cache size the kept chunks stop short: that reply is made again, whole
+  const whole = current && current.bytes <= CACHE_MAX_BYTES;
+  if (sender && !ready && current && whole && !current.sender && current.key === key) {
     return adopt(current, sender);
   }
   stopUtterance();

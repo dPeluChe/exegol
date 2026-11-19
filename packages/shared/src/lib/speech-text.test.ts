@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { speechSentences } from "./speech-text";
+import { speechLength, speechSentences } from "./speech-text";
 
 describe("speechSentences", () => {
   it("reads prose without Markdown syntax, in sentences", () => {
@@ -61,6 +61,15 @@ describe("speechSentences", () => {
     const long = speechSentences(`${words}.`);
     expect(long.length).toBeGreaterThan(1);
     expect(long.every((s) => s.length <= 280)).toBe(true);
+  });
+
+  it("reads a long reply whole and says how long it is before any audio", () => {
+    const reply = Array.from({ length: 60 }, (_, i) => `- Point ${i} of the update is done.`).join(
+      "\n",
+    );
+    expect(speechSentences(reply)).toHaveLength(60);
+    expect(speechLength(reply)).toEqual({ words: 420, cut: false });
+    expect(speechLength(reply, 100)).toMatchObject({ cut: true });
   });
 
   it("returns nothing for a reply that is only code", () => {
