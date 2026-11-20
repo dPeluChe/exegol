@@ -7,13 +7,13 @@ import {
   PREFERRED_PORTS_KEY,
   pickDevServerPort,
   robotsBlocks,
-  skipsView,
   VIEW_THUMB_WIDTH,
   VIEWS_MAX,
   type ViewEntry,
   type ViewSource,
   type ViewsState,
   viewCounts,
+  viewIndex,
 } from "@exegol/shared";
 import { type BrowserWindow, clipboard, nativeImage } from "electron";
 import type Database from "libsql";
@@ -46,6 +46,9 @@ interface Pass {
   recapturing: boolean;
   /** Pages still loading at the cap: their captures may show placeholders */
   unsettled: number;
+  /** When the current hold began, and the time spent on hold so far */
+  heldAt: number | null;
+  heldMs: number;
 }
 
 const passes = new Map<string, Pass>();
@@ -134,6 +137,10 @@ export function resumeViews(projectId: string, retry: boolean): void {
     pass.skipped.add(hold.path);
   }
   pass.state.hold = undefined;
+  const waited = pass.heldAt ? Date.now() - pass.heldAt : 0;
+  pass.heldMs += waited;
+  pass.heldAt = null;
+  logger.info(`[Views] ${projectId}: went on after ${waited}ms (${retry ? "retry" : "skip"})`);
   wake(pass);
   push(projectId, pass);
 }
@@ -271,6 +278,8 @@ export async function startViews(
     waiting: [],
     recapturing: false,
     unsettled: 0,
+    heldAt: null,
+    heldMs: 0,
   };
   passes.set(projectId, pass);
   push(projectId, pass);
@@ -285,24 +294,19 @@ export async function startViews(
   state.robots = meta.robots ? "found" : "missing";
   state.patterns = files.patterns;
 
-  const byPath = new Map<string, ViewEntry>();
-  const add = (path: string, source: ViewSource): void => {
-    const known = byPath.get(path);
-    if (known) {
-      if (!known.sources.includes(source)) known.sources.push(source);
-      return;
-    }
-    if (byPath.size >= VIEWS_MAX || skipsView(path)) return;
-    const view: ViewEntry = {
-      path,
-      sources: [source],
-      status: "waiting",
-      inSitemap: inSitemap.has(path),
-      robotsBlocked: meta.robots ? robotsBlocks(meta.robots, path) : false,
-    };
-    byPath.set(path, view);
+  const index = viewIndex(VIEWS_MAX, (path) => ({
+    inSitemap: inSitemap.has(path),
+    robotsBlocked: meta.robots ? robotsBlocks(meta.robots, path) : false,
+  }));
+  const load = (view: ViewEntry): void => {
     state.views.push(view);
     queue.push(view);
+  };
+  /** The kept views a page's links added to: told once per page, not once per link */
+  const add = (path: string, source: ViewSource, grown?: Set<ViewEntry>): void => {
+    const found = index.add(path, source);
+    if (found?.fresh) load(found.view);
+    else if (found) grown?.add(found.view);
   };
   add("/", "links");
   for (const path of files.paths) add(path, "files");
@@ -343,13 +347,21 @@ export async function startViews(
         const page = await readPage(win, base + view.path);
         if (pass.stopped) return;
         const status = await record(pass, dir, view, page);
-        if (status === "done") for (const link of page.links) add(link.to, "links");
+        if (status === "done") {
+          const grown = new Set<ViewEntry>();
+          for (const link of page.links) add(link.to, "links", grown);
+          for (const kept of grown) if (kept !== view) push(projectId, pass, kept);
+        }
         if (status === "redirected") {
           add(page.finalPath, "links");
           const hold = holdFor(state.views, pass.skipped);
           if (hold && !state.hold) {
             // Waiting on the person: the windows go, so the wait costs nothing
             state.hold = hold;
+            pass.heldAt = Date.now();
+            logger.info(
+              `[Views] ${projectId}: on hold (${state.views.some((v) => v.login && v.finalPath === hold.path) ? "a page asks for a password" : `${hold.views} views sent to one page`})`,
+            );
             closeWindows(pass);
             push(projectId, pass);
           }
@@ -360,6 +372,9 @@ export async function startViews(
         view.status = state.hold ? "waiting" : "failed";
         if (state.hold) queue.unshift(view);
       } finally {
+        // Before this window counts as free: the others quit on an empty queue
+        const next = view.status === "failed" ? index.replace(view) : null;
+        if (next) load(next);
         loading--;
       }
       push(projectId, pass, view);
@@ -372,7 +387,9 @@ export async function startViews(
   state.hold = undefined;
   push(projectId, pass);
   const counts = viewCounts(state.views);
+  const onHold = pass.heldMs + (pass.heldAt ? Date.now() - pass.heldAt : 0);
+  const alike = state.views.reduce((n, v) => n + (v.alike ?? 0), 0);
   logger.info(
-    `[Views] pass ${projectId}: ${counts.total} views in ${Date.now() - started}ms (${counts.redirected} redirected, ${counts.failed} failed, ${pass.unsettled} not settled${pass.stopped ? ", stopped" : ""})`,
+    `[Views] pass ${projectId}: ${counts.total} views in ${Date.now() - started - onHold}ms (${counts.redirected} redirected, ${counts.failed} failed, ${pass.unsettled} not settled, ${alike} alike left out${onHold ? `, ${onHold}ms on hold` : ""}${pass.stopped ? ", stopped" : ""})`,
   );
 }

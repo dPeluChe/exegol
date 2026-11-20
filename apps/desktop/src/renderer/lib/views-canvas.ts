@@ -1,4 +1,4 @@
-import { VIEW_PAGE, type ViewEntry } from "@exegol/shared";
+import { VIEW_PAGE, type ViewEntry, viewResolver } from "@exegol/shared";
 
 export const CARD_WIDTH = 240;
 export const CARD_LABEL_HEIGHT = 52;
@@ -65,7 +65,8 @@ export function linkCurve(
 
 /** Views that link to `path`, for the details of a selected view */
 export function linkedFrom(views: readonly ViewEntry[], path: string): string[] {
+  const viewOf = viewResolver(views);
   return views
-    .filter((v) => v.path !== path && v.links?.some((l) => l.to === path))
+    .filter((v) => v.path !== path && v.links?.some((l) => viewOf(l.to) === path))
     .map((v) => v.path);
 }

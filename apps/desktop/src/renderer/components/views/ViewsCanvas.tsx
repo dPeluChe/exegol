@@ -1,4 +1,4 @@
-import { layoutViews, type ViewEntry } from "@exegol/shared";
+import { layoutViews, type ViewEntry, viewResolver } from "@exegol/shared";
 import { Maximize, Minus, Plus } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { useLatest } from "../../hooks/use-latest";
@@ -37,6 +37,7 @@ export function ViewsCanvas({
   const drag = useRef<{ x: number; y: number; moved: boolean } | null>(null);
 
   const byPath = useMemo(() => new Map(views.map((v) => [v.path, v])), [views]);
+  const viewOf = useMemo(() => viewResolver(views), [views]);
   const layout = useMemo(
     () =>
       layoutViews(
@@ -86,10 +87,18 @@ export function ViewsCanvas({
 
   const picked = selected ? byPath.get(selected) : undefined;
   const from = selected ? boxes.get(selected) : undefined;
-  const linkLines = (picked?.links ?? []).flatMap((link) => {
-    const to = boxes.get(link.to);
-    return from && to && link.to !== selected ? [{ ...link, d: linkCurve(from, to) }] : [];
-  });
+  // A link to a path left out goes to the view kept for its shape, one line per view
+  const linkLines = [
+    ...new Map(
+      (picked?.links ?? []).flatMap((link) => {
+        const path = viewOf(link.to);
+        const to = path ? boxes.get(path) : undefined;
+        return from && to && path && path !== selected
+          ? [[path, { ...link, to: path, d: linkCurve(from, to) }] as const]
+          : [];
+      }),
+    ).values(),
+  ];
   const linkedPaths = new Set(linkLines.map((l) => l.to));
 
   return (

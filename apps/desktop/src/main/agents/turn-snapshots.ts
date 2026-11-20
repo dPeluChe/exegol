@@ -65,7 +65,8 @@ async function snapshotTree(entry: AgentTurns, agentId: string, cwd: string) {
     // A folder outside git fails every turn: say so once
     if (!entry.warnedNotGit) {
       entry.warnedNotGit = true;
-      logger.info(`[Turns] No turn snapshots for ${agentId}: ${(err as Error).message}`);
+      const why = (err as Error).message.trim().split("\n").pop();
+      logger.info(`[Turns] No turn snapshots for ${agentId}: ${why}`);
     }
     return null;
   }

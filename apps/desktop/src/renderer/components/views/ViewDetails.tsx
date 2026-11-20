@@ -1,4 +1,4 @@
-import type { ViewEntry, ViewsState } from "@exegol/shared";
+import { type ViewEntry, type ViewsState, viewResolver } from "@exegol/shared";
 import { Button } from "@exegol/ui";
 import {
   Copy,
@@ -77,7 +77,7 @@ export function ViewDetails({
   onEnlarge: () => void;
 }) {
   const url = `${state.base ?? ""}${view.path}`;
-  const known = useMemo(() => new Set(state.views.map((v) => v.path)), [state.views]);
+  const viewOf = useMemo(() => viewResolver(state.views), [state.views]);
   const from = useMemo(() => linkedFrom(state.views, view.path), [state.views, view.path]);
   const links = view.links ?? [];
   const input = { projectId, path: view.path };
@@ -91,6 +91,7 @@ export function ViewDetails({
             {view.status === "redirected" && `. Redirected to ${view.finalPath}`}
             {view.status === "failed" && `. Did not load${view.http ? ` (${view.http})` : ""}`}
             {view.cut && ". The page goes on below the capture"}
+            {view.alike ? `. Stands for ${view.alike} more like it (${view.shape})` : ""}
           </p>
         </div>
         <button
@@ -181,14 +182,18 @@ export function ViewDetails({
       {links.length > 0 && (
         <Section title={`Links to (${links.length})`}>
           <PathList
-            paths={links.map((l) => ({
-              path: l.to,
-              note:
-                [l.newTab && "new tab", !known.has(l.to) && "not captured"]
-                  .filter(Boolean)
-                  .join(", ") || undefined,
-            }))}
-            onPick={(path) => known.has(path) && onSelect(path)}
+            paths={links.map((l) => {
+              const kept = viewOf(l.to);
+              const captured = kept === l.to ? null : kept ? `like ${kept}` : "not captured";
+              return {
+                path: l.to,
+                note: [l.newTab && "new tab", captured].filter(Boolean).join(", ") || undefined,
+              };
+            })}
+            onPick={(path) => {
+              const kept = viewOf(path);
+              if (kept) onSelect(kept);
+            }}
           />
         </Section>
       )}
