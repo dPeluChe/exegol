@@ -619,6 +619,28 @@ exchange-bus MVP only, no headless council executions. Absorbs:
 
 ---
 
+### T229: Remote workers in sandboxes (analysis first) `added: 2026-11-20`
+**Priority**: P3 | **Effort**: analysis, then to size | **Source**: `RESEARCH/REMOTE_WORKERS_SANDBOXES_2026_11.md`
+
+Not decided. A worker takes one backlog task, works in a sandbox outside the machine, opens a PR and is destroyed on merge; the project's main session reviews and integrates. Antonio's doubt (2026-11-20): as it stands it adds work and a dependency without a clear gain in quality or speed. To reopen with a clearer idea of the benefit, together with T230.
+- Answer first the five questions that close the research (what a remote worker gives over a local session, review cost on the main session, whether the image-based setup of the other project is enough, whether a local OS sandbox is, which projects qualify)
+- Cheap test with no code in Exegol: one sandbox, one real task of a web project, opened from an Exegol terminal, through to the PR
+- If it goes on: a recipe per project (create, enter, destroy), no provider SDK; the PR as the done signal through PR watch; a short-lived token for one repo; destroy on merge and a warning for idle sandboxes
+- Accepted for a first version: no chat, inbox or agent messages in the worker
+
+### T230: Assistants, schedules and outside agents (analysis first) `added: 2026-11-20`
+**Priority**: P3 | **Effort**: analysis, then one task per idea | **Source**: `RESEARCH/BOTS_AND_OUTSIDE_AGENTS_2026_11.md` (Orca Bots, TaroBird, TalkTo)
+
+Not decided. Ideas kept from the review, each to be weighed for what it really gives before any is built:
+- Events from outside that wake a session, and answering where the question was asked: who may activate, from where, when
+- Assistants with a purpose as complements of the Commander (a session with a written purpose and a schedule), not a second hierarchy
+- Schedules with an interface (the engine exists, `main/scheduler/`): for the Commander first, to review repos or assign recurring work
+- A watcher of what is deployed: site up, console and network errors, a score, a report in the inbox for the developer to assign or not; read-only enforced by Exegol
+- Outside agents (review bots, other teams) reporting to Exegol: GitHub comments over PR watch as the recommended channel; open whether every report has a repo behind it
+- Secrets per project, encrypted, and how a value reaches a session
+- From TaroBird: the follow-up queue's missing parts (reorder, edit, survive a quit, show in the chats) and Commander tickets, which wait on "direct" in T224
+- Left out for now: Gmail and Calendar in Exegol
+
 ### T228: Views canvas, every view of a local web app at once `added: 2026-11-18`
 **Priority**: P2 | **Effort**: M per phase | **Source**: `RESEARCH/VIEWS_CANVAS_2026_11.md`
 
