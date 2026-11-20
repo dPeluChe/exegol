@@ -22,6 +22,8 @@
 |----------|------------|
 | [TASK_TODO.md](./TASK_TODO.md) | The single source of truth for pending work |
 | [../CONTRIBUTING.md](../CONTRIBUTING.md) / [../AGENTS.md](../AGENTS.md) | How to contribute, for people and for AI agents |
+| [RESEARCH/REMOTE_WORKERS_SANDBOXES_2026_11.md](./RESEARCH/REMOTE_WORKERS_SANDBOXES_2026_11.md) | Workers in cloud sandboxes instead of local worktrees: what Exegol would need, limits, providers and prices, open source managers (T229, not decided) |
+| [RESEARCH/BOTS_AND_OUTSIDE_AGENTS_2026_11.md](./RESEARCH/BOTS_AND_OUTSIDE_AGENTS_2026_11.md) | Orca Bots, TaroBird and TalkTo read against Exegol: assistants, schedules, a deploy watcher, outside agents (T230, not decided) |
 | [RESEARCH/VIEWS_CANVAS_2026_11.md](./RESEARCH/VIEWS_CANVAS_2026_11.md) | Every view of a local web app as thumbnails on one canvas: what exists, a measured spike, phased design (T228) |
 | [RESEARCH/MCP_FOOTPRINT_AND_RESTART_LOAD_2026_11.md](./RESEARCH/MCP_FOOTPRINT_AND_RESTART_LOAD_2026_11.md) | What each session starts for MCP, measured after a 65 session restart, and the options (T227) |
 | [RESEARCH/COLABS_INBOX_NOTES_DESIGN_2026_11.md](./RESEARCH/COLABS_INBOX_NOTES_DESIGN_2026_11.md) | Design for T217: colabs, inbox and notes, with usage numbers and outside evidence |
