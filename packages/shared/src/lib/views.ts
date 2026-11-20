@@ -29,6 +29,10 @@ export interface ViewEntry {
   newTabLinks?: number;
   inSitemap: boolean;
   robotsBlocked: boolean;
+  /** Its path with the values taken out (`/errors/:id`), when it has any */
+  shape?: string;
+  /** Other paths of that shape found and not loaded: one view stands for them */
+  alike?: number;
   /** Bumped per capture, so a new thumbnail is fetched */
   shot?: number;
 }

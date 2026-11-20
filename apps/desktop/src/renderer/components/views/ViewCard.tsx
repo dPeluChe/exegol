@@ -90,6 +90,11 @@ export const ViewCard = memo(function ViewCard({
           {view.path}
         </span>
         <div className="flex items-center gap-2 overflow-hidden">
+          {!!view.alike && (
+            <Badge title={`Stands for ${view.alike} more like it (${view.shape})`}>
+              +{view.alike} alike
+            </Badge>
+          )}
           {view.status === "redirected" && (
             <Badge title={`Redirected to ${view.finalPath}`}>
               <LogIn className={ICON} />

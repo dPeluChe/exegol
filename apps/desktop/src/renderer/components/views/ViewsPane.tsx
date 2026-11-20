@@ -1,9 +1,8 @@
 import { viewCounts } from "@exegol/shared";
 import { Button } from "@exegol/ui";
 import { LayoutDashboard, Loader2, LogIn, Play, Square, Trash2 } from "lucide-react";
-import { useState } from "react";
-import { usePaneProject } from "../../contexts/ProjectScope";
-import { useMountEffect } from "../../hooks/use-mount-effect";
+import { useEffect, useRef, useState } from "react";
+import { usePanePolling, usePaneProject } from "../../contexts/ProjectScope";
 import { useViewServers, useViews } from "../../hooks/use-views";
 import { splitWithBrowser } from "../../lib/split-terminal";
 import { trpcMutate } from "../../lib/trpc-client";
@@ -43,10 +42,15 @@ function Views({ projectId, paneId }: { projectId: string; paneId: string }) {
       toastError("Could not start the pass"),
     );
 
-  // Opening the pane is what runs a pass; main skips it when one ran or runs
-  useMountEffect(() => {
+  // Seeing the pane for the first time is what runs a pass (one restored in a hidden tab waits,
+  // and Clear stays cleared); main skips it when one ran or runs
+  const visible = usePanePolling();
+  const asked = useRef(false);
+  useEffect(() => {
+    if (!visible || asked.current) return;
+    asked.current = true;
     void trpcMutate("views.start", { projectId, ifEmpty: true }).catch(() => undefined);
-  });
+  }, [visible, projectId]);
 
   const resume = (retry: boolean) =>
     trpcMutate("views.resume", { projectId, retry }).catch(toastError("Could not continue"));
