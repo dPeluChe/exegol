@@ -55,21 +55,26 @@ export const VIEWS_MAX = 200;
 /** Views ending on one other page before a pass stops to ask */
 export const HOLD_AFTER = 2;
 
-/** The page a pass should stop for: one that asks for a password, or where `HOLD_AFTER` views
- *  or more were sent, unless the person already said to go on without it */
+/** The page a pass stops for: one asking for a password, or where `HOLD_AFTER` views were sent.
+ *  Never a skipped page; an answered one only while it asks for a password. The root and an
+ *  answered page's own view do not count: both send a logged-in person on to the app's home */
 export function holdFor(
   views: readonly ViewEntry[],
   skipped: ReadonlySet<string>,
+  answered: ReadonlySet<string> = new Set(),
 ): { path: string; views: number } | null {
   const sent = new Map<string, number>();
   for (const v of views) {
     if (v.status !== "redirected" || !v.finalPath || skipped.has(v.finalPath)) continue;
+    const expected = v.path === "/" || answered.has(v.path) || answered.has(v.finalPath);
+    if (!v.login && expected) continue;
     const n = (sent.get(v.finalPath) ?? 0) + 1;
     if (v.login || n >= HOLD_AFTER) return { path: v.finalPath, views: n };
     sent.set(v.finalPath, n);
   }
   return null;
 }
+
 /** The page as most desktops show it, and how far down a thumbnail goes */
 export const VIEW_PAGE = { width: 1920, height: 1080, maxHeight: 1920 } as const;
 export const VIEW_THUMB_WIDTH = 960;

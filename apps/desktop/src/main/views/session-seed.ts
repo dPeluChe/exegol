@@ -39,9 +39,9 @@ export async function seedSession(
   win: BrowserWindow,
   projectId: string,
   origin: string,
-): Promise<void> {
+): Promise<boolean> {
   const entries = await paneSession(projectId, origin);
-  if (!entries || win.isDestroyed()) return;
+  if (!entries || win.isDestroyed()) return false;
   const wc = win.webContents;
   const run = (code: string) => wc.executeJavaScriptInIsolatedWorld(SEED_WORLD_ID, [{ code }]);
   try {
@@ -49,13 +49,15 @@ export async function seedSession(
     await withTimeout(wc.loadURL(`${origin}/robots.txt`), 5_000, "seed page").catch(
       () => undefined,
     );
-    if ((await run("location.origin")) !== origin) return;
+    if ((await run("location.origin")) !== origin) return false;
     // A dev server may answer any path with the app: let it finish clearing a session it
     // does not have before the copy lands
     if ((await run("document.contentType")) === "text/html") await delay(APP_SETTLE_MS);
     await run(write(entries));
     logger.info(`[Views] ${projectId}: session of an open pane copied (${entries.length} key(s))`);
+    return true;
   } catch {
     // An error page or a closed window: the pass goes on without the copy
+    return false;
   }
 }
