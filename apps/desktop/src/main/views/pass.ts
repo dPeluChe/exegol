@@ -41,6 +41,10 @@ interface Pass {
   queue: ViewEntry[];
   /** Pages the person said to go on without (a login they will not do now) */
   skipped: Set<string>;
+  /** Pages the person answered with a retry (they logged in) */
+  answered: Set<string>;
+  /** Said once per pass: no session to copy, and views a Retry did not move */
+  said: Set<"unseeded" | "unmoved">;
   waiting: (() => void)[];
   /** A view being captured again on its own: no pass starts over it */
   recapturing: boolean;
@@ -87,6 +91,12 @@ function held(pass: Pass): Promise<void> {
   return new Promise((resolve) => pass.waiting.push(resolve));
 }
 
+function sayOnce(projectId: string, pass: Pass, what: "unseeded" | "unmoved", text: string): void {
+  if (pass.said.has(what)) return;
+  pass.said.add(what);
+  logger.info(`[Views] ${projectId}: ${text}`);
+}
+
 function wake(pass: Pass): void {
   for (const resolve of pass.waiting.splice(0)) resolve();
 }
@@ -126,6 +136,7 @@ export function resumeViews(projectId: string, retry: boolean): void {
   const hold = pass?.state.hold;
   if (!pass || !hold) return;
   if (retry) {
+    pass.answered.add(hold.path);
     for (const view of pass.state.views) {
       if (view.status !== "redirected" || view.finalPath !== hold.path) continue;
       view.status = "waiting";
@@ -275,6 +286,8 @@ export async function startViews(
     stopped: false,
     queue,
     skipped: new Set(),
+    answered: new Set(),
+    said: new Set(),
     waiting: [],
     recapturing: false,
     unsettled: 0,
@@ -333,7 +346,8 @@ export async function startViews(
         pass.windows.push(win);
         // Counted while it waits: with one view queued the other windows must not give up
         loading++;
-        await seedSession(win, projectId, base);
+        const seeded = await seedSession(win, projectId, base);
+        if (!seeded) sayOnce(projectId, pass, "unseeded", "no session to copy from an open pane");
         loading--;
         if (pass.stopped || win.isDestroyed()) {
           queue.unshift(view);
@@ -354,7 +368,10 @@ export async function startViews(
         }
         if (status === "redirected") {
           add(page.finalPath, "links");
-          const hold = holdFor(state.views, pass.skipped);
+          const hold = holdFor(state.views, pass.skipped, pass.answered);
+          if (!page.login && pass.answered.has(page.finalPath)) {
+            sayOnce(projectId, pass, "unmoved", "views still sent to the page answered for");
+          }
           if (hold && !state.hold) {
             // Waiting on the person: the windows go, so the wait costs nothing
             state.hold = hold;

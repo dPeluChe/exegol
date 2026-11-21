@@ -169,4 +169,21 @@ describe("holdFor", () => {
       views: 1,
     });
   });
+
+  it("goes on after a login: the login page and the root both lead to the home", () => {
+    const views = [sent("/", "/overview"), sent("/login", "/overview"), sent("/home", "/overview")];
+    expect(holdFor(views, new Set(), new Set(["/login"]))).toBeNull();
+    expect(holdFor(views, new Set())).toEqual({ path: "/overview", views: 2 });
+  });
+
+  it("stops again for an answered page only while it asks for a password", () => {
+    expect(
+      holdFor([sent("/a", "/gate"), sent("/b", "/gate")], new Set(), new Set(["/gate"])),
+    ).toBeNull();
+    const asks = { ...sent("/login", "/login2"), login: true };
+    expect(holdFor([asks], new Set(), new Set(["/login", "/login2"]))).toEqual({
+      path: "/login2",
+      views: 1,
+    });
+  });
 });
