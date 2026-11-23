@@ -76,13 +76,22 @@ export function noteHookSignal(agentId: string): void {
   hooked.add(agentId);
 }
 
-/** The signals a chunk's reports mean for this agent, whether it asked for the 7501 reply, and
- *  whether it reports every turn (OSC 7501 does, OSC 9;4 progress only some) */
+/** How long a session that starts at its prompt gets to begin a turn (a prompt given at launch) */
+export const START_IDLE_MS = 5_000;
+
+/** Asked again after `START_IDLE_MS`: a turn, a hook or an exit since then all answer no */
+export function restsAtPrompt(agentId: string): boolean {
+  return sessions.get(agentId)?.phase === "idle" && !hooked.has(agentId);
+}
+
+/** The signals a chunk's reports mean for this agent, whether it asked for the 7501 reply,
+ *  whether it reports every turn (OSC 7501 does, OSC 9;4 progress only some), and whether it
+ *  just started at its prompt: a resumed session ends no turn, so nothing else says so */
 export function takeTermStatus(
   agentId: string,
   cliType: string,
   reports: readonly TermReport[],
-): { signals: AgentSignalType[]; reply: boolean; everyTurn: boolean } {
+): { signals: AgentSignalType[]; reply: boolean; everyTurn: boolean; startedIdle: boolean } {
   const reply = reports.some((r) => r.kind === "query");
   if (reply && !answered.has(agentId)) {
     answered.add(agentId);
@@ -100,6 +109,7 @@ export function takeTermStatus(
     signals: hooked.has(agentId) ? [] : signals,
     reply,
     everyTurn: state.reportsStatus,
+    startedIdle: prev.phase === "none" && state.phase === "idle" && !hooked.has(agentId),
   };
 }
 

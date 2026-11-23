@@ -176,6 +176,7 @@ export function startAgentStatusPush(queryClient: QueryClient): void {
       // reattached agents don't earn amber dots (verify round 3).
       const scrapedAttention =
         existing.cliType !== "claude-code" &&
+        !event.idleOnly &&
         (existing.status === "running" || existing.status === "spawning");
       if (
         isFinalStatus ||

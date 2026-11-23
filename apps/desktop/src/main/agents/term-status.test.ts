@@ -4,6 +4,7 @@ import {
   forgetTermStatus,
   INITIAL_TERM_STATUS,
   noteHookSignal,
+  restsAtPrompt,
   takeTermStatus,
   termStatusSignals,
 } from "./term-status";
@@ -81,10 +82,28 @@ describe("takeTermStatus", () => {
       signals: [],
       reply: true,
       everyTurn: false,
+      startedIdle: false,
     });
     noteHookSignal("a1");
     expect(takeTermStatus("a1", "pi", [query]).reply).toBe(true);
     forgetTermStatus("a1");
+  });
+
+  it("a session that starts at its prompt says so once, and rests there until a turn", () => {
+    const first = takeTermStatus("a3", "claude-code", [status("idle")]);
+    expect(first).toMatchObject({ signals: [], startedIdle: true });
+    expect(restsAtPrompt("a3")).toBe(true);
+    expect(takeTermStatus("a3", "claude-code", [status("idle")]).startedIdle).toBe(false);
+    takeTermStatus("a3", "claude-code", [status("working")]);
+    expect(restsAtPrompt("a3")).toBe(false);
+    expect(takeTermStatus("a3", "claude-code", [status("idle")]).startedIdle).toBe(false);
+    forgetTermStatus("a3");
+
+    takeTermStatus("a4", "claude-code", [status("idle")]);
+    noteHookSignal("a4");
+    expect(restsAtPrompt("a4")).toBe(false);
+    forgetTermStatus("a4");
+    expect(restsAtPrompt("a4")).toBe(false);
   });
 
   it("hooks win: once one spoke, the reports keep their state but send no signal", () => {
