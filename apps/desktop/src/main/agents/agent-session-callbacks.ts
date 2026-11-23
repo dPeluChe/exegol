@@ -8,7 +8,7 @@ import {
 import type Database from "libsql";
 import { noteCommanderTurn } from "../commander/unread";
 import { isAgentQuiet } from "../db/queries";
-import { getAgentCwd, setAgentFinalOutput } from "../db/queries/agents";
+import { getAgent, getAgentCwd, setAgentFinalOutput } from "../db/queries/agents";
 import { releasePaths } from "../db/queries/path-claims";
 import { broadcast } from "../lib/event-bus";
 import { createLogLimiter, suppressedNote } from "../lib/log-limiter";
@@ -53,6 +53,8 @@ import {
   forgetTermStatus,
   noteHookSignal,
   PROGRAM_STATUS_REPLY,
+  restsAtPrompt,
+  START_IDLE_MS,
   takeTermStatus,
 } from "./term-status";
 import { endTurn, forgetTurns, startTurn } from "./turn-snapshots";
@@ -346,6 +348,22 @@ export function createSpawnCallbacks(
         const signals = term.signals.map((event) => ({ agentId: agent.id, event }));
         if (signals.length) {
           applyAgentSignals(db, agent, maps, signals, null, "terminal", term.everyTurn);
+        }
+        if (term.startedIdle) {
+          // A resumed session ends no turn, so nothing else says it is at its prompt. The wait
+          // leaves a prompt given at launch time to start its turn
+          setTimeout(() => {
+            const rests = restsAtPrompt(agent.id) && maps.outputProcessors.has(agent.id);
+            if (!rests || getAgent(db, agent.id)?.status !== "running") return;
+            applyAgentSignals(
+              db,
+              agent,
+              maps,
+              [{ agentId: agent.id, event: "idle" }],
+              null,
+              "terminal",
+            );
+          }, START_IDLE_MS).unref();
         }
       }
       // Full-screen TUIs: their own status reports above are deterministic, the scrape is not

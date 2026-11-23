@@ -15,6 +15,8 @@ interface AgentStatusEvent {
   turnEnded?: number;
   /** T123: true when the agent is waiting on the user (drives T141 attention inbox). */
   needsAttention?: boolean;
+  /** At its prompt without having finished a turn: no question to answer */
+  idleOnly?: boolean;
   /** A terminal's session became an agent: its new name, and that it runs over a shell */
   alias?: string | null;
   launchedInShell?: boolean;
