@@ -1,5 +1,4 @@
 import { type CliUpdateStatus, cliRestartNeeded, LIVE_STATUSES } from "@exegol/shared";
-import * as Dialog from "@radix-ui/react-dialog";
 import { ArrowUpCircle, RefreshCw } from "lucide-react";
 import { useState } from "react";
 import { updateAndRestart, useCliUpdates } from "../../hooks/use-cli-updates";
@@ -7,7 +6,9 @@ import { useProjects } from "../../hooks/use-trpc";
 import { sessionWhere } from "../../lib/agent-label";
 import { type AgentState, useAgentStore } from "../../stores/agents";
 import { useCliRestartStore } from "../../stores/cli-restarts";
+import { ChoiceDialog } from "../common/ChoiceDialog";
 import { SessionChips } from "../common/SessionChips";
+import { RestartPendingDialog } from "./RestartPendingDialog";
 
 const chip = "flex shrink-0 items-center gap-1 text-[9px]";
 
@@ -52,6 +53,9 @@ export function CliUpdateControl({ agentId }: { agentId: string }) {
   const pending = useCliRestartStore((s) => s.pending[agentId]);
   const status = useCliUpdates().get(agent?.cliType ?? "");
   const [choice, setChoice] = useState<ScopeChoice | null>(null);
+  const [askedAt, setAskedAt] = useState<number | null>(null);
+  // The restart ran or was cancelled: the next one starts with no dialog open
+  if (!pending && askedAt !== null) setAskedAt(null);
   if (!agent) return null;
 
   /** Ask first when other sessions are concerned; else run for this one */
@@ -70,25 +74,25 @@ export function CliUpdateControl({ agentId }: { agentId: string }) {
       <>
         <button
           type="button"
-          onClick={() => useCliRestartStore.getState().cancel(agentId)}
+          onClick={() => setAskedAt(Date.now())}
           className={`${chip} text-accent hover:text-text-primary`}
           title={
             pending === "update"
-              ? "Restarts once the update is installed and this turn ends. Click to cancel"
-              : "Restarts on the new version when this turn ends. Click to cancel"
+              ? "Restarts once the update is installed and this turn ends. Click to restart now or cancel"
+              : "Restarts on the new version when this turn ends. Click to restart now or cancel"
           }
         >
           <RefreshCw className="h-2.5 w-2.5 animate-spin" />
           {pending === "update" ? "Restarts after the update" : "Restarts after this turn"}
         </button>
-        <button
-          type="button"
-          onClick={() => useCliRestartStore.getState().request(agentId, "now")}
-          className={`${chip} text-text-muted hover:text-text-primary`}
-          title="Restart now, cutting the current turn (the conversation still resumes)"
-        >
-          Now
-        </button>
+        {askedAt !== null && (
+          <RestartPendingDialog
+            agent={agent}
+            update={pending === "update"}
+            askedAt={askedAt}
+            onClose={() => setAskedAt(null)}
+          />
+        )}
       </>
     );
   }
@@ -169,60 +173,28 @@ function RestartScopeDialog({
   onClose: () => void;
 }) {
   const where = useSessionWhere();
-  const pick = (all: boolean) => {
-    choice.run(all);
-    onClose();
-  };
-  const button = "rounded-lg px-3 py-1.5 text-[11px] font-medium";
   return (
-    <Dialog.Root open onOpenChange={(open) => !open && onClose()}>
-      <Dialog.Portal>
-        <Dialog.Overlay className="fixed inset-0 z-50 bg-black/60" />
-        <Dialog.Content className="fixed left-1/2 top-1/2 z-50 flex w-[calc(100%-2rem)] max-w-sm max-h-[85vh] overflow-y-auto -translate-x-1/2 -translate-y-1/2 flex-col gap-3 rounded-lg border border-border bg-bg-secondary p-5 shadow-2xl">
-          <Dialog.Title className="min-w-0 text-sm font-semibold text-text-primary">
-            {choice.title}
-          </Dialog.Title>
-          <Dialog.Description asChild>
-            <div className="space-y-2 text-[11px] text-text-secondary">
-              <p>
-                This one: <span className="text-text-primary">{where(agent)}</span>
-              </p>
-              <div>
-                <p className="text-text-muted">Other sessions of the same CLI:</p>
-                <div className="mt-1">
-                  <SessionChips sessions={choice.others} />
-                </div>
-              </div>
-              <p className="text-text-muted">
-                Each restarts when its turn ends and resumes its conversation.
-              </p>
-            </div>
-          </Dialog.Description>
-          <div className="flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className={`${button} text-text-muted hover:bg-white/5`}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => pick(false)}
-              className={`${button} text-text-secondary hover:bg-white/5`}
-            >
-              Only this one
-            </button>
-            <button
-              type="button"
-              onClick={() => pick(true)}
-              className={`${button} bg-accent font-semibold text-white hover:bg-accent/90`}
-            >
-              All {choice.others.length + 1}
-            </button>
-          </div>
-        </Dialog.Content>
-      </Dialog.Portal>
-    </Dialog.Root>
+    <ChoiceDialog
+      title={choice.title}
+      onClose={onClose}
+      choices={[
+        { label: "Cancel", kind: "muted" },
+        { label: "Only this one", run: () => choice.run(false) },
+        { label: `All ${choice.others.length + 1}`, kind: "primary", run: () => choice.run(true) },
+      ]}
+    >
+      <p>
+        This one: <span className="text-text-primary">{where(agent)}</span>
+      </p>
+      <div>
+        <p className="text-text-muted">Other sessions of the same CLI:</p>
+        <div className="mt-1">
+          <SessionChips sessions={choice.others} />
+        </div>
+      </div>
+      <p className="text-text-muted">
+        Each restarts when its turn ends and resumes its conversation.
+      </p>
+    </ChoiceDialog>
   );
 }
