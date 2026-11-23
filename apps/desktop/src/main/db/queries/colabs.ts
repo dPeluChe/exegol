@@ -7,6 +7,7 @@ interface ColabRow {
   name: string;
   purpose: string;
   created_at: number;
+  notify: number;
 }
 
 interface MemberRow {
@@ -51,6 +52,7 @@ export function listColabs(db: Database.Database, projectId: string | null = nul
     name: c.name,
     purpose: c.purpose,
     createdAt: c.created_at,
+    notify: c.notify === 1,
     members: byColab.get(c.id) ?? [],
   }));
 }
@@ -93,6 +95,10 @@ export function updateColab(
   purpose: string,
 ): void {
   db.prepare("UPDATE colabs SET name = ?, purpose = ? WHERE id = ?").run(name, purpose, id);
+}
+
+export function setColabNotify(db: Database.Database, id: string, notify: boolean): void {
+  db.prepare("UPDATE colabs SET notify = ? WHERE id = ?").run(notify ? 1 : 0, id);
 }
 
 export function deleteColab(db: Database.Database, id: string): void {

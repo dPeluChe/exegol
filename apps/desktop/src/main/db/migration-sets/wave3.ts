@@ -519,4 +519,11 @@ export const wave3Migrations: Migration[] = [
     id: "w3_048_agent_cli_name",
     sql: "ALTER TABLE agents ADD COLUMN cli_name TEXT;",
   },
+  {
+    id: "w3_049_colab_notices",
+    sql: `
+      ALTER TABLE colabs ADD COLUMN notify INTEGER NOT NULL DEFAULT 0;
+      ALTER TABLE inbox_reads ADD COLUMN noticed_seq INTEGER NOT NULL DEFAULT 0;
+    `,
+  },
 ];

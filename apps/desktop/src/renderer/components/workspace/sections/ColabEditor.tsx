@@ -83,6 +83,28 @@ export function ColabEditor({
         )}
       </div>
 
+      {colab && (
+        <label className="flex items-start gap-2">
+          <input
+            type="checkbox"
+            checked={colab.notify}
+            disabled={busy}
+            onChange={(e) =>
+              void act("colabs.setNotify", { id: colab.id, notify: e.target.checked })
+            }
+            className="mt-0.5 h-3.5 w-3.5 accent-accent"
+          />
+          <span className="leading-relaxed text-text-secondary">
+            Tell sessions when a thread has news
+            <span className="block text-text-muted">
+              The session a thread is for, else the project's main one, gets one line while it rests
+              at its prompt and you have not written to it for 10 minutes. Off, sessions find out
+              when one starts or when you send them the thread.
+            </span>
+          </span>
+        </label>
+      )}
+
       {colab && <ColabRoom colab={colab} />}
 
       {colab && (

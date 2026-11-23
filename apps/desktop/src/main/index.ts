@@ -27,6 +27,7 @@ import { forwardDictationEscape, forwardDictationKeys } from "./dictation/keys";
 import { releaseMediaNow } from "./dictation/media-pause";
 import { applyDictationSettings, dictationSettings } from "./dictation/service";
 import { installPreviewSession, registerPreviewScheme } from "./files-preview/preview-host";
+import { startInboxNotices } from "./inbox/notice-sweep";
 import { startPrWatch, stopPrWatch } from "./integrations/github/pr-watch";
 import { registerDictationIpc } from "./ipc/procedures/dictation";
 import { registerTrpcIpcHandler } from "./ipc/trpc-ipc";
@@ -171,6 +172,7 @@ app.whenReady().then(async () => {
     startStuckTurnSweep(getDb());
     startQuestionWatch(getDb());
     startCommanderFeed(getDb());
+    startInboxNotices(getDb());
   });
 
   // Background services (non-blocking, start after window)
