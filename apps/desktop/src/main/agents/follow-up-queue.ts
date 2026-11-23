@@ -105,7 +105,7 @@ export function removeFollowUp(agentId: string, id: string): boolean {
 }
 
 /** At its input prompt; a terminal whose CLI exited back to the shell is idle too, but not there */
-function atPrompt(db: Database.Database, agentId: string): boolean {
+export function atPrompt(db: Database.Database, agentId: string): boolean {
   const agent = getAgent(db, agentId);
   if (!agent || holdsDelivery(agentId)) return false;
   return agent.status === "waiting_input" || (agent.status === "idle" && !agent.launchedInShell);

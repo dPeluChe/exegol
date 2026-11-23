@@ -9,6 +9,7 @@ import {
   removeColabMember,
   setColabMain,
   setColabMemberRole,
+  setColabNotify,
   updateColab,
 } from "../../db/queries/colabs";
 import { countColabActiveThreads } from "../../db/queries/inbox";
@@ -62,6 +63,10 @@ export const colabsRouter = router({
     .mutation(({ ctx, input }) =>
       changed(uniqueName(() => updateColab(ctx.db, input.id, input.name, input.purpose))),
     ),
+
+  setNotify: publicProcedure
+    .input(z.object({ id: z.string(), notify: z.boolean() }))
+    .mutation(({ ctx, input }) => changed(setColabNotify(ctx.db, input.id, input.notify))),
 
   delete: publicProcedure.input(z.object({ id: z.string() })).mutation(({ ctx, input }) => {
     const active = countColabActiveThreads(ctx.db, input.id);

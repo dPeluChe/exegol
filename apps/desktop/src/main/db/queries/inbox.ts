@@ -37,11 +37,15 @@ const reachSql = (project: string) => `((t.scope = 'project' AND t.scope_id = ${
 // A null project is a person, who reaches every thread
 const REACH_SQL = `(@projectId IS NULL OR ${reachSql("@projectId")})`;
 
+// Agent messages in a row: since a person last wrote
+const AGENT_TURNS_SQL = `(SELECT COUNT(*) FROM inbox_messages m
+    WHERE m.thread_id = t.id AND m.author_kind = 'agent'
+      AND m.seq > COALESCE((SELECT seq FROM inbox_messages u
+        WHERE u.thread_id = t.id AND u.author_kind = 'user' ORDER BY seq DESC LIMIT 1), 0))`;
+
 const THREAD_SELECT = `SELECT t.*, r.last_read_seq,
     l.seq AS last_seq,
-    (SELECT COUNT(*) FROM inbox_messages m WHERE m.thread_id = t.id AND m.author_kind = 'agent'
-      AND m.seq > COALESCE((SELECT seq FROM inbox_messages u
-        WHERE u.thread_id = t.id AND u.author_kind = 'user' ORDER BY seq DESC LIMIT 1), 0)) AS agent_turns,
+    ${AGENT_TURNS_SQL} AS agent_turns,
     (SELECT json_group_array(DISTINCT m.project_id) FROM inbox_messages m WHERE m.thread_id = t.id
       AND m.author_kind = 'agent' AND ${reachSql("m.project_id")}) AS writers,
     o.agent_id AS opener_agent, o.project_id AS opener_project,
@@ -407,4 +411,56 @@ export function countColabActiveThreads(db: Database.Database, colabId: string):
     )
     .get(colabId) as { n: number };
   return n;
+}
+
+export interface ColabNews {
+  threadId: number;
+  seq: number;
+  colab: string;
+  projectId: string;
+  toSession: string | null;
+}
+
+// A member a colab thread concerns: the one it is for (all, with none) and whoever wrote in it.
+// A proposal to close concerns only the writers still to agree
+const WROTE_SQL = `EXISTS (SELECT 1 FROM inbox_messages w WHERE w.thread_id = t.id
+    AND w.author_kind = 'agent' AND w.project_id = cm.project_id)`;
+const CONCERNS_SQL = `CASE WHEN t.closing_status IS NULL
+    THEN t.to_project IS NULL OR t.to_project = cm.project_id OR ${WROTE_SQL}
+    ELSE ${WROTE_SQL} AND NOT EXISTS
+      (SELECT 1 FROM json_each(t.closing_projects) j WHERE j.value = cm.project_id) END`;
+
+/** Threads of colabs that notify, per member project that has not read or been told of their
+ *  last message. Not its own message, and not past `maxAgentTurns` agent messages in a row:
+ *  sessions that answer each other stop being woken long before the thread stops taking replies */
+export function listColabNews(db: Database.Database, maxAgentTurns: number): ColabNews[] {
+  return db
+    .prepare(
+      `SELECT t.id AS threadId, l.seq, c.name AS colab, cm.project_id AS projectId,
+              t.to_session AS toSession
+       FROM colabs c
+       JOIN inbox_threads t ON t.scope = 'colab' AND t.scope_id = c.id
+       JOIN (SELECT DISTINCT colab_id, project_id FROM colab_members) cm ON cm.colab_id = c.id
+       JOIN inbox_messages l ON l.thread_id = t.id
+         AND l.seq = (SELECT MAX(seq) FROM inbox_messages m WHERE m.thread_id = t.id)
+       LEFT JOIN inbox_reads r ON r.thread_id = t.id AND r.project_id = cm.project_id
+       WHERE c.notify = 1 AND t.kind = 'message' ${STATE_SQL.active}
+         AND (${CONCERNS_SQL})
+         AND l.project_id IS NOT cm.project_id
+         AND l.seq > MAX(COALESCE(r.last_read_seq, 0), COALESCE(r.noticed_seq, 0))
+         AND ${AGENT_TURNS_SQL} < ?
+       ORDER BY t.id`,
+    )
+    .all(maxAgentTurns) as ColabNews[];
+}
+
+export function markNoticed(db: Database.Database, news: readonly ColabNews[]): void {
+  const mark = db.prepare(
+    `INSERT INTO inbox_reads (thread_id, project_id, last_read_seq, noticed_seq)
+     VALUES (?, ?, 0, ?)
+     ON CONFLICT (thread_id, project_id) DO UPDATE SET noticed_seq = excluded.noticed_seq`,
+  );
+  db.transaction(() => {
+    for (const n of news) mark.run(n.threadId, n.projectId, n.seq);
+  })();
 }

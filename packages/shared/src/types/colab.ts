@@ -9,6 +9,8 @@ export interface Colab {
   /** What belongs here; agents read it */
   purpose: string;
   createdAt: number;
+  /** Sessions of its members are told when a thread has news (off: they find out when asked) */
+  notify: boolean;
   members: ColabMember[];
 }
 
