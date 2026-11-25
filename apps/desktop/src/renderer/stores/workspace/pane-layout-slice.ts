@@ -1,12 +1,12 @@
 import { projectOfTab, pwOf, setPwOf } from "./helpers";
 import type { LayoutNode, WorkspaceSliceCreator, WorkspaceStore } from "./types";
 
-type SplitSizesSlice = Pick<
+type PaneLayoutSlice = Pick<
   WorkspaceStore,
   "equalizeSplits" | "setSplitSizes" | "setPaneCwd" | "setPaneLastExit"
 >;
 
-export const createSplitSizesSlice: WorkspaceSliceCreator<SplitSizesSlice> = (set) => ({
+export const createPaneLayoutSlice: WorkspaceSliceCreator<PaneLayoutSlice> = (set) => ({
   equalizeSplits: (tabId) =>
     set((s) => {
       const pid = projectOfTab(s, tabId);

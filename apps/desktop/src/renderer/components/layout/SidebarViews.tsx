@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useNow } from "../../hooks/use-now";
 import { usePointerReorder } from "../../hooks/use-pointer-reorder";
 import { useProjects } from "../../hooks/use-trpc";
+import { timeAgo } from "../../lib/format";
 import {
   groupByProject,
   reorderProjectOrder,
@@ -37,7 +38,6 @@ import { useWorkspaceStore } from "../../stores/workspace";
 import { AgentIcon } from "../common/AgentIcon";
 import { ProjectChip, type ProjectMeta } from "../common/ProjectChip";
 import { ProjectCard } from "./SidebarProjectCard";
-import { timeAgo } from "./sidebar-time";
 
 // ─── Level config ────────────────────────────────────────────────────────
 

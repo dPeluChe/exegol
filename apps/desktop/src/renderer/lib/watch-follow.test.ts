@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest";
-import { shellClosesOn } from "../stores/agents";
+import { shellClosesOn } from "../stores/agent-state";
 import { useWatchStore } from "../stores/watch";
 import { screenRank } from "./auto-resume";
 import { pinsToResolve, planWatchFollow, type WatchResolution } from "./watch-follow";

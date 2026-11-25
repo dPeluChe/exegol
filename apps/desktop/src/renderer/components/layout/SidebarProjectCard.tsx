@@ -6,6 +6,7 @@ import { shallow } from "zustand/shallow";
 import { useNow } from "../../hooks/use-now";
 import type { usePointerReorder } from "../../hooks/use-pointer-reorder";
 import { useProject } from "../../hooks/use-trpc";
+import { elapsed } from "../../lib/format";
 import { type LiveProjectGroup, type LiveTabGroup, PANELESS_TAB } from "../../lib/live-tabs";
 import { useSessionRecovery } from "../../lib/session-recovery";
 import { type AgentState, focusPane, showProject, useAgentStore } from "../../stores/agents";
@@ -13,7 +14,6 @@ import { AgentIcon } from "../common/AgentIcon";
 import { AgentSpinner } from "../common/AgentSpinner";
 import { ProjectAvatar } from "../common/ProjectAvatar";
 import { ProjectSignals } from "./ProjectSignals";
-import { elapsed } from "./sidebar-time";
 
 // ─── Project Card ────────────────────────────────────────────────────────
 
