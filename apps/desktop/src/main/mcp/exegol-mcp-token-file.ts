@@ -11,12 +11,12 @@ import {
   mkdirSync,
   readFileSync,
   realpathSync,
-  renameSync,
   unlinkSync,
   writeFileSync,
 } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, resolve } from "node:path";
+import { renameSyncWithRetry } from "../lib/rename-retry";
 
 export const MCP_TOKENS_DIR = join(homedir(), ".exegol", "mcp", "tokens");
 
@@ -68,7 +68,7 @@ export function writeTokenFile(cwd: string, token: string, dir = MCP_TOKENS_DIR)
     write();
   }
   try {
-    renameSync(tmp, path);
+    renameSyncWithRetry(tmp, path);
   } catch (err) {
     unlinkSync(tmp);
     throw err;

@@ -13,7 +13,6 @@ import {
   readdirSync,
   readFileSync,
   realpathSync,
-  renameSync,
   statSync,
   unlinkSync,
   writeFileSync,
@@ -26,6 +25,7 @@ import {
   CLAUDE_SESSION_READY_SOURCES,
 } from "@exegol/shared";
 import { logger } from "../lib/logger";
+import { renameSyncWithRetry } from "../lib/rename-retry";
 
 const EXEGOL_DIR = join(homedir(), ".exegol");
 export const HOOKS_DIR = join(EXEGOL_DIR, "hooks");
@@ -355,7 +355,7 @@ export function syncHooksFile(
     const tmp = join(dir, `${name}.exegol-tmp-${process.pid}-${randomBytes(4).toString("hex")}`);
     writeFileSync(tmp, formatLike(raw, merge.settings), { mode: 0o600 });
     chmodSync(tmp, mode);
-    renameSync(tmp, target);
+    renameSyncWithRetry(tmp, target);
     logger.info(
       `[AgentWrappers] ${label}: ${merge.removed} Exegol hook entries removed, ${merge.added} added`,
     );
