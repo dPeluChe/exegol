@@ -33,7 +33,7 @@ describe("cliSetupFor", () => {
   });
 
   it("binary aliases are keyed by the provider's command (which equals its id there)", async () => {
-    const { BUILTIN_PROVIDERS } = await import("../agents/registry");
+    const { BUILTIN_PROVIDERS } = await import("../agents/builtin-providers");
     for (const id of Object.keys(COMMAND_ALIASES)) {
       expect(BUILTIN_PROVIDERS.find((p) => p.id === id)?.command).toBe(id);
     }

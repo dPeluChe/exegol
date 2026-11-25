@@ -8,7 +8,8 @@ import {
 import type Database from "libsql";
 import { noteCommanderTurn } from "../commander/unread";
 import { isAgentQuiet } from "../db/queries";
-import { getAgent, getAgentCwd, setAgentFinalOutput } from "../db/queries/agents";
+import { setAgentFinalOutput } from "../db/queries/agent-history";
+import { getAgent, getAgentCwd } from "../db/queries/agents";
 import { releasePaths } from "../db/queries/path-claims";
 import { broadcast } from "../lib/event-bus";
 import { createLogLimiter, suppressedNote } from "../lib/log-limiter";

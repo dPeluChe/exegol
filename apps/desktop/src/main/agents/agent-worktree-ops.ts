@@ -5,7 +5,7 @@ import {
   getAgent,
   getWorktreeByAgentId,
 } from "../db/queries";
-import { countLiveAgentsInWorktree } from "../db/queries/agents";
+import { countLiveAgentsInWorktree } from "../db/queries/agent-live";
 import { getAppSettings } from "../db/queries/settings";
 import { invalidateProjectDiff } from "../ipc/procedures/diff-helpers";
 import { runNative } from "../lib/concurrency";

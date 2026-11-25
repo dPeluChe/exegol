@@ -30,13 +30,12 @@ import {
   setAgentSuspended,
   updateAgentStatus,
 } from "../../db/queries";
+import { archiveAgent, archiveEndedAgents } from "../../db/queries/agent-history";
+import { listCompletedSince } from "../../db/queries/agent-live";
 import {
-  archiveAgent,
-  archiveEndedAgents,
   deleteShellRow,
   getAgentLastCwd,
   listActiveAgents,
-  listCompletedSince,
   setAgentPrWatch,
 } from "../../db/queries/agents";
 import { clearMainMark, setProjectMainMark } from "../../db/queries/main-session";

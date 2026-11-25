@@ -1,10 +1,6 @@
 import { z } from "zod";
-import {
-  AGENT_ACCESS_MODES,
-  AGENT_CLI_TYPES,
-  AGENT_STATUSES,
-  MODEL_ID_PATTERN,
-} from "../types/agent";
+import { AGENT_ACCESS_MODES, AGENT_CLI_TYPES, AGENT_STATUSES } from "../types/agent";
+import { MODEL_ID_PATTERN } from "../types/agent-models";
 
 export const agentCliTypeSchema = z.enum(AGENT_CLI_TYPES);
 export const agentStatusSchema = z.enum(AGENT_STATUSES);

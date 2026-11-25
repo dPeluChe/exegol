@@ -1,4 +1,7 @@
 export * from "./queries/activities";
+export * from "./queries/agent-history";
+export * from "./queries/agent-live";
+export * from "./queries/agent-recovery";
 export * from "./queries/agents";
 export * from "./queries/budgets";
 export * from "./queries/colabs";

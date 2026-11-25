@@ -5,7 +5,7 @@ import type Database from "libsql";
 import { announceSave, type SaveTarget, saveWorktreeWork } from "../agents/worktree-save";
 import { removingWorktrees } from "../agents/worktrees";
 import { removeWorktree as dbRemoveWorktree } from "../db/queries";
-import { countLiveAgentsInWorktree } from "../db/queries/agents";
+import { countLiveAgentsInWorktree } from "../db/queries/agent-live";
 import { getAppSettings } from "../db/queries/settings";
 import {
   type GitRunner,
