@@ -131,7 +131,7 @@ function ServerTab({
         {data && (
           <div className="mt-3 space-y-1.5 text-[11px] text-text-muted">
             <div>
-              Socket: <code className="text-text-secondary">{data.sockPath}</code>
+              Endpoint: <code className="text-text-secondary">{data.sockPath}</code>
             </div>
             <div>
               Active agent tokens: <span className="text-text-primary">{data.activeTokens}</span>{" "}

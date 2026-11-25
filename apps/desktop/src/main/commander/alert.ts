@@ -4,6 +4,7 @@ import { getAppSettings } from "../db/queries/settings";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
 import { ExegolToolError } from "../mcp/exegol-protocol";
+import { showKept } from "../notifications/keep-shown";
 
 const GAP_MS = 60_000;
 const MAX_CHARS = 200;
@@ -39,7 +40,7 @@ function notify(message: string): void {
     notification.on("click", () => {
       void import("../bootstrap/window").then((m) => m.showMainWindowWith("commander:open"));
     });
-    notification.show();
+    showKept(notification);
   } catch (err) {
     logger.warn("[Commander] notice not shown:", err);
   }

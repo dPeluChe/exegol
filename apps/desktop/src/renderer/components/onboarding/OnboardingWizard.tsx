@@ -12,7 +12,7 @@ const STEPS = [
   {
     id: "clis",
     label: "Your agent CLIs",
-    description: "The coding agents found on this Mac. Others can be installed any time.",
+    description: "The coding agents found on this computer. Others can be installed any time.",
     categories: ["agents"],
   },
   {
