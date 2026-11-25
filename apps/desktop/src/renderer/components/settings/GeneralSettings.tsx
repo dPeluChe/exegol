@@ -37,8 +37,9 @@ function acceleratorFor(e: React.KeyboardEvent): string | null {
   const key = e.key;
   if (["Meta", "Control", "Shift", "Alt"].includes(key)) return null;
   const mods = [
-    e.metaKey && "CommandOrControl",
-    e.ctrlKey && !e.metaKey && "Control",
+    // Off macOS the Windows/Super key is no CommandOrControl: that would save Ctrl
+    e.metaKey && (IS_MAC ? "CommandOrControl" : "Super"),
+    e.ctrlKey && !(IS_MAC && e.metaKey) && "Control",
     e.altKey && "Alt",
     e.shiftKey && "Shift",
   ].filter(Boolean);
