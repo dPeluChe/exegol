@@ -1,7 +1,7 @@
 import type { FitAddon } from "@xterm/addon-fit";
 import type { Terminal } from "@xterm/xterm";
 import { describe, expect, it, vi } from "vitest";
-import { fitAndSyncSize } from "./terminal-setup";
+import { fitAndSyncSize } from "./terminal-fit";
 
 const terminal = (width: number, height: number) =>
   ({

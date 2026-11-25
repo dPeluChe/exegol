@@ -1,5 +1,5 @@
 import { type KeyChord, matchesChord } from "@exegol/shared";
-import { IS_MAC } from "../keymap";
+import { IS_MAC, typedWithAltGr } from "../keymap";
 
 let source: () => KeyChord | null = () => null;
 
@@ -13,5 +13,5 @@ export const dictationChord = (): KeyChord | null => source();
 /** For key handlers that would otherwise eat it (the terminal's) */
 export function isDictationChord(e: KeyboardEvent): boolean {
   const chord = source();
-  return !!chord && matchesChord(e, chord, IS_MAC);
+  return !!chord && !typedWithAltGr(e) && matchesChord(e, chord, IS_MAC);
 }

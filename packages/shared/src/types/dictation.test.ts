@@ -62,6 +62,8 @@ describe("dictation chord", () => {
       "Cmd+Shift+Space",
     );
     expect(chordFromEvent(key("KeyM", { alt: true }), true)).toBeNull();
+    // Off macOS plain Ctrl keys are the terminal's (Ctrl+C interrupts)
+    expect(chordFromEvent(key("KeyC", { ctrl: true }), false)).toBeNull();
     expect(chordFromEvent(key("ShiftLeft", { meta: true, shift: true }), true)).toBeNull();
   });
 
