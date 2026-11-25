@@ -60,6 +60,19 @@ export function isAgentAwaitingApproval(agentId: string): boolean {
   return agentsAwaitingApproval.has(agentId);
 }
 
+/** A status push seen as the approval flag. A dialog redrawn and scraped as plain waiting_input
+ *  is still the dialog, so only leaving waiting_input or a reported turn end clears it. */
+export function noteApprovalStatus(
+  agentId: string,
+  event: { status: string; needsAttention?: boolean; turnEnded?: number },
+): void {
+  const mayKeep = event.status === "waiting_input" && !event.turnEnded;
+  setAgentAwaitingApproval(
+    agentId,
+    event.needsAttention === true || (mayKeep && agentsAwaitingApproval.has(agentId)),
+  );
+}
+
 /** A hook-reported approval or a dialog on its screen (CLIs with no hook for it): Enter answers it */
 export function needsUser(agentId: string): boolean {
   return agentsAwaitingApproval.has(agentId) || getPtyHost().holdsEnter(agentId);

@@ -129,9 +129,12 @@ function applyAgentSignals(
     if (derived.status) signalStatus = derived.status;
     if (derived.turnStarted) turnStarted = derived.turnStarted;
     if (derived.turnEnded) turnEnded = derived.turnEnded;
-    if (derived.needsAttention) needsAttention = true;
-    // The batch's last status wins: idle followed by turn_started is a running turn
-    if (derived.status) idleOnly = derived.idleOnly === true;
+    // The batch's last status wins: idle followed by turn_started is a running turn, and a
+    // question followed by its turn end is no longer asked
+    if (derived.status) {
+      idleOnly = derived.idleOnly === true;
+      needsAttention = derived.needsAttention === true;
+    }
     // A permission prompt ends a turn too — latching on it would let an
     // attention signal disable the delivery fallback.
     if (derived.turnEnded && !derived.needsAttention) noteAgentBoundarySignal(agent.id);
