@@ -19,14 +19,8 @@ import { refitWhenFontLoads } from "./font-ready";
 import { mountRepaint } from "./live-seq";
 import { createSettleTracker, SETTLE_WINDOW_MS } from "./mount-settle";
 import { trackMousePress } from "./mouse-release";
-import {
-  cancelPtyResize,
-  fitAndSyncSize,
-  fitMirror,
-  type SnapshotApplied,
-  setupTerminalSession,
-  type TerminalSession,
-} from "./terminal-setup";
+import { cancelPtyResize, fitAndSyncSize, fitMirror } from "./terminal-fit";
+import { type SnapshotApplied, setupTerminalSession, type TerminalSession } from "./terminal-setup";
 import {
   CANVAS_ONLY_CLI_TYPES,
   DARK_BLACK_TERMINAL_THEME,

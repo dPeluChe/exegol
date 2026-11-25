@@ -178,6 +178,14 @@ describe("dictation shortcut", () => {
     expect(shortcutClash("Cmd+5")).toBe("Project N");
     expect(shortcutClash("Cmd+Option+3")).toBe("Workspace Tab N");
     expect(shortcutClash("Cmd+Shift+M")).toBeNull();
+    expect(shortcutClash("Cmd+Shift+BracketRight")).toBe(shortcutClash("Cmd+Shift+]"));
+    expect(shortcutClash("Cmd+Shift+BracketRight")).not.toBeNull();
+  });
+
+  it("compares the keys pressed off macOS, where Cmd+D is Ctrl+Shift+D", () => {
+    expect(shortcutClash(DEFAULT_DICTATION_SHORTCUT, false)).toBeNull();
+    expect(shortcutClash("Cmd+Shift+D", false)).toBe("Split Horizontal");
+    expect(shortcutClash("Cmd+Option+Shift+D", false)).toBe("Split Vertical");
   });
 
   it("lists the chord the user set, and none with dictation off", () => {
