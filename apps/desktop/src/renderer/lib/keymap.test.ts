@@ -41,6 +41,20 @@ describe("appChord", () => {
       alt: true,
     });
   });
+
+  it("Windows: AltGr typing a character is no chord, though it reports Ctrl+Alt", () => {
+    const altGr = ev({ ctrlKey: true, shiftKey: true, altKey: true });
+    const altGraph = (k: string) => k === "AltGraph";
+    expect(
+      appChord({ ...altGr, key: "Ą", code: "KeyA", getModifierState: altGraph }, false),
+    ).toBeNull();
+    expect(
+      appChord({ ...altGr, key: "@", code: "KeyQ", getModifierState: altGraph }, false),
+    ).toBeNull();
+    // Left Ctrl+Alt on such a layout still gives the letter: the app's chord
+    const leftCtrlAlt = { ...altGr, key: "D", code: "KeyD", getModifierState: altGraph };
+    expect(appChord(leftCtrlAlt, false)).toEqual({ shift: true, alt: true });
+  });
 });
 
 describe("chordKey", () => {

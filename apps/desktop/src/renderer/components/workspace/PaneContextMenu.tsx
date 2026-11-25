@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 import { useState } from "react";
 import { interruptTerminal, kickTerminal } from "../../lib/dispatch-refit";
-import { editKeys } from "../../lib/keymap";
+import { appKeys, editKeys } from "../../lib/keymap";
 import { movePane, paneMoveTargets } from "../../lib/move-pane";
 import { isShellish, restartTerminal } from "../../lib/split-terminal";
 import { useAgentStore } from "../../stores/agents";
@@ -63,7 +63,7 @@ function clipboardSection(paneId: string, selection: string): MenuItem[] {
     selection.length > 0 && {
       label: "Copy",
       icon: Clipboard,
-      shortcut: editKeys("Cmd+C"),
+      shortcut: source ? appKeys("Cmd+C") : editKeys("Cmd+C"),
       action: () => void navigator.clipboard.writeText(selection).catch(() => {}),
     },
     source?.paste !== undefined &&
@@ -71,7 +71,7 @@ function clipboardSection(paneId: string, selection: string): MenuItem[] {
       RUNNING_STATUSES.has(status) && {
         label: "Paste",
         icon: ClipboardPaste,
-        shortcut: editKeys("Cmd+V"),
+        shortcut: appKeys("Cmd+V"),
         action: () =>
           void navigator.clipboard
             .readText()

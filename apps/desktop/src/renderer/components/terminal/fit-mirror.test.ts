@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nextMirrorFont } from "./terminal-setup";
+import { nextMirrorFont } from "./terminal-fit";
 
 /** Painted grid with cells rounded to half pixels, like xterm on a 2x display. */
 const drawnAt = (cols: number, rows: number, font: number) => ({

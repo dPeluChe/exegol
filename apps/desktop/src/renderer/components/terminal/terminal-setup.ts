@@ -4,7 +4,7 @@ import { SerializeAddon } from "@xterm/addon-serialize";
 import { type ITerminalOptions, Terminal } from "@xterm/xterm";
 import { hasClipboardImage } from "../../lib/clipboard-image";
 import { isDictationChord } from "../../lib/dictation/shortcut";
-import { appChord, chordKey, IS_MAC } from "../../lib/keymap";
+import { appChord, chordKey, IS_MAC, IS_WINDOWS } from "../../lib/keymap";
 import { isPaneSwitcherMounted } from "../../lib/pane-switcher-control";
 import { persistShellCwd } from "../../lib/shell-cwd";
 import { useAgentStore } from "../../stores/agents";
@@ -16,9 +16,9 @@ import {
   type OscHandlersDisposable,
   registerOscHandlers,
 } from "./osc-handlers";
-import { createResizeStabilizer } from "./resize-stabilizer";
 import { getScrollPosition } from "./terminal-buffer";
 import { createDormantPipe, type DormantPipe } from "./terminal-dormant-wiring";
+import { fitMirror, ptyResizes } from "./terminal-fit";
 import { registerTerminalLinkProviders } from "./terminal-link-providers";
 import type { TerminalInstanceProps } from "./terminal-types";
 import { watchTuiCopy } from "./tui-copy";
@@ -26,6 +26,9 @@ import { tuneWheelSensitivity } from "./tui-wheel";
 import { applyUnicode11Widths } from "./unicode-widths";
 
 const CTRL_V = "\x16";
+// Claude Code on Windows reads an image paste on Alt+V: Ctrl+V is the terminal's paste there
+const imagePasteKey = (cliType: string | undefined) =>
+  IS_WINDOWS && cliType === "claude-code" ? "\x1bv" : CTRL_V;
 
 interface TerminalSessionDeps {
   agentId: string;
@@ -202,13 +205,20 @@ export function setupTerminalSession(
       // Ctrl+Shift+Tab Shift+Tab, which flips Claude's permission mode
       if (e.ctrlKey && e.key === "Tab") return !isPaneSwitcherMounted();
       if (e.type !== "keydown") return true;
-      if (e.key === "Backspace" && (e.ctrlKey || e.metaKey || e.altKey)) {
+      // The word keys are readline's: PowerShell and cmd have their own (Ctrl+←/→, Ctrl+Backspace)
+      const readlineKeys = !IS_WINDOWS || deps.cliType !== "shell";
+      if (readlineKeys && e.key === "Backspace" && (e.ctrlKey || e.metaKey || e.altKey)) {
         window.api.terminal.write(deps.agentId, "\x17");
         return false;
       }
       // Option+←/→ → word back/forward (ESC b / ESC f). xterm sent CSI 1;3D, which zsh has no
       // binding for, so a plain shell printed "D"
-      if (e.altKey && !e.metaKey && (e.key === "ArrowLeft" || e.key === "ArrowRight")) {
+      if (
+        readlineKeys &&
+        e.altKey &&
+        !e.metaKey &&
+        (e.key === "ArrowLeft" || e.key === "ArrowRight")
+      ) {
         window.api.terminal.write(deps.agentId, e.key === "ArrowLeft" ? "\x1bb" : "\x1bf");
         return false;
       }
@@ -252,7 +262,10 @@ export function setupTerminalSession(
       const cliType = useAgentStore.getState().agents[deps.agentId]?.cliType ?? deps.cliType;
       const way = cliType ? CLIPBOARD_IMAGE[cliType] : undefined;
       if (way) {
-        window.api.terminal.write(deps.agentId, way === "ctrl-v" ? CTRL_V : "/paste");
+        window.api.terminal.write(
+          deps.agentId,
+          way === "ctrl-v" ? imagePasteKey(cliType) : "/paste",
+        );
         return;
       }
       const filePath = await window.api.terminal.saveClipboardImage();
@@ -400,121 +413,4 @@ export function setupTerminalSession(
   }
 
   return { terminal, fitAddon, serializeAddon, dormantPipe, oscHandlers, dispose };
-}
-
-/**
- * Fit the terminal and broadcast the new size to PTY + store. Wrapped so the
- * many callers in TerminalInstance don't each have to repeat the try/catch.
- *
- * Always the addon's floored grid. An alt-screen variant used to CEIL the rows
- * and meant to squeeze the line height to compensate, but the squeeze was a
- * no-op: every fit left the grid one row taller than its box, the box grew to
- * hold it, and the next fit added another row, so the PTY kept gaining rows
- * nobody could see (Claude's input box ended up below the edge) (T194 logs).
- */
-export function fitAndSyncSize(
-  terminal: Terminal,
-  fitAddon: FitAddon,
-  agentId: string,
-  readOnly: boolean,
-  onSize: (cols: number, rows: number) => void,
-): boolean {
-  try {
-    const host = measureHost(terminal);
-    // Unlaid-out or hidden (display: none) box, or cells not measured yet: the addon would fall
-    // back to 80x24 and the PTY would redraw (and rewrap) at 80 columns for a frame
-    if (!host?.width || !host?.height) return false;
-    const dims = fitAddon.proposeDimensions();
-    if (!dims || !Number.isFinite(dims.cols) || !Number.isFinite(dims.rows)) return false;
-    fitAddon.fit();
-    const { cols, rows } = terminal;
-    onSize(cols, rows);
-    if (!readOnly) ptyResizes.request(agentId, terminal, cols, rows);
-    return true;
-  } catch {
-    /* container may not be ready */
-    return false;
-  }
-}
-
-const ptyResizes = createResizeStabilizer((agentId, cols, rows) =>
-  window.api.terminal.resize(agentId, cols, rows),
-);
-
-/** A view that unmounts or hides drops the size it was settling: a transient layout size
- *  reached the PTY after the user had already left. True when there was one */
-export function cancelPtyResize(agentId: string, terminal: Terminal): boolean {
-  return ptyResizes.cancel(agentId, terminal);
-}
-
-/** Latest fit per terminal: a newer call makes older rAF retry chains exit, so
- *  two chains measuring a width that lags a frame can't shrink it twice. */
-const mirrorFitGeneration = new WeakMap<Terminal, number>();
-
-/**
- * T194: a mirror renders at the PTY's real grid, so output wraps exactly as in
- * the owning pane, and shrinks its font to fit the card instead of resizing.
- */
-export function fitMirror(terminal: Terminal, baseFontSize: number): void {
-  const generation = (mirrorFitGeneration.get(terminal) ?? 0) + 1;
-  mirrorFitGeneration.set(terminal, generation);
-  const step = (attempt: number) => {
-    if (mirrorFitGeneration.get(terminal) !== generation) return;
-    try {
-      const host = measureHost(terminal);
-      // The painted grid, not xterm's internal cell metrics: those may not exist
-      // yet, and a mirror that never measures keeps its full font and overflows
-      const rect = terminal.element
-        ?.querySelector<HTMLElement>(".xterm-screen")
-        ?.getBoundingClientRect();
-      if (host?.width && host.height && rect?.width && rect.height) {
-        const current = terminal.options.fontSize ?? baseFontSize;
-        const drawn = { width: rect.width, height: rect.height };
-        const next = nextMirrorFont(current, drawn, host, baseFontSize);
-        if (next === null) return;
-        terminal.options.fontSize = next;
-      }
-    } catch {
-      /* container may not be ready */
-    }
-    // Unmeasured, or glyph metrics settle a frame after a font change
-    if (attempt < 10) requestAnimationFrame(() => step(attempt + 1));
-  };
-  step(0);
-}
-
-/**
- * Next font for a mirror, or null when it should stay put. Glyph sizes round
- * to device pixels, so the painted grid moves in steps: jumping by ratio
- * alone overshot the size that fits and flip-flopped forever, and every font
- * change rebuilds xterm's glyph atlas (~50ms a frame, the renderer never went
- * idle). Overflow always shrinks strictly, fitting is final, and only a card
- * with lots of room left grows, so the sequence always ends.
- */
-export function nextMirrorFont(
-  current: number,
-  drawn: { width: number; height: number },
-  host: { width: number; height: number },
-  base: number,
-): number | null {
-  // The tighter of the two dimensions decides: a full-height card is usually
-  // width-bound, a wide one height-bound
-  const ratio = Math.min(host.width / drawn.width, host.height / drawn.height);
-  const byRatio = Math.floor(current * ratio * 4) / 4;
-  if (drawn.width > host.width + 1 || drawn.height > host.height + 1) {
-    const next = Math.max(6, Math.min(current - 0.25, byRatio));
-    return next < current ? next : null;
-  }
-  const loose = drawn.width < host.width * 0.75 && drawn.height < host.height * 0.75;
-  if (loose && current < base) {
-    const next = Math.min(base, byRatio);
-    return next > current ? next : null;
-  }
-  return null;
-}
-
-function measureHost(terminal: Terminal): { width: number; height: number } | null {
-  const el = terminal.element?.parentElement;
-  if (!el) return null;
-  return { width: el.clientWidth, height: el.clientHeight };
 }
