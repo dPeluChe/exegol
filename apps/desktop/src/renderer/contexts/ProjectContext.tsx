@@ -5,7 +5,8 @@ import { useMountEffect } from "../hooks/use-mount-effect";
 import { useAgents, useProject } from "../hooks/use-trpc";
 import { startAgentBrowserPush } from "../stores/agent-browser";
 // Stale activeProjectId is cleaned up by useAutoSelectProject in App.tsx.
-import { startAgentStatusPush, stopAgentStatusPush, useAgentStore } from "../stores/agents";
+import { startAgentStatusPush, stopAgentStatusPush } from "../stores/agent-status-push";
+import { useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
 
 interface ProjectContextValue {
