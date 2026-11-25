@@ -1,6 +1,6 @@
 import type { SessionProcesses } from "@exegol/shared";
 import type Database from "libsql";
-import { listLiveSessionProcesses } from "../db/queries/agents";
+import { listLiveSessionProcesses } from "../db/queries/agent-live";
 import { type KnownServer, knownClaudeServers } from "../mcp/claude-servers";
 import { readProcessTable } from "./process-table";
 import { indexProcesses } from "./process-tree";

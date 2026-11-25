@@ -1,24 +1,10 @@
-import { dictationSettingsOf, formatChord, type KeyChord } from "@exegol/shared";
+import { dictationSettingsOf } from "@exegol/shared";
 import { cn } from "@exegol/ui";
-import { ArrowDown, Crosshair, Loader2, Mic, Pause, Play } from "lucide-react";
-import {
-  type CSSProperties,
-  type ReactNode,
-  type UIEvent,
-  useLayoutEffect,
-  useRef,
-  useState,
-} from "react";
+import { ArrowDown, Crosshair, Loader2, Pause } from "lucide-react";
+import { type UIEvent, useLayoutEffect, useRef, useState } from "react";
 import { useMountEffect } from "../../hooks/use-mount-effect";
 import { useProjects, useSettings } from "../../hooks/use-trpc";
 import { useDictationStatus } from "../../hooks/use-trpc-dictation";
-import { AUTO_INSERT_COUNTDOWN_MS } from "../../lib/dictation/auto-insert";
-import {
-  cancelAutoInsert,
-  dismissDictation,
-  stopDictation,
-  togglePauseDictation,
-} from "../../lib/dictation/controller";
 import { OVERLAY_ATTR } from "../../lib/dictation/overlay-keys";
 import {
   dockedPill,
@@ -29,25 +15,26 @@ import {
   paneOnScreen,
   sameBox,
 } from "../../lib/dictation/overlay-position";
-import { dictationChord } from "../../lib/dictation/shortcut";
 import { insertHint, TARGET_KINDS, targetName } from "../../lib/dictation/target";
-import { clippedAbove, shouldFollow, unannounced } from "../../lib/dictation/transcript-scroll";
-import { appKeys, IS_MAC } from "../../lib/keymap";
+import { clippedAbove, shouldFollow } from "../../lib/dictation/transcript-scroll";
 import { paneRoot } from "../../lib/pane-focus";
 import { useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
-import {
-  type DictationPhase,
-  isRecording,
-  recordedMs,
-  useDictationStore,
-} from "../../stores/dictation";
+import { type DictationPhase, isRecording, useDictationStore } from "../../stores/dictation";
 import { useWorkspaceStore } from "../../stores/workspace";
 import { AgentIcon } from "../common/AgentIcon";
-import { Kbd } from "../common/Kbd";
 import { LevelBars } from "./LevelBars";
 import { ModelChooser } from "./ModelChooser";
+import {
+  CancelButton,
+  Commands,
+  InputName,
+  InputNotice,
+  InsertButton,
+  PauseButton,
+} from "./overlay-controls";
 import { ErrorBody, MicDenied } from "./overlay-panels";
+import { Announcer, AutoInsertCountdown, StatePill, Timer } from "./overlay-status";
 import { keepFocus, OverlayButton } from "./overlay-ui";
 import { cardBox, DRAG_HANDLE, useOverlayDrag } from "./use-overlay-drag";
 
@@ -267,115 +254,6 @@ function DockedPill({ phase }: { phase: DictationPhase }) {
   );
 }
 
-/** Auto insert's last seconds: a draining bar; a click keeps this dictation going */
-function AutoInsertCountdown({ compact = false }: { compact?: boolean }) {
-  const countdown = useDictationStore((s) => s.autoInsertCountdown);
-  if (!countdown) return null;
-  return <Countdown key={countdown.endsAt} {...countdown} compact={compact} />;
-}
-
-function Countdown({ endsAt, ms, compact }: { endsAt: number; ms: number; compact: boolean }) {
-  const [secs, setSecs] = useState(Math.ceil(ms / 1000));
-  // The label changes once a second; the bar drains on its own (CSS)
-  useMountEffect(() => {
-    let id: ReturnType<typeof setTimeout>;
-    const tick = () => {
-      const left = endsAt - Date.now();
-      setSecs(Math.max(0, Math.ceil(left / 1000)));
-      if (left > 0) id = setTimeout(tick, (left % 1000 || 1000) + 5);
-    };
-    tick();
-    return () => clearTimeout(id);
-  });
-  const drain = {
-    "--from": Math.max(0, Math.min(1, ms / AUTO_INSERT_COUNTDOWN_MS)),
-    animationDuration: `${ms}ms`,
-  } as CSSProperties;
-  return (
-    <button
-      type="button"
-      onMouseDown={keepFocus}
-      onClick={cancelAutoInsert}
-      title="Click to keep dictating: no auto insert this time"
-      className={cn(
-        "shrink-0 text-left text-[11px] font-medium text-accent",
-        compact
-          ? "flex w-24 flex-col gap-0.5 rounded-md px-1.5 py-0.5 hover:bg-accent/10"
-          : "mx-3.5 mb-2 flex w-[calc(100%-1.75rem)] flex-col gap-1 rounded-md px-2 py-1.5 hover:bg-accent/10",
-      )}
-    >
-      <span className="flex items-center justify-between gap-2">
-        <span aria-live="polite">Inserting in {secs}…</span>
-        {!compact && <span className="font-normal text-text-muted">Click to keep dictating</span>}
-      </span>
-      <span className="block h-1 overflow-hidden rounded-full bg-accent/15">
-        <span
-          className="animate-countdown-drain block h-full rounded-full bg-accent"
-          style={drain}
-        />
-      </span>
-    </button>
-  );
-}
-
-function StatePill({ phase }: { phase: DictationPhase }) {
-  const modelLoading = useDictationStore((s) => s.modelLoading);
-  const paused = useDictationStore((s) => s.pausedAt !== null);
-  if (phase === "listening" && paused) {
-    return (
-      <span className="inline-flex shrink-0 items-center gap-2 rounded-full bg-bg-tertiary/80 py-1 pr-2.5 pl-2 text-[11px] font-medium text-text-secondary">
-        <Pause className="h-3 w-3" />
-        <Timer />
-        <span className="font-normal text-text-muted">Paused</span>
-      </span>
-    );
-  }
-  if (phase === "listening") {
-    return (
-      <span className="inline-flex shrink-0 items-center gap-2 rounded-full bg-error/10 py-1 pr-2.5 pl-2 text-[11px] font-medium text-error">
-        <span className="relative flex h-2 w-2">
-          <span className="absolute inset-0 rounded-full bg-error/60 motion-safe:animate-ping" />
-          <span className="relative h-2 w-2 rounded-full bg-error" />
-        </span>
-        <Timer />
-        <span className="font-normal text-text-secondary">
-          {modelLoading ? "Loading model" : "Listening"}
-        </span>
-      </span>
-    );
-  }
-  return (
-    <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full bg-accent/10 py-1 pr-2.5 pl-2 text-[11px] font-medium text-accent">
-      <Loader2 className="h-3 w-3 motion-safe:animate-spin" />
-      {phase === "transcribing" ? "Transcribing…" : "Starting"}
-    </span>
-  );
-}
-
-function Timer() {
-  const startedAt = useDictationStore((s) => s.startedAt);
-  const pausedAt = useDictationStore((s) => s.pausedAt);
-  const [now, setNow] = useState(Date.now());
-  // Ticks on each whole second of the recording, not on a fixed poll; a resume moves startedAt
-  useMountEffect(() => {
-    let id: ReturnType<typeof setTimeout>;
-    const tick = () => {
-      const t = Date.now();
-      setNow(t);
-      const ms = recordedMs(useDictationStore.getState(), t);
-      id = setTimeout(tick, 1000 - (ms % 1000) + 5);
-    };
-    tick();
-    return () => clearTimeout(id);
-  });
-  const secs = Math.floor(recordedMs({ startedAt, pausedAt }, now) / 1000);
-  return (
-    <span className="font-mono tabular-nums">
-      {Math.floor(secs / 60)}:{String(secs % 60).padStart(2, "0")}
-    </span>
-  );
-}
-
 /** Where Insert puts the text: the session (its CLI's icon and alias) and its project */
 function TargetChip() {
   const kind = useDictationStore((s) => s.targetKind);
@@ -404,32 +282,6 @@ function TargetChip() {
       {kind === "terminal" && pressEnter && <span className="shrink-0 text-accent">+ Enter</span>}
     </span>
   );
-}
-
-/** Pauses this long close a phrase for screen readers: streamed words are not read one by one */
-const ANNOUNCE_AFTER_MS = 1200;
-
-/** Reads each finished phrase out once, in the card and the pill alike */
-function Announcer() {
-  const live = useRef<HTMLSpanElement>(null);
-  useMountEffect(() => {
-    let announced = "";
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const unsubscribe = useDictationStore.subscribe((s, prev) => {
-      if (s.partial === prev.partial) return;
-      clearTimeout(timer);
-      timer = setTimeout(() => {
-        const next = unannounced(announced, s.partial);
-        announced = s.partial;
-        if (live.current && next) live.current.textContent = next;
-      }, ANNOUNCE_AFTER_MS);
-    });
-    return () => {
-      unsubscribe();
-      clearTimeout(timer);
-    };
-  });
-  return <span ref={live} aria-live="polite" className="sr-only" />;
 }
 
 function Transcript({ phase }: { phase: DictationPhase }) {
@@ -511,102 +363,3 @@ function Transcript({ phase }: { phase: DictationPhase }) {
     </div>
   );
 }
-
-const MAC_GLYPHS: Record<string, string> = { Cmd: "⌘", Ctrl: "⌃", Shift: "⇧", Option: "⌥" };
-
-/** The chord's keys for this platform: glyphs on macOS, words elsewhere */
-const chordKeys = (chord: KeyChord): string[] =>
-  formatChord(chord, IS_MAC)
-    .split("+")
-    .map((k) => (IS_MAC ? (MAC_GLYPHS[k] ?? k) : k));
-
-/** The pill's keycaps that also click: Insert (accent) and Esc cancel (neutral) */
-function Commands({ phase }: { phase: DictationPhase }) {
-  return (
-    <div className="flex shrink-0 items-center gap-1.5">
-      {isRecording(phase) && <InsertButton compact />}
-      <CancelButton />
-    </div>
-  );
-}
-
-function InsertButton({ compact = false }: { compact?: boolean }) {
-  const chord = dictationChord();
-  const keys = chord && !compact ? chordKeys(chord) : [];
-  const enter = IS_MAC ? "↵" : "Enter";
-  return (
-    <OverlayButton
-      variant="insert"
-      label={chord ? `Insert (Enter or ${formatChord(chord, IS_MAC)})` : "Insert (Enter)"}
-      title={`Insert: ${[enter, chord ? chordKeys(chord).join("") : ""].filter(Boolean).join(" or ")}`}
-      onClick={() => void stopDictation("button")}
-    >
-      <KeyCap>{enter}</KeyCap>
-      {keys.length > 0 && (
-        <>
-          <span>or</span>
-          <span className="inline-flex gap-0.5">
-            {keys.map((k) => (
-              <KeyCap key={k}>{k}</KeyCap>
-            ))}
-          </span>
-        </>
-      )}
-      <span>insert</span>
-    </OverlayButton>
-  );
-}
-
-/** Pause the recording and pick it up again: same session, same text so far */
-function PauseButton({ paused }: { paused: boolean }) {
-  const keys = appKeys("Cmd+P");
-  const word = paused ? "Resume" : "Pause";
-  return (
-    <OverlayButton
-      variant="cancel"
-      label={`${word} (${keys})`}
-      title={`${word}: ${keys}`}
-      onClick={togglePauseDictation}
-    >
-      {paused ? <Play className="h-3 w-3" /> : <Pause className="h-3 w-3" />}
-      <span>{paused ? "resume" : "pause"}</span>
-    </OverlayButton>
-  );
-}
-
-/** The mic this dictation opened */
-function InputName() {
-  const name = useDictationStore((s) => s.inputName);
-  if (!name) return <span className="flex-1" />;
-  return (
-    <span
-      title={`Input: ${name}`}
-      className="inline-flex min-w-0 flex-1 items-center justify-center gap-1 text-[10px] text-text-muted"
-    >
-      <Mic className="h-2.5 w-2.5 shrink-0" />
-      <span className="truncate">{name}</span>
-    </span>
-  );
-}
-
-function InputNotice() {
-  const notice = useDictationStore((s) => s.inputNotice);
-  if (!notice) return null;
-  return <p className="truncate px-3.5 pb-1.5 text-[10px] text-warning">{notice}</p>;
-}
-
-const CancelButton = () => (
-  <OverlayButton
-    variant="cancel"
-    label="Cancel (Esc)"
-    title="Cancel: Esc"
-    onClick={() => dismissDictation("button")}
-  >
-    <KeyCap>Esc</KeyCap>
-    <span>cancel</span>
-  </OverlayButton>
-);
-
-const KeyCap = ({ children }: { children: ReactNode }) => (
-  <Kbd className="h-5 min-w-5 px-1">{children}</Kbd>
-);

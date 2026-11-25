@@ -1,6 +1,6 @@
 import type Database from "libsql";
 import { hookCwdOf } from "../agents/hook-cwd";
-import { listLiveProjectSessions } from "../db/queries/agents";
+import { listLiveProjectSessions } from "../db/queries/agent-live";
 import {
   type ProjectRepo,
   repoOfSessions,

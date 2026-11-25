@@ -1,16 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
-  appliedModelRoles,
   classifyActivity,
-  cliRestartNeeded,
   deriveIsolationMode,
   injectedHeaders,
   injectedMessageId,
-  isNewerVersion,
-  MODEL_ID_PATTERN,
-  roleModelProblem,
   stripPasteTags,
 } from "./agent";
+import { cliRestartNeeded, isNewerVersion } from "./agent-cli-install";
+import { appliedModelRoles, MODEL_ID_PATTERN, roleModelProblem } from "./agent-models";
 
 // ─── classifyActivity ─────────────────────────────────────────────────────
 

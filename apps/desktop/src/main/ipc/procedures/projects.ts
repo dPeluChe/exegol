@@ -31,7 +31,7 @@ import {
   updateProjectLastOpened,
   updateProjectSortOrder,
 } from "../../db/queries";
-import { countLiveAgentsInWorktree, listLiveAgentIds } from "../../db/queries/agents";
+import { countLiveAgentsInWorktree, listLiveAgentIds } from "../../db/queries/agent-live";
 import {
   setProjectBrowserEval,
   setProjectBrowserHosts,

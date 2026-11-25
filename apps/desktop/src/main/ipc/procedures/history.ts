@@ -6,7 +6,7 @@ import {
   getAgentFinalOutput,
   listHistoryCliTypes,
   listSessionHistory,
-} from "../../db/queries/agents";
+} from "../../db/queries/agent-history";
 import { hasLocalSession, listLocalSessions } from "../../history";
 import { mergeHistory } from "../../history/merge";
 import { claudeCodeHistory } from "../../history/providers/claude-code";

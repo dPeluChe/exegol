@@ -28,8 +28,13 @@ export function hasFileDragData(e: React.DragEvent): boolean {
 
 /** A path a CLI on this OS reads as one word; Windows quotes only with `"` and names no file with it */
 export function quotePath(p: string, platform = PLATFORM): string {
-  if (!/[\s'"]/.test(p)) return p;
-  return platform === "win32" ? `"${p}"` : `'${p.replace(/'/g, "'\\''")}'`;
+  if (platform === "win32") {
+    if (!/[\s&()^;,'"`$%!]/.test(p)) return p;
+    // PowerShell, the default shell, expands $ and backticks inside double quotes
+    return /[$`]/.test(p) ? `'${p.replace(/'/g, "''")}'` : `"${p}"`;
+  }
+  // Anything a POSIX shell reads specially: $, &, *, (, ;, quotes, spaces
+  return /^[\p{L}\p{N}_@%+=:,./~-]+$/u.test(p) ? p : `'${p.replace(/'/g, "'\\''")}'`;
 }
 
 /** Files from Finder, dropped or pasted: absolute paths, quoted when they need it */
