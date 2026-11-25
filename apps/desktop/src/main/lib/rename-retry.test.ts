@@ -1,9 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const rename = vi.hoisted(() => vi.fn());
+const renameSync = vi.hoisted(() => vi.fn());
 vi.mock("node:fs/promises", () => ({ rename }));
+vi.mock("node:fs", () => ({ renameSync }));
 
-import { renameWithRetry } from "./rename-retry";
+import { renameSyncWithRetry, renameWithRetry } from "./rename-retry";
 
 const busy = () => Object.assign(new Error("busy"), { code: "EPERM" });
 
@@ -33,5 +35,14 @@ describe("renameWithRetry", () => {
     expect(rename).toHaveBeenCalledTimes(1);
     expect(await code(renameWithRetry("a", "b", "win32", 2))).toBe("EPERM");
     expect(rename).toHaveBeenCalledTimes(3);
+  });
+
+  it("waits out a busy file in its synchronous form too", () => {
+    renameSync.mockReset();
+    renameSync.mockImplementationOnce(() => {
+      throw busy();
+    });
+    renameSyncWithRetry("a", "b", "win32");
+    expect(renameSync).toHaveBeenCalledTimes(2);
   });
 });
