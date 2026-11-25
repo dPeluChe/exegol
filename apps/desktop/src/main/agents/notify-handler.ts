@@ -56,13 +56,12 @@ export function startNotifyHandler(onEvent: EventCallback): void {
       if (!filename?.endsWith(".json")) return;
       const filePath = join(dir, filename);
       try {
-        const raw = readFileSync(filePath, "utf-8");
-        const event = JSON.parse(raw) as AgentEvent;
-        if (event.type && event.agentId) {
-          callback?.(event);
-        }
+        const event = JSON.parse(readFileSync(filePath, "utf-8")) as AgentEvent;
+        if (event.type && event.agentId) callback?.(event);
       } catch {
-        // Malformed event file — ignore
+        // Gone already, or not whole yet (an older notify.sh wrote in place): its next change
+        // event reads it again, and the startup sweep takes what is left
+        return;
       }
       try {
         unlinkSync(filePath);
