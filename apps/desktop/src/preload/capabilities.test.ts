@@ -22,7 +22,7 @@ import { appRouter } from "../main/ipc/router";
  * halves are individually correct.
  */
 describe("preload capabilities allowlist", () => {
-  // Mirrors the shape both live matchers use (`preload/index.ts`,
+  // Mirrors the shape both live matchers use (`preload/safe-ipc.ts`,
   // `main/ipc/capabilities.ts`): a router may be "*" for every procedure.
   const capabilities = JSON.parse(readFileSync(join(__dirname, "capabilities.json"), "utf-8")) as {
     trpc: Record<string, "*" | readonly string[]>;

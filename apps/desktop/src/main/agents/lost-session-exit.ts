@@ -5,10 +5,10 @@ import { logger } from "../lib/logger";
 import { revokeAgentMcpToken } from "../mcp/exegol-server";
 import { forgetTerminalLogs } from "../terminal/mount-log";
 import { forgetTerminalViewers } from "../terminal/pty-visibility";
-import type { SessionMaps } from "./agent-session-callbacks";
 import { lastActiveOf } from "./auto-resume";
 import { addLost } from "./lost-sessions";
 import { detachOutputPipeline } from "./output-pipeline";
+import type { SessionMaps } from "./session-maps";
 import { type AgentContext, broadcastAgentStatus, forgetBroadcastStatus } from "./spawn-env";
 import { forgetTurns } from "./turn-snapshots";
 

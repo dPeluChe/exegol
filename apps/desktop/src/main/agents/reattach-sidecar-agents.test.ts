@@ -54,8 +54,8 @@ vi.mock("./spawn-env", () => ({
 import { logger } from "../lib/logger";
 import { getRecoveryState, whenSessionReady } from "../terminal/reattach-gate";
 import { saveActiveView } from "./active-view";
-import type { SessionMaps } from "./agent-session-callbacks";
 import { reattachSidecarAgents } from "./reattach-sidecar-agents";
+import type { SessionMaps } from "./session-maps";
 import { broadcastAgentStatus } from "./spawn-env";
 
 function setupDb(): Database.Database {

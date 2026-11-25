@@ -1,7 +1,8 @@
 import Database from "libsql";
 import { beforeEach, describe, expect, it } from "vitest";
-import { dispatchAgentFileEvent, type SessionMaps } from "./agent-session-callbacks";
+import { dispatchAgentFileEvent } from "./agent-signals";
 import { hookCwdOf } from "./hook-cwd";
+import type { SessionMaps } from "./session-maps";
 
 function setupDb(): Database.Database {
   const db = new Database(":memory:");

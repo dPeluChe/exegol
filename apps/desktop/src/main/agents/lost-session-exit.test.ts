@@ -10,9 +10,9 @@ vi.mock("./spawn-env", async (orig) => ({
 
 import { runMigrations } from "../db/migrations";
 import { settleAllReattach } from "../terminal/reattach-gate";
-import type { SessionMaps } from "./agent-session-callbacks";
 import { handleLostSession, lostStep } from "./lost-session-exit";
 import { settleLost, takeLostOnRestart } from "./lost-sessions";
+import type { SessionMaps } from "./session-maps";
 
 function maps(): SessionMaps {
   return {

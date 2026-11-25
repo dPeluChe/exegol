@@ -7,7 +7,8 @@ import { runMigrations } from "../db/migrations";
 import { createAgent } from "../db/queries";
 import type { LocalSession } from "../history/types";
 import { AGENT_BIN_DIR } from "../mcp/agent-cli-install";
-import { beforeAgentPrefix, buildPtyInvocation, setupAgentCwd } from "./agent-spawn-flow";
+import { setupAgentCwd } from "./agent-cwd-setup";
+import { beforeAgentPrefix, buildPtyInvocation } from "./agent-spawn-flow";
 import type { AgentProviderRegistry } from "./registry";
 
 const mocks = vi.hoisted(() => ({
