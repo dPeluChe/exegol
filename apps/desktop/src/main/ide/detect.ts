@@ -3,7 +3,7 @@ import { readdir, readFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
 import type { IdeInfo } from "@exegol/shared";
-import { findOnPath } from "../agents/spawn-env";
+import { findOnPath } from "../agents/shell-path";
 import { mapWithConcurrency } from "../lib/concurrency";
 import { execFileAsync } from "../lib/exec-file";
 import {

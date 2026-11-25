@@ -2,7 +2,7 @@ import { access, stat } from "node:fs/promises";
 import { join } from "node:path";
 import type { AgentCliType } from "@exegol/shared";
 import { providerBinaries } from "./cli-catalog";
-import { commandOnPath } from "./spawn-env";
+import { commandOnPath } from "./shell-path";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

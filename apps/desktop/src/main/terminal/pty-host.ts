@@ -382,10 +382,14 @@ export class PtyHost {
   kill(id: string): void {
     const s = this.sessions.get(id);
     if (!s?.alive) return;
+    // Windows reads the table through PowerShell (a second or more) and keeps a dead parent's
+    // pid on its children, so the pane closes first there and the tree is read after
+    const first = process.platform === "win32";
+    if (first) this.killPty(s);
     const read = s.pid ? readProcessTable().catch(() => []) : Promise.resolve([]);
     void read.then((rows) => {
       const started = s.pid ? terminalProcesses(s.pid, rows) : [];
-      this.killPty(s);
+      if (!first) this.killPty(s);
       terminateAll(started);
     });
   }

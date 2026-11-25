@@ -1,7 +1,7 @@
 import { MODEL_ID_PATTERN } from "@exegol/shared";
 import { logger } from "../lib/logger";
 import { getProviderRegistry } from "./registry";
-import { _getFullPath, execCli, resolveCommand } from "./spawn-env";
+import { _getFullPath, execCli, resolveCommand } from "./shell-path";
 
 type Parse = (stdout: string) => string[];
 

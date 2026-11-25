@@ -42,14 +42,9 @@ import {
   shellKind,
   submitKey,
 } from "./shell-dialect";
+import { _getFullPath, loginShell } from "./shell-path";
 import { buildShellCommand, buildSpawnContext } from "./spawn-context";
-import {
-  _getFullPath,
-  buildApiKeyEnv,
-  buildClaudeCodeHooksFile,
-  coreRust,
-  loginShell,
-} from "./spawn-env";
+import { buildApiKeyEnv, buildClaudeCodeHooksFile, coreRust } from "./spawn-env";
 import { findReusableWorktree, findWorktreeHolding, requestedBranchFor } from "./spawn-target";
 import {
   createManagedWorktree,

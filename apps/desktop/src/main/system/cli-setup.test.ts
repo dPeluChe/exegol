@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("electron", () => ({ net: { fetch: vi.fn() } }));
-vi.mock("../agents/spawn-env", () => ({ _getFullPath: () => "" }));
+vi.mock("../agents/shell-path", () => ({ _getFullPath: () => "" }));
 vi.mock("../lib/logger", () => ({ logger: { info: vi.fn(), warn: vi.fn() } }));
 const { CLI_CATALOG, COMMAND_ALIASES, cliSetupFor } = await import("../agents/cli-catalog");
 

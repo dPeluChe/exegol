@@ -9,11 +9,11 @@ import {
   writeFileSync,
 } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, dirname, join } from "node:path";
 import { promisify } from "node:util";
 import { samePath } from "@exegol/shared";
 import { afterAll, describe, expect, it } from "vitest";
-import { execCli, findOnPath, hookShell } from "../agents/spawn-env";
+import { execCli, findAllOnPath, findOnPath, hookShell } from "../agents/shell-path";
 import { execFileAsync } from "../lib/exec-file";
 import { checkGitSync } from "../pipeline/pipeline-helpers";
 import { readProcessTable } from "./process-table";
@@ -50,6 +50,14 @@ describe("processes", () => {
 });
 
 describe("CLIs as npm installs them", () => {
+  it("lists one copy per PATH folder, in PATH order, a folder listed twice once", () => {
+    const [a, b] = [temp(), temp()];
+    for (const dir of [a, b])
+      writeFileSync(join(dir, WINDOWS ? "fake-cli.cmd" : "fake-cli"), "", { mode: 0o755 });
+    const hits = findAllOnPath("fake-cli", [b, a, b].join(delimiter));
+    expect(hits.map((h) => dirname(h).toLowerCase())).toEqual([b, a].map((d) => d.toLowerCase()));
+  });
+
   it.runIf(WINDOWS)("prefers the .cmd over npm's extensionless POSIX script", () => {
     const dir = temp();
     writeFileSync(join(dir, "fake-cli"), "#!/bin/sh\n");
