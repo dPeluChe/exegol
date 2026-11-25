@@ -1,6 +1,6 @@
 import { createOutputProcessor } from "./agent-output-processor";
-import type { SessionMaps } from "./agent-session-callbacks";
 import { getProviderRegistry } from "./registry";
+import type { SessionMaps } from "./session-maps";
 import { type AgentContext, broadcastAgentStatus } from "./spawn-env";
 import { forgetAgentStatusWrites } from "./status-writes";
 import { forgetTermStatus } from "./term-status";

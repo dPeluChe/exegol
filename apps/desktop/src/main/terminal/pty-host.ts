@@ -9,45 +9,28 @@ import { ExitWaiters } from "./exit-waiters";
 import type { HeadlessEmulator } from "./headless-emulator";
 import { SidecarLossHandler } from "./pty-host-loss";
 import {
-  newSidecarSession,
   type ReattachedSession,
   type ReattachHost,
   type ReattachOptions,
   reattachSidecarSession,
 } from "./pty-host-reattach";
-import {
-  encodeFrame,
-  encodeJson,
-  encodeString,
-  FRAME_KILL,
-  FRAME_RESIZE,
-  FRAME_WRITE,
-  type SpawnPayload,
-} from "./pty-ipc";
+import type { SpawnPayload } from "./pty-ipc";
 import { doCreateLegacy, forceKillSession, type LegacyHostDeps } from "./pty-legacy-session";
+import * as screen from "./pty-screen-reads";
 import { flushScrollbackSync, scheduleScrollbackFlush } from "./pty-scrollback";
-import {
-  MAX_CONCURRENT_SPAWNS,
-  type Session,
-  type SessionCallbacks,
-  SHELL_READY_TIMEOUT_MS,
-} from "./pty-session-types";
+import { callSidecar, killPty, resizePty, sendNow } from "./pty-session-io";
+import { MAX_CONCURRENT_SPAWNS, type Session, type SessionCallbacks } from "./pty-session-types";
 import { resolveShellReady, scanForMarker } from "./pty-shell-ready";
 import type { SidecarClient } from "./pty-sidecar-client";
-import { type SessionMemoryResult, SHELL_RING_BUFFER_CAPACITY } from "./pty-sidecar-protocol";
-import { awaitsConfirm, readScreenDialog } from "./screen-dialog";
-import { trackSidecarCall } from "./sidecar-health-watch";
+import { doCreateSidecar } from "./pty-sidecar-create";
+import type { SessionMemoryResult } from "./pty-sidecar-protocol";
 import { isFrameGap, isStaleFrame, lostFrames, resyncFromRing } from "./sidecar-resync";
 
 export type { ReattachedSession } from "./pty-host-reattach";
 export type { SessionCallbacks } from "./pty-session-types";
 
-/** A snapshot waits at most this long for queued output to parse, then goes without a seq */
-const SNAPSHOT_PARSE_DEADLINE_MS = 1_500;
-
 /** Redraws asked within this of the last one are the same repaint */
 const REDRAW_WINDOW_MS = 500;
-const MAX_CHAT_LINES = 600;
 
 export class PtyHost {
   private sessions = new Map<string, Session>();
@@ -178,17 +161,6 @@ export class PtyHost {
     return this.sidecarClient;
   }
 
-  /** The calls a keystroke or pane depends on: the health watch sees each one */
-  private callSidecar(
-    method: string,
-    id: string,
-    call: (client: SidecarClient) => Promise<void>,
-  ): void {
-    const client = this.sidecarClient;
-    if (!client) return;
-    trackSidecarCall(method, id, call(client), client);
-  }
-
   disconnectSidecar(): void {
     this.sidecarClient?.disconnect();
     this.sidecarClient = null;
@@ -256,47 +228,17 @@ export class PtyHost {
   ): Promise<{ pid: number }> {
     this.pendingSizes.delete(id);
     if (this.sidecarClient?.isConnected()) {
-      return this.doCreateSidecar(id, spawnOpts, callbacks, options);
+      return doCreateSidecar(
+        this.sidecarClient,
+        this.sessions,
+        (s, st) => this.resolveShellReady(s, st),
+        id,
+        spawnOpts,
+        callbacks,
+        options,
+      );
     }
     return this.spawnSlot(() => this.doCreateLegacy(id, spawnOpts, callbacks, options));
-  }
-
-  private async doCreateSidecar(
-    id: string,
-    spawnOpts: SpawnPayload,
-    callbacks: SessionCallbacks,
-    options?: { scrollbackPath?: string; shellReadyGating?: boolean; smallRingBuffer?: boolean },
-  ): Promise<{ pid: number }> {
-    const session = newSidecarSession(
-      id,
-      spawnOpts,
-      callbacks,
-      options?.scrollbackPath,
-      options?.shellReadyGating ? "pending" : "unsupported",
-    );
-    session.lastSeq = 0;
-    this.sessions.set(id, session);
-
-    if (session.shellReadyState === "pending") {
-      session.shellReadyTimeout = setTimeout(() => {
-        this.resolveShellReady(session, "timed_out");
-      }, SHELL_READY_TIMEOUT_MS);
-    }
-
-    // biome-ignore lint/style/noNonNullAssertion: checked above
-    const result = await this.sidecarClient!.createSession({
-      id,
-      shell: spawnOpts.shell,
-      args: spawnOpts.args,
-      cwd: spawnOpts.cwd,
-      cols: spawnOpts.cols,
-      rows: spawnOpts.rows,
-      env: spawnOpts.env,
-      bufferCapacity: options?.smallRingBuffer ? SHELL_RING_BUFFER_CAPACITY : undefined,
-    });
-
-    session.pid = result.pid;
-    return { pid: result.pid };
   }
 
   private doCreateLegacy(
@@ -322,7 +264,7 @@ export class PtyHost {
       s.preReadyStdinQueue.push(data);
       return;
     }
-    this.sendNow(s, data);
+    sendNow(this.sidecarClient, s, data);
   }
 
   resize(id: string, cols: number, rows: number): void {
@@ -333,7 +275,7 @@ export class PtyHost {
     }
     if (!s.alive) return;
     s.emulator.resize(cols, rows);
-    this.resizePty(s, cols, rows);
+    resizePty(this.sidecarClient, s, cols, rows);
   }
 
   /** Make the CLI repaint at its current size: a size change is the only
@@ -348,9 +290,9 @@ export class PtyHost {
     const { cols, rows } = s.emulator.size;
     if (cols < 3) return;
     this.lastRedrawAt.set(id, now);
-    this.resizePty(s, cols - 1, rows);
+    resizePty(this.sidecarClient, s, cols - 1, rows);
     setTimeout(() => {
-      if (s.alive) this.resizePty(s, s.emulator.size.cols, s.emulator.size.rows);
+      if (s.alive) resizePty(this.sidecarClient, s, s.emulator.size.cols, s.emulator.size.rows);
     }, 60);
   }
 
@@ -365,18 +307,6 @@ export class PtyHost {
     this.write(id, "\x0c");
   }
 
-  private resizePty(s: Session, cols: number, rows: number): void {
-    if (s.mode === "sidecar") {
-      this.callSidecar("session.resize", s.id, (c) => c.resize(s.id, cols, rows));
-      return;
-    }
-    try {
-      s.child?.stdin?.write(encodeJson(FRAME_RESIZE, { cols, rows }));
-    } catch {
-      /* pipe broken */
-    }
-  }
-
   /** Ends the session and what it started (`terminalProcesses`), read while the shell still holds
    *  it: once the shell dies its children are reparented and its tty released */
   kill(id: string): void {
@@ -385,32 +315,19 @@ export class PtyHost {
     // Windows reads the table through PowerShell (a second or more) and keeps a dead parent's
     // pid on its children, so the pane closes first there and the tree is read after
     const first = process.platform === "win32";
-    if (first) this.killPty(s);
+    if (first) killPty(this.sidecarClient, s);
     const read = s.pid ? readProcessTable().catch(() => []) : Promise.resolve([]);
     void read.then((rows) => {
       const started = s.pid ? terminalProcesses(s.pid, rows) : [];
-      if (!first) this.killPty(s);
+      if (!first) killPty(this.sidecarClient, s);
       terminateAll(started);
     });
-  }
-
-  private killPty(s: Session): void {
-    const id = s.id;
-    if (s.mode === "sidecar") {
-      this.callSidecar("session.kill", id, (c) => c.kill(id));
-      return;
-    }
-    try {
-      s.child?.stdin?.write(encodeFrame(FRAME_KILL, Buffer.alloc(0)));
-    } catch {
-      /* pipe broken */
-    }
   }
 
   /** Kill a sidecar session that has no local `sessions` entry (orphan sweep).
    *  `kill()` no-ops for unmapped ids, which left zombies alive across restarts. */
   killUnclaimed(id: string): void {
-    this.callSidecar("session.kill", id, (c) => c.kill(id));
+    callSidecar(this.sidecarClient, "session.kill", id, (c) => c.kill(id));
   }
 
   /** The PTY's real grid; mirrors render at this size instead of resizing it. */
@@ -432,47 +349,24 @@ export class PtyHost {
     return this.sessions.get(id)?.emulator.snapshot() ?? null;
   }
 
-  /** The screen holding exactly the output up to `seq`, serialized once that output is parsed */
   parsedLiveSnapshot(id: string): Promise<LiveSnapshot | null> {
-    const s = this.sessions.get(id);
-    if (!s) return Promise.resolve(null);
-    const { emulator } = s;
-    const seq = s.lastSeq;
-    return emulator.afterParsed(SNAPSHOT_PARSE_DEADLINE_MS, (parsed) => {
-      if (this.sessions.get(id) !== s) return null;
-      // A Retry resync may have swapped the model meanwhile: its screen is not the one `seq` names
-      const model = s.emulator;
-      const snapshot = model.snapshot();
-      return {
-        data: snapshot ? snapshot + model.modeSequence() : null,
-        seq: parsed && model === emulator ? seq : undefined,
-        alt: model.alternateScreen,
-        ...model.size,
-      };
-    });
+    return screen.parsedLiveSnapshot(this.sessions, id);
   }
 
-  /** The numbered dialog the session's screen shows now, if any */
   screenDialog(id: string): ScreenDialog | null {
-    const lines = this.sessions.get(id)?.emulator.visibleLines();
-    return lines ? readScreenDialog(lines) : null;
+    return screen.screenDialog(this.sessions, id);
   }
 
-  /** A gate with no numbers on screen (a trust prompt): only its terminal answers it */
   screenGate(id: string): boolean {
-    const lines = this.sessions.get(id)?.emulator.visibleLines();
-    return !!lines && readScreenDialog(lines) == null && awaitsConfirm(lines);
+    return screen.screenGate(this.sessions, id);
   }
 
-  /** A dialog or a gate on screen: an Enter typed now would answer it */
   holdsEnter(id: string): boolean {
-    const lines = this.sessions.get(id)?.emulator.visibleLines();
-    return !!lines && (readScreenDialog(lines) != null || awaitsConfirm(lines));
+    return screen.holdsEnter(this.sessions, id);
   }
 
-  /** The chat of a CLI with no transcript */
   textLines(id: string): ReturnType<HeadlessEmulator["textLines"]> | null {
-    return this.sessions.get(id)?.emulator.textLines(MAX_CHAT_LINES) ?? null;
+    return screen.textLines(this.sessions, id);
   }
 
   markTurn(id: string): void {
@@ -508,20 +402,7 @@ export class PtyHost {
   // ─── Private ──────────────────────────────────────────────────────────
 
   private resolveShellReady(session: Session, state: "ready" | "timed_out"): void {
-    resolveShellReady(session, state, (data) => this.sendNow(session, data));
-  }
-
-  /** A write past the shell-ready gate */
-  private sendNow(s: Session, data: string): void {
-    if (s.mode === "sidecar") {
-      this.callSidecar("session.write", s.id, (c) => c.write(s.id, data));
-      return;
-    }
-    try {
-      s.child?.stdin?.write(encodeString(FRAME_WRITE, data));
-    } catch {
-      /* pipe broken */
-    }
+    resolveShellReady(session, state, (data) => sendNow(this.sidecarClient, session, data));
   }
 
   private endSession(s: Session): void {

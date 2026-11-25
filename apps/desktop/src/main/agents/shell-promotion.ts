@@ -16,9 +16,9 @@ import {
 } from "../system/shell-clis";
 import { failQueuedMessages } from "./agent-messaging";
 import { pickAgentCodename } from "./agent-names";
-import type { SessionMaps } from "./agent-session-callbacks";
 import { attachOutputPipeline, detachOutputPipeline } from "./output-pipeline";
 import { lastInputOf } from "./session-activity";
+import type { SessionMaps } from "./session-maps";
 import { broadcastAgentStatus } from "./spawn-env";
 
 /** A terminal session the watcher looks at: a plain shell, or one already promoted */

@@ -27,14 +27,12 @@ import { runSetupIfNeeded } from "../lifecycle/loader";
 import { chosenClaudeServers } from "../mcp/claude-servers";
 import { installedCliVersion } from "../system/cli-versions";
 import { getPtyHost } from "../terminal/pty-host";
+import { setupAgentCwd } from "./agent-cwd-setup";
 import { noteDraftInput } from "./agent-message-queue";
 import type { OutputProcessor } from "./agent-output-processor";
-import {
-  createSpawnCallbacks,
-  dispatchAgentFileEvent,
-  type SessionMaps,
-} from "./agent-session-callbacks";
-import { buildPtyInvocation, setupAgentCwd } from "./agent-spawn-flow";
+import { createSpawnCallbacks } from "./agent-session-callbacks";
+import { dispatchAgentFileEvent } from "./agent-signals";
+import { buildPtyInvocation } from "./agent-spawn-flow";
 import { cleanupWorktree, type WorktreeRecord } from "./agent-worktree-ops";
 import { inheritClaudeTrust, trustOwnFolder } from "./claude-trust";
 import { noteEnterForName } from "./cli-name";
@@ -48,6 +46,7 @@ import {
 } from "./reattach-sidecar-agents";
 import { liveSessionIds, recoverLostSessionId } from "./recover-lost-session";
 import { getProviderRegistry } from "./registry";
+import type { SessionMaps } from "./session-maps";
 import { resolveCommand } from "./shell-path";
 import { startShellPromotion } from "./shell-promotion";
 import {

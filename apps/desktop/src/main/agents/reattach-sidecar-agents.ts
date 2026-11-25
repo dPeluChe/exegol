@@ -15,15 +15,12 @@ import {
   settleReattach,
 } from "../terminal/reattach-gate";
 import { loadActiveView, orderForReattach } from "./active-view";
-import {
-  appendScrollback,
-  createSpawnCallbacks,
-  type SessionMaps,
-} from "./agent-session-callbacks";
+import { appendScrollback, createSpawnCallbacks } from "./agent-session-callbacks";
 import { cleanupWorktree, hydrateTrackedWorktree, type WorktreeRecord } from "./agent-worktree-ops";
 import { attachOutputPipeline, detachOutputPipeline } from "./output-pipeline";
 import { readableStep } from "./readable-step";
 import { getProviderRegistry } from "./registry";
+import type { SessionMaps } from "./session-maps";
 import {
   type AgentContext,
   broadcastAgentStatus,
