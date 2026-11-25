@@ -6,13 +6,16 @@ const mocks = vi.hoisted(() => ({
   read: null as { name: string; renamed: boolean } | null,
   pushes: [] as unknown[],
   moved: [] as unknown[],
+  db: null as unknown,
 }));
+vi.mock("../db/client", () => ({ getDb: () => mocks.db }));
 vi.mock("../inbox/threads", () => ({
   renameSession: (_db: unknown, ...args: unknown[]) => mocks.moved.push(args),
 }));
 vi.mock("./session-chat", () => ({
   NAME_READERS: {
-    "claude-code": { at: "turn_start", everyMs: 0, read: async () => mocks.read },
+    "claude-code": { at: "any", everyMs: 0, read: async () => mocks.read },
+    codex: { at: "turn_end", everyMs: 0, read: async () => mocks.read },
   },
 }));
 vi.mock("../lib/event-bus", () => ({
@@ -20,7 +23,7 @@ vi.mock("../lib/event-bus", () => ({
 }));
 
 import { setAgentAlias } from "../db/queries/agents";
-import { followCliName } from "./cli-name";
+import { followCliName, noteEnterForName } from "./cli-name";
 
 const SESSION = { id: "a1", cliType: "claude-code" };
 
@@ -45,6 +48,29 @@ describe("followCliName", () => {
     mocks.moved.length = 0;
   });
 
+  it.each([
+    "enter",
+    "turn_end",
+  ] as const)("reads a CLI that names a session at its prompt at %s too", async (at) => {
+    await followCliName(db, SESSION, at);
+    expect(row().alias).toBe("taskyserver");
+  });
+
+  it("reads once, a moment after an Enter, and only for such a CLI", async () => {
+    vi.useFakeTimers({ toFake: ["setTimeout"] });
+    try {
+      mocks.db = db;
+      noteEnterForName({ id: "a1", cliType: "codex" });
+      noteEnterForName(SESSION);
+      noteEnterForName(SESSION);
+      expect(vi.getTimerCount()).toBe(1);
+      vi.advanceTimersByTime(1_500);
+    } finally {
+      vi.useRealTimers();
+    }
+    await vi.waitFor(() => expect(row().cli_name).toBe("taskyserver"));
+  });
+
   it("renames the session and its inbox threads once, and keeps a later name set in Exegol", async () => {
     await followCliName(db, SESSION, "turn_start");
 
@@ -62,10 +88,12 @@ describe("followCliName", () => {
   it("pushes a title the CLI wrote with no new name, and reads only at the reader's moment", async () => {
     mocks.read = { name: "A title the CLI wrote", renamed: false };
 
-    await followCliName(db, SESSION, "turn_end");
+    const codex = { id: "a1", cliType: "codex" };
+    await followCliName(db, codex, "turn_start");
+    await followCliName(db, codex, "enter");
     expect(row().cli_name).toBeNull();
 
-    await followCliName(db, SESSION, "turn_start");
+    await followCliName(db, codex, "turn_end");
     expect(mocks.pushes).toEqual([
       ["agent:renamed", { agentId: "a1", cliName: "A title the CLI wrote", alias: null }],
     ]);

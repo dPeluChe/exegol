@@ -1,6 +1,7 @@
 import { setImmediate } from "node:timers/promises";
 import { renameEffect } from "@exegol/shared";
 import type Database from "libsql";
+import { getDb } from "../db/client";
 import { getAgent, setAgentCliName } from "../db/queries/agents";
 import { broadcast } from "../lib/event-bus";
 import { logger } from "../lib/logger";
@@ -11,19 +12,36 @@ import { renameAgent } from "./session-name";
 // A session not found in its CLI's store costs a scan of that store: not on every turn
 const MISSING_RETRY_MS = 10 * 60_000;
 const MAX_TRACKED = 256;
+// Long enough for the CLI to have written the name its command set
+const ENTER_READ_MS = 1_500;
 const nextRead = new Map<string, number>();
 const reading = new Set<string>();
+const afterEnter = new Set<string>();
+
+/** A name given at the prompt (Claude's /rename) starts no turn: the Enter is its only sign */
+export function noteEnterForName(session: { id: string; cliType: string }): void {
+  if (NAME_READERS[session.cliType]?.at !== "any" || afterEnter.has(session.id)) return;
+  afterEnter.add(session.id);
+  setTimeout(() => {
+    afterEnter.delete(session.id);
+    try {
+      void followCliName(getDb(), session, "enter");
+    } catch {
+      // The app is quitting: the database is closed
+    }
+  }, ENTER_READ_MS).unref();
+}
 
 /** Keeps the name a session has inside its CLI; one the person gave there (Claude's /rename)
- *  becomes its name in Exegol too. Called at every turn start and end: the CLI's reader says
- *  which of the two it reads at */
+ *  becomes its name in Exegol too. Called at every turn start and end and after an Enter at
+ *  the prompt: the CLI's reader says which of them it reads at */
 export async function followCliName(
   db: Database.Database,
   session: { id: string; cliType: string },
-  at: "turn_start" | "turn_end",
+  at: "turn_start" | "turn_end" | "enter",
 ): Promise<void> {
   const reader = NAME_READERS[session.cliType];
-  if (reader?.at !== at || reading.has(session.id)) return;
+  if (!reader || (reader.at !== "any" && reader.at !== at) || reading.has(session.id)) return;
   if (Date.now() < (nextRead.get(session.id) ?? 0)) return;
   reading.add(session.id);
   try {

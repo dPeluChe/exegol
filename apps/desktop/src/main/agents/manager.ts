@@ -37,6 +37,7 @@ import {
 import { buildPtyInvocation, setupAgentCwd } from "./agent-spawn-flow";
 import { cleanupWorktree, type WorktreeRecord } from "./agent-worktree-ops";
 import { inheritClaudeTrust, trustOwnFolder } from "./claude-trust";
+import { noteEnterForName } from "./cli-name";
 import { applyLaunchModel } from "./launch-model";
 import { noteAgentInput, noteBlindResume, takeMissedResume } from "./missed-resume";
 import { attachOutputPipeline } from "./output-pipeline";
@@ -366,7 +367,9 @@ export class AgentManager {
   write(agentId: string, data: string): void {
     noteAgentInput(agentId, data);
     // Shells take no messages, so their keys never hold anything
-    if (this.contexts.get(agentId)?.cliType !== "shell") noteDraftInput(agentId, data);
+    const cliType = this.contexts.get(agentId)?.cliType;
+    if (cliType !== "shell") noteDraftInput(agentId, data);
+    if (cliType && data.includes("\r")) noteEnterForName({ id: agentId, cliType });
     getPtyHost().write(agentId, data);
   }
 
