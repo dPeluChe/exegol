@@ -8,11 +8,13 @@ export { type ProcRow, readProcessTable } from "./process-table";
 /** Interpreters whose script (the next token) names the CLI: `node .../codex` */
 const RUNTIMES = new Set(["node", "bun", "deno", "python", "python3"]);
 
-const base = pathBase;
+/** A program's name: Windows lists `node.exe` running `codex.js` */
+const base = (path: string) => pathBase(path).replace(/\.(exe|cmd|bat|[cm]?js)$/i, "");
 
-/** The command line from the program on: `node /x/codex --y` → [`codex`, `--y`] */
+/** The command line from the program on: `node /x/codex --y` → [`codex`, `--y`]. A quoted path
+ *  is one token (`"C:\Program Files\nodejs\node.exe" ...` on Windows) */
 export function programTokens(args: string): string[] {
-  const tokens = args.trim().split(/\s+/);
+  const tokens = [...args.trim().matchAll(/"([^"]*)"|(\S+)/g)].map((m) => m[1] ?? m[2] ?? "");
   const rest = RUNTIMES.has(base(tokens[0] ?? "")) ? tokens.slice(1) : tokens;
   return [base(rest[0] ?? ""), ...rest.slice(1)];
 }

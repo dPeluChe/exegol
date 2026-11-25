@@ -1,4 +1,4 @@
-import { resolveCommand } from "../../agents/spawn-env";
+import { resolveCommand } from "../../agents/shell-path";
 import type { LocalHistoryProvider, LocalSession } from "../types";
 import { listViaCli } from "./opencode";
 

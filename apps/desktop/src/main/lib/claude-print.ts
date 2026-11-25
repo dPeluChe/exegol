@@ -1,5 +1,5 @@
 import { tmpdir } from "node:os";
-import { _getFullPath, execCli } from "../agents/spawn-env";
+import { _getFullPath, execCli } from "../agents/shell-path";
 import { childEnv } from "./child-env";
 
 export interface PrintResult {

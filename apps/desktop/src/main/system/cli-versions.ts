@@ -15,7 +15,7 @@ import {
   updateCommandFor,
 } from "../agents/cli-install-method";
 import { getProviderRegistry } from "../agents/registry";
-import { _getFullPath, commandOnPath } from "../agents/spawn-env";
+import { _getFullPath, commandOnPath, findAllOnPath } from "../agents/shell-path";
 import { logger } from "../lib/logger";
 
 const shellEnv = () => ({ ...process.env, PATH: _getFullPath() });
@@ -53,26 +53,6 @@ function runVersion(binPath: string): Promise<string | null> {
       },
     );
   });
-}
-
-/** `where` ends lines with CRLF: a kept \r breaks stat and realpath */
-export const parsePathHits = (stdout: string): string[] => [
-  ...new Set(
-    stdout
-      .split(/\r?\n/)
-      .map((l) => l.trim())
-      .filter(Boolean),
-  ),
-];
-
-/** All PATH hits for a command (`which -a` / `where` both list every match). */
-export function findAllOnPath(command: string): Promise<string[]> {
-  const cmd = process.platform === "win32" ? `where "${command}"` : `which -a "${command}"`;
-  return new Promise((resolve) =>
-    exec(cmd, { env: shellEnv(), timeout: 3_000, windowsHide: true }, (err, stdout) =>
-      resolve(err ? [] : parsePathHits(stdout)),
-    ),
-  );
 }
 
 const LATEST_TTL_MS = 6 * 60 * 60 * 1000;
@@ -125,7 +105,7 @@ export async function cliInstalls(cliType: string, fresh = false): Promise<CliIn
   const seen = new Set<string>();
   const copies: { path: string; real: string }[] = [];
   for (const cmd of providerBinaries(provider.command)) {
-    for (const path of await findAllOnPath(cmd)) {
+    for (const path of findAllOnPath(cmd)) {
       let real = path;
       try {
         real = realpathSync(path);
@@ -173,7 +153,7 @@ export async function runningCliBinary(
   const provider = getProviderRegistry().get(cliType);
   if (!provider || cliType === "shell") return null;
   for (const cmd of providerBinaries(provider.command)) {
-    for (const path of await findAllOnPath(cmd)) {
+    for (const path of findAllOnPath(cmd)) {
       let changedAtMs: number;
       try {
         changedAtMs = statSync(realpathSync(path)).ctimeMs;

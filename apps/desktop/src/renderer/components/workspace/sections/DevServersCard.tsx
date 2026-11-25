@@ -4,6 +4,7 @@ import { cn } from "@exegol/ui";
 import { ChevronDown, ChevronRight, ExternalLink, Network, RefreshCw, Square } from "lucide-react";
 import { useState } from "react";
 import { useDevServers, useKillDevServer } from "../../../hooks/use-trpc-resources";
+import { PLATFORM } from "../../../lib/keymap";
 import { openInBrowser } from "../../../lib/open-in-browser";
 import { jumpToAgent } from "../../../stores/agents";
 import { ConfirmDialog } from "../../common/ConfirmDialog";
@@ -41,7 +42,9 @@ export function DevServersCard() {
 
       {mine.length === 0 ? (
         <p className="mt-2 text-[11px] text-text-muted">
-          No server is running from a project folder.
+          {PLATFORM === "win32"
+            ? "Exegol cannot read listening ports on Windows yet."
+            : "No server is running from a project folder."}
         </p>
       ) : (
         <div className="mt-2 space-y-px">
