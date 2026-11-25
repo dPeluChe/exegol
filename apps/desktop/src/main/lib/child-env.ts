@@ -27,6 +27,14 @@ export function childEnv(
   const out = Object.fromEntries(
     Object.entries(env).filter(([k]) => !SESSION_MARKERS.has(k) && !k.startsWith("EXEGOL_")),
   );
+  // Windows spells it `Path`: a `PATH` set on top became a second key, and the PTY took the first
+  if (platform === "win32") {
+    for (const key of Object.keys(out)) {
+      if (key === "PATH" || key.toUpperCase() !== "PATH") continue;
+      out.PATH ??= out[key];
+      delete out[key];
+    }
+  }
   // An app opened from Finder has no locale (Terminal and iTerm set one): `pbcopy` from an agent
   // then stored UTF-8 as Mac Roman ("│" pasted as "‚îÇ"). Encoding only, never the language.
   // en_US.UTF-8, not macOS's bare "UTF-8": ssh forwards LC_* and Linux servers lack "UTF-8"

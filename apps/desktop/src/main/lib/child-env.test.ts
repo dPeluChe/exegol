@@ -27,6 +27,16 @@ describe("childEnv", () => {
     expect(childEnv({ PATH: "/bin" }, "win32").LC_CTYPE).toBeUndefined();
   });
 
+  it("keeps one PATH on Windows, whatever the spelling it came in", () => {
+    const env = childEnv({ Path: "C:\\bin" }, "win32");
+    expect(Object.keys(env).filter((k) => k.toUpperCase() === "PATH")).toEqual(["PATH"]);
+    expect({ ...env, PATH: "C:\\x" }.PATH).toBe("C:\\x");
+    expect(childEnv({ Path: "/a", PATH: "/b" }, "darwin")).toMatchObject({
+      Path: "/a",
+      PATH: "/b",
+    });
+  });
+
   it("never overrides a locale the user set", () => {
     expect(childEnv({ LANG: "es_MX.UTF-8" }, "darwin").LC_CTYPE).toBeUndefined();
     expect(childEnv({ LC_ALL: "en_US.UTF-8" }, "darwin").LC_CTYPE).toBeUndefined();

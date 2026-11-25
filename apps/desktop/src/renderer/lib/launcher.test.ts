@@ -40,6 +40,7 @@ describe("launcherRelFor", () => {
   it("the session's folder relative to the project root", () => {
     expect(launcherRelFor("/w/corp/nexus-control", "/w/corp")).toBe("nexus-control");
     expect(launcherRelFor("/w/corp/apps/web/", "/w/corp/")).toBe("apps/web");
+    expect(launcherRelFor("c:\\Corp\\apps\\web", "C:\\corp")).toBe("apps/web");
   });
   it("nothing at the root, outside the project or without a folder", () => {
     expect(launcherRelFor("/w/corp", "/w/corp")).toBeUndefined();

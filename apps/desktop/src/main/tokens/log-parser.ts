@@ -128,7 +128,8 @@ async function parseClaudeFile(path: string, since: number): Promise<ParsedToken
 /** With roots, only the folders Claude names after them (or a subfolder of them) */
 async function listClaudeFiles(home: string, roots?: string[]): Promise<string[]> {
   const base = join(home, ".claude", "projects");
-  const prefixes = roots?.map(claudeProjectDir);
+  // Claude cuts a long folder name at 200 characters and adds a hash after a dash
+  const prefixes = roots?.map((root) => claudeProjectDir(root).slice(0, 200));
   const files: string[] = [];
   for (const dir of await safeReaddir(base)) {
     if (!dir.isDirectory()) continue;

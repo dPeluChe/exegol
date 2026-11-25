@@ -5,7 +5,7 @@
  */
 import { realpathSync } from "node:fs";
 import * as sherpa from "sherpa-onnx-node";
-import { isInside, specPaths } from "../dictation/model-config";
+import { specPaths, staysInside } from "../dictation/model-config";
 import type { TtsSpec } from "./tts-config";
 import type { TtsReply, TtsRequest } from "./tts-protocol";
 
@@ -34,7 +34,7 @@ function assertModelPaths(spec: TtsSpec): void {
   if (!modelsRoot) throw new Error("no models folder");
   const root = realpathSync(modelsRoot);
   for (const path of specPaths(spec.config)) {
-    if (!isInside(root, realpathSync(path)))
+    if (!staysInside(root, realpathSync(path)))
       throw new Error("model file outside the models folder");
   }
 }

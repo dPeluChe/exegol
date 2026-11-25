@@ -154,7 +154,8 @@ describe("claudeCodeHistory", () => {
 
 describe("claudeProjectDir", () => {
   it("encodes a Windows folder as Claude Code does, and keeps the POSIX form", () => {
-    expect(claudeProjectDir("/Users/me/_code_/repo.x")).toBe("-Users-me--code--repo.x");
+    expect(claudeProjectDir("/Users/me/_code_/repo.x")).toBe("-Users-me--code--repo-x");
+    expect(claudeProjectDir("/Users/me/.exegol/my app")).toBe("-Users-me--exegol-my-app");
     expect(claudeProjectDir("C:\\Users\\me\\repo")).toBe("C--Users-me-repo");
   });
 });

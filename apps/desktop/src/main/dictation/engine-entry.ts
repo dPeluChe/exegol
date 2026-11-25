@@ -7,7 +7,7 @@ import { realpathSync } from "node:fs";
 import { DICTATION_SAMPLE_RATE as SAMPLE_RATE } from "@exegol/shared";
 import * as sherpa from "sherpa-onnx-node";
 import type { EngineReply, EngineRequest } from "./engine-protocol";
-import { isInside, type RecognizerSpec, specPaths } from "./model-config";
+import { type RecognizerSpec, specPaths, staysInside } from "./model-config";
 import {
   decodeWithVocabulary,
   joinPhrases,
@@ -74,7 +74,7 @@ function assertModelPaths(spec: RecognizerSpec): void {
   });
   for (const path of specPaths(spec.config)) {
     const real = realpathSync(path);
-    if (!roots.some((root) => isInside(root, real)))
+    if (!roots.some((root) => staysInside(root, real)))
       throw new Error("model file outside the models folder");
   }
 }
