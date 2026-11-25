@@ -1,7 +1,8 @@
 import Database from "libsql";
 import { beforeEach, describe, expect, it } from "vitest";
 import { runMigrations } from "../migrations";
-import { archiveAgent, archiveEndedAgents, createAgent, listRecentSessions } from "./agents";
+import { archiveAgent, archiveEndedAgents, listRecentSessions } from "./agent-history";
+import { createAgent } from "./agents";
 
 function setupDb(): Database.Database {
   const db = new Database(":memory:");

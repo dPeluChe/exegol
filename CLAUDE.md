@@ -149,7 +149,7 @@ Sequential agent orchestration in shared worktrees. Exegol controls everything â
 11. **Oplog v2** (T129): `prepareStepSnapshot`/`commitStepSnapshot` wrap each step â€” git-tree snapshots on hidden ref `refs/exegol/oplog` (GitButler model), restore refuses cross-worktree + takes a PreRestore safety snapshot first
 
 ### Provider registry
-16 built-in providers (Claude Code, Codex, Gemini, Antigravity, Devin, Aider, Goose, OpenCode, Amp, Kiro, Kilo Code, Crush, Factory Droid, Grok, Cursor, Terminal/shell) + custom, in `agents/registry.ts`. Each has: `supportsPromptArg`, `promptFlag`, `enabled`. `supportsPromptArg: false` (launch without prompt injection): Gemini, Aider, OpenCode, Kiro, Kilo Code, Crush, shell.
+16 built-in providers (Claude Code, Codex, Gemini, Antigravity, Devin, Aider, Goose, OpenCode, Amp, Kiro, Kilo Code, Crush, Factory Droid, Grok, Cursor, Terminal/shell) + custom: the list in `agents/builtin-providers.ts`, the registry in `agents/registry.ts`. Each has: `supportsPromptArg`, `promptFlag`, `enabled`. `supportsPromptArg: false` (launch without prompt injection): Gemini, Aider, OpenCode, Kiro, Kilo Code, Crush, shell.
 
 ### Key patterns
 - **tRPC over IPC**: 43 routers in main process (`ipc/router.ts`), renderer calls via `window.api.trpc.invoke` (`lib/trpc-client.ts`: errors come back without Electron's "Error invoking remote method" prefix and with the tRPC `code`, carried in the error name)

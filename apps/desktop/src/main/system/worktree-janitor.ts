@@ -2,7 +2,7 @@ import { lstat, readdir, realpath, rm } from "node:fs/promises";
 import { join } from "node:path";
 import type Database from "libsql";
 import { removingWorktrees } from "../agents/worktrees";
-import { listBusyWorktreePaths, listLiveAgentFolders } from "../db/queries/agents";
+import { listBusyWorktreePaths, listLiveAgentFolders } from "../db/queries/agent-live";
 import { getJsonSetting, setJsonSetting } from "../db/queries/settings";
 import { mapWithConcurrency } from "../lib/concurrency";
 import { logger } from "../lib/logger";

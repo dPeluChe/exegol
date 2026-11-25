@@ -23,9 +23,9 @@ import {
   listWorktrees,
   updateAgentStatus,
 } from "../../db/queries";
+import { archiveAgent } from "../../db/queries/agent-history";
 import {
   AGENT_FOLDER_SQL,
-  archiveAgent,
   getAgentCwd,
   getAgentLastCwd,
   resumedInto,
