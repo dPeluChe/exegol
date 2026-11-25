@@ -73,6 +73,23 @@ function Views({ projectId, paneId }: { projectId: string; paneId: string }) {
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-3 py-1.5">
         <LayoutDashboard className="h-3.5 w-3.5 text-text-muted" />
         <span className="text-xs font-medium text-text-primary">Views</span>
+        {ports.length === 0 && (
+          // Windows cannot list listening ports yet, and a server elsewhere is not found either
+          <input
+            type="number"
+            min={1}
+            max={65_535}
+            aria-label="Port"
+            placeholder="Port"
+            className="w-20 rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-[11px] text-text-secondary"
+            value={port ?? ""}
+            disabled={state?.running}
+            onChange={(e) => {
+              const n = Number(e.target.value);
+              setPort(Number.isInteger(n) && n >= 1 && n <= 65_535 ? n : null);
+            }}
+          />
+        )}
         {ports.length > 0 && (
           <select
             aria-label="Local server"
@@ -210,7 +227,7 @@ function Views({ projectId, paneId }: { projectId: string; paneId: string }) {
             description={
               ports.length > 0
                 ? "A pass loads every page of the running app and captures it. Nothing is clicked."
-                : "Start the project's dev server in a terminal of this project, then check again."
+                : "Start the project's dev server in a terminal of this project and check again, or type its port above."
             }
             action={
               ports.length > 0
