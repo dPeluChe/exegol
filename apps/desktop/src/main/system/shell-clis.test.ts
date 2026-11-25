@@ -1,5 +1,23 @@
 import { describe, expect, it } from "vitest";
-import { foregroundCommands, launchFlagsFromArgs, matchShellClis } from "./shell-clis";
+import {
+  foregroundCommands,
+  launchFlagsFromArgs,
+  matchShellClis,
+  programTokens,
+} from "./shell-clis";
+
+describe("programTokens", () => {
+  it("reads a Windows command line: a quoted path is one token, extensions dropped", () => {
+    const args =
+      '"C:\\Program Files\\nodejs\\node.exe" C:\\Users\\me\\npm\\codex\\bin\\codex.js --yolo';
+    expect(programTokens(args)).toEqual(["codex", "--yolo"]);
+    expect(programTokens('"C:\\Tools\\claude.exe" --resume x')).toEqual([
+      "claude",
+      "--resume",
+      "x",
+    ]);
+  });
+});
 
 const commands = new Map([
   ["claude", "claude-code"],

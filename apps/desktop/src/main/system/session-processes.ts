@@ -45,7 +45,7 @@ export function sessionProcesses(
   };
   const groups = new Map<string, SessionProcessGroup>();
   let rssKb = 0;
-  let cpu = 0;
+  let cpu: number | null = null;
   for (const row of all) {
     const { kind, name } = kindOf(row);
     const key = `${kind}:${name}`;
@@ -54,7 +54,7 @@ export function sessionProcesses(
     g.rssKb += row.rss ?? 0;
     groups.set(key, g);
     rssKb += row.rss ?? 0;
-    cpu += row.cpu ?? 0;
+    if (row.cpu !== undefined) cpu = (cpu ?? 0) + row.cpu;
   }
   return {
     agentId: session.id,
@@ -65,7 +65,7 @@ export function sessionProcesses(
     projectName: session.projectName,
     count: all.length,
     rssKb,
-    cpu: Math.round(cpu * 10) / 10,
+    cpu: cpu === null ? null : Math.round(cpu * 10) / 10,
     groups: [...groups.values()].sort((a, b) => b.rssKb - a.rssKb),
   };
 }

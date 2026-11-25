@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import { realpath } from "node:fs/promises";
 import type { ZodType } from "zod";
-import { execCli, findOnPath } from "../agents/spawn-env";
+import { execCli, findOnPath } from "../agents/shell-path";
 import { childEnv } from "../lib/child-env";
 import { mapWithConcurrency } from "../lib/concurrency";
 import { AsyncLruCache } from "../lib/lru-cache";

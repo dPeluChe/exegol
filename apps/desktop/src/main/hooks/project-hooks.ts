@@ -4,7 +4,7 @@
 import { exec } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { hookShell } from "../agents/spawn-env";
+import { hookShell } from "../agents/shell-path";
 import { logger } from "../lib/logger";
 import { inspectCommand } from "../security/command-guard";
 
