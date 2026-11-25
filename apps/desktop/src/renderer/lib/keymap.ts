@@ -9,6 +9,7 @@ import { fileManagerName } from "@exegol/shared";
 export const PLATFORM =
   typeof window === "undefined" ? "darwin" : (window.api?.app?.getPlatform?.() ?? "darwin");
 export const IS_MAC = PLATFORM === "darwin";
+export const IS_WINDOWS = PLATFORM === "win32";
 
 /** What the OS calls its file manager, for "Reveal in ..." labels (Linux: "Files"; the launcher
  *  has main's detected one in `ProjectDetect.fileManager`) */
@@ -23,11 +24,24 @@ interface ChordEvent {
   altKey: boolean;
   key: string;
   code: string;
+  /** AltGr: Windows reports it as Ctrl+Alt, so a typed character would look like a chord */
+  getModifierState?: (key: string) => boolean;
+}
+
+/** Windows reports AltGr as Ctrl+Alt, so a character typed with it ("Ą", "@") looks like a chord.
+ *  Left Ctrl+Alt can report AltGraph on such layouts too: a key that still gives its own letter, or
+ *  plain ASCII off a letter key, stays a chord */
+export function typedWithAltGr(e: Pick<ChordEvent, "key" | "code" | "getModifierState">): boolean {
+  if (!e.getModifierState?.("AltGraph") || e.key.length !== 1) return false;
+  if (/[^\x20-\x7e]/.test(e.key)) return true;
+  const letter = /^Key([A-Z])$/.exec(e.code)?.[1];
+  return !!letter && e.key.toUpperCase() !== letter;
 }
 
 /** The app modifier is held: which macOS extras (Shift, Option) come with it. Null otherwise */
 export function appChord(e: ChordEvent, mac = IS_MAC): { shift: boolean; alt: boolean } | null {
   if (mac) return e.metaKey && !e.ctrlKey ? { shift: e.shiftKey, alt: e.altKey } : null;
+  if (typedWithAltGr(e)) return null;
   return e.ctrlKey && e.shiftKey && !e.metaKey ? { shift: e.altKey, alt: e.altKey } : null;
 }
 
