@@ -406,7 +406,8 @@ export function matchesChord(e: ChordInput, chord: KeyChord, mac: boolean): bool
 }
 
 /** A pressed key combination in stored (macOS) notation, for the shortcut recorder. Off macOS
- *  Ctrl is stored as Cmd so the same setting works on every platform */
+ *  Ctrl is stored as Cmd so the same setting works on every platform, and it takes Ctrl+Shift:
+ *  plain Ctrl keys are the terminal's (Ctrl+C, Ctrl+Z), as for every app shortcut there */
 export function chordFromEvent(e: ChordInput, mac: boolean): string | null {
   const key = codeToKey(e.code);
   if (!key) return null;
@@ -415,8 +416,8 @@ export function chordFromEvent(e: ChordInput, mac: boolean): string | null {
     if (e.ctrlKey) mods.push("Ctrl");
     if (e.metaKey) mods.push("Cmd");
   } else {
-    if (e.metaKey) return null;
-    if (e.ctrlKey) mods.push("Cmd");
+    if (e.metaKey || !e.ctrlKey || !e.shiftKey) return null;
+    mods.push("Cmd");
   }
   if (e.altKey) mods.push("Option");
   if (e.shiftKey) mods.push("Shift");

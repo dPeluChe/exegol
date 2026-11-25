@@ -260,17 +260,29 @@ const MAC_SHORTCUTS: Shortcut[] = [
   },
 ];
 
+// A recorded chord names punctuation by its key code, the shortcut list by its character
+const CODE_CHARS: Record<string, string> = {
+  BracketLeft: "[",
+  BracketRight: "]",
+  Comma: ",",
+  Period: ".",
+  Slash: "/",
+  Equal: "=",
+  Minus: "-",
+};
+
 /** "Cmd+Shift+D" in any modifier order → one comparable form */
 function normalizeKeys(keys: string): string {
   const parts = keys.split("+");
-  const key = parts.pop()?.toUpperCase() ?? "";
+  const last = parts.pop() ?? "";
+  const key = (CODE_CHARS[last] ?? last).toUpperCase();
   return [...parts.sort(), key].join("+");
 }
 
-/** Every chord an app shortcut uses, ranges ("Cmd+2-9") expanded, macOS notation */
-function appChords(): { chord: string; label: string }[] {
+/** Every chord an app shortcut uses on this platform, ranges ("Cmd+2-9") expanded */
+function appChords(mac: boolean): { chord: string; label: string }[] {
   return MAC_SHORTCUTS.filter((s) => s.id !== "dictation").flatMap((s) =>
-    s.keys
+    (mac ? s.keys : (s.otherKeys ?? appKeys(s.keys, false)))
       .split(/ \/ |, /)
       .flatMap((keys) => {
         const range = /^(.*\+)(\d)-(\d)$/.exec(keys);
@@ -285,10 +297,12 @@ function appChords(): { chord: string; label: string }[] {
   );
 }
 
-/** The app shortcut a dictation chord (stored notation) would take over, if any */
-export function shortcutClash(keys: string): string | null {
-  const wanted = normalizeKeys(keys);
-  return appChords().find((c) => c.chord === wanted)?.label ?? null;
+/** The app shortcut a dictation chord (stored notation) would take over, if any: compared as the
+ *  keys pressed on this platform (Cmd+D is Ctrl+Shift+D off macOS) */
+export function shortcutClash(keys: string, mac = IS_MAC): string | null {
+  const chord = parseChord(keys);
+  const wanted = normalizeKeys(chord ? formatChord(chord, mac) : keys);
+  return appChords(mac).find((c) => c.chord === wanted)?.label ?? null;
 }
 
 export const SHORTCUTS: Shortcut[] = MAC_SHORTCUTS.map((s) => ({
