@@ -8,7 +8,7 @@ import type {
   SkillSource,
 } from "@exegol/shared";
 import { SKILL_CATEGORIES } from "@exegol/shared";
-import { commandOnPath } from "../agents/spawn-env";
+import { commandOnPath } from "../agents/shell-path";
 import { parseFrontmatter } from "../lib/frontmatter";
 import { logger } from "../lib/logger";
 

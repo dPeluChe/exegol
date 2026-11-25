@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { type IdeInfo, ideLabel } from "@exegol/shared";
 import type Database from "libsql";
 import { quoteArg, shellKind } from "../agents/shell-dialect";
-import { loginShell } from "../agents/spawn-env";
+import { loginShell } from "../agents/shell-path";
 import { getProject } from "../db/queries/projects";
 import { getAppSettings } from "../db/queries/settings";
 import { execFileAsync } from "../lib/exec-file";

@@ -129,8 +129,8 @@ function SessionRow({
           </button>
         </td>
         <td className="px-3 py-2">{session.cliType}</td>
-        <td className={cn("px-3 py-2 text-right tabular-nums", thresholdColor(session.cpu))}>
-          {session.cpu.toFixed(1)}%
+        <td className={cn("px-3 py-2 text-right tabular-nums", thresholdColor(session.cpu ?? 0))}>
+          {session.cpu === null ? "n/a" : `${session.cpu.toFixed(1)}%`}
         </td>
         <td className="px-3 py-2 text-right tabular-nums">{session.count}</td>
         <td className="px-3 py-2 text-right tabular-nums">{mcp.count}</td>

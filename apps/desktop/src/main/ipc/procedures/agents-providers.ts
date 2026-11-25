@@ -6,7 +6,8 @@ import { cliSetupFor, interruptKeyOf } from "../../agents/cli-catalog";
 import { cliDefaultModel } from "../../agents/default-model";
 import { listCliModels } from "../../agents/model-lists";
 import { runPreflight } from "../../agents/preflight";
-import { coreRust, resolveCommand } from "../../agents/spawn-env";
+import { resolveCommand } from "../../agents/shell-path";
+import { coreRust } from "../../agents/spawn-env";
 import { installedProviderIds } from "../../system/cli-versions";
 import { publicProcedure } from "../trpc";
 

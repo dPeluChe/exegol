@@ -7,7 +7,7 @@ import { cleanupOldEvents, startNotifyHandler, stopNotifyHandler } from "./agent
 import { startQuestionWatch } from "./agents/question-watch";
 import { getQueueExecutor } from "./agents/queue";
 import { getProviderRegistry } from "./agents/registry";
-import { warmShellPath } from "./agents/spawn-env";
+import { warmShellPath } from "./agents/shell-path";
 import { startStuckTurnSweep } from "./agents/stuck-turn-sweep";
 import { ensureAgentWrappers, sweepStaleAgentEvents } from "./agents/wrappers";
 import { installDeepLinkHandling } from "./bootstrap/deep-link";

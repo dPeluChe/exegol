@@ -156,7 +156,8 @@ export function listTcpListeners(uid?: string, fresh = false): Promise<TcpListen
 }
 
 async function scanTcpListeners(uid?: string): Promise<TcpListener[]> {
-  if (lsofMissing()) return [];
+  // An empty list would read as "nothing listens": idle suspend would stop a running server
+  if (lsofMissing()) throw new Error("Port detection is not available on Windows");
   let stdout = "";
   try {
     ({ stdout } = await execFileAsync(
