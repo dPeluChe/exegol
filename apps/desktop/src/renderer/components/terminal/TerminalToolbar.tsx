@@ -18,6 +18,7 @@ import {
 import { openInBrowser } from "../../lib/open-in-browser";
 import { trpcMutate } from "../../lib/trpc-client";
 import { AccessModeBadge } from "../common/AccessModeBadge";
+import { ChipLabel } from "../common/ChipLabel";
 import { McpStatusIndicator } from "../common/McpStatusIndicator";
 import { type QuietAgent, QuietControls } from "../common/QuietControls";
 import { SessionAlias } from "../common/SessionAlias";
@@ -68,9 +69,14 @@ export function TerminalToolbar({
   onToggleFiles,
 }: TerminalToolbarProps) {
   return (
-    // Badges live on the LEFT — the pane's hover actions (float/split/close)
-    // occupy the right edge and were covering them (verify session 2026-08-11).
-    <div className="flex shrink-0 items-center gap-2 border-b border-border/40 px-2 py-0.5">
+    // The pane's hover actions (float, split, close) sit over the right edge: a pane's toolbar
+    // keeps that strip free and clips, and under 56rem its chips show only their icons
+    <div
+      className={cn(
+        "@container/toolbar flex min-w-0 shrink-0 items-center gap-2 overflow-hidden border-b border-border/40 px-2 py-0.5",
+        paneId && "pr-46",
+      )}
+    >
       {paneId && <PaneDragHandle paneId={paneId} className="-mr-1 h-4 w-3.5 shrink-0" />}
       {agent && agent.cliType !== "shell" && <SessionControls agent={agent} />}
       {agent && agent.cliType !== "shell" && (
@@ -102,7 +108,7 @@ export function TerminalToolbar({
           }
         >
           <FolderTree className="h-2.5 w-2.5" />
-          Files
+          <ChipLabel>Files</ChipLabel>
         </button>
       )}
       {dirtyCount > 0 && (
@@ -210,13 +216,13 @@ function IsolationModeBadge({
   return (
     <span
       className={cn(
-        "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide",
+        "inline-flex shrink-0 items-center gap-1 whitespace-nowrap rounded px-1.5 py-0.5 text-[9px] font-medium uppercase tracking-wide",
         config.className,
       )}
       title={tooltip}
     >
       <Icon className="h-2.5 w-2.5" />
-      {config.label}
+      <ChipLabel>{config.label}</ChipLabel>
     </span>
   );
 }
@@ -274,11 +280,13 @@ export function TerminalViewToggle({
     >
       {viewMode === "terminal" ? (
         <>
-          <MessageSquare className="h-3 w-3" /> Chat
+          <MessageSquare className="h-3 w-3" />
+          <ChipLabel>Chat</ChipLabel>
         </>
       ) : (
         <>
-          <TerminalSquare className="h-3 w-3" /> Terminal
+          <TerminalSquare className="h-3 w-3" />
+          <ChipLabel>Terminal</ChipLabel>
         </>
       )}
     </button>

@@ -9,6 +9,7 @@ import { useEnabledProviders } from "../../hooks/use-providers";
 import { trpcInvoke, trpcMutate } from "../../lib/trpc-client";
 import { followUpsKey, useAgentStore } from "../../stores/agents";
 import { toastError, useToastStore } from "../../stores/toasts";
+import { ChipLabel } from "../common/ChipLabel";
 
 const STEER_SECONDS = STEER_TIMEOUT_MS / 1000;
 
@@ -88,7 +89,7 @@ export function FollowUpControl({ agentId, className }: { agentId: string; class
         }
       >
         <ListPlus className="h-3 w-3" />
-        {items.length > 0 ? items.length : "Queue"}
+        {items.length > 0 ? items.length : <ChipLabel>Queue</ChipLabel>}
       </button>
       {anchor &&
         createPortal(

@@ -5,6 +5,7 @@ import { GitPullRequest } from "lucide-react";
 import { useMountEffect } from "../../hooks/use-mount-effect";
 import { setAgentPrWatch } from "../../lib/session-quiet";
 import { trpcInvoke } from "../../lib/trpc-client";
+import { ChipLabel } from "../common/ChipLabel";
 import type { QuietAgent } from "../common/QuietControls";
 
 export const prWatchStatusKey = (agentId: string) => ["agents", "prWatchStatus", agentId];
@@ -72,7 +73,7 @@ export function PrWatchControl({ agent }: { agent: QuietAgent }) {
       title={title}
     >
       <GitPullRequest className="h-3 w-3" />
-      {label}
+      <ChipLabel>{label}</ChipLabel>
     </button>
   );
 }
