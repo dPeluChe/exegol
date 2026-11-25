@@ -1,5 +1,6 @@
 import { readdir } from "node:fs/promises";
 import { join } from "node:path";
+import { isWindowsPath, samePath } from "@exegol/shared";
 import { mapWithConcurrency } from "../lib/concurrency";
 
 /** Reads are I/O-bound with a small sync parse; past this the parses queue up. */
@@ -48,5 +49,15 @@ export async function scanPerCwdDir<T>(
  * adapters that scan flat stores each wrote this line by hand.
  */
 export function mentionsAnyCwd(text: string, cwds: string[]): boolean {
-  return cwds.some((cwd) => text.includes(`"${cwd}"`));
+  // JSON escapes a Windows path's backslashes, and Windows folders ignore case
+  const loose = cwds.some(isWindowsPath) ? text.toLowerCase().replace(/\\\\/g, "/") : text;
+  return cwds.some((cwd) =>
+    isWindowsPath(cwd)
+      ? loose.includes(cwd.toLowerCase().replace(/\\/g, "/"))
+      : text.includes(`"${cwd}"`),
+  );
 }
+
+/** The folder a store recorded is one of these, in either spelling */
+export const isAnyCwd = (recorded: string | undefined, cwds: string[]): recorded is string =>
+  !!recorded && cwds.some((cwd) => samePath(recorded, cwd));

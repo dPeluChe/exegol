@@ -1,4 +1,4 @@
-import { pathBelow, pathSegments } from "@exegol/shared";
+import { pathSegments, relPathBelow } from "@exegol/shared";
 import { endedFocusAllowed, type FocusTarget, isTextField } from "./ended-session";
 import { appKeys, editKeys, hasClickModifier, IS_MAC } from "./keymap";
 
@@ -56,7 +56,7 @@ export function launcherRelFor(
   projectPath: string | null | undefined,
 ): string | undefined {
   if (!folder || !projectPath) return undefined;
-  const rel = pathBelow(folder, projectPath);
+  const rel = relPathBelow(folder, projectPath);
   if (!rel) return undefined;
   return pathSegments(rel).some((part) => part === ".." || part === ".") ? undefined : rel;
 }

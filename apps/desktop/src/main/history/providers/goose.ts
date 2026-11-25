@@ -2,7 +2,7 @@ import { readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { mapWithConcurrency } from "../../lib/concurrency";
 import { windowsAppData, xdgDataDir } from "../../lib/xdg-data";
-import { FILE_CONCURRENCY, mentionsAnyCwd } from "../pool";
+import { FILE_CONCURRENCY, isAnyCwd, mentionsAnyCwd } from "../pool";
 import { readHead } from "../read-head";
 import { type LocalHistoryProvider, type LocalSession, normalizeTitle } from "../types";
 
@@ -71,7 +71,7 @@ async function readSession(
     if (!mentionsAnyCwd(firstLine, cwds)) return null;
 
     const header = JSON.parse(firstLine) as GooseHeader;
-    if (!header.working_dir || !cwds.includes(header.working_dir)) return null;
+    if (!isAnyCwd(header.working_dir, cwds)) return null;
 
     return {
       provider: "goose",

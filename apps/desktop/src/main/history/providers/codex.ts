@@ -4,7 +4,7 @@ import { basename, join } from "node:path";
 import { z } from "zod";
 import { mapWithConcurrency } from "../../lib/concurrency";
 import { parseJson } from "../../lib/parse-json";
-import { FILE_CONCURRENCY, mentionsAnyCwd } from "../pool";
+import { FILE_CONCURRENCY, isAnyCwd, mentionsAnyCwd } from "../pool";
 import { readHead, readTail } from "../read-head";
 import { type LocalHistoryProvider, type LocalSession, normalizeTitle } from "../types";
 
@@ -182,7 +182,7 @@ async function readRollout(path: string, cwds: string[]): Promise<LocalSession |
 
     const meta = JSON.parse(firstLine) as SessionMeta;
     const cwd = meta.payload?.cwd;
-    if (!cwd || !cwds.includes(cwd)) return null;
+    if (!cwd || !isAnyCwd(cwd, cwds)) return null;
 
     // codex writes a rollout per internal guardian assessment too, one for every
     // turn it reviews. Those are machinery, not sessions a person ran — listed,

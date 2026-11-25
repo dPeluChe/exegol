@@ -53,6 +53,15 @@ describe("codexHistory", () => {
     });
   });
 
+  it("finds a Windows folder through JSON's escaped backslashes and another letter case", async () => {
+    writeRollout("2026", "08", "18", "rollout-w.jsonl", {
+      type: "session_meta",
+      payload: { session_id: "win", cwd: "c:\\Users\\Me\\repo", thread_source: "user" },
+    });
+    const sessions = await codexHistory.list(["C:\\Users\\Me\\Repo"], 0);
+    expect(sessions.map((s) => s.sessionId)).toEqual(["win"]);
+  });
+
   // ~750 rollouts accumulate; the date is in the PATH, so a window prunes whole
   // directories instead of opening every file.
   it("skips day directories outside the window without opening them", async () => {
