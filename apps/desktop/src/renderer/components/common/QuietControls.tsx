@@ -2,6 +2,7 @@ import { cn } from "@exegol/ui";
 import { BellOff, Moon, Pause } from "lucide-react";
 import { setAgentMuted, suspendAgent } from "../../lib/session-quiet";
 import type { AgentState } from "../../stores/agents";
+import { ChipLabel } from "./ChipLabel";
 
 const chip = "flex items-center gap-0.5 rounded px-1 py-0.5 hover:bg-white/10";
 
@@ -30,7 +31,7 @@ export function QuietControls({ agent, className }: { agent: QuietAgent; classNa
         }
       >
         {agent.muted ? <Moon className="h-3 w-3" /> : <BellOff className="h-3 w-3" />}
-        {agent.muted ? "Muted" : "Mute"}
+        <ChipLabel>{agent.muted ? "Muted" : "Mute"}</ChipLabel>
       </button>
       <button
         type="button"
@@ -42,7 +43,7 @@ export function QuietControls({ agent, className }: { agent: QuietAgent; classNa
         title="Suspend: stop it quietly and keep it here to Resume later"
       >
         <Pause className="h-3 w-3" />
-        Suspend
+        <ChipLabel>Suspend</ChipLabel>
       </button>
     </>
   );

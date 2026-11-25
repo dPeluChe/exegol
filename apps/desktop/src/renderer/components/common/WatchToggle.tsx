@@ -1,6 +1,7 @@
 import { cn } from "@exegol/ui";
 import { Pin } from "lucide-react";
 import { useWatchStore } from "../../stores/watch";
+import { ChipLabel } from "./ChipLabel";
 
 /** T194: pin a session to the Dashboard watch list (or unpin it). */
 export function WatchToggle({ agentId, className }: { agentId: string; className?: string }) {
@@ -25,7 +26,7 @@ export function WatchToggle({ agentId, className }: { agentId: string; className
       }
     >
       <Pin className="h-3 w-3" />
-      {watching ? "Watching" : "Watch"}
+      <ChipLabel>{watching ? "Watching" : "Watch"}</ChipLabel>
     </button>
   );
 }

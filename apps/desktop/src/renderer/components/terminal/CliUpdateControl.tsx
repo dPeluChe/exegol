@@ -6,6 +6,7 @@ import { useProjects } from "../../hooks/use-trpc";
 import { sessionWhere } from "../../lib/agent-label";
 import { type AgentState, useAgentStore } from "../../stores/agents";
 import { useCliRestartStore } from "../../stores/cli-restarts";
+import { ChipLabel } from "../common/ChipLabel";
 import { ChoiceDialog } from "../common/ChoiceDialog";
 import { SessionChips } from "../common/SessionChips";
 import { RestartPendingDialog } from "./RestartPendingDialog";
@@ -83,7 +84,9 @@ export function CliUpdateControl({ agentId }: { agentId: string }) {
           }
         >
           <RefreshCw className="h-2.5 w-2.5 animate-spin" />
-          {pending === "update" ? "Restarts after the update" : "Restarts after this turn"}
+          <ChipLabel>
+            {pending === "update" ? "Restarts after the update" : "Restarts after this turn"}
+          </ChipLabel>
         </button>
         {askedAt !== null && (
           <RestartPendingDialog
@@ -115,7 +118,7 @@ export function CliUpdateControl({ agentId }: { agentId: string }) {
           title={`${status.installed} is installed; this session runs ${agent.cliVersion ?? "an older one"}. Restart it on the new version: the conversation resumes (after the current turn if it is working)`}
         >
           <RefreshCw className="h-2.5 w-2.5" />
-          Restart to update
+          <ChipLabel>Restart to update</ChipLabel>
         </button>
         {dialog}
       </>
@@ -142,7 +145,7 @@ export function CliUpdateControl({ agentId }: { agentId: string }) {
           title={`${status.latest} is out (installed: ${status.installed}). Runs \`${cmd}\` ${restartable ? "in a terminal beside this session, then restarts the sessions you choose on it as each one is free (the conversation, model, YOLO and mode carry over)" : "in this terminal once its CLI is closed (else beside it); Continue then starts the new version"}${status.updateNote ? `. ${status.updateNote}` : ""}`}
         >
           <ArrowUpCircle className="h-2.5 w-2.5" />
-          Update {status.latest}
+          <ChipLabel>Update {status.latest}</ChipLabel>
         </button>
         {dialog}
       </>
@@ -158,7 +161,7 @@ export function CliUpdateControl({ agentId }: { agentId: string }) {
       title="Restart this session: the CLI starts again and resumes the conversation, with the same model, YOLO and mode (after its turn if it is working)"
     >
       <RefreshCw className="h-2.5 w-2.5" />
-      Restart
+      <ChipLabel>Restart</ChipLabel>
     </button>
   );
 }

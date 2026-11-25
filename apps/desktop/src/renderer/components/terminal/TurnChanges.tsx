@@ -4,6 +4,7 @@ import { FileDiff, Undo2, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { useLatestTurn, useTurnDiff, useUndoTurn } from "../../hooks/use-trpc-scoring";
 import { plural } from "../../lib/plural";
+import { ChipLabel } from "../common/ChipLabel";
 import { ConfirmDialog } from "../common/ConfirmDialog";
 import { DiffFileView } from "../workspace/sections/diff/DiffFileView";
 import { parseUnifiedDiff } from "../workspace/sections/diff/diff-parser";
@@ -37,7 +38,8 @@ export function TurnChangesChip({ agentId }: { agentId: string }) {
         title={`What turn ${turn.turnIndex} changed`}
       >
         <FileDiff className="h-2.5 w-2.5" />
-        {plural(turn.files.length, "file")} changed
+        {turn.files.length}
+        <ChipLabel>{turn.files.length === 1 ? "file" : "files"} changed</ChipLabel>
       </button>
       {open && <TurnDiffDialog turn={turn} busy={data.inTurn} onClose={() => setOpen(false)} />}
     </>

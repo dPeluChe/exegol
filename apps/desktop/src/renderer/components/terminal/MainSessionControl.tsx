@@ -1,6 +1,7 @@
 import { cn } from "@exegol/ui";
 import { Crown } from "lucide-react";
 import { useMainSessions, useSetMainSession } from "../../hooks/use-main-sessions";
+import { ChipLabel } from "../common/ChipLabel";
 
 /** Marks the session as its project's main one, or clears that mark */
 export function MainSessionControl({ agentId }: { agentId: string }) {
@@ -27,7 +28,7 @@ export function MainSessionControl({ agentId }: { agentId: string }) {
       title={title}
     >
       <Crown className="h-3 w-3" />
-      Main
+      <ChipLabel>Main</ChipLabel>
     </button>
   );
 }
