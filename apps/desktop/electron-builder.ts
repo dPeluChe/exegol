@@ -86,14 +86,6 @@ const config: Configuration = {
       filter: ["*.node", "index.js", "index.d.ts", "package.json"],
     },
     { from: "src/resources/build/icons/icon.png", to: "tray-icon.png" },
-    // macOS menu bar: a template image is drawn from its alpha only; the app icon is an opaque square
-    { from: "src/resources/build/icons/trayTemplate.png", to: "trayTemplate.png" },
-    { from: "src/resources/build/icons/trayTemplate@2x.png", to: "trayTemplate@2x.png" },
-    // T155.6: `exegol` CLI opener script, symlinked onto PATH via the app menu
-    {
-      from: "resources/bin",
-      to: "bin",
-    },
   ],
 
   // T155.6: exegol:// deep link (packaged registration; dev uses
@@ -115,6 +107,13 @@ const config: Configuration = {
     entitlements: "src/resources/build/entitlements.mac.plist",
     entitlementsInherit: "src/resources/build/entitlements.mac.inherit.plist",
     darkModeSupport: true,
+    // Added to the shared extraResources. The menu bar takes a template image (drawn from its alpha);
+    // the `exegol` opener is a POSIX script, linked onto PATH from the app menu
+    extraResources: [
+      { from: "src/resources/build/icons/trayTemplate.png", to: "trayTemplate.png" },
+      { from: "src/resources/build/icons/trayTemplate@2x.png", to: "trayTemplate@2x.png" },
+      { from: "resources/bin", to: "bin" },
+    ],
     extendInfo: {
       NSAppleEventsUsageDescription:
         "Exegol needs automation access to open IDEs, manage terminals and, if you turn it on, pause your music while you dictate.",
@@ -161,6 +160,7 @@ const config: Configuration = {
     // Without it the binary, the .desktop file and the icon took the scoped package name
     // ("@exegoldesktop"); `exegol` itself is the CLI opener on PATH
     executableName: "exegol-desktop",
+    extraResources: [{ from: "resources/bin", to: "bin" }],
     // Every hicolor size: a 1024px icon alone showed no icon in KDE menus
     icon: resolve(iconPath, "linux"),
     target: [

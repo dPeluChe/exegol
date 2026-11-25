@@ -197,7 +197,7 @@ Until a build is notarized, a user can still open it: System Settings → Privac
 "Open Anyway" (on macOS 15 right-click → Open no longer offers it), or
 `xattr -dr com.apple.quarantine /Applications/Exegol.app`.
 
-### 5b. Linux (AppImage + .deb)
+### 5b. Linux (AppImage, .deb, .rpm)
 
 Native modules are built per platform, so Linux packages come from CI, not from the Mac:
 `.github/workflows/linux.yml` runs on Ubuntu 22.04 (older glibc, wider distro reach) when a
@@ -206,6 +206,9 @@ release is published, builds core-rust and node-pty for Linux, packages an AppIm
 by hand from Actions → Linux build (optionally with a tag). With `test` checked it builds the selected
 branch instead and keeps the packages as a run artifact (7 days), attaching nothing:
 `gh workflow run linux.yml --ref <branch> -f test=true`.
+
+Built on Ubuntu 22.04, the packages need glibc 2.35 or newer (Debian 12, Fedora 36, RHEL 10 and
+later); an older system cannot start the AppImage either.
 
 Install: `chmod +x Exegol-<v>-x86_64.AppImage && ./Exegol-<v>-x86_64.AppImage`, or
 `sudo apt install ./exegol_<v>_amd64.deb`, or `sudo dnf install ./exegol-<v>.x86_64.rpm`. Runtime needs: a desktop keyring (gnome-keyring or
@@ -231,12 +234,26 @@ Unsigned: no code-signing certificate yet, so SmartScreen shows "Windows protect
 first run of the downloaded installer; More info → Run anyway. The installer is per user (no admin),
 lets the user pick the folder and keeps app data on uninstall.
 
+Not on Windows yet: the `exegol` shell opener (`exegol .`, `exegol inbox add`; `exegol://` links
+work), ports and dev servers (Monitor, idle suspend skips sessions instead), per-process CPU, and
+Codex hook events (Codex status comes from its terminal).
+
 Updates: the NSIS updater reads `latest.yml` from the same feed as macOS
 (`releases/latest/download/`), downloads the new `.exe` (differential through the `.blockmap` when the
 old one is there too) and runs it on quit or Restart. With no `publisherName` in the config, the
 updater does not check a signature.
 
 ### 6. Publish to GitHub Releases
+
+Before tagging, build the Linux and Windows packages from the release branch and install them on a
+machine of each (they are only built after the release is published otherwise):
+
+```bash
+gh workflow run linux.yml --ref <branch> -f test=true
+gh workflow run windows.yml --ref <branch> -f test=true
+# the packages are the run's artifact for 7 days
+gh run download <run-id>
+```
 
 ```bash
 # Version set in step 2, package built in step 3
@@ -270,7 +287,7 @@ x.y.z-canary.YYYYMMDDHHmmss — canary builds (auto-detected by updater)
 
 ## CI checks
 
-Pull requests and pushes to main run lint, TypeScript checks, tests, and builds through `.github/workflows/ci.yml` on macOS, plus the unit tests on Windows (`windows-tests`, in parallel). See [Pipeline evidence and CI](PIPELINE_EVIDENCE_AND_CI.md) for commands and scope.
+Pull requests and pushes to main run lint, TypeScript checks, tests, and builds through `.github/workflows/ci.yml` on macOS, plus the unit tests on Linux and Windows (`linux-tests`, `windows-tests`, in parallel). See [Pipeline evidence and CI](PIPELINE_EVIDENCE_AND_CI.md) for commands and scope.
 
 ## Future: automated releases (T45)
 
