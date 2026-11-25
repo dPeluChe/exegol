@@ -175,7 +175,8 @@ const STORES: Record<string, ChatStore> = {
 
 /** When a CLI's name for a session is worth reading, and how often at most */
 interface NameReader {
-  at: "turn_start" | "turn_end";
+  /** "any": also when a session comes to rest and after an Enter at its prompt */
+  at: "turn_start" | "turn_end" | "any";
   everyMs: number;
   read: (db: Database.Database, agent: Agent) => Promise<CliName | null>;
 }
@@ -195,8 +196,8 @@ const fromStore = (cli: string): NameReader => ({
 /** The CLIs whose own store names a session; a read is null when Exegol cannot tell which is its */
 export const NAME_READERS: Record<string, NameReader> = {
   "claude-code": {
-    // /rename is typed at the prompt: the next turn's start is the first to see it
-    at: "turn_start",
+    // /rename is typed at the prompt and starts no turn; a session resumed and left alone only rests
+    at: "any",
     everyMs: 0,
     async read(db, agent) {
       const path = await transcriptPath(db, agent, PROVIDERS["claude-code"] as Provider);

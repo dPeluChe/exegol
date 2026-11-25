@@ -48,6 +48,8 @@ function firstPromptText(line: HeadLine): string | null {
  * the last line would be.
  */
 const TITLE_TAIL_BYTES = 32 * 1024;
+// Claude Code writes the name again every few records; one large record pushes it past 32 KB
+const RENAME_TAIL_BYTES = 256 * 1024;
 const CUSTOM_TITLE = /"type":"custom-title","customTitle":"((?:[^"\\]|\\.)*)"/g;
 
 export const claudeCodeHistory: LocalHistoryProvider = {
@@ -80,7 +82,7 @@ export async function claudeSessionName(cwd: string, sessionId: string): Promise
 
 /** The last /rename name in a transcript's tail (Claude writes it again as the file grows) */
 export async function claudeRenamedTo(path: string): Promise<string | null> {
-  return lastCustomTitle(await readTail(path, undefined, TITLE_TAIL_BYTES));
+  return lastCustomTitle(await readTail(path, undefined, RENAME_TAIL_BYTES));
 }
 
 function lastCustomTitle(text: string): string | null {
