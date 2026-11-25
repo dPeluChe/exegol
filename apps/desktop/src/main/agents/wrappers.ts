@@ -82,7 +82,7 @@ function createNotifyScript(): void {
 }
 
 export function notifyScript(): string {
-  return `#!/bin/bash
+  return `#!/usr/bin/env bash
 # Exegol lifecycle notification hook.
 # Usage: notify.sh <event_type> [agent]
 # Called by agent hooks (Claude Code, Codex, etc.) on lifecycle events.
@@ -117,8 +117,10 @@ if [ ! -t 0 ]; then
     TOOL=$(printf '%s' "$AFTER" | tr -d '\\n' | sed -nE 's/^[[:space:]]*:[[:space:]]*"([A-Za-z0-9_-]+)".*/\\1/p')
   fi
 fi
+# Written aside, then moved: a watcher must never read the file half written
+TMP="$EVENT_DIR/.\${EXEGOL_AGENT_ID}_$$.tmp"
 echo "{\\"type\\":\\"$EVENT_TYPE\\",\\"agentId\\":\\"$EXEGOL_AGENT_ID\\",\\"ts\\":$TS,\\"sessionId\\":\\"$SID\\",\\"cwd\\":\\"$CWD\\",\\"tool\\":\\"$TOOL\\"}" \\
-  > "$EVENT_DIR/\${EXEGOL_AGENT_ID}_\${EVENT_TYPE}_\${TS}.json"
+  > "$TMP" && mv -f "$TMP" "$EVENT_DIR/\${EXEGOL_AGENT_ID}_\${EVENT_TYPE}_\${TS}.json"
 `;
 }
 
@@ -392,8 +394,14 @@ export function claudeGlobalHooks(script = NOTIFY_SCRIPT): ManagedHook[] {
   ];
 }
 
-/** Codex has no per-session hooks file, so every codex session Exegol runs reads these */
-export function codexGlobalHooks(script = NOTIFY_SCRIPT): ManagedHook[] {
+/** Codex has no per-session hooks file, so every codex session Exegol runs reads these. None on
+ *  Windows: Codex may run them without Git Bash, and a POSIX guard would then fail the start and
+ *  stop of every Codex session on the machine, Exegol's or not (what an older build wrote goes) */
+export function codexGlobalHooks(
+  script = NOTIFY_SCRIPT,
+  platform: NodeJS.Platform = process.platform,
+): ManagedHook[] {
+  if (platform === "win32") return [];
   return [
     { event: "SessionStart", def: { hooks: globalRun("session_start", script) } },
     { event: "Stop", def: { hooks: globalRun("stop", script) } },
@@ -407,7 +415,9 @@ function mergeClaudeHooks(): void {
 
 function mergeCodexHooks(): void {
   if (!existsSync(join(homedir(), ".codex"))) return; // Codex not installed
-  syncHooksFile(CODEX_HOOKS, "~/.codex/hooks.json", codexGlobalHooks());
+  const managed = codexGlobalHooks();
+  if (managed.length === 0 && !existsSync(CODEX_HOOKS)) return;
+  syncHooksFile(CODEX_HOOKS, "~/.codex/hooks.json", managed);
 }
 
 export function getEventsDir(): string {
