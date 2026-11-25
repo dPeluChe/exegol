@@ -28,7 +28,6 @@ import { useWorkspaceStore } from "./workspace";
 export { findAgentPane, findPane, focusPane, showProject } from "./agent-navigation";
 export {
   type AgentState,
-  type AttentionCause,
   type AttentionItem,
   type AttentionLevel,
   attentionInterrupts,
@@ -37,9 +36,7 @@ export {
   isLiveAgent,
   isPaneAgentStale,
   isWorking,
-  shellClosesOn,
   sortAttentionItems,
-  syncedStatus,
   toAgentState,
 } from "./agent-state";
 

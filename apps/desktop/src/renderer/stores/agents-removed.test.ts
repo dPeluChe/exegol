@@ -1,6 +1,7 @@
 import type { Agent } from "@exegol/shared";
 import { beforeEach, describe, expect, it } from "vitest";
-import { FLEET_SYNC, syncedStatus, toAgentState, useAgentStore } from "./agents";
+import { syncedStatus } from "./agent-state";
+import { FLEET_SYNC, toAgentState, useAgentStore } from "./agents";
 import { useWatchStore } from "./watch";
 
 const row = (id: string, status = "running") =>

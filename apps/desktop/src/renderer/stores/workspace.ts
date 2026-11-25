@@ -15,8 +15,8 @@ import {
   pwOf,
   switchProject,
 } from "./workspace/helpers";
+import { createPaneLayoutSlice } from "./workspace/pane-layout-slice";
 import { migrateWorkspaceState, onWorkspaceRehydrate } from "./workspace/recovery";
-import { createSplitSizesSlice } from "./workspace/split-sizes-slice";
 import { createTabsPanesSlice } from "./workspace/tabs-panes-slice";
 import type { Pane, ProjectWorkspace, WorkspaceStore, WorkspaceTab } from "./workspace/types";
 
@@ -69,7 +69,7 @@ export const useWorkspaceStore = create<WorkspaceStore>()(
       ...createTabsPanesSlice(...args),
       ...createCustomLayoutsSlice(...args),
       ...createFloatingPanesSlice(...args),
-      ...createSplitSizesSlice(...args),
+      ...createPaneLayoutSlice(...args),
     }),
     {
       name: "exegol-workspace",
