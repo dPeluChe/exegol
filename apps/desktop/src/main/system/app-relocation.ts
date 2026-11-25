@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { app, dialog } from "electron";
 import type Database from "libsql";
 import { HOOKS_DIR } from "../agents/wrappers";
-import { listLiveAgentFolders } from "../db/queries/agents";
+import { listLiveAgentFolders } from "../db/queries/agent-live";
 import { listProjects } from "../db/queries/projects";
 import { logger } from "../lib/logger";
 import { relocateMcpConfigs } from "../mcp/exegol-mcp-config";

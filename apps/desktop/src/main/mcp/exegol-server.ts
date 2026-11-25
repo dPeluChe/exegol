@@ -11,7 +11,7 @@ import type Database from "libsql";
 import { forgetBrowserAgent } from "../browser/agent-browser-tools";
 import { COMMANDER_LINE } from "../commander/brief";
 import { isCommander } from "../commander/home";
-import { listLiveAgentClis, listLiveAgentSessions } from "../db/queries/agents";
+import { listLiveAgentClis, listLiveAgentSessions } from "../db/queries/agent-live";
 import { findBlockingClaim } from "../db/queries/path-claims";
 import { getProject } from "../db/queries/projects";
 import { sessionLine } from "../inbox/session-line";

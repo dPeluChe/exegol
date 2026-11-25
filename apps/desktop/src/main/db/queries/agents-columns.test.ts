@@ -2,17 +2,10 @@ import Database from "libsql";
 import { describe, expect, it } from "vitest";
 import { wave3Migrations } from "../migration-sets/wave3";
 import { runMigrations } from "../migrations";
-import {
-  AGENT_COLUMNS,
-  activateAgent,
-  agentPtySize,
-  getAgent,
-  getAgentFinalOutput,
-  listAgentsByIds,
-  listLiveAgentClis,
-  recoverStaleAgents,
-  setAgentFinalOutput,
-} from "./agents";
+import { getAgentFinalOutput, setAgentFinalOutput } from "./agent-history";
+import { listLiveAgentClis } from "./agent-live";
+import { recoverStaleAgents } from "./agent-recovery";
+import { AGENT_COLUMNS, activateAgent, agentPtySize, getAgent, listAgentsByIds } from "./agents";
 
 function setupDb(): Database.Database {
   const db = new Database(":memory:");

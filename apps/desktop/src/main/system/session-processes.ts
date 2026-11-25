@@ -1,5 +1,5 @@
 import type { SessionProcesses, SessionProcessGroup } from "@exegol/shared";
-import type { LiveSessionProcess } from "../db/queries/agents";
+import type { LiveSessionProcess } from "../db/queries/agent-live";
 import { AGENT_BIN } from "../mcp/agent-cli";
 import type { KnownServer } from "../mcp/claude-servers";
 import { CLAIM_GUARD_BIN, SHIM_BIN } from "../mcp/exegol-mcp-config";
