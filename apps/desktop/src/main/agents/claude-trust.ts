@@ -1,9 +1,10 @@
 import { existsSync } from "node:fs";
-import { readFile, rename, stat, writeFile } from "node:fs/promises";
+import { readFile, stat, writeFile } from "node:fs/promises";
 import { homedir } from "node:os";
 import path, { dirname, join } from "node:path";
 import { lock } from "proper-lockfile";
 import { logger } from "../lib/logger";
+import { renameWithRetry } from "../lib/rename-retry";
 
 /** Claude's global config: a legacy `<configDir>/.config.json` wins, else `.claude.json` in
  *  CLAUDE_CONFIG_DIR or the home directory (the lookup Claude Code itself does) */
@@ -96,7 +97,7 @@ async function recordTrust(
     if (!next) return false;
     const tmp = join(dirname(file), `.claude.json.exegol-${process.pid}.tmp`);
     await writeFile(tmp, JSON.stringify(next, null, 2), { mode: (await stat(file)).mode });
-    await rename(tmp, file);
+    await renameWithRetry(tmp, file);
     logger.info("[ClaudeTrust] Trusted a folder");
     return true;
   } catch (err) {

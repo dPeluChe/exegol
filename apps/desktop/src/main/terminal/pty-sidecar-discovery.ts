@@ -1,11 +1,11 @@
 // Sidecar discovery: find running sidecar, or spawn a new one.
 
-import { spawn as cpSpawn, execFile } from "node:child_process";
+import { spawn as cpSpawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { closeSync, existsSync, openSync, readFileSync, unlinkSync } from "node:fs";
 import { join } from "node:path";
-import { promisify } from "node:util";
 import { satisfies } from "semver";
+import { execFileAsync } from "../lib/exec-file";
 import { logger } from "../lib/logger";
 import { withTimeout } from "../lib/timeout";
 import { nodeLaunch } from "../system/node-launch";
@@ -260,7 +260,7 @@ async function runsSidecar(pid: number): Promise<boolean> {
       const row = (await readProcessTable()).find((r) => r.pid === pid);
       return !!row?.args.includes(SIDECAR_ENTRY);
     }
-    const { stdout } = await promisify(execFile)("ps", ["-o", "args=", "-p", String(pid)], {
+    const { stdout } = await execFileAsync("ps", ["-o", "args=", "-p", String(pid)], {
       timeout: 3_000,
     });
     return stdout.includes(SIDECAR_ENTRY);

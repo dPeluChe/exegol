@@ -174,3 +174,12 @@ describe("notes tools", () => {
     expect(line).not.toContain("Secret");
   });
 });
+
+describe("folderSlug", () => {
+  it("never names a folder Windows refuses", async () => {
+    const { folderSlug } = await import("./folders");
+    expect(folderSlug("CON", "x")).toBe("con-1");
+    expect(folderSlug("com1", "x")).toBe("com1-1");
+    expect(folderSlug("console", "x")).toBe("console");
+  });
+});
