@@ -5,6 +5,7 @@ import type Database from "libsql";
 import { getAppSettings } from "../../db/queries/settings";
 import { logger } from "../../lib/logger";
 import type { NotificationChannel } from "../bus";
+import { showKept } from "../keep-shown";
 
 // ─── Settings cache (avoid a DB hit on every event) ──────────────────────
 
@@ -83,7 +84,7 @@ export const desktopChannel: NotificationChannel = {
         });
       });
 
-      notification.show();
+      showKept(notification);
     } catch (err) {
       logger.warn("[NotificationBus] desktop channel failed to deliver:", err);
     }

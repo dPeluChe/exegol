@@ -125,7 +125,10 @@ describe("notifyScript", () => {
       input: payload,
     });
     const dir = join(home, ".exegol", "events");
-    const [name] = readdirSync(dir);
+    const names = readdirSync(dir);
+    // Moved into place whole: no half-written file is ever left for the watcher
+    expect(names).toEqual([expect.stringMatching(/^a1_tool_use_\d+\.json$/)]);
+    const [name] = names;
     const parsed = JSON.parse(readFileSync(join(dir, name as string), "utf-8"));
     rmSync(home, { recursive: true, force: true });
     return parsed as { sessionId: string; cwd: string; tool: string };
@@ -210,10 +213,14 @@ describe("withExegolHooks", () => {
     expect(stops.filter((d) => isExegolHook(d as never, script))).toHaveLength(1);
   });
 
+  it("asks for no Codex hooks on Windows, so an older build's entries are taken out", () => {
+    expect(codexGlobalHooks(script, "win32")).toEqual([]);
+  });
+
   it("skips an event whose value is not a list", () => {
     const { settings } = withExegolHooks(
       { hooks: { Stop: { odd: true } } },
-      codexGlobalHooks(script),
+      codexGlobalHooks(script, "darwin"),
       script,
     );
     expect((settings.hooks as Record<string, unknown>).Stop).toEqual({ odd: true });
@@ -230,11 +237,11 @@ describe("withExegolHooks", () => {
   });
 
   it("adds to a file without hooks and leaves malformed hooks alone", () => {
-    const fresh = withExegolHooks({}, codexGlobalHooks(script), script);
+    const fresh = withExegolHooks({}, codexGlobalHooks(script, "darwin"), script);
     expect(fresh.added).toBe(2);
     expect(Object.keys(fresh.settings.hooks as object)).toEqual(["SessionStart", "Stop"]);
     const odd = { hooks: "not an object" };
-    expect(withExegolHooks(odd, codexGlobalHooks(script), script)).toEqual({
+    expect(withExegolHooks(odd, codexGlobalHooks(script, "darwin"), script)).toEqual({
       settings: odd,
       removed: 0,
       added: 0,

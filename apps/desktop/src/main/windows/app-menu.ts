@@ -11,7 +11,7 @@ import {
   shell,
   type WebContents,
 } from "electron";
-import { _getFullPath } from "../agents/spawn-env";
+import { _getFullPath } from "../agents/shell-path";
 import { showMainWindowWith } from "../bootstrap/window";
 import { LOG_DIR } from "../lib/logger";
 import { EXEGOL_REPO_URL } from "../lib/repo";

@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 
 vi.mock("./registry", () => ({ getProviderRegistry: () => ({ get: () => undefined }) }));
-vi.mock("./spawn-env", () => ({ _getFullPath: () => "", resolveCommand: (c: string) => c }));
+vi.mock("./shell-path", () => ({ _getFullPath: () => "", resolveCommand: (c: string) => c }));
 const { _parsers } = await import("./model-lists");
 const parse = (cli: string, out: string) => _parsers.LIST_COMMANDS[cli]?.parse(out);
 

@@ -30,13 +30,20 @@ function Views({ projectId, paneId }: { projectId: string; paneId: string }) {
   const { data: state } = useViews(projectId);
   const servers = useViewServers(projectId);
   const [port, setPort] = useState<number | null>(null);
+  const [typed, setTyped] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   // With its pass: a later pass that finds the same path must not bring the capture back up
   const [enlarged, setEnlarged] = useState<{ path: string; run: number } | null>(null);
 
   const ports = servers.data ?? [];
-  const statePort = state?.base ? Number(new URL(state.base).port) : null;
-  const chosen = port ?? statePort ?? ports[0] ?? null;
+  // An origin on port 80 carries no port
+  const statePort = state?.base ? Number(new URL(state.base).port) || null : null;
+  const typedPort = /^[1-9]\d{0,4}$/.test(typed) && Number(typed) <= 65_535 ? Number(typed) : null;
+  const listed = (p: number | null) => (p !== null && ports.includes(p) ? p : null);
+  const chosen =
+    ports.length > 0
+      ? (listed(port) ?? listed(statePort) ?? ports[0] ?? null)
+      : (typedPort ?? statePort);
   const start = (on: number) =>
     trpcMutate("views.start", { projectId, port: on }).catch(
       toastError("Could not start the pass"),
@@ -73,6 +80,18 @@ function Views({ projectId, paneId }: { projectId: string; paneId: string }) {
       <div className="flex shrink-0 flex-wrap items-center gap-2 border-b border-border px-3 py-1.5">
         <LayoutDashboard className="h-3.5 w-3.5 text-text-muted" />
         <span className="text-xs font-medium text-text-primary">Views</span>
+        {ports.length === 0 && (
+          // Windows cannot list listening ports yet, and a server elsewhere is not found either
+          <input
+            inputMode="numeric"
+            aria-label="Port"
+            placeholder={statePort ? String(statePort) : "Port"}
+            className="w-20 rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-[11px] text-text-secondary"
+            value={typed}
+            disabled={state?.running}
+            onChange={(e) => setTyped(e.target.value.trim())}
+          />
+        )}
         {ports.length > 0 && (
           <select
             aria-label="Local server"
@@ -210,7 +229,7 @@ function Views({ projectId, paneId }: { projectId: string; paneId: string }) {
             description={
               ports.length > 0
                 ? "A pass loads every page of the running app and captures it. Nothing is clicked."
-                : "Start the project's dev server in a terminal of this project, then check again."
+                : "Start the project's dev server in a terminal of this project and check again, or type its port above."
             }
             action={
               ports.length > 0
