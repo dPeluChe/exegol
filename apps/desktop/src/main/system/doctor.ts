@@ -15,7 +15,8 @@ import { safeStorage } from "electron";
 import type Database from "libsql";
 import { cliSetupFor } from "../agents/cli-catalog";
 import { getProviderRegistry } from "../agents/registry";
-import { _getFullPath, coreRust } from "../agents/spawn-env";
+import { _getFullPath, commandOnPath } from "../agents/shell-path";
+import { coreRust } from "../agents/spawn-env";
 import { isWaylandSession } from "../bootstrap/global-hotkey";
 import { getAppSettings } from "../db/queries/settings";
 import { checkOllamaStatus } from "../indexer/ollama-client";
@@ -39,12 +40,7 @@ export type { DoctorCategory, DoctorCheck, DoctorReport, DoctorStatus } from "@e
 
 // ─── Individual checks ──────────────────────────────────────────────────────
 
-function checkCommandAvailable(command: string): Promise<boolean> {
-  const cmd = process.platform === "win32" ? `where "${command}"` : `which "${command}"`;
-  return new Promise((resolve) =>
-    exec(cmd, { env: shellEnv(), timeout: 3_000, windowsHide: true }, (err) => resolve(!err)),
-  );
-}
+const checkCommandAvailable = async (command: string): Promise<boolean> => commandOnPath(command);
 
 async function checkGitVersion(): Promise<string | null> {
   try {

@@ -23,9 +23,11 @@ const mocks = vi.hoisted(() => ({
 vi.mock("./spawn-env", () => ({
   coreRust: null,
   slugifyBranchName: (s: string) => s,
-  _getFullPath: () => "/usr/local/bin:/usr/bin",
   buildApiKeyEnv: () => ({ ANTHROPIC_API_KEY: "sk-test" }),
   buildClaudeCodeHooksFile: mocks.buildClaudeCodeHooksFile,
+}));
+vi.mock("./shell-path", () => ({
+  _getFullPath: () => "/usr/local/bin:/usr/bin",
   loginShell: () => process.env.SHELL || "/bin/zsh",
 }));
 vi.mock("./spawn-context", () => ({

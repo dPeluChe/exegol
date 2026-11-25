@@ -8,7 +8,7 @@ const BANNED: { pattern: RegExp; use: string }[] = [
   { pattern: /\.startsWith\("\/"\)/g, use: "isAbsolute from node:path, or isWindowsPath" },
   { pattern: /lastIndexOf\("\/"\)/g, use: "pathBase or pathParent from @exegol/shared" },
   { pattern: /\/dev\/null/g, use: "execFileAsync with no shell: cmd.exe has no /dev/null" },
-  { pattern: /\bcommand -v\b/g, use: "commandOnPath from agents/spawn-env" },
+  { pattern: /\bcommand -v\b/g, use: "commandOnPath from agents/shell-path" },
   { pattern: /promisify\(execFile\)/g, use: "execFileAsync from lib/exec-file: it hides consoles" },
 ];
 

@@ -23,6 +23,7 @@ export interface SessionProcesses {
   projectName: string;
   count: number;
   rssKb: number;
-  cpu: number;
+  /** null where the process table has no CPU (Windows) */
+  cpu: number | null;
   groups: SessionProcessGroup[];
 }

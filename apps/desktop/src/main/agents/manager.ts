@@ -48,6 +48,7 @@ import {
 } from "./reattach-sidecar-agents";
 import { liveSessionIds, recoverLostSessionId } from "./recover-lost-session";
 import { getProviderRegistry } from "./registry";
+import { resolveCommand } from "./shell-path";
 import { startShellPromotion } from "./shell-promotion";
 import {
   type AgentContext,
@@ -55,7 +56,6 @@ import {
   coreRust,
   DEFAULT_PTY_COLS,
   DEFAULT_PTY_ROWS,
-  resolveCommand,
 } from "./spawn-env";
 import { stripAnsi } from "./status-parser";
 
