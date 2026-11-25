@@ -229,7 +229,7 @@ export function specPaths(value: unknown): string[] {
 }
 
 /** A path stays inside root (no "..", no other absolute place) */
-export function isInside(root: string, path: string): boolean {
+export function staysInside(root: string, path: string): boolean {
   const rel = relative(root, path);
   return rel !== "" && !rel.startsWith("..") && !isAbsolute(rel);
 }

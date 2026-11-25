@@ -1,4 +1,11 @@
-import { pathBase, pathBelow, pathParent, pathSegments, pathSep } from "@exegol/shared";
+import {
+  pathBase,
+  pathBelow,
+  pathParent,
+  pathSegments,
+  pathSep,
+  relPathBelow,
+} from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import * as Dialog from "@radix-ui/react-dialog";
 import { useQueryClient } from "@tanstack/react-query";
@@ -138,7 +145,7 @@ function FileContextMenu({
             Copy,
             () =>
               navigator.clipboard.writeText(
-                menu.targetPath.slice(rootPath.length).replace(/^\//, ""),
+                relPathBelow(menu.targetPath, rootPath) ?? menu.targetPath,
               ),
           ],
           ["Rename", Pencil, () => onRequestRename(menu.targetPath)],
@@ -272,10 +279,7 @@ export function FileExplorer({
   // T155: drag a file onto a terminal pane → pasted as @rel/path mention
   const handleFileDragStart = useCallback(
     (e: React.DragEvent, path: string) => {
-      const relPath = path.startsWith(rootPath)
-        ? path.slice(rootPath.length).replace(/^\//, "")
-        : undefined;
-      setFileDragData(e, [{ relPath, absPath: path }]);
+      setFileDragData(e, [{ relPath: relPathBelow(path, rootPath) ?? undefined, absPath: path }]);
     },
     [rootPath],
   );

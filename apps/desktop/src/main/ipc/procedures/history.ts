@@ -1,4 +1,5 @@
 import { isAbsolute } from "node:path";
+import { samePath } from "@exegol/shared";
 import { z } from "zod";
 import { getProject, listWorktrees } from "../../db/queries";
 import {
@@ -99,7 +100,7 @@ export const historyRouter = router({
       // Claude's store alone: the full scan also runs every CLI's listing (seconds) to drop them
       const local = await claudeCodeHistory.list([cwd], since).catch(() => []);
       return local
-        .filter((s) => s.cwd === cwd)
+        .filter((s) => samePath(s.cwd, cwd))
         .sort((a, b) => (b.endedAt ?? 0) - (a.endedAt ?? 0))
         .slice(0, 15);
     }),

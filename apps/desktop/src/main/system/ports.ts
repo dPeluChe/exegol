@@ -1,5 +1,6 @@
 import { readFile, readlink, stat } from "node:fs/promises";
 import { join } from "node:path";
+import { isUnderPath, samePath } from "@exegol/shared";
 import { execFileAsync } from "../lib/exec-file";
 import { logger } from "../lib/logger";
 import { AsyncLruCache } from "../lib/lru-cache";
@@ -124,7 +125,7 @@ export async function getAllProcessCwds(): Promise<string[] | null> {
 
 /** `cwd` is `root` or inside it (a path boundary: /repo-2 is not in /repo) */
 export function isInside(cwd: string | null | undefined, root: string): boolean {
-  return !!cwd && (cwd === root || cwd.startsWith(`${root}/`));
+  return !!cwd && (samePath(cwd, root) || isUnderPath(cwd, root));
 }
 
 /**

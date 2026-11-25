@@ -4,7 +4,7 @@ import { z } from "zod";
 import { mapWithConcurrency } from "../../lib/concurrency";
 import { xdgDataDir } from "../../lib/xdg-data";
 import { cliListing, realpathOr } from "../cli-list";
-import { FILE_CONCURRENCY, mentionsAnyCwd } from "../pool";
+import { FILE_CONCURRENCY, isAnyCwd, mentionsAnyCwd } from "../pool";
 import {
   type LocalHistoryProvider,
   type LocalSession,
@@ -148,7 +148,7 @@ async function readSession(
     if (!mentionsAnyCwd(raw, cwds)) return null;
 
     const parsed = JSON.parse(raw) as OpencodeSession;
-    if (!parsed.directory || !cwds.includes(parsed.directory)) return null;
+    if (!isAnyCwd(parsed.directory, cwds)) return null;
 
     // `time` is in milliseconds; mtime covers stores that omit it.
     const updated = parsed.time?.updated

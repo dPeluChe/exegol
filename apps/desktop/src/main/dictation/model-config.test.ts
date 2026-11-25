@@ -3,10 +3,10 @@ import { describe, expect, it } from "vitest";
 import { MODEL_CATALOG } from "../models/catalog";
 import {
   bpeVocabFromTokens,
-  isInside,
   recognizerKey,
   recognizerSpec,
   specPaths,
+  staysInside,
   vocabularyHash,
   vocabularyUse,
 } from "./model-config";
@@ -71,10 +71,10 @@ describe("recognizer specs", () => {
   });
 
   it("keeps paths inside the models folder", () => {
-    expect(isInside(ROOT, `${ROOT}/parakeet/tokens.txt`)).toBe(true);
-    expect(isInside(ROOT, `${ROOT}/../.ssh/id_rsa`)).toBe(false);
-    expect(isInside(ROOT, "/etc/passwd")).toBe(false);
-    expect(isInside(ROOT, ROOT)).toBe(false);
+    expect(staysInside(ROOT, `${ROOT}/parakeet/tokens.txt`)).toBe(true);
+    expect(staysInside(ROOT, `${ROOT}/../.ssh/id_rsa`)).toBe(false);
+    expect(staysInside(ROOT, "/etc/passwd")).toBe(false);
+    expect(staysInside(ROOT, ROOT)).toBe(false);
   });
 });
 

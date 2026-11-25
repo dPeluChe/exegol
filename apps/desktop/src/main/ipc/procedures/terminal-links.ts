@@ -52,10 +52,11 @@ function sessionCwd(ctx: Ctx, input: z.infer<typeof linkInput>): string | null {
   return isPathInside(realpathSafeSync(own), realpathSafeSync(input.cwd)) ? input.cwd : own;
 }
 
-/** Where a printed path outside the project can still be shown in Finder */
+/** Where a printed path outside the project can still be shown in the file manager */
 let revealRoots: Promise<string[]> | undefined;
+const TEMP_ROOTS = process.platform === "win32" ? [tmpdir()] : [tmpdir(), "/tmp"];
 const getRevealRoots = () =>
-  (revealRoots ??= Promise.all([homedir(), tmpdir(), "/tmp"].map(realpathSafe)));
+  (revealRoots ??= Promise.all([homedir(), ...TEMP_ROOTS].map(realpathSafe)));
 
 /**
  * A link reaches a file only when its realpath is inside the session's own project or one of
