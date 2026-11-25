@@ -30,13 +30,20 @@ function Views({ projectId, paneId }: { projectId: string; paneId: string }) {
   const { data: state } = useViews(projectId);
   const servers = useViewServers(projectId);
   const [port, setPort] = useState<number | null>(null);
+  const [typed, setTyped] = useState("");
   const [selected, setSelected] = useState<string | null>(null);
   // With its pass: a later pass that finds the same path must not bring the capture back up
   const [enlarged, setEnlarged] = useState<{ path: string; run: number } | null>(null);
 
   const ports = servers.data ?? [];
-  const statePort = state?.base ? Number(new URL(state.base).port) : null;
-  const chosen = port ?? statePort ?? ports[0] ?? null;
+  // An origin on port 80 carries no port
+  const statePort = state?.base ? Number(new URL(state.base).port) || null : null;
+  const typedPort = /^[1-9]\d{0,4}$/.test(typed) && Number(typed) <= 65_535 ? Number(typed) : null;
+  const listed = (p: number | null) => (p !== null && ports.includes(p) ? p : null);
+  const chosen =
+    ports.length > 0
+      ? (listed(port) ?? listed(statePort) ?? ports[0] ?? null)
+      : (typedPort ?? statePort);
   const start = (on: number) =>
     trpcMutate("views.start", { projectId, port: on }).catch(
       toastError("Could not start the pass"),
@@ -76,18 +83,13 @@ function Views({ projectId, paneId }: { projectId: string; paneId: string }) {
         {ports.length === 0 && (
           // Windows cannot list listening ports yet, and a server elsewhere is not found either
           <input
-            type="number"
-            min={1}
-            max={65_535}
+            inputMode="numeric"
             aria-label="Port"
-            placeholder="Port"
+            placeholder={statePort ? String(statePort) : "Port"}
             className="w-20 rounded border border-border bg-bg-secondary px-1.5 py-0.5 text-[11px] text-text-secondary"
-            value={port ?? ""}
+            value={typed}
             disabled={state?.running}
-            onChange={(e) => {
-              const n = Number(e.target.value);
-              setPort(Number.isInteger(n) && n >= 1 && n <= 65_535 ? n : null);
-            }}
+            onChange={(e) => setTyped(e.target.value.trim())}
           />
         )}
         {ports.length > 0 && (
