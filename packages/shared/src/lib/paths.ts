@@ -51,3 +51,10 @@ export function isUnderPath(path: string, root: string): boolean {
 export function pathBelow(path: string, root: string): string | null {
   return isUnderPath(path, root) ? trimSeps(path).slice(trimSeps(root).length + 1) : null;
 }
+
+/** `path` from `root` down with `/` between names, as a project's folder list and CLI mentions
+ *  spell it; null when it is not under it */
+export function relPathBelow(path: string, root: string): string | null {
+  const below = pathBelow(path, root);
+  return below === null ? null : pathSegments(below).join("/");
+}

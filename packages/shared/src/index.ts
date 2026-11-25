@@ -26,6 +26,7 @@ export {
   pathParent,
   pathSegments,
   pathSep,
+  relPathBelow,
   samePath,
 } from "./lib/paths";
 export {

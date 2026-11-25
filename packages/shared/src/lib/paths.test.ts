@@ -6,6 +6,7 @@ import {
   pathParent,
   pathSegments,
   pathSep,
+  relPathBelow,
   samePath,
 } from "./paths";
 
@@ -47,6 +48,12 @@ describe("paths", () => {
     expect(pathBelow("/repo/src/a.ts", "/repo/")).toBe("src/a.ts");
     expect(pathBelow("C:\\Repo\\src\\a.ts", "c:/repo")).toBe("src\\a.ts");
     expect(pathBelow("/other/a.ts", "/repo")).toBeNull();
+  });
+
+  it("gives it with forward slashes for folder lists and mentions", () => {
+    expect(relPathBelow("C:\\Repo\\src\\a.ts", "c:/repo")).toBe("src/a.ts");
+    expect(relPathBelow("/repo/src/a.ts", "/repo")).toBe("src/a.ts");
+    expect(relPathBelow("/other", "/repo")).toBeNull();
   });
 
   it("splits in either spelling", () => {
