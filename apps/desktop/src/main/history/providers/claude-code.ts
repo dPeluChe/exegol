@@ -1,20 +1,20 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { stripPasteTags } from "@exegol/shared";
+import { samePath, stripPasteTags } from "@exegol/shared";
 import { scanPerCwdDir } from "../pool";
 import { readHead, readTail } from "../read-head";
 import { type LocalHistoryProvider, type LocalSession, normalizeTitle } from "../types";
 
 /**
- * Claude Code names a project directory after its cwd, replacing `/` and `_`, and `\\` and `:`
- * on Windows, with `-` (`/a/_code_/repo` becomes `-a--code--repo`, `C:\\a` `C--a`). Dots survive.
+ * Claude Code names a project directory after its cwd, every character but a letter or digit
+ * becoming `-` (`/a/_code_/.x` is `-a--code---x`, `C:\\a` `C--a`).
  *
  * The encoding is lossy — `_code_` and `-code-` land on the same directory — so
  * the transcript's own `cwd` field is what actually decides the match; this only
  * tells us where to look.
  */
 export function claudeProjectDir(cwd: string): string {
-  return cwd.replace(/[/\\:_]/g, "-");
+  return cwd.replace(/[^a-zA-Z0-9]/g, "-");
 }
 
 interface HeadLine {
@@ -154,7 +154,7 @@ async function parseTranscript(
 
     // The slug is ambiguous; the transcript is not. A session naming a different
     // cwd belongs to a repo that merely slugs the same way.
-    return recordedCwd && recordedCwd !== cwd ? null : { session, aiTitle };
+    return recordedCwd && !samePath(recordedCwd, cwd) ? null : { session, aiTitle };
   } catch {
     return null; // unreadable transcript — skip rather than fail the listing
   }
