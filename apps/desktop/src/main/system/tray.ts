@@ -197,9 +197,12 @@ export function initTray(): void {
       toggleMainWindow();
     }
   });
-  tray.on("right-click", () => {
-    tray?.popUpContextMenu(buildContextMenu(getTrayProjects()));
-  });
+  // Windows and Linux open the menu set by setContextMenu on a right click by themselves
+  if (process.platform === "darwin") {
+    tray.on("right-click", () => {
+      tray?.popUpContextMenu(buildContextMenu(getTrayProjects()));
+    });
+  }
 
   logger.info("[Tray] System tray initialized");
 }

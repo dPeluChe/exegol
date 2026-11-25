@@ -27,7 +27,7 @@ const errorText = (err: unknown) => (err instanceof Error ? err.message : String
 function engineError(err: unknown, sentences: string[]): string {
   const text = errorText(err);
   if (sentences.some((s) => text.includes(s))) return "engine error";
-  return text.replace(/\/[^\s'"]+/g, "<path>").slice(0, 160);
+  return text.replace(/(?:[A-Za-z]:\\|\\\\)[^'"\n]*|\/[^\s'"]+/g, "<path>").slice(0, 160);
 }
 
 function assertModelPaths(spec: TtsSpec): void {

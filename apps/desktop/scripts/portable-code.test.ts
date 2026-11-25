@@ -15,10 +15,6 @@ const BANNED: { pattern: RegExp; use: string }[] = [
 /** Hits that are fine, with why. A count, so a new hit in a listed file still fails */
 const ALLOWED: Record<string, { hits: number; why: string }> = {
   "src/main/lib/exec-file.ts": { hits: 1, why: "the one wrapper" },
-  "src/main/terminal/pty-sidecar-discovery.ts": {
-    hits: 1,
-    why: "ps behind a win32 guard, sidecar",
-  },
   "src/main/terminal/shell-wrappers.ts": { hits: 3, why: "POSIX zsh and bash wrappers" },
   "src/main/agents/shell-dialect.ts": { hits: 1, why: "its POSIX branch" },
   "src/main/agents/spawn-env.ts": { hits: 1, why: "Claude hook, skipped on Windows" },

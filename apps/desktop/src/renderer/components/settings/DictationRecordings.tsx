@@ -29,7 +29,7 @@ export function DictationRecordings({
       <div className="space-y-2">
         <SwitchRow
           label="Keep recordings for model testing"
-          description="Audio and text stay on this Mac in ~/.exegol/dictation-audio"
+          description="Audio and text stay on this computer in ~/.exegol/dictation-audio"
           value={prefs.keepRecordings}
           onToggle={() => set({ keepRecordings: !prefs.keepRecordings })}
         />
