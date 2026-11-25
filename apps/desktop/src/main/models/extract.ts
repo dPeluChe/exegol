@@ -1,6 +1,7 @@
-import { chmod, lstat, mkdir, readdir, rename, rm, stat } from "node:fs/promises";
+import { chmod, lstat, mkdir, readdir, rm, stat } from "node:fs/promises";
 import { join, posix, win32 } from "node:path";
 import { execFileAsync } from "../lib/exec-file";
+import { renameWithRetry } from "../lib/rename-retry";
 
 const EXTRACT_TIMEOUT_MS = 10 * 60_000;
 
@@ -140,7 +141,8 @@ export async function extractTarBz2(opts: {
     }
     await pruneToRequired(extracted, opts.requiredFiles, opts.keepDirs);
     await rm(opts.destDir, { recursive: true, force: true });
-    await rename(extracted, opts.destDir);
+    // A whole model folder: an antivirus may scan it for a few seconds after extraction
+    await renameWithRetry(extracted, opts.destDir, process.platform, 10);
   } finally {
     await rm(opts.tmpDir, { recursive: true, force: true });
   }

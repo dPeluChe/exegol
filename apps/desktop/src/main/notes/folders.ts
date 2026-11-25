@@ -29,6 +29,8 @@ export function folderSlug(name: string, fallback: string): string {
     .replace(/^-+|-+$/g, "")
     .slice(0, SLUG_MAX)
     .replace(/-+$/, "");
+  // Windows refuses these names as folders, with any extension
+  if (/^(con|prn|aux|nul|com\d|lpt\d)$/.test(slug)) return `${slug}-1`;
   return slug || fallback;
 }
 
