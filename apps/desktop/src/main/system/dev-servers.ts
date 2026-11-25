@@ -1,7 +1,7 @@
 import { userInfo } from "node:os";
 import type { DevServer } from "@exegol/shared";
 import type Database from "libsql";
-import { listLiveSessionProcesses } from "../db/queries/agents";
+import { listLiveSessionProcesses } from "../db/queries/agent-live";
 import { execFileAsync } from "../lib/exec-file";
 import { logger } from "../lib/logger";
 import { parseEtime } from "../lib/ps-etime";

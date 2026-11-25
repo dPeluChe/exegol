@@ -5,7 +5,7 @@ import type Database from "libsql";
 import { MODEL_SETTINGS_DIR } from "../agents/launch-model";
 import { WORKTREE_ROOTS } from "../agents/worktrees";
 import { HOOKS_DIR } from "../agents/wrappers";
-import { listLiveAgentFolders } from "../db/queries/agents";
+import { listLiveAgentFolders } from "../db/queries/agent-live";
 import { getAppSettings, getJsonSetting, setJsonSetting } from "../db/queries/settings";
 import { sweepRecordings } from "../dictation/recordings";
 import { logger } from "../lib/logger";

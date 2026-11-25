@@ -9,30 +9,17 @@ import {
 } from "@exegol/shared";
 import type { QueryClient } from "@tanstack/react-query";
 import { DICTATION_STATUS_KEY, fetchDictationStatus } from "../../hooks/use-trpc-dictation";
-import { findAgentPane, useAgentStore } from "../../stores/agents";
-import { useAppStore } from "../../stores/app";
 import { recordedMs, useDictationStore } from "../../stores/dictation";
 import { useToastStore } from "../../stores/toasts";
-import { getActivePaneId, useWorkspaceStore } from "../../stores/workspace";
-import { pasteToAgent, submitToAgent } from "../agent-input";
-import { agentAsksQuestion } from "../agent-question";
-import { focusedField } from "../focused-field";
-import { paneRoot } from "../pane-focus";
 import { trpcInvoke, trpcMutate } from "../trpc-client";
 import { autoInsertState, countdownMs, resumedVad } from "./auto-insert";
-import { type Capture, startCapture } from "./capture";
-import { insertIntoEditorIn } from "./editors";
+import { startCapture } from "./capture";
+import type { Run } from "./dictation-run";
+import { finalTarget, snapshot } from "./focus-snapshot";
 import { isFlat, peakOf, resolveInput } from "./inputs";
-import {
-  confirmTarget,
-  type DictationTarget,
-  type FocusSnapshot,
-  keptOnCancel,
-  resolveTarget,
-  sanitizeDictation,
-  takesDictation,
-} from "./target";
-import { rms, updateVad, VAD_START, type VadState } from "./vad";
+import { copyInstead, heardNothing, insertDictation } from "./insert-dictation";
+import { keptOnCancel, sanitizeDictation } from "./target";
+import { rms, updateVad, VAD_START } from "./vad";
 
 /** A press held at least this long is hold-to-talk (release stops); shorter toggles */
 const HOLD_MS = 350;
@@ -40,27 +27,6 @@ const HOLD_MS = 350;
 const TAIL_TICK_MS = 50;
 const TAIL_QUIET_MS = 150;
 const TAIL_MAX_MS = 600;
-
-interface Run {
-  settings: DictationSettings;
-  target: DictationTarget;
-  /** The app's own text field that had the focus, when that is the target */
-  field: HTMLElement | null;
-  capture: Capture | null;
-  sessionId: string | null;
-  /** Chunks captured before the session id came back */
-  early: Float32Array[];
-  vad: VadState;
-  /** Loudest sample sent: a dictation that stays flat heard nothing from the mic */
-  peak: number;
-  cancelled: boolean;
-  /** Paused: chunks are dropped here, before IPC, and the VAD does not count them */
-  paused: boolean;
-  /** Stopped while the mic was opening: stops once it listens, for this reason */
-  stopWhenReady: DictationStopReason | null;
-  /** A click on the countdown: this dictation no longer inserts on its own */
-  autoInsertOff: boolean;
-}
 
 let run: Run | null = null;
 let pressedAt = 0;
@@ -78,45 +44,6 @@ export const currentAnalyser = (): AnalyserNode | null =>
 
 const store = () => useDictationStore.getState();
 const toast = useToastStore.getState;
-
-/** Dashboard: the session whose mirror has the focus, Watching's or Company's, and its pane */
-function focusedMirror(): FocusSnapshot["mirror"] {
-  const agentId =
-    document.activeElement?.closest<HTMLElement>("[data-mirror-agent-id]")?.dataset.mirrorAgentId;
-  const agent = agentId ? useAgentStore.getState().agents[agentId] : undefined;
-  if (!agentId || !agent) return undefined;
-  return {
-    agentId,
-    projectId: agent.projectId,
-    paneId: findAgentPane(agentId, agent.projectId)?.paneId ?? null,
-    live: takesDictation(agent),
-  };
-}
-
-function snapshot(): { target: DictationTarget; field: HTMLElement | null; anchor: string | null } {
-  const projectId = useAppStore.getState().activeProjectId;
-  const { focusedPaneId, projectWorkspaces } = useWorkspaceStore.getState();
-  // Only a pane of the tab on screen: resolveTarget sends anything else to the clipboard
-  const activePane = getActivePaneId();
-  const pane =
-    projectId && activePane ? projectWorkspaces[projectId]?.panes[activePane] : undefined;
-  const agent = pane?.agentId ? useAgentStore.getState().agents[pane.agentId] : undefined;
-  const field = focusedField();
-  const snap: FocusSnapshot = {
-    activeView: useAppStore.getState().activeView,
-    projectId,
-    focusedPaneId,
-    pane,
-    sessionLive: !!agent && takesDictation(agent),
-    editableField: !!field,
-    mirror: focusedMirror(),
-  };
-  const target = resolveTarget(snap);
-  // A field inside a pane (the browser's address bar): the overlay still centers on the pane
-  const fieldPane = field?.closest<HTMLElement>("[data-pane-id]")?.dataset.paneId ?? null;
-  const anchor = "paneId" in target && snap.activeView === "workspace" ? target.paneId : fieldPane;
-  return { target, field, anchor };
-}
 
 function finishRun(): void {
   if (!run) return;
@@ -215,16 +142,6 @@ async function inputLost(r: Run): Promise<void> {
   } catch (err) {
     if (run === r) fail(`Microphone disconnected: ${errorText(err)}`);
   }
-}
-
-/** The mic gave no signal or the model found no words: say which input, not just nothing */
-function heardNothing(inputName: string | null): void {
-  toast().addToast({
-    type: "warning",
-    title: `Heard nothing from ${inputName || "the microphone"}`,
-    body: "Check the input in Settings > Dictation",
-    action: { label: "Open Settings", run: () => void window.api.settings.open("dictation") },
-  });
 }
 
 async function loadStatus(): Promise<DictationStatus> {
@@ -429,72 +346,6 @@ export function cancelDictation(source: DictationCancelSource): void {
     if (r.sessionId) void trpcMutate("dictation.cancel", { sessionId: r.sessionId, source });
   }
   reset();
-}
-
-/** The start target if the focus never left it and it can still take text */
-function finalTarget(r: Run): DictationTarget {
-  const target = confirmTarget(r.target, snapshot().target);
-  if (target.kind === "field" && (!r.field?.isConnected || document.activeElement !== r.field)) {
-    return { kind: "clipboard", projectId: target.projectId, why: "The field lost the focus" };
-  }
-  return target;
-}
-
-async function copyInstead(text: string, title: string, body: string): Promise<void> {
-  await navigator.clipboard.writeText(text).catch(() => {});
-  toast().addToast({ type: "info", title, body });
-}
-
-/** Why the text must not be typed into the agent: it ended, or a dictation would answer its
- *  question. Null when it can take it */
-async function terminalRefusal(agentId: string): Promise<string | null> {
-  const agent = useAgentStore.getState().agents[agentId];
-  if (!agent || !takesDictation(agent)) return "The agent is not running";
-  return (await agentAsksQuestion(agentId)) ? "The agent is waiting on a question" : null;
-}
-
-export async function insertDictation(
-  text: string,
-  target: DictationTarget,
-  pressEnter: boolean,
-  field: HTMLElement | null,
-): Promise<void> {
-  if (target.kind === "terminal") {
-    const refusal = await terminalRefusal(target.agentId);
-    if (refusal) {
-      return copyInstead(text, "Dictation copied, not typed", `${refusal}: paste it yourself`);
-    }
-    if (pressEnter) submitToAgent(target.agentId, text, true);
-    else pasteToAgent(target.agentId, text, true);
-    return;
-  }
-  if (target.kind === "browser") {
-    const ok = await window.api.dictation
-      .insertInBrowser({ paneId: target.paneId, projectId: target.projectId, text })
-      .catch(() => false);
-    if (ok) return;
-    return copyInstead(
-      text,
-      "Dictation copied",
-      "The page changed, is outside the project's hosts, or no editable field has the focus",
-    );
-  }
-  if (target.kind === "editor") {
-    const root = paneRoot(target.paneId);
-    if (root && insertIntoEditorIn(root, text)) return;
-  }
-  if (target.kind === "field" && field) {
-    field.focus();
-    if (document.execCommand("insertText", false, text)) return;
-  }
-  const why = target.kind === "clipboard" ? target.why : undefined;
-  return copyInstead(
-    text,
-    "Dictation copied",
-    why
-      ? `${why}: paste it where you need it`
-      : "No focused pane could take it: paste it where you need it",
-  );
 }
 
 /** Main's focus relay. Leaving Exegol never cancels: the user may narrate another app and come
