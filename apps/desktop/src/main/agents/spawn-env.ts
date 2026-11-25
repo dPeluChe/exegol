@@ -23,7 +23,7 @@ import { getNotificationBus } from "../notifications/bus";
 import { getApiKey } from "../security/keystore";
 import { type NodeLaunch, nodeLaunch, nodeShellCommand } from "../system/node-launch";
 import { refreshTray } from "../system/tray";
-import { isAgentAwaitingApproval, setAgentAwaitingApproval } from "./agent-message-queue";
+import { noteApprovalStatus } from "./agent-message-queue";
 import { deliverPendingAgentMessages, fireAgentLinks } from "./agent-messaging";
 import { COMMAND_ALIASES } from "./cli-catalog";
 import { followCliName } from "./cli-name";
@@ -131,13 +131,7 @@ export function broadcastAgentStatus(event: AgentStatusEvent): void {
   // needsAttention is transient (never persisted), so messaging can't read it
   // from the DB — mirror it here so a sender can't inject into a permission
   // dialog and confirm it with the trailing Enter.
-  // Only leaving waiting_input clears it: a redrawn dialog scraped as plain
-  // waiting_input is still the dialog.
-  setAgentAwaitingApproval(
-    event.agentId,
-    event.needsAttention === true ||
-      (event.status === "waiting_input" && isAgentAwaitingApproval(event.agentId)),
-  );
+  noteApprovalStatus(event.agentId, event);
 
   // T157/T162: turn boundary = a real transition INTO waiting_input that is NOT
   // an attention prompt. Delivering on `needsAttention` would inject (with a
