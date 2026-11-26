@@ -1,6 +1,7 @@
 import { pathBase } from "@exegol/shared";
 import { cn } from "@exegol/ui";
 import { LayoutGrid, Rows3 } from "lucide-react";
+import { useShallow } from "zustand/react/shallow";
 import { useMountEffect } from "../../hooks/use-mount-effect";
 import { sessionName } from "../../lib/agent-label";
 import { pageLabel } from "../../lib/browser-viewports";
@@ -14,7 +15,7 @@ import { STATUS_DOT_COLORS } from "../../lib/semantic-colors";
 import { useAgentStore } from "../../stores/agents";
 import { type Pane, selectPanes, selectTabs, useWorkspaceStore } from "../../stores/workspace";
 import { AgentIcon } from "../common/AgentIcon";
-import { PANE_TYPE_ICONS, tabLabel } from "./tab-bar-helpers";
+import { getTabMeta, PANE_TYPE_ICONS, tabLabel } from "./tab-bar-helpers";
 
 const PANE_LABEL: Record<string, string> = { git: "Git", empty: "Launcher", terminal: "Terminal" };
 
@@ -110,11 +111,12 @@ type SwitcherView = NonNullable<ReturnType<typeof usePaneSwitcherView.getState>[
 function SwitcherOverlay({ view }: { view: SwitcherView }) {
   const tabs = useWorkspaceStore(selectTabs);
   const panes = useWorkspaceStore(selectPanes);
-  const labelOf = (tabId: string) => {
-    const at = tabs.findIndex((t) => t.id === tabId);
-    const tab = tabs[at];
-    return tab ? tabLabel(tab, at) : "";
-  };
+  const names = useAgentStore(
+    useShallow((s) =>
+      tabs.map((t, i) => getTabMeta(tabLabel(t, i), t.layout, panes, s.agents).displayName),
+    ),
+  );
+  const labelOf = (tabId: string) => names[tabs.findIndex((t) => t.id === tabId)] ?? "";
 
   return (
     <div className="pointer-events-none fixed inset-0 z-[210] flex items-center justify-center">

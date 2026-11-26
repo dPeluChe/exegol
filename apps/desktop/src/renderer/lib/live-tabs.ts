@@ -1,6 +1,6 @@
 import { ACTIVE_STATUSES } from "@exegol/shared";
 import { useMemo } from "react";
-import { tabLabel } from "../components/workspace/tab-bar-helpers";
+import { getTabMeta, tabLabel } from "../components/workspace/tab-bar-helpers";
 import { type AgentState, showProject, useAgentStore } from "../stores/agents";
 import { useAppStore } from "../stores/app";
 import { SHORTCUT_DIGITS, type ShortcutDigit, useShortcutStore } from "../stores/shortcuts";
@@ -37,7 +37,7 @@ export function computeLiveTabGroups(
           key: `${projectId}:${tab.id}`,
           projectId,
           tabId: tab.id,
-          tabLabel: tabLabel(tab, index),
+          tabLabel: getTabMeta(tabLabel(tab, index), tab.layout, pw.panes, agents).displayName,
           agentIds,
         });
       }

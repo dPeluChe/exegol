@@ -1,10 +1,11 @@
 import { cn } from "@exegol/ui";
 import { Globe, LayoutGrid } from "lucide-react";
+import { useShallow } from "zustand/react/shallow";
 import { pageLabel } from "../../lib/browser-viewports";
 import { focusPane, useAgentStore } from "../../stores/agents";
 import { useAppStore } from "../../stores/app";
 import { collectPaneIds, type Pane, useWorkspaceStore } from "../../stores/workspace";
-import { PANE_TYPE_ICONS, tabLabel } from "../workspace/tab-bar-helpers";
+import { getTabMeta, PANE_TYPE_ICONS, tabLabel } from "../workspace/tab-bar-helpers";
 import { AgentMiniCard } from "./AgentMiniCard";
 
 const PANE_LABEL: Record<string, string> = {
@@ -48,6 +49,13 @@ export function TabsOverview({ projectId }: { projectId: string }) {
   const activeProjectId = useAppStore((s) => s.activeProjectId);
 
   const tabs = pw?.tabs ?? [];
+  const names = useAgentStore(
+    useShallow((s) =>
+      tabs.map(
+        (t, i) => getTabMeta(tabLabel(t, i), t.layout, pw?.panes ?? {}, s.agents).displayName,
+      ),
+    ),
+  );
   if (tabs.length === 0) return null;
 
   return (
@@ -70,7 +78,7 @@ export function TabsOverview({ projectId }: { projectId: string }) {
                   isActive ? "bg-accent" : "bg-text-muted/40",
                 )}
               />
-              <span className="truncate">{tabLabel(tab, i)}</span>
+              <span className="truncate">{names[i]}</span>
             </button>
             <div className="space-y-px">
               {collectPaneIds(tab.layout).map((paneId) => {

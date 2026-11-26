@@ -1,7 +1,12 @@
 import { FolderTree, GitBranch, Globe, Terminal } from "lucide-react";
 import { needsYou } from "../../lib/agent-groups";
 import type { AgentState, AttentionItem } from "../../stores/agents";
-import { findFirstPaneId, type LayoutNode, type Pane } from "../../stores/workspace";
+import {
+  collectPaneIds,
+  findFirstPaneId,
+  type LayoutNode,
+  type Pane,
+} from "../../stores/workspace";
 
 // ─── T70: Activity dot for tab chrome ───────────────────────────────────────
 
@@ -57,8 +62,12 @@ export const PANE_TYPE_ICONS: Record<string, React.ComponentType<{ className?: s
   git: GitBranch,
 };
 
+const PANE_TYPE_NAMES: Record<string, string> = { browser: "Browser", git: "Git", files: "Files" };
+
+type TabAgent = { cliType: string; alias?: string | null };
+
 /** A label the app wrote from the agent (its cliType or CLI name, "Claude Code"), not the user */
-function isAgentLabel(label: string, agent: { cliType: string; alias?: string | null }): boolean {
+function isAgentLabel(label: string, agent: TabAgent): boolean {
   return (
     label === agent.cliType ||
     label === agent.alias ||
@@ -66,43 +75,76 @@ function isAgentLabel(label: string, agent: { cliType: string; alias?: string | 
   );
 }
 
-/** Derive display name and icon from the tab's primary pane.
- *  An agent tab follows its session: the alias once it has one ("lupus"), else the CLI. */
+const sessionName = (agent: TabAgent) => agent.alias ?? agent.cliType;
+
+/** The agent sessions a tab holds, in pane order: shells, browsers and files do not name it */
+function tabSessions(
+  layout: LayoutNode,
+  panes: Record<string, Pane>,
+  agents: Record<string, TabAgent>,
+): TabAgent[] {
+  return collectPaneIds(layout).flatMap((id) => {
+    const agentId = panes[id]?.type === "terminal" ? panes[id]?.agentId : undefined;
+    const agent = agentId ? agents[agentId] : undefined;
+    return agent?.cliType && agent.cliType !== "shell" ? [agent] : [];
+  });
+}
+
+/** A name typed for a tab that one of its sessions already has: it would read as that session */
+export function tabNameTaken(
+  name: string,
+  layout: LayoutNode,
+  panes: Record<string, Pane>,
+  agents: Record<string, TabAgent>,
+): boolean {
+  const typed = name.trim().toLowerCase();
+  return tabSessions(layout, panes, agents).some(
+    (a) => sessionName(a).toLowerCase() === typed || isAgentLabel(name.trim(), a),
+  );
+}
+
+/** Derive display name and icon. One session names its tab ("lupus"), more add a count
+ *  ("lupus +2", `sessions` lists them); a name the user typed stays */
 export function getTabMeta(
   tabLabel: string,
   tabLayout: LayoutNode,
   panes: Record<string, Pane>,
-  agents: Record<string, { cliType: string; alias?: string | null }>,
+  agents: Record<string, TabAgent>,
 ): {
   displayName: string;
   Icon: React.ComponentType<{ className?: string }> | null;
   /** Set for an agent tab: the tab shows that CLI's icon, as the sidebar does */
   agentCliType: string | null;
+  /** The session names, set only when the tab holds more than one */
+  sessions: string[] | null;
 } {
   const firstPaneId = findFirstPaneId(tabLayout);
   const firstPane = firstPaneId ? panes[firstPaneId] : null;
-  const Icon = firstPane ? (PANE_TYPE_ICONS[firstPane.type] ?? null) : null;
-  const primaryAgentId = firstPane?.type === "terminal" ? (firstPane.agentId ?? null) : null;
-  const agent = primaryAgentId ? agents[primaryAgentId] : undefined;
-  const agentCliType = agent && agent.cliType !== "shell" ? agent.cliType : null;
+  const firstPaneAgent =
+    firstPane?.type === "terminal" && firstPane.agentId ? agents[firstPane.agentId] : undefined;
+  const firstAgent = firstPaneAgent?.cliType ? firstPaneAgent : undefined;
+  const sessions = tabSessions(tabLayout, panes, agents);
+  const lead = sessions[0];
+  const agentCliType = lead?.cliType ?? null;
+  const Icon = lead ? Terminal : firstPane ? (PANE_TYPE_ICONS[firstPane.type] ?? null) : null;
+  const names = sessions.length > 1 ? sessions.map(sessionName) : null;
 
-  // If user explicitly renamed the tab (not a default name), respect it
   const isDefault =
+    !tabLabel ||
     tabLabel.startsWith("Tab ") ||
     tabLabel === "Workspace" ||
     tabLabel === "Terminal" ||
-    (!!agent && isAgentLabel(tabLabel, agent));
-  if (!isDefault) return { displayName: tabLabel, Icon, agentCliType };
+    sessions.some((a) => isAgentLabel(tabLabel, a)) ||
+    (!!firstAgent && isAgentLabel(tabLabel, firstAgent));
+  if (!isDefault) return { displayName: tabLabel, Icon, agentCliType, sessions: names };
 
-  if (agent)
-    return {
-      displayName: agent.alias ?? agent.cliType,
-      Icon: Terminal,
-      agentCliType,
-    };
-  if (firstPane?.type === "browser") return { displayName: "Browser", Icon: Globe, agentCliType };
-  if (firstPane?.type === "git") return { displayName: "Git", Icon: GitBranch, agentCliType };
-  if (firstPane?.type === "files") return { displayName: "Files", Icon: FolderTree, agentCliType };
-
-  return { displayName: tabLabel, Icon, agentCliType };
+  if (lead) {
+    const more = sessions.length - 1;
+    const displayName = more > 0 ? `${sessionName(lead)} +${more}` : sessionName(lead);
+    return { displayName, Icon, agentCliType, sessions: names };
+  }
+  const name = firstAgent
+    ? sessionName(firstAgent)
+    : (PANE_TYPE_NAMES[firstPane?.type ?? ""] ?? (tabLabel || "Tab"));
+  return { displayName: name, Icon, agentCliType, sessions: null };
 }
