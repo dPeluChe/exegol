@@ -82,6 +82,20 @@ export function statusToAttention(
   }
 }
 
+/** A CLI with no signal of its own moving from work to its prompt may be asking: a turn end the
+ *  CLI reported itself (hook, OSC 7501, OSC 9;4) is not, its questions come as attention */
+export function guessesQuestion(
+  agent: Pick<AgentState, "cliType" | "status">,
+  event: { idleOnly?: boolean; reported?: boolean },
+): boolean {
+  return (
+    agent.cliType !== "claude-code" &&
+    !event.idleOnly &&
+    !event.reported &&
+    (agent.status === "running" || agent.status === "spawning")
+  );
+}
+
 export const followUpsKey = (agentId: string) => ["agents", "followUps", agentId];
 
 /**

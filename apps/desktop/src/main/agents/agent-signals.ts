@@ -134,6 +134,7 @@ export function applyAgentSignals(
         turnStarted,
         turnEnded,
         ...(idleOnly && !turnEnded ? { idleOnly } : {}),
+        reported: true,
       });
     } else {
       broadcast("agent:turn-boundary", {

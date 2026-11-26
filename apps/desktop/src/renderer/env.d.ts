@@ -17,6 +17,8 @@ interface AgentStatusEvent {
   needsAttention?: boolean;
   /** At its prompt without having finished a turn: no question to answer */
   idleOnly?: boolean;
+  /** From the CLI's own signal (hook or terminal report): it says itself when it asks */
+  reported?: boolean;
   /** A terminal's session became an agent: its new name, and that it runs over a shell */
   alias?: string | null;
   launchedInShell?: boolean;

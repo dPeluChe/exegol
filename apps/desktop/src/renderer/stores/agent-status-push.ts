@@ -2,7 +2,7 @@ import type { AgentCliType, AgentStatus } from "@exegol/shared";
 import type { QueryClient } from "@tanstack/react-query";
 import { MCP_STATUS_KEY } from "../hooks/use-mcp-status";
 import { applyRecoveredCrashes, RECOVERY_KEY } from "../lib/session-recovery";
-import { type AgentState, followUpsKey, shellClosesOn } from "./agent-state";
+import { type AgentState, followUpsKey, guessesQuestion, shellClosesOn } from "./agent-state";
 import { useAgentStore } from "./agents";
 import { noteDeskActivity } from "./desk-activity";
 import { useWorkspaceStore } from "./workspace";
@@ -76,14 +76,8 @@ export function startAgentStatusPush(queryClient: QueryClient): void {
       // — only real attention (permission prompt/question) earns an inbox
       // entry, or idle agents show amber dots forever (verify round 3).
       const needsAttention = event.needsAttention === true;
-      // T123 hooks are claude-only: other CLIs never emit needsAttention, so
-      // their questions would never reach the inbox. Fall back to the scraped
-      // running→waiting transition for them — transition-gated so idle or
-      // reattached agents don't earn amber dots (verify round 3).
-      const scrapedAttention =
-        existing.cliType !== "claude-code" &&
-        !event.idleOnly &&
-        (existing.status === "running" || existing.status === "spawning");
+      // A CLI with no signal of its own: its running→waiting move is the only hint of a question
+      const scrapedAttention = guessesQuestion(existing, event);
       if (
         isFinalStatus ||
         (event.status === "waiting_input" && (needsAttention || scrapedAttention))
