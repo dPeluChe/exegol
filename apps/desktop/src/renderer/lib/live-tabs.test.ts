@@ -75,6 +75,15 @@ describe("computeLiveTabGroups", () => {
     expect(computeLiveTabGroups(unnamed, agents, []).map((g) => g.tabLabel)).toEqual(["Tab 2"]);
   });
 
+  it("an agent tab reads as the tab bar names it", () => {
+    const named = { p: pw([{ id: "t1", label: "", panes: { p1: "a", p2: "b" } }]) };
+    const cli = {
+      a: { id: "a", status: "running", cliType: "codex", alias: "orion" },
+      b: { id: "b", status: "waiting_input", cliType: "claude-code", alias: "lupus" },
+    } as never;
+    expect(computeLiveTabGroups(named, cli, []).map((g) => g.tabLabel)).toEqual(["orion +1"]);
+  });
+
   it("a project's tabs stay together in tab order, wherever its project sits", () => {
     const many = {
       a: pw([

@@ -10,6 +10,7 @@ import { trpcMutate } from "../../lib/trpc-client";
 import { useAgentBrowserStore } from "../../stores/agent-browser";
 import { useAgentStore } from "../../stores/agents";
 import { useTerminalStore } from "../../stores/terminals";
+import { useToastStore } from "../../stores/toasts";
 import {
   collectPaneIds,
   findFirstPaneId,
@@ -26,7 +27,7 @@ import { InboxMenu } from "./InboxMenu";
 import { LayoutPresets } from "./LayoutPresets";
 import { PANE_ALONE_DRAG_TYPE, PANE_DRAG_TYPE, readPaneDrag } from "./PaneDragHandle";
 import { QuickLaunchBar } from "./QuickLaunchBar";
-import { getTabMeta, tabDotClass, tabSignal } from "./tab-bar-helpers";
+import { getTabMeta, tabDotClass, tabNameTaken, tabSignal } from "./tab-bar-helpers";
 import { WorkspaceTabItem } from "./WorkspaceTabItem";
 
 // ─── Component ──────────────────────────────────────────────────────────────
@@ -196,11 +197,18 @@ export function WorkspaceTabBar() {
   }, []);
 
   const finishEditing = useCallback(() => {
-    if (editingTabId && editValue.trim()) {
-      renameTab(editingTabId, editValue.trim());
+    const tab = tabs.find((t) => t.id === editingTabId);
+    if (tab && editValue.trim() && editValue.trim() !== tab.label) {
+      if (tabNameTaken(editValue, tab.layout, panes, agents)) {
+        useToastStore.getState().addToast({
+          type: "warning",
+          title: "A session in this tab has that name",
+          body: "Pick another name for the tab.",
+        });
+      } else renameTab(tab.id, editValue.trim());
     }
     setEditingTabId(null);
-  }, [editingTabId, editValue, renameTab]);
+  }, [editingTabId, editValue, renameTab, tabs, panes, agents]);
 
   return (
     <div className="flex h-full min-w-0 flex-1 items-center">
@@ -215,7 +223,7 @@ export function WorkspaceTabBar() {
         onDrop={handleBarDrop}
       >
         {tabs.map((tab) => {
-          const { displayName, Icon, agentCliType } = getTabMeta(
+          const { displayName, Icon, agentCliType, sessions } = getTabMeta(
             tab.label,
             tab.layout,
             panes,
@@ -233,6 +241,7 @@ export function WorkspaceTabBar() {
               displayName={displayName}
               TabIcon={Icon}
               agentCliType={agentCliType}
+              sessionsTitle={sessions?.join(", ") ?? null}
               paneCount={paneIds.length}
               needsYou={signal.needsYou}
               dotClass={tabDotClass(signal)}

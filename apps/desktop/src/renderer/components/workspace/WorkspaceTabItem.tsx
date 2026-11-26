@@ -13,6 +13,8 @@ interface WorkspaceTabItemProps {
   TabIcon: React.ComponentType<{ className?: string }> | null;
   /** An agent tab: that CLI's icon instead of the generic one */
   agentCliType: string | null;
+  /** The tab's sessions by name when it holds several, for its tooltip */
+  sessionsTitle: string | null;
   /** Shown muted past one pane, the layout has no name of its own */
   paneCount: number;
   /** A session here waits on you: the badge replaces the dot */
@@ -44,6 +46,7 @@ export const WorkspaceTabItem = memo(function WorkspaceTabItem({
   displayName,
   TabIcon,
   agentCliType,
+  sessionsTitle,
   paneCount,
   needsYou,
   dotClass,
@@ -99,6 +102,7 @@ export const WorkspaceTabItem = memo(function WorkspaceTabItem({
           type="button"
           onClick={() => setActiveTab(tab.id)}
           onDoubleClick={() => startEditing(tab.id, tab.label)}
+          title={sessionsTitle ?? undefined}
           draggable
           onDragStart={(e) => handleTabDragStart(e, tab.id)}
           onDragEnd={handleTabDragEnd}
@@ -111,7 +115,7 @@ export const WorkspaceTabItem = memo(function WorkspaceTabItem({
             TabIcon && <TabIcon className="h-3.5 w-3.5 shrink-0 text-text-muted" />
           )}
           <span className="max-w-[160px] truncate">{displayName}</span>
-          {paneCount > 1 && (
+          {paneCount > 1 && !sessionsTitle && (
             <span className="text-[10px] text-text-muted" title={`${paneCount} panes`}>
               {paneCount}
             </span>
