@@ -97,6 +97,7 @@ and the project follows [Semantic Versioning](https://semver.org/).
 - Browser panes search from the address bar: `?telnyx`, or words that are not an address, open a Google search; `localhost:3000`, `example.com` and full URLs still go straight there
 
 ### Fixed
+- **No lasting Needs you after a reported turn end**: a CLI that reports its own turns (Antigravity, and any with hooks, OSC 7501 or OSC 9;4) ending one was still taken for a question, so its tab said Needs you until its next turn, across restarts. Only CLIs with no signal of their own get that guess now; the others raise attention when they say they ask.
 - **Terminal toolbar fits a narrow pane**: it no longer runs under the pane's hover actions (float, split, close): it leaves that edge free and clips, and in a pane under 56rem wide its chips (Watch, Queue, Mute, Suspend, Main, Watch PR, Restart, Files, Chat, the isolation badge) show only their icons, with the title as before.
 - **A dragged path reaches a shell as one path**: a file whose path holds `$`, `&`, `(` or `;` was dropped into a terminal unquoted, so a shell expanded or split it. On Windows, rewriting the Codex hooks file and an MCP token file waits out a moment when another program holds the file.
 - **Views works where Exegol finds no server**: with no running server found (always on Windows, where ports cannot be read yet), the Views pane takes a port typed in its bar and runs the pass on it.

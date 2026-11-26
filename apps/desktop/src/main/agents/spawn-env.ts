@@ -57,6 +57,8 @@ interface AgentStatusEvent {
   needsAttention?: boolean;
   /** At its prompt without having finished a turn (`idle` signal): delivers messages, fires no links */
   idleOnly?: boolean;
+  /** From the CLI's own signal (hook or terminal report), not scraped: a turn end there is no question */
+  reported?: boolean;
   /** Pending question text extracted from an `attention` signal's detail, if any. */
   attentionDetail?: string;
   /** Set when a terminal's session became an agent (or went back to its prompt) */
